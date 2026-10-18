@@ -96,13 +96,13 @@ describe("Pokédex entries", () => {
   it("keeps a dex entry to name, type, description, and size", () => {
     const text = dexBlurb(
       {
-        ...sheet(1, "Bulbasaur", entry("Bulbasaur")),
+        ...sheet(50, "Bulbasaur", entry("Bulbasaur")),
         evolution:
           "Eevee becomes Vaporeon with a Water Stone. Eevee becomes Jolteon with a Thunder Stone. Eevee becomes Flareon with a Fire Stone. Eevee becomes Espeon by leveling up once it is very happy during the day.",
       },
       "1",
     );
-    assert.match(text, /^This is Bulbasaur\. It is number 1\./);
+    assert.match(text, /^Bulbasaur\. It is number 1\./);
     assert.match(text, /It is a Grass and Poison type\./);
     assert.match(text, /It is the Seed Pokémon\./);
     assert.match(text, /It weighs 6\.9 kilograms\. It is 70 centimetres tall\./);
@@ -118,7 +118,7 @@ describe("Pokédex entries", () => {
     assert.doesNotMatch(lowHealth, /inflict 1\./);
     const fragment = dexBlurb(
       {
-        ...sheet(25, "Pikachu", [
+        ...sheet(26, "Pikachu", [
           {
             version: "yellow",
             text: "Possesses cheek sacs in which it stores electricity. This clever forest-dweller roasts tough berries.",
@@ -140,7 +140,12 @@ describe("Pokédex entries", () => {
     assert.match(text, /It can become Vaporeon, Jolteon, Flareon, and others\./);
     assert.match(text, /It lives in grassland\./);
     assert.doesNotMatch(text, /\bmetres\b|Attack |briefing/);
-    assert.ok(text.length < 1100);
+    assert.ok(text.length < 2800);
+    assert.match(text, /keeps a quiet habit/);
+    assert.match(text, /wanders far from home/);
+    const authored = dexBlurb(sheet(1, "Bulbasaur", entry("Bulbasaur")), "1");
+    assert.match(authored, /large plant bulb on its back/);
+    assert.doesNotMatch(authored, /keeps a quiet habit/);
   });
 
   it("respells the names the narrator gets wrong", () => {
@@ -187,7 +192,7 @@ describe("cards for ages 8 to 12", () => {
         assert.ok(chapter.picture.length > 0);
         for (const track of chapter.tracks) {
           assert.ok(track.text.length > 40);
-          assert.ok(track.text.length < 1100);
+          assert.ok(track.text.length < 2800);
           assert.ok(track.spoken.length > 40);
           assert.ok(track.icon.startsWith("yoto:#"));
           for (const banned of BANNED) {
@@ -207,7 +212,7 @@ describe("cards for ages 8 to 12", () => {
     assert.doesNotMatch(bulba, /\bmetres\b|Attack /);
     const wailord = cards[0]?.chapters.find((chapter) => chapter.key === "wailord");
     const whale = wailord?.tracks[0]?.text ?? "";
-    assert.match(whale, /When a small Wailmer is attacked/);
+    assert.match(whale, /People go to the coast just to watch a group of them/);
     assert.match(whale, /It is a Water type\./);
     assert.match(whale, /It is the Float Whale Pokémon\./);
     assert.match(whale, /It weighs 398 kilograms\. It is 1450 centimetres tall\./);

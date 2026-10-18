@@ -27,6 +27,10 @@ export type KidChapter = {
   /** Parent preview, not shown on the player. */
   mark: string;
   icon: string;
+  /** Compressed pixel sprite, shown on the page. */
+  sprite?: string;
+  /** Merged cry and reading, when that file has been recorded. */
+  clip?: string;
   tracks: KidTrack[];
 };
 
@@ -103,8 +107,19 @@ function picture(
   mark: string,
   icon: string,
   tracks: KidTrack[],
+  extras?: { sprite?: string; clip?: string },
 ): KidChapter {
-  return { key, title, overlay, picture: pictureLabel, mark, icon, tracks };
+  return {
+    key,
+    title,
+    overlay,
+    picture: pictureLabel,
+    mark,
+    icon,
+    tracks,
+    sprite: extras?.sprite,
+    clip: extras?.clip,
+  };
 }
 
 export function trackSpeech(track: KidTrack): string {
@@ -120,16 +135,25 @@ export function kidCardsFromDex(sheets: MonSheet[]): KidCard[] {
     if (!sheet) throw new Error(`PokéAPI sheet missing for ${mon.name}.`);
     const entry = pickDexEntry(sheet.entries);
     const number = String(index + 1);
-    return picture(mon.key, mon.name, number, mon.picture, mon.mark, mon.icon, [
-      talk(
-        "entry",
-        mon.name,
-        dexBlurb(sheet, number),
-        mon.icon,
-        number,
-        entry.version,
-      ),
-    ]);
+    return picture(
+      mon.key,
+      mon.name,
+      number,
+      mon.picture,
+      mon.mark,
+      mon.icon,
+      [
+        talk(
+          "entry",
+          mon.name,
+          dexBlurb(sheet, number),
+          mon.icon,
+          number,
+          entry.version,
+        ),
+      ],
+      { sprite: `/pixels/${mon.id}.png`, clip: `/facts/${mon.id}.mp3` },
+    );
   });
 
   const riddles = GUESS_ORDER.map((key, index) => {
@@ -157,7 +181,7 @@ export function kidCardsFromDex(sheets: MonSheet[]): KidCard[] {
         "Yes",
         entry.version,
       ),
-    ]);
+    ], { sprite: `/pixels/${mon.id}.png` });
   });
 
   return [
@@ -166,15 +190,15 @@ export function kidCardsFromDex(sheets: MonSheet[]): KidCard[] {
       title: "Facts",
       libraryTitle: "Champdex: Pokémon Facts",
       recommended: true,
-      blurb: "The name, the type, the Pokédex entry, how much it weighs, and how tall it is.",
+      blurb: "The cry, the name, then the Pokédex entries, the weight, and the height.",
       childDoes:
-        "Turn to a picture and press play. You hear the name, the type, the Pokédex entry, how much it weighs, and how tall it is.",
+        "Turn to a picture and press play. You hear the cry, then the name, then the Pokédex entries.",
       chapters: [
         picture("start", "Start here", "Go", "a star", "★", I.star, [
           talk(
             "how",
             "How to play",
-            "This card is Pokémon facts. Turn the wheel, or press the arrows, until you see a picture. Then press play. You will hear the name, the type, and the Pokédex entry. You will also hear how much it weighs and how tall it is. The star is this track. Number 1 is Bulbasaur.",
+            "This card is Pokémon facts. Turn the wheel, or press the arrows, until you see a picture. Then press play. You will hear the cry, then the name, then the Pokédex entries. You will also hear how much it weighs and how tall it is. The star is this track. Number 1 is Bulbasaur.",
             I.star,
             "Go",
           ),

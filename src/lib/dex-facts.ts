@@ -1,3 +1,4 @@
+import { POKE_DESCRIPTIONS } from "@/lib/descriptions";
 import {
   centimetresSpeech,
   cleanFlavor,
@@ -218,43 +219,57 @@ function abilityFact(name: string | null, effect: string | null): string {
   return `Its ability is ${name}. ${sentence}`;
 }
 
-/** A second Pokédex sentence, when a later game wrote a different short line. */
-function anotherEntry(entries: FlavorSource[], name: string): string {
-  const next = prepareEntries(entries)[1];
-  if (!next) return "";
-  const sentence = next.text.match(/^[^.!?]+[.!?]/)?.[0]?.trim() ?? "";
-  if (sentence.length < 40 || sentence.length > 180) return "";
-  return withSubject(sentence, name);
+function wordCount(text: string): number {
+  return text.split(/\s+/).filter(Boolean).length;
+}
+
+function repeats(next: string, soFar: string): boolean {
+  const words = next.toLowerCase().split(/\W+/).filter((word) => word.length > 4);
+  if (words.length === 0) return false;
+  const hay = ` ${soFar.toLowerCase()} `;
+  const hits = words.filter((word) => hay.includes(` ${word} `)).length;
+  return hits / words.length > 0.62;
 }
 
 /**
- * One spoken entry: name, type, Pokédex text, weight, height, then a few facts.
- * Kept short enough to finish in under a minute.
+ * Distinct Pokédex entries, newest first, until the reading is about a minute.
+ * The cry is joined in front of this script when the track is recorded.
  */
+function dexPassage(entries: FlavorSource[], name: string, room: number): string {
+  const parts: string[] = [];
+  let words = 0;
+  for (const entry of prepareEntries(entries)) {
+    const text = withSubject(entry.text, name);
+    if (repeats(text, parts.join(" "))) continue;
+    const count = wordCount(text);
+    if (parts.length > 0 && words + count > room) break;
+    parts.push(text);
+    words += count;
+    if (words >= room) break;
+  }
+  return parts.join(" ");
+}
+
+/** Name, then the Pokédex lines, then weight, height, and a few plain facts. */
 export function dexBlurb(sheet: MonSheet, number: string): string {
-  const entry = pickDexEntry(sheet.entries);
   const genus = sheet.genus.replace(/POK[eé]MON/gi, "Pokémon");
-  const parts = [
-    `This is ${sheet.name}. It is number ${number}.`,
+  const opening = [
+    `${sheet.name}. It is number ${number}.`,
     typeSentence(sheet.types),
     `It is the ${genus}.`,
-    withSubject(entry.text, sheet.name),
+  ].join(" ");
+  const closing = [
     `It weighs ${kilogramsSpeech(sheet.weightHectograms)}. It is ${centimetresSpeech(sheet.heightDecimetres)} tall.`,
-    abilityFact(sheet.abilityName, sheet.abilityEffect),
     evolutionFact(sheet),
-    anotherEntry(sheet.entries, sheet.name),
+    abilityFact(sheet.abilityName, sheet.abilityEffect),
     homeFact(sheet.habitat),
-  ].filter(Boolean);
-  const extra = anotherEntry(sheet.entries, sheet.name);
-  let text = parts.join(" ").replace(/\s+/g, " ").trim();
-  if (text.length > 950 && extra) {
-    text = parts
-      .filter((part) => part !== extra)
-      .join(" ")
-      .replace(/\s+/g, " ")
-      .trim();
-  }
-  return text;
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const authored = POKE_DESCRIPTIONS[sheet.id];
+  const passage =
+    authored ?? dexPassage(sheet.entries, sheet.name, Math.max(80, 250 - wordCount(opening) - wordCount(closing)));
+  return [opening, passage, closing].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
 }
 
 export function threeClues(name: string, entries: FlavorSource[]): string[] {

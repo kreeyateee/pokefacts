@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { ConnectDialog } from "@/components/connect-dialog";
@@ -78,11 +78,48 @@ function playableChapters(card: KidCard) {
   return card.chapters.filter((chapter) => chapter.key !== "start");
 }
 
-function entryLines(text: string): string[] {
+function withPixels(card: KidCard, icons: Record<string, string>): KidCard {
+  return {
+    ...card,
+    chapters: card.chapters.map((chapter) => {
+      const icon = icons[chapter.key];
+      if (!icon) return chapter;
+      return {
+        ...chapter,
+        icon,
+        tracks: chapter.tracks.map((track) =>
+          track.key === "clues" ? track : { ...track, icon },
+        ),
+      };
+    }),
+  };
+}
+
+async function pixelIcons(card: KidCard): Promise<Record<string, string>> {
+  const icons: Record<string, string> = {};
+  for (const chapter of card.chapters) {
+    const id = chapter.sprite?.match(/\/pixels\/(\d+)\.png$/)?.[1];
+    if (!id) continue;
+    const response = await yotoFetch(`/api/yoto/icon?id=${id}`, { method: "POST" });
+    const payload = (await response.json()) as { mediaId?: string; error?: string };
+    if (!response.ok || !payload.mediaId) {
+      throw new Error(payload.error || "Yoto did not take the 16×16 picture.");
+    }
+    icons[chapter.key] = `yoto:#${payload.mediaId}`;
+  }
+  return icons;
+}
+
+function entryLines(text: string, title: string): string[] {
   return text
     .split(/(?<=[.!?])\s+(?=[A-Z])/)
     .map((line) => line.trim())
-    .filter((line) => line.length > 0 && !/^This is .+\.$/.test(line) && !/^It is number \d+\.$/.test(line));
+    .filter(
+      (line) =>
+        line.length > 0 &&
+        line !== `${title}.` &&
+        !/^It is number \d+\.$/.test(line),
+    );
 }
 
 function isMeasure(line: string): boolean {
@@ -102,6 +139,7 @@ export function Studio({ cards }: { cards: KidCard[] }) {
   const [job, setJob] = useState<JobView | null>(null);
   const [linked, setLinked] = useState<SavedCards>({});
   const [ready, setReady] = useState(false);
+  const clipRef = useRef<HTMLAudioElement | null>(null);
 
   const card = cards.find((item) => item.id === cardId) ?? cards[0];
   const chapter =
@@ -121,12 +159,19 @@ export function Studio({ cards }: { cards: KidCard[] }) {
     return () => {
       cancelled = true;
       stopSpeaking();
+      clipRef.current?.pause();
       window.speechSynthesis?.removeEventListener("voiceschanged", loadVoices);
     };
   }, []);
 
+  function stopClip() {
+    clipRef.current?.pause();
+    clipRef.current = null;
+  }
+
   function chooseCard(next: KidCard) {
     stopSpeaking();
+    stopClip();
     setSpeaking(false);
     setRevealed(false);
     setCardId(next.id);
@@ -136,6 +181,7 @@ export function Studio({ cards }: { cards: KidCard[] }) {
 
   function chooseChapter(key: string) {
     stopSpeaking();
+    stopClip();
     setSpeaking(false);
     setRevealed(false);
     setChapterKey(key);
@@ -144,11 +190,34 @@ export function Studio({ cards }: { cards: KidCard[] }) {
   function hear(texts: string[]) {
     if (speaking) {
       stopSpeaking();
+      stopClip();
       setSpeaking(false);
       return;
     }
     setSpeaking(true);
     speakTexts(texts, () => setSpeaking(false));
+  }
+
+  function hearFact(src: string, texts: string[]) {
+    if (speaking) {
+      stopSpeaking();
+      stopClip();
+      setSpeaking(false);
+      return;
+    }
+    const audio = new Audio(src);
+    clipRef.current = audio;
+    setSpeaking(true);
+    let fellBack = false;
+    const fallback = () => {
+      if (fellBack) return;
+      fellBack = true;
+      clipRef.current = null;
+      speakTexts(texts, () => setSpeaking(false));
+    };
+    audio.onended = () => setSpeaking(false);
+    audio.onerror = fallback;
+    void audio.play().catch(fallback);
   }
 
   function revealAnswer() {
@@ -181,9 +250,10 @@ export function Studio({ cards }: { cards: KidCard[] }) {
     setSending(true);
     setJob({ status: "sending", detail: "Sending the script to Yoto…" });
     try {
+      setJob({ status: "sending", detail: "Uploading the 16×16 pictures…" });
       const previous = savedCards()[card.id];
       const content = buildKidCard(
-        card,
+        withPixels(card, await pixelIcons(card)),
         replace && previous ? previous : undefined,
       );
       const response = await yotoFetch("/api/yoto/job", {
@@ -269,7 +339,7 @@ export function Studio({ cards }: { cards: KidCard[] }) {
             <p className="mt-1 max-w-xl text-sm leading-6 text-[#5c5348]">
               {card?.id === "guess"
                 ? "Three clues. Guess the Pokémon. Then hear if you were right."
-                : "Name, type, the Pokédex entry, the weight, and the height."}
+                : "The cry, then the name, then a short description."}
             </p>
           </div>
           {session ? (
@@ -345,12 +415,23 @@ export function Studio({ cards }: { cards: KidCard[] }) {
                       : "Three clues"
                     : `Number ${chapter.overlay}`}
                 </p>
-                <h2 className="font-display mt-1 text-4xl leading-tight sm:text-5xl">
-                  {card.id === "guess" && !revealed ? `Riddle ${chapter.overlay}` : chapter.title}
-                </h2>
+                <div className="mt-3 flex items-end gap-4">
+                  {chapter.sprite && (card.id !== "guess" || revealed) ? (
+                    <img
+                      src={chapter.sprite}
+                      alt=""
+                      width={96}
+                      height={96}
+                      className="h-24 w-24 shrink-0 [image-rendering:pixelated]"
+                    />
+                  ) : null}
+                  <h2 className="font-display text-4xl leading-tight sm:text-5xl">
+                    {card.id === "guess" && !revealed ? `Riddle ${chapter.overlay}` : chapter.title}
+                  </h2>
+                </div>
                 <div className="mt-6 max-w-prose space-y-3 text-base leading-7 text-[#2a241c]">
                   {visibleTracks?.map((track) =>
-                    entryLines(track.text).map((line) =>
+                    entryLines(track.text, chapter.title).map((line) =>
                       isMeasure(line) ? (
                         <p
                           key={`${track.key}-${line}`}
@@ -395,7 +476,14 @@ export function Studio({ cards }: { cards: KidCard[] }) {
                     <Button
                       type="button"
                       className="h-11 px-5"
-                      onClick={() => hear(chapter.tracks.map((track) => trackSpeech(track)))}
+                      onClick={() =>
+                        chapter.clip
+                          ? hearFact(
+                              chapter.clip,
+                              chapter.tracks.map((track) => trackSpeech(track)),
+                            )
+                          : hear(chapter.tracks.map((track) => trackSpeech(track)))
+                      }
                     >
                       {speaking ? "Stop" : "Hear the entry"}
                     </Button>
