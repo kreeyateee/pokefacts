@@ -65,7 +65,7 @@ function picture(
   };
 }
 
-const MEET_END = "Turn to a different picture when you want another one.";
+const MEET_END = "Turn the dial when you want the next one.";
 
 export const KID_CARDS: KidCard[] = [
   {
@@ -73,9 +73,9 @@ export const KID_CARDS: KidCard[] = [
     title: "Facts",
     libraryTitle: "Champdex: Pokémon Facts",
     recommended: true,
-    blurb: "A short fact for each Pokémon.",
+    blurb: "Type, a real fact, and how it evolves.",
     childDoes:
-      "They turn to a picture and press play. Each picture tells one Pokémon fact.",
+      "Turn to a picture and press play. Each picture gives the type, a fact, and the evolution.",
     chapters: [
       picture(
         "start",
@@ -88,7 +88,7 @@ export const KID_CARDS: KidCard[] = [
           talk(
             "how",
             "How to play",
-            "Hi. This is your Pokémon card. Turn the wheel, or press the arrow buttons, until you see a picture. Then press the big button. I will tell you about that Pokémon. When you want a new one, turn to a different picture. The star is me. Number 1 is a good place to start.",
+            "Pokémon facts. Turn the wheel, or press the arrows, until you see a picture. Then press play. You get the type, a real fact, and how it evolves. The star is this track. Number 1 is Bulbasaur.",
             I.star,
             "Go",
           ),
@@ -105,7 +105,7 @@ export const KID_CARDS: KidCard[] = [
           talk(
             "fact",
             "Bulbasaur",
-            `Number 1. The picture is a flower. This is Bulbasaur. Bulbasaur is green, with a big seed on its back. The seed likes sunshine. It drinks the light and grows as Bulbasaur grows. Bulbasaur is calm and likes to nap in the grass. If it stood next to you, it would reach about to your waist. One day that seed becomes a flower. ${MEET_END}`,
+            `Number 1. The flower. Bulbasaur is a Grass and Poison type, number 001 in the Pokédex. The seed on its back stores energy from sunlight, and it gets bigger as Bulbasaur grows. At level 16 it evolves into Ivysaur. At level 32 the seed blooms and it becomes Venusaur. About 2 feet tall, and about 15 pounds. ${MEET_END}`,
             I.daisy,
             "1",
           ),
@@ -122,7 +122,7 @@ export const KID_CARDS: KidCard[] = [
           talk(
             "fact",
             "Charmander",
-            `Number 2. The picture is a flame. This is Charmander. Charmander is an orange lizard with a flame on the tip of its tail. That flame is its power. When Charmander feels strong, the flame burns bright. It is small and warm, like a campfire you could hold in your arms. Be gentle with the tail. ${MEET_END}`,
+            `Number 2. The flame. Charmander is a Fire type. The flame on its tail is a sign of its health. When Charmander is doing well, that flame burns bright. At level 16 it evolves into Charmeleon. At level 36 it becomes Charizard. About 2 feet tall, and about 19 pounds. ${MEET_END}`,
             I.fire,
             "2",
           ),
@@ -139,7 +139,7 @@ export const KID_CARDS: KidCard[] = [
           talk(
             "fact",
             "Squirtle",
-            `Number 3. The picture is a fish, because this one loves water. This is Squirtle. Squirtle is a blue turtle. It can hide in its shell, and it can shoot water. The shell is tough, like a helmet. Squirtle loves to swim. It is heavier than a cat, and lighter than you. ${MEET_END}`,
+            `Number 3. The fish, because Squirtle is a Water type. It can pull into its shell, and that shell is hard enough to take a hit. It fights back with a blast of water. At level 16 it evolves into Wartortle. At level 36 it becomes Blastoise, with water cannons on the shell. A bit under 2 feet tall, about 20 pounds. ${MEET_END}`,
             I.fish,
             "3",
           ),
@@ -156,7 +156,7 @@ export const KID_CARDS: KidCard[] = [
           talk(
             "fact",
             "Pikachu",
-            `Number 4. The picture is a sun. This is Pikachu. Pikachu is yellow, with long ears and two red circles on its cheeks. Those cheeks are full of electricity, like a little battery. When Pikachu is surprised, sparks can jump. Pikachu is small enough to sit on your lap. It says its own name. Pikachu! ${MEET_END}`,
+            `Number 4. The sun. Pikachu is an Electric type. The red circles on its cheeks are pouches that store electricity, and a shock can jump out when it is startled. Pikachu evolves from Pichu once their bond is strong. A Thunder Stone turns Pikachu into Raichu. Just over a foot tall, about 13 pounds. And yes, it says its own name. ${MEET_END}`,
             I.sun,
             "4",
           ),
@@ -173,7 +173,7 @@ export const KID_CARDS: KidCard[] = [
           talk(
             "fact",
             "Eevee",
-            `Number 5. The picture is a dog, because this one is fluffy with pointy ears. This is Eevee. Eevee is brown, with a big soft tail. It is curious, and it likes to watch people. Eevee is special. It can grow up in lots of different ways. A special stone, or a whole lot of kindness, can change what it becomes. ${MEET_END}`,
+            `Number 5. The dog, for the fluffy coat and pointed ears. Eevee is a Normal type, and its body can evolve eight different ways. Water Stone, Vaporeon. Thunder Stone, Jolteon. Fire Stone, Flareon. A close bond in the day, Espeon. A close bond at night, Umbreon. A Leaf Stone, Leafeon. An Ice Stone, Glaceon. A close bond plus a Fairy move, Sylveon. About 1 foot tall, and about 14 pounds. ${MEET_END}`,
             I.dog,
             "5",
           ),
@@ -190,7 +190,7 @@ export const KID_CARDS: KidCard[] = [
           talk(
             "fact",
             "Jigglypuff",
-            `Number 6. The picture is a music note. This is Jigglypuff. Jigglypuff is round and pink, like a balloon that can sing. Its song is a lullaby, and people get sleepy. If you fall asleep before the song is finished, Jigglypuff gets grumpy and draws on your face with a marker. Try to clap until the end. ${MEET_END}`,
+            `Number 6. The music note. Jigglypuff is Normal and Fairy. Its song is a lullaby, and listeners fall asleep. Fall asleep before the song ends and it gets annoyed and draws on your face with a marker. It evolves from Igglybuff. A Moon Stone turns it into Wigglytuff. A bit under 2 feet tall, about 12 pounds. ${MEET_END}`,
             I.music,
             "6",
           ),
@@ -207,7 +207,7 @@ export const KID_CARDS: KidCard[] = [
           talk(
             "fact",
             "Snorlax",
-            `Number 7. The picture is a bear. This is Snorlax. Snorlax is giant and very sleepy. It naps in the middle of the road, and it will not budge. Food is the trick. Snorlax wakes up to eat, and then it wants to sleep again. It is taller than a door, and it weighs about as much as six grown-ups. ${MEET_END}`,
+            `Number 7. The bear. Snorlax is a Normal type, almost 7 feet tall and over 1,000 pounds. It falls asleep in the road and will not move. It wakes up to eat. A hungry Snorlax can put away about 900 pounds of food in a day, then go straight back to sleep. It evolves from Munchlax when their bond is strong. ${MEET_END}`,
             I.bear,
             "7",
           ),
@@ -224,7 +224,7 @@ export const KID_CARDS: KidCard[] = [
           talk(
             "fact",
             "Gengar",
-            "Number 8. The picture is a ghost. This is Gengar. Gengar floats, and it loves to giggle and hide. On a dark night it might slip into your shadow and follow your feet. It is naughty, like a friend who jumps out and says boo. It is not a monster from a scary movie. You know eight Pokémon now. You can turn back to any picture and hear it again.",
+            "Number 8. The ghost. Gengar is Ghost and Poison, about 5 feet tall and 90 pounds. It hides in shadows and will slip into yours to give you a scare. A sudden chill can mean it is right there with you. Gastly evolves into Haunter, and Haunter becomes Gengar only when it is traded. You can turn back to any number and hear it again.",
             I.ghost,
             "8",
           ),
@@ -236,9 +236,9 @@ export const KID_CARDS: KidCard[] = [
     id: "guess",
     title: "Guess Who",
     libraryTitle: "Champdex: Guess Who",
-    blurb: "Three clues. Guess the Pokémon. Then hear if you were right.",
+    blurb: "Three clues. Call the name before the count ends.",
     childDoes:
-      "They pick a number, hear three clues, and shout a name. They wait through the count. The answer plays next, and the picture on the player changes.",
+      "Pick a number and press play. Three clues, then a count of three. The answer plays next and the picture changes.",
     chapters: [
       picture(
         "start",
@@ -251,7 +251,7 @@ export const KID_CARDS: KidCard[] = [
           talk(
             "how",
             "How to play Guess Who",
-            "This card is a guessing game. Turn the wheel, or press the arrows, until you see a number. Then press the big button. I will give you three clues. Shout the Pokémon's name if you know it. Then wait. I count to three, and the answer plays next. The picture changes when I say the name. Start at number 1.",
+            "Guess Who. Turn the wheel, or press the arrows, until you see a number. Then press play. Three clues. Call the name before the count of three ends. The answer plays next, and the picture changes to that Pokémon. Start at number 1.",
             I.star,
             "Go",
           ),
@@ -275,9 +275,10 @@ function guessChapters(): KidChapter[] {
     {
       key: "pikachu",
       name: "Pikachu",
-      clues: "I am yellow. I have long ears. My cheeks are full of electricity.",
+      clues:
+        "I am an Electric type. My cheeks store electricity. I evolve from Pichu, and a Thunder Stone turns me into Raichu.",
       answer:
-        "It is Pikachu. Pikachu is small enough to sit on your lap. A surprise can make sparks jump from those red cheeks.",
+        "It is Pikachu. Those red cheek pouches can throw a spark when it is startled. Just over a foot tall, about 13 pounds.",
       icon: I.sun,
       picture: "a sun",
       mark: "☀",
@@ -285,9 +286,10 @@ function guessChapters(): KidChapter[] {
     {
       key: "bulbasaur",
       name: "Bulbasaur",
-      clues: "I am green. I carry a seed on my back. One day that seed becomes a flower.",
+      clues:
+        "I am Grass and Poison. I carry a seed that stores sunlight. I evolve at level 16, and later that seed blooms.",
       answer:
-        "It is Bulbasaur. Bulbasaur naps in the grass, and the seed on its back drinks the sunshine.",
+        "It is Bulbasaur. Number 001. At level 32 it becomes Venusaur and the seed opens into a flower.",
       icon: I.daisy,
       picture: "a flower",
       mark: "❀",
@@ -295,9 +297,10 @@ function guessChapters(): KidChapter[] {
     {
       key: "charmander",
       name: "Charmander",
-      clues: "I am an orange lizard. I have a flame on my tail. The flame shows how strong I feel.",
+      clues:
+        "I am a Fire type. A flame on my tail shows how healthy I am. At level 36 I grow wings.",
       answer:
-        "It is Charmander. Be gentle with that tail. The flame is Charmander's power.",
+        "It is Charmander. Charmeleon comes at level 16. Charizard comes at level 36.",
       icon: I.fire,
       picture: "a flame",
       mark: "🔥",
@@ -305,9 +308,10 @@ function guessChapters(): KidChapter[] {
     {
       key: "snorlax",
       name: "Snorlax",
-      clues: "I am giant. I fall asleep in the road. I wake up if you bring food.",
+      clues:
+        "I am a Normal type, almost 7 feet tall. I fall asleep in the road. I can eat about 900 pounds of food in a day.",
       answer:
-        "It is Snorlax. Snorlax is taller than a door and weighs about as much as six grown-ups.",
+        "It is Snorlax. Over 1,000 pounds, and it evolves from Munchlax when their bond is strong.",
       icon: I.bear,
       picture: "a bear",
       mark: "🐻",
@@ -315,9 +319,9 @@ function guessChapters(): KidChapter[] {
     {
       key: "squirtle",
       name: "Squirtle",
-      clues: "I am blue. I hide in a shell. I shoot water, and I love to swim.",
-      answer:
-        "It is Squirtle. Squirtle's shell is tough, like a helmet, and it is heavier than a cat.",
+      clues:
+        "I am a Water type. I hide inside a hard shell. Later, water cannons grow out of that shell.",
+      answer: "It is Squirtle. Wartortle at level 16. Blastoise at level 36.",
       icon: I.fish,
       picture: "a fish",
       mark: "🐟",
@@ -325,9 +329,9 @@ function guessChapters(): KidChapter[] {
     {
       key: "jigglypuff",
       name: "Jigglypuff",
-      clues: "I am round and pink. I sing a lullaby. If you fall asleep too soon, I draw on your face.",
-      answer:
-        "It is Jigglypuff. Clap until the song is over, or you might wake up with marker on your cheeks.",
+      clues:
+        "I am Normal and Fairy. I sing people to sleep. If you nod off too early, I draw on your face.",
+      answer: "It is Jigglypuff. A Moon Stone evolves it into Wigglytuff.",
       icon: I.music,
       picture: "a music note",
       mark: "♪",
@@ -335,9 +339,10 @@ function guessChapters(): KidChapter[] {
     {
       key: "eevee",
       name: "Eevee",
-      clues: "I am brown and fluffy. I have a big soft tail. I can grow up in lots of different ways.",
+      clues:
+        "I am a Normal type, brown and fluffy. I can evolve eight different ways. A stone, the time of day, or a close bond decides which one.",
       answer:
-        "It is Eevee. A special stone, or a lot of kindness, can change what Eevee becomes.",
+        "It is Eevee. Vaporeon, Jolteon, Flareon, Espeon, Umbreon, Leafeon, Glaceon, and Sylveon all start as Eevee.",
       icon: I.dog,
       picture: "a dog",
       mark: "🐶",
@@ -345,9 +350,10 @@ function guessChapters(): KidChapter[] {
     {
       key: "gengar",
       name: "Gengar",
-      clues: "I float. I giggle and hide. On a dark night I might follow you inside your own shadow.",
+      clues:
+        "I am Ghost and Poison. I hide in shadows. I only finish evolving when I am traded.",
       answer:
-        "It is Gengar. Gengar likes to say boo. It is naughty, not a monster from a scary movie.",
+        "It is Gengar. It steps into your shadow to give you a scare. Haunter becomes Gengar by trade.",
       icon: I.ghost,
       picture: "a ghost",
       mark: "👻",
@@ -408,7 +414,7 @@ export function buildKidCard(card: KidCard, cardId?: string): YotoContent {
     },
     metadata: {
       title: card.libraryTitle,
-      description: `${card.blurb} Made for a child to play on a Yoto player with one Make Your Own card.`,
+      description: `${card.blurb} Written for ages 8 to 12, to play on a Yoto player with one Make Your Own card.`,
     },
   };
   if (cardId) content.cardId = cardId;

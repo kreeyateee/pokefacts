@@ -5,7 +5,7 @@ import { buildKidCard, KID_CARDS } from "./kid-cards";
 
 const BANNED = [/kill/i, /death/i, /quarry/i, /stat total/i, /capture rate/i, /base stat/i];
 
-describe("cards a seven-year-old can play", () => {
+describe("cards for ages 8 to 12", () => {
   it("ships facts and guess who", () => {
     assert.deepEqual(
       KID_CARDS.map((card) => card.id),

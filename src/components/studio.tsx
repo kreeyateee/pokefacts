@@ -460,7 +460,7 @@ export function Studio() {
       <footer className="mx-auto w-full max-w-6xl px-4 pb-8 text-xs leading-5 text-[#8d8272]">
         Unofficial fan cards for your own Yoto library. Not made by Nintendo, Game Freak,
         Creatures, or Yoto. Pokémon names are theirs. The words are written for a
-        seven-year-old to hear on a player.
+        ages 8 to 12 to hear on a player.
       </footer>
 
       <ConnectDialog open={connectOpen} onOpenChange={setConnectOpen} />
