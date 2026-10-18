@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { listMonSheets } from "./catalogue-db";
 import { dexBlurb, pickDexEntry, threeClues, type FlavorSource, type MonSheet } from "./dex-facts";
-import { buildKidCard, kidCardsFromDex } from "./kid-cards";
+import { buildKidCard, countSpokenTracks, kidCardsFromDex, YOTO_TRACK_LIMIT } from "./kid-cards";
 import { pronounce } from "./pronounce";
+import { POST as postJob } from "../app/api/yoto/job/route";
 
 const BANNED = [/kill/i, /death/i, /quarry/i, /stat total/i, /capture rate/i, /base stat/i];
 
@@ -39,6 +41,7 @@ function sheet(id: number, name: string, entries: FlavorSource[]): MonSheet {
   const wailord = name === "Wailord";
   return {
     id,
+    slug: name.toLowerCase(),
     name,
     genus: wailord ? "Float Whale Pokémon" : "Seed Pokémon",
     types: wailord ? ["water"] : ["grass", "poison"],
@@ -143,9 +146,40 @@ describe("Pokédex entries", () => {
     assert.ok(text.length < 2800);
     assert.match(text, /keeps a quiet habit/);
     assert.match(text, /wanders far from home/);
-    const authored = dexBlurb(sheet(1, "Bulbasaur", entry("Bulbasaur")), "1");
+    const fromDex = dexBlurb(sheet(1, "Bulbasaur", entry("Bulbasaur")), "1");
+    assert.match(fromDex, /keeps a quiet habit/);
+    assert.doesNotMatch(fromDex, /large plant bulb on its back/);
+    const authored = dexBlurb({ ...sheet(1, "Bulbasaur", []), entries: [] }, "1");
     assert.match(authored, /large plant bulb on its back/);
-    assert.doesNotMatch(authored, /keeps a quiet habit/);
+  });
+
+  it("writes original clues when the Pokédex has fewer than three sentences", () => {
+    const clues = threeClues(
+      "Mew",
+      [
+        {
+          version: "red",
+          text: "So rare that it is still said to be a mirage by many experts.",
+        },
+      ],
+      {
+        types: ["psychic"],
+        genus: "New Species Pokémon",
+        heightDecimetres: 4,
+        weightHectograms: 40,
+        habitat: null,
+      },
+    );
+    assert.equal(clues.length, 3);
+    for (const clue of clues) assert.doesNotMatch(clue, /Mew/i);
+    assert.doesNotThrow(() =>
+      threeClues("Mr. Mime", [
+        {
+          version: "red",
+          text: "Mr. Mime is a master of pantomime and can make walls of thin air.",
+        },
+      ]),
+    );
   });
 
   it("respells the names the narrator gets wrong", () => {
@@ -165,8 +199,10 @@ describe("cards for ages 8 to 12", () => {
   it("ships facts and guess who", () => {
     assert.deepEqual(
       cards.map((card) => card.id),
-      ["meet", "guess"],
+      ["meet-1", "guess-1"],
     );
+    assert.equal(cards[0]?.kind, "meet");
+    assert.equal(cards[1]?.kind, "guess");
     assert.equal(cards[0]?.title, "Facts");
     assert.equal(cards[1]?.title, "Guess Who");
   });
@@ -178,7 +214,7 @@ describe("cards for ages 8 to 12", () => {
       const script = start?.tracks.map((track) => track.text).join(" ") ?? "";
       assert.match(script, /picture/i);
       assert.match(script, /press/i);
-      assert.ok(card.chapters.length <= 12);
+      assert.ok(countSpokenTracks(card.chapters) <= YOTO_TRACK_LIMIT);
     }
   });
 
@@ -212,7 +248,7 @@ describe("cards for ages 8 to 12", () => {
     assert.doesNotMatch(bulba, /\bmetres\b|Attack /);
     const wailord = cards[0]?.chapters.find((chapter) => chapter.key === "wailord");
     const whale = wailord?.tracks[0]?.text ?? "";
-    assert.match(whale, /People go to the coast just to watch a group of them/);
+    assert.match(whale, /whole pod works together/);
     assert.match(whale, /It is a Water type\./);
     assert.match(whale, /It is the Float Whale Pokémon\./);
     assert.match(whale, /It weighs 398 kilograms\. It is 1450 centimetres tall\./);
@@ -223,7 +259,7 @@ describe("cards for ages 8 to 12", () => {
   });
 
   it("makes Guess Who a two-part riddle that changes the picture", () => {
-    const guess = cards.find((card) => card.id === "guess");
+    const guess = cards.find((card) => card.kind === "guess");
     assert.ok(guess);
     const riddles = guess.chapters.slice(1);
     assert.equal(riddles.length, 9);
@@ -242,11 +278,144 @@ describe("cards for ages 8 to 12", () => {
     assert.ok(meet);
     const payload = buildKidCard(meet, "card-meet");
     assert.equal(payload.cardId, "card-meet");
-    assert.equal(payload.title, "Champdex: Pokémon Facts");
+    assert.equal(payload.title, meet.libraryTitle);
+    assert.match(payload.title, /Champdex: Facts /);
     assert.equal(payload.content.chapters.length, meet.chapters.length);
     assert.equal(payload.content.chapters[1]?.title, "Bulbasaur");
     assert.equal(payload.content.chapters[1]?.tracks[0]?.type, "elevenlabs");
     const wailord = payload.content.chapters.find((chapter) => chapter.key === "wailord");
     assert.match(wailord?.tracks[0]?.trackUrl ?? "", /Whale mer/);
+  });
+});
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function spokenTracks(card: { chapters: Array<{ tracks: unknown[] }> }): number {
+  return countSpokenTracks(card.chapters);
+}
+
+describe("every national species", () => {
+  const sheets = listMonSheets();
+  const cards = kidCardsFromDex(sheets);
+  const facts = cards.filter((card) => card.kind === "meet");
+  const guess = cards.filter((card) => card.kind === "guess");
+
+  it("splits the dex into 11 Facts cards and 21 Guess Who cards", () => {
+    assert.equal(sheets.length, 1025);
+    assert.equal(facts.length, 11);
+    assert.equal(guess.length, 21);
+    assert.equal(facts[0]?.rangeLabel, "Facts 1–99");
+    assert.equal(facts[10]?.rangeLabel, "Facts 991–1025");
+    assert.equal(guess[0]?.rangeLabel, "Guess Who 1–49");
+    assert.equal(guess[20]?.rangeLabel, "Guess Who 981–1025");
+    assert.equal(spokenTracks(facts[0]!), 100);
+    assert.equal(spokenTracks(facts[10]!), 36);
+    assert.equal(spokenTracks(guess[0]!), 99);
+    assert.equal(spokenTracks(guess[20]!), 91);
+  });
+
+  it("keeps every playlist at or under 100 tracks and uses each id once", () => {
+    const expected = Array.from({ length: 1025 }, (_, index) => index + 1);
+    for (const group of [facts, guess]) {
+      const ids = group.flatMap((card) =>
+        card.chapters.flatMap((chapter) => (chapter.dexId ? [chapter.dexId] : [])),
+      );
+      assert.deepEqual(ids, expected);
+      for (const card of group) {
+        assert.ok(spokenTracks(card) <= YOTO_TRACK_LIMIT);
+        assert.ok(spokenTracks(card) > 0);
+      }
+    }
+  });
+
+  it("still reads Bulbasaur in metric, and hides the name on a clue track", () => {
+    const bulbasaur = facts[0]?.chapters.find((chapter) => chapter.dexId === 1);
+    const text = bulbasaur?.tracks[0]?.text ?? "";
+    assert.match(text, /It is a Grass and Poison type\./);
+    assert.match(text, /It weighs 6\.9 kilograms\. It is 70 centimetres tall\./);
+    assert.match(text, /nutrients that are stored in the seed on its back/);
+    assert.doesNotMatch(text, /\bHP\b|\bAttack\b|feet|pounds/);
+    const riddle = guess[0]?.chapters.find((chapter) => chapter.dexId === 1);
+    assert.ok(riddle);
+    assert.equal(riddle.tracks[0]?.icon, riddle.icon);
+    assert.match(riddle.tracks[0]?.text ?? "", /One\. Two\. Three\./);
+    assert.doesNotMatch(riddle.tracks[0]?.text ?? "", /Bulbasaur/i);
+    assert.match(riddle.tracks[1]?.text ?? "", /^It is Bulbasaur\./);
+    assert.notEqual(riddle.tracks[1]?.icon, riddle.tracks[0]?.icon);
+    for (const card of guess) {
+      for (const chapter of card.chapters) {
+        if (!chapter.dexId) continue;
+        const clue = chapter.tracks[0]?.text ?? "";
+        assert.doesNotMatch(clue, new RegExp(escapeRegExp(chapter.title), "i"));
+        assert.match(chapter.tracks[1]?.text ?? "", /^It is /);
+      }
+    }
+  });
+});
+
+describe("Yoto playlist limit", () => {
+  function chapter(extra = 0) {
+    const tracks = [
+      {
+        type: "elevenlabs",
+        trackUrl: "Bulbasaur. It is a Grass and Poison type. It weighs 6.9 kilograms.",
+      },
+    ];
+    for (let index = 0; index < extra; index += 1) {
+      tracks.push({
+        type: "elevenlabs",
+        trackUrl: `Extra line ${index}. It is 70 centimetres tall.`,
+      });
+    }
+    return { tracks };
+  }
+
+  async function send(chapters: unknown[]) {
+    return postJob(
+      new Request("http://localhost/api/yoto/job", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${"x".repeat(24)}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          voiceId: "pFZP5JQG7iQjIQuC4Bku",
+          content: { title: "Facts", content: { chapters } },
+        }),
+      }),
+    );
+  }
+
+  it("accepts a 99-chapter facts card and rejects 101 tracks", async () => {
+    const original = globalThis.fetch;
+    let called = false;
+    globalThis.fetch = async () => {
+      called = true;
+      return new Response(JSON.stringify({ jobId: "job-1", status: "queued" }), { status: 202 });
+    };
+    try {
+      const accepted = await send(Array.from({ length: 99 }, () => chapter()));
+      assert.equal(accepted.status, 202);
+      assert.equal(called, true);
+
+      called = false;
+      const full = await send(Array.from({ length: 100 }, () => chapter()));
+      assert.equal(full.status, 202);
+      assert.equal(called, true);
+
+      called = false;
+      const rejected = await send([
+        ...Array.from({ length: 99 }, () => chapter()),
+        chapter(1),
+      ]);
+      assert.equal(rejected.status, 400);
+      const body = (await rejected.json()) as { error?: string };
+      assert.match(body.error ?? "", /100 tracks/);
+      assert.equal(called, false);
+    } finally {
+      globalThis.fetch = original;
+    }
   });
 });

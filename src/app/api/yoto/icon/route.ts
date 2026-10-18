@@ -3,17 +3,28 @@ import path from "node:path";
 
 import { bearerToken, jsonError } from "@/lib/yoto-proxy";
 
-const PIXEL_IDS = new Set(["1", "4", "7", "25", "39", "94", "133", "143", "321"]);
+function pixelFile(id: string): string | null {
+  if (!/^[1-9]\d{0,3}$/.test(id)) return null;
+  const number = Number(id);
+  if (!Number.isInteger(number) || number < 1 || number > 1025) return null;
+  return path.join(process.cwd(), "public", "pixels", `${number}.png`);
+}
 
 export async function POST(request: Request) {
   const token = bearerToken(request);
   if (!token) return jsonError("Connect Yoto before uploading a picture.", 401);
 
   const id = new URL(request.url).searchParams.get("id") ?? "";
-  if (!PIXEL_IDS.has(id)) return jsonError("That picture is not one of the Champdex pixels.");
+  const file = pixelFile(id);
+  if (!file) return jsonError("That picture is not a national Pokédex icon.");
 
-  const file = path.join(process.cwd(), "public", "pixels", `${id}.png`);
-  const bytes = await readFile(file);
+  let bytes: Buffer;
+  try {
+    bytes = await readFile(file);
+  } catch {
+    return jsonError("That picture is not a national Pokédex icon.");
+  }
+
   const url = new URL("https://api.yotoplay.com/media/displayIcons/user/me/upload");
   url.searchParams.set("autoConvert", "false");
   url.searchParams.set("filename", `champdex-${id}`);
@@ -25,7 +36,7 @@ export async function POST(request: Request) {
       Accept: "application/json",
       "Content-Type": "image/png",
     },
-    body: bytes,
+    body: new Uint8Array(bytes),
     signal: AbortSignal.timeout(30_000),
   });
   const payload = (await response.json().catch(() => null)) as {

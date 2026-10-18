@@ -7,6 +7,8 @@ import type {
   CatalogueListItem,
   CataloguePage,
 } from "@/lib/catalogue-types";
+import type { MonSheet } from "@/lib/dex-facts";
+import { habitatSpeech } from "@/lib/format";
 
 const PAGE_SIZE = 40;
 
@@ -276,4 +278,89 @@ export function getCatalogueEntry(id: number): CatalogueEntry | null {
     evolutionSet: row.evo_set,
     moves: moves.map((move) => move.name),
   };
+}
+
+/** Every national species, for Facts and Guess Who. Reads SQLite only. */
+export function listMonSheets(): MonSheet[] {
+  const species = db()
+    .prepare(
+      `SELECT id, slug, name, genus, habitat, height_dm, weight_hg, info, info_version
+       FROM species
+       ORDER BY id`,
+    )
+    .all() as Array<{
+    id: number;
+    slug: string;
+    name: string;
+    genus: string;
+    habitat: string | null;
+    height_dm: number;
+    weight_hg: number;
+    info: string;
+    info_version: string;
+  }>;
+  const typeRows = db()
+    .prepare("SELECT species_id, type_name FROM species_types ORDER BY species_id, slot")
+    .all() as Array<{ species_id: number; type_name: string }>;
+  const abilityRows = db()
+    .prepare(
+      `SELECT sa.species_id, sa.ability_name, sa.is_hidden, IFNULL(a.info, '') AS info
+       FROM species_abilities sa
+       LEFT JOIN abilities a ON a.id = sa.ability_id
+       ORDER BY sa.species_id, sa.is_hidden, sa.slot`,
+    )
+    .all() as Array<{
+    species_id: number;
+    ability_name: string;
+    is_hidden: number;
+    info: string;
+  }>;
+  const evoRows = db()
+    .prepare(
+      `SELECT e.from_id, s.name AS name, e.method
+       FROM evolutions e
+       JOIN species s ON s.id = e.into_id
+       ORDER BY e.from_id, e.into_id`,
+    )
+    .all() as Array<{ from_id: number; name: string; method: string }>;
+
+  const types = new Map<number, string[]>();
+  for (const row of typeRows) {
+    const list = types.get(row.species_id) ?? [];
+    list.push(row.type_name);
+    types.set(row.species_id, list);
+  }
+  const abilities = new Map<number, { name: string; info: string }>();
+  for (const row of abilityRows) {
+    if (abilities.has(row.species_id)) continue;
+    abilities.set(row.species_id, { name: row.ability_name, info: row.info });
+  }
+  const evolutions = new Map<number, Array<{ name: string; method: string }>>();
+  for (const row of evoRows) {
+    const list = evolutions.get(row.from_id) ?? [];
+    list.push({ name: row.name, method: row.method });
+    evolutions.set(row.from_id, list);
+  }
+
+  return species.map((row) => {
+    const ability = abilities.get(row.id);
+    const evolution = (evolutions.get(row.id) ?? [])
+      .map((step) => `${row.name} becomes ${step.name} ${step.method}.`.replace(/\s+/g, " ").trim())
+      .join(" ");
+    return {
+      id: row.id,
+      slug: row.slug,
+      name: row.name,
+      genus: row.genus,
+      types: types.get(row.id) ?? [],
+      heightDecimetres: row.height_dm,
+      weightHectograms: row.weight_hg,
+      stats: [],
+      abilityName: ability?.name ?? null,
+      abilityEffect: ability?.info || null,
+      evolution,
+      habitat: row.habitat ? habitatSpeech(row.habitat) : null,
+      entries: row.info ? [{ text: row.info, version: row.info_version }] : [],
+    };
+  });
 }

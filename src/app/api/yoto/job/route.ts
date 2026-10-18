@@ -1,3 +1,4 @@
+import { YOTO_TRACK_LIMIT } from "@/lib/kid-cards";
 import { bearerToken, forwardYoto, jsonError } from "@/lib/yoto-proxy";
 
 type JobBody = {
@@ -30,10 +31,8 @@ export async function POST(request: Request) {
   if (!Array.isArray(chapters) || chapters.length === 0) {
     return jsonError("Add at least one Pokémon before cutting a card.");
   }
-  if (chapters.length > 12) {
-    return jsonError("A Champdex card holds twelve pictures. That is the most a child can browse.");
-  }
 
+  let trackCount = 0;
   for (const chapter of chapters) {
     if (!chapter || typeof chapter !== "object") {
       return jsonError("A chapter in this card is malformed.");
@@ -42,6 +41,7 @@ export async function POST(request: Request) {
     if (!Array.isArray(tracks) || tracks.length === 0) {
       return jsonError("Every chapter needs a spoken briefing.");
     }
+    trackCount += tracks.length;
     for (const track of tracks) {
       if (!track || typeof track !== "object") {
         return jsonError("A track in this card is malformed.");
@@ -54,6 +54,11 @@ export async function POST(request: Request) {
         return jsonError("A briefing is empty or longer than Yoto allows.");
       }
     }
+  }
+  if (trackCount > YOTO_TRACK_LIMIT) {
+    return jsonError(
+      `A Yoto Make Your Own playlist holds ${YOTO_TRACK_LIMIT} tracks. Send the next card for the rest.`,
+    );
   }
 
   const url = `https://labs.api.yotoplay.com/content/job?voiceId=${encodeURIComponent(voiceId)}`;

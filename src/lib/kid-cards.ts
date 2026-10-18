@@ -1,7 +1,7 @@
 import { dexBlurb, pickDexEntry, threeClues, type MonSheet } from "@/lib/dex-facts";
 import { pronounce } from "@/lib/pronounce";
 import type { YotoContent } from "@/lib/yoto-card";
-import { YOTO_ICONS } from "@/lib/yoto-icons";
+import { iconForType, YOTO_ICONS } from "@/lib/yoto-icons";
 
 export type KidTrack = {
   key: string;
@@ -27,16 +27,24 @@ export type KidChapter = {
   /** Parent preview, not shown on the player. */
   mark: string;
   icon: string;
-  /** Compressed pixel sprite, shown on the page. */
+  /** National dex number, when this chapter is one Pokémon. */
+  dexId?: number;
+  /** Sprite shown on the page. */
   sprite?: string;
   /** Merged cry and reading, when that file has been recorded. */
   clip?: string;
   tracks: KidTrack[];
 };
 
+export type KidCardKind = "meet" | "guess";
+
 export type KidCard = {
-  id: "meet" | "guess";
+  /** `meet-1` … `meet-11`, or `guess-1` … `guess-21`. */
+  id: string;
+  kind: KidCardKind;
   title: string;
+  /** Playlist the parent is sending, such as "Facts 1–99". */
+  rangeLabel: string;
   libraryTitle: string;
   recommended?: boolean;
   blurb: string;
@@ -44,40 +52,19 @@ export type KidCard = {
   chapters: KidChapter[];
 };
 
-type Mon = {
-  id: number;
-  key: string;
-  name: string;
-  picture: string;
-  mark: string;
-  icon: string;
-};
+/** Yoto Make Your Own playlists hold 100 tracks on one card. */
+export const YOTO_TRACK_LIMIT = 100;
+
+/** One intro track plus one fact leaves room for 99 Pokémon. */
+export const FACTS_PER_CARD = YOTO_TRACK_LIMIT - 1;
+
+/** One intro track plus two tracks per riddle leaves room for 49 riddles. */
+export const RIDDLES_PER_CARD = Math.floor((YOTO_TRACK_LIMIT - 1) / 2);
 
 const I = YOTO_ICONS;
 
-const ROSTER: Mon[] = [
-  { id: 1, key: "bulbasaur", name: "Bulbasaur", picture: "a flower", mark: "❀", icon: I.daisy },
-  { id: 4, key: "charmander", name: "Charmander", picture: "a flame", mark: "🔥", icon: I.fire },
-  { id: 7, key: "squirtle", name: "Squirtle", picture: "a fish", mark: "🐟", icon: I.fish },
-  { id: 25, key: "pikachu", name: "Pikachu", picture: "a sun", mark: "☀", icon: I.sun },
-  { id: 133, key: "eevee", name: "Eevee", picture: "a dog", mark: "🐶", icon: I.dog },
-  { id: 39, key: "jigglypuff", name: "Jigglypuff", picture: "a music note", mark: "♪", icon: I.music },
-  { id: 143, key: "snorlax", name: "Snorlax", picture: "a bear", mark: "🐻", icon: I.bear },
-  { id: 94, key: "gengar", name: "Gengar", picture: "a ghost", mark: "👻", icon: I.ghost },
-  { id: 321, key: "wailord", name: "Wailord", picture: "a wave", mark: "〰", icon: I.wave },
-];
-
-const GUESS_ORDER = [
-  "pikachu",
-  "bulbasaur",
-  "charmander",
-  "snorlax",
-  "squirtle",
-  "jigglypuff",
-  "eevee",
-  "gengar",
-  "wailord",
-];
+/** Browser Hear clips already recorded for the first nine. Yoto still speaks text. */
+const CRY_CLIPS = new Set([1, 4, 7, 25, 39, 94, 133, 143, 321]);
 
 function talk(
   key: string,
@@ -107,7 +94,7 @@ function picture(
   mark: string,
   icon: string,
   tracks: KidTrack[],
-  extras?: { sprite?: string; clip?: string },
+  extras?: { sprite?: string; clip?: string; dexId?: number },
 ): KidChapter {
   return {
     key,
@@ -119,6 +106,7 @@ function picture(
     tracks,
     sprite: extras?.sprite,
     clip: extras?.clip,
+    dexId: extras?.dexId,
   };
 }
 
@@ -126,106 +114,141 @@ export function trackSpeech(track: KidTrack): string {
   return track.spoken;
 }
 
-export function kidCardsFromDex(sheets: MonSheet[]): KidCard[] {
-  const byId = new Map(sheets.map((sheet) => [sheet.id, sheet]));
-  const byKey = new Map(ROSTER.map((mon) => [mon.key, mon]));
+export function countSpokenTracks(chapters: Array<{ tracks?: unknown[] }>): number {
+  return chapters.reduce((sum, chapter) => {
+    const tracks = chapter.tracks;
+    return sum + (Array.isArray(tracks) ? tracks.length : 0);
+  }, 0);
+}
 
-  const facts = ROSTER.map((mon, index) => {
-    const sheet = byId.get(mon.id);
-    if (!sheet) throw new Error(`PokéAPI sheet missing for ${mon.name}.`);
-    const entry = pickDexEntry(sheet.entries);
-    const number = String(index + 1);
-    return picture(
-      mon.key,
-      mon.name,
-      number,
-      mon.picture,
-      mon.mark,
-      mon.icon,
-      [
-        talk(
-          "entry",
-          mon.name,
-          dexBlurb(sheet, number),
-          mon.icon,
-          number,
-          entry.version,
-        ),
-      ],
-      { sprite: `/pixels/${mon.id}.png`, clip: `/facts/${mon.id}.mp3` },
-    );
-  });
+function chunk<T>(items: T[], size: number): T[][] {
+  const groups: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    groups.push(items.slice(index, index + size));
+  }
+  return groups;
+}
 
-  const riddles = GUESS_ORDER.map((key, index) => {
-    const mon = byKey.get(key);
-    if (!mon) throw new Error(`Missing roster entry for ${key}.`);
-    const sheet = byId.get(mon.id);
-    if (!sheet) throw new Error(`PokéAPI sheet missing for ${mon.name}.`);
-    const sources = sheet.entries;
-    const entry = pickDexEntry(sources);
-    const clues = threeClues(mon.name, sources);
-    const number = String(index + 1);
-    return picture(mon.key, mon.name, number, "a detective", "?", I.detective, [
+export function rangeLabel(kind: KidCardKind, first: number, last: number): string {
+  const title = kind === "meet" ? "Facts" : "Guess Who";
+  return first === last ? `${title} ${first}` : `${title} ${first}–${last}`;
+}
+
+function typeIcon(types: string[]): string {
+  const icon = iconForType(types[0]?.toLowerCase());
+  return icon === I.detective ? I.star : icon;
+}
+
+function factChapter(sheet: MonSheet): KidChapter {
+  const number = String(sheet.id);
+  const entry = pickDexEntry(sheet.entries);
+  const icon = typeIcon(sheet.types);
+  return picture(
+    sheet.slug,
+    sheet.name,
+    number,
+    "this Pokémon",
+    number,
+    icon,
+    [
+      talk(
+        "entry",
+        sheet.name,
+        dexBlurb(sheet, number),
+        icon,
+        number,
+        entry.version || undefined,
+      ),
+    ],
+    {
+      sprite: `/sprites/${sheet.id}.png`,
+      clip: CRY_CLIPS.has(sheet.id) ? `/facts/${sheet.id}.mp3` : undefined,
+      dexId: sheet.id,
+    },
+  );
+}
+
+function riddleChapter(sheet: MonSheet): KidChapter {
+  const number = String(sheet.id);
+  const entry = pickDexEntry(sheet.entries);
+  const clues = threeClues(sheet.name, sheet.entries, sheet);
+  const answerIcon = typeIcon(sheet.types);
+  const dexLine = entry.text ? ` ${entry.text}` : "";
+  return picture(
+    sheet.slug,
+    sheet.name,
+    number,
+    "a detective",
+    "?",
+    I.detective,
+    [
       talk(
         "clues",
-        `${mon.name} clues`,
+        "Three clues",
         `Number ${number}. Three clues. ${clues.join(" ")} Shout your guess. One. Two. Three.`,
         I.detective,
         "?",
       ),
       talk(
         "answer",
-        `${mon.name} answer`,
-        `It is ${mon.name}. ${entry.text} The picture is ${mon.picture} now. Turn to another number for a new riddle.`,
-        mon.icon,
+        "The answer",
+        `It is ${sheet.name}.${dexLine} The picture changes to this Pokémon now. Turn to another number for a new riddle.`,
+        answerIcon,
         "Yes",
-        entry.version,
+        entry.version || undefined,
       ),
-    ], { sprite: `/pixels/${mon.id}.png` });
-  });
+    ],
+    { sprite: `/sprites/${sheet.id}.png`, dexId: sheet.id },
+  );
+}
 
+function intro(kind: KidCardKind, first: number, last: number, firstName: string): KidChapter {
+  const label = rangeLabel(kind, first, last);
+  const text =
+    kind === "meet"
+      ? `This card is ${label}. Turn the wheel, or press the arrows, until you see a picture. Then press play. You will hear the name, then the Pokédex line, then how much it weighs and how tall it is. The star is this track. Number ${first} is ${firstName}. Each playlist links to its own card.`
+      : `Guess Who. This card is ${label}. Turn the wheel, or press the arrows, until you see a number. Then press play. Three clues. Call the name before the count of three ends. The answer plays next, and the picture changes to that Pokémon. Start at number ${first}. Each playlist links to its own card.`;
+  return picture("start", "Start here", "Go", "a star", "★", I.star, [
+    talk("how", kind === "meet" ? "How to play" : "How to play Guess Who", text, I.star, "Go"),
+  ]);
+}
+
+function buildGroup(sheets: MonSheet[], kind: KidCardKind, size: number): KidCard[] {
+  return chunk(sheets, size).map((group, index) => {
+    const firstSheet = group[0];
+    const lastSheet = group[group.length - 1];
+    const first = firstSheet?.id ?? 0;
+    const last = lastSheet?.id ?? first;
+    const label = rangeLabel(kind, first, last);
+    const chapters = [
+      intro(kind, first, last, firstSheet?.name ?? "this Pokémon"),
+      ...group.map((sheet) => (kind === "meet" ? factChapter(sheet) : riddleChapter(sheet))),
+    ];
+    return {
+      id: `${kind}-${index + 1}`,
+      kind,
+      title: kind === "meet" ? "Facts" : "Guess Who",
+      rangeLabel: label,
+      libraryTitle: `Champdex: ${label}`,
+      recommended: kind === "meet" && index === 0,
+      blurb:
+        kind === "meet"
+          ? "The name, then the Pokédex line, then the weight and the height."
+          : "Three clues. Call the name before the count ends.",
+      childDoes:
+        kind === "meet"
+          ? "Turn to a picture and press play. You hear the name, then the Pokédex line, then how much it weighs and how tall it is."
+          : "Pick a number and press play. Three clues, then a count of three. The answer plays next and the picture changes.",
+      chapters,
+    };
+  });
+}
+
+export function kidCardsFromDex(sheets: MonSheet[]): KidCard[] {
+  const ordered = [...sheets].sort((a, b) => a.id - b.id);
   return [
-    {
-      id: "meet",
-      title: "Facts",
-      libraryTitle: "Champdex: Pokémon Facts",
-      recommended: true,
-      blurb: "The cry, the name, then the Pokédex entries, the weight, and the height.",
-      childDoes:
-        "Turn to a picture and press play. You hear the cry, then the name, then the Pokédex entries.",
-      chapters: [
-        picture("start", "Start here", "Go", "a star", "★", I.star, [
-          talk(
-            "how",
-            "How to play",
-            "This card is Pokémon facts. Turn the wheel, or press the arrows, until you see a picture. Then press play. You will hear the cry, then the name, then the Pokédex entries. You will also hear how much it weighs and how tall it is. The star is this track. Number 1 is Bulbasaur.",
-            I.star,
-            "Go",
-          ),
-        ]),
-        ...facts,
-      ],
-    },
-    {
-      id: "guess",
-      title: "Guess Who",
-      libraryTitle: "Champdex: Guess Who",
-      blurb: "Three clues from the Pokédex. Call the name before the count ends.",
-      childDoes:
-        "Pick a number and press play. Three Pokédex clues, then a count of three. The answer plays next and the picture changes.",
-      chapters: [
-        picture("start", "Start here", "Go", "a star", "★", I.star, [
-          talk(
-            "how",
-            "How to play Guess Who",
-            "Guess Who. Turn the wheel, or press the arrows, until you see a number. Then press play. Three clues from the Pokédex. Call the name before the count of three ends. The answer plays next, and the picture changes to that Pokémon. Start at number 1.",
-            I.star,
-            "Go",
-          ),
-        ]),
-        ...riddles,
-      ],
-    },
+    ...buildGroup(ordered, "meet", FACTS_PER_CARD),
+    ...buildGroup(ordered, "guess", RIDDLES_PER_CARD),
   ];
 }
 
@@ -235,7 +258,10 @@ export function buildKidCard(card: KidCard, cardId?: string): YotoContent {
     content: {
       chapters: card.chapters.map((chapter) => ({
         key: chapter.key,
-        title: chapter.title,
+        title:
+          card.kind === "guess" && chapter.key !== "start"
+            ? `Riddle ${chapter.overlay}`
+            : chapter.title,
         overlayLabel: chapter.overlay,
         display: { icon16x16: chapter.icon },
         tracks: chapter.tracks.map((track) => ({
@@ -250,7 +276,7 @@ export function buildKidCard(card: KidCard, cardId?: string): YotoContent {
     },
     metadata: {
       title: card.libraryTitle,
-      description: `${card.blurb} Written for ages 8 to 12, to play on a Yoto player with one Make Your Own card.`,
+      description: `${card.rangeLabel}. ${card.blurb} Written for ages 8 to 12. Link this playlist to its own Make Your Own card. One card holds ${YOTO_TRACK_LIMIT} tracks.`,
     },
   };
   if (cardId) content.cardId = cardId;

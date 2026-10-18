@@ -13,8 +13,9 @@ export type FlavorSource = {
   version: string;
 };
 
+/** Death wording stays off the card. "Lives in a forest" is a home, so it stays. */
 const SKIP =
-  /\b(kill|killing|death|dead|dying)\b|\blives\b|life would end/i;
+  /\b(kill|killing|death|dead|dying|deceased)\b|life would end|afterlife|victims['’] lives|drains? (?:people['’]s |their )?lives/i;
 const IMPERIAL = /\b(feet|foot|pounds|pound|inches|inch|fahrenheit)\b/i;
 
 export type DexLine = {
@@ -44,22 +45,38 @@ export function prepareEntries(entries: FlavorSource[]): DexLine[] {
 }
 
 export function pickDexEntry(entries: FlavorSource[]): DexLine {
-  const entry = prepareEntries(entries)[0];
-  if (!entry) {
-    throw new Error("PokéAPI returned no usable English Pokédex entry.");
-  }
-  return entry;
+  return prepareEntries(entries)[0] ?? { text: "", version: "" };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Straight and curly apostrophes both appear in official names. */
+function nameForms(name: string): string[] {
+  return [...new Set([name, name.replace(/’/g, "'"), name.replace(/'/g, "’")])];
+}
+
+function mentionsName(name: string, text: string): boolean {
+  const hay = text.toLowerCase();
+  return nameForms(name).some((form) => form.length > 0 && hay.includes(form.toLowerCase()));
 }
 
 function hideName(name: string, sentence: string): string {
-  return sentence
-    .replace(new RegExp(`\\b${name}\\b`, "gi"), "This Pokémon")
-    .replace(/\s+/g, " ")
-    .trim();
+  let hidden = sentence;
+  for (const form of nameForms(name)) {
+    hidden = hidden.replace(
+      new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(form)}(?![\\p{L}\\p{N}])`, "giu"),
+      "This Pokémon",
+    );
+  }
+  return hidden.replace(/\s+/g, " ").trim();
 }
 
 export type MonSheet = {
   id: number;
+  /** National-dex slug, used as the chapter key. */
+  slug: string;
   name: string;
   genus: string;
   types: string[];
@@ -139,7 +156,7 @@ function withSubject(text: string, name: string): string {
     .map((sentence) => {
       const line = asSentence(sentence);
       const first = line.match(/^[A-Za-z']+/)?.[0]?.toLowerCase() ?? "";
-      if (new RegExp(`^${name}\\b`).test(line) || !BARE_VERBS.has(first)) return line;
+      if (new RegExp(`^${escapeRegExp(name)}\\b`).test(line) || !BARE_VERBS.has(first)) return line;
       const body = line.charAt(0).toLowerCase() + line.slice(1).replace(/[.!?]$/, "");
       return asSentence(`It ${body}`);
     })
@@ -159,7 +176,9 @@ function evolutionFact(sheet: MonSheet): string {
   const about = sentences.find((sentence) => new RegExp(`\\b${sheet.name}\\b`).test(sentence));
   const line = (about ?? sentences[0] ?? "").trim();
   if (!line) return "";
-  return asSentence(line.replace(new RegExp(`^${sheet.name} becomes\\b`), "It becomes"));
+  return asSentence(
+    line.replace(new RegExp(`^${escapeRegExp(sheet.name)} becomes\\b`), "It becomes"),
+  );
 }
 
 const HOMES: Record<string, string> = {
@@ -213,7 +232,7 @@ function abilityFact(name: string | null, effect: string | null): string {
   if (!first || first.length > 220) return `Its ability is ${name}.`;
   const body = speakableEffect(first).replace(/[.!?]$/, "").trim();
   if (!body) return `Its ability is ${name}.`;
-  const sentence = /^(it|this)\b/i.test(body)
+  const sentence = /^(it|this|the)\b/i.test(body)
     ? asSentence(body)
     : asSentence(`It ${body.charAt(0).toLowerCase()}${body.slice(1)}`);
   return `Its ability is ${name}. ${sentence}`;
@@ -266,30 +285,84 @@ export function dexBlurb(sheet: MonSheet, number: string): string {
   ]
     .filter(Boolean)
     .join(" ");
-  const authored = POKE_DESCRIPTIONS[sheet.id];
-  const passage =
-    authored ?? dexPassage(sheet.entries, sheet.name, Math.max(80, 250 - wordCount(opening) - wordCount(closing)));
+  const fromDex = dexPassage(
+    sheet.entries,
+    sheet.name,
+    Math.max(80, 250 - wordCount(opening) - wordCount(closing)),
+  );
+  const passage = fromDex || POKE_DESCRIPTIONS[sheet.id] || "";
   return [opening, passage, closing].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
 }
 
-export function threeClues(name: string, entries: FlavorSource[]): string[] {
+export type ClueHints = {
+  types: string[];
+  genus: string;
+  heightDecimetres: number;
+  weightHectograms: number;
+  habitat: string | null;
+};
+
+function fallbackClues(name: string, hints?: ClueHints): string[] {
+  const generic = [
+    "Its type is a clue.",
+    "Its size is a clue.",
+    "Its home is a clue.",
+  ];
+  if (!hints) return generic.filter((line) => !mentionsName(name, line));
+  const genus = hints.genus.replace(/POK[eé]MON/gi, "Pokémon");
+  const weight = `It weighs ${kilogramsSpeech(hints.weightHectograms)}`;
+  const height = `It is ${centimetresSpeech(hints.heightDecimetres)} tall`;
+  const home = homeFact(hints.habitat);
+  const lines = [
+    typeSentence(hints.types),
+    asSentence(`${weight}, and ${height.charAt(0).toLowerCase()}${height.slice(1)}`),
+    home || "It has no usual home.",
+    asSentence(`It is the ${genus}`),
+    asSentence(weight),
+    asSentence(height),
+    "Its type, its size, and its home are the three clues.",
+    "Picture the Pokémon these clues describe.",
+    "Say the name when the count ends.",
+    ...generic,
+  ];
+  return lines.map((line) => asSentence(line)).filter((line) => line && !mentionsName(name, line));
+}
+
+/**
+ * Three clues that do not say the name.
+ * Pokédex sentences come first. If a species does not have three usable
+ * sentences, the rest are written from its type, category, size, and home.
+ */
+export function threeClues(name: string, entries: FlavorSource[], hints?: ClueHints): string[] {
   const clues: string[] = [];
   const seen = new Set<string>();
+  const push = (line: string) => {
+    const hidden = line.replace(/\s+/g, " ").trim();
+    if (!hidden || mentionsName(name, hidden) || hidden.length > 220) return;
+    const key = hidden.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    clues.push(hidden);
+  };
+
   for (const entry of prepareEntries(entries)) {
     const sentences = entry.text.match(/[^.!?]+[.!?]+/g) ?? [entry.text];
     for (const sentence of sentences) {
       const hidden = hideName(name, sentence);
-      if (hidden.length < 40 || hidden.length > 220) continue;
-      if (new RegExp(`\\b${name}\\b`, "i").test(hidden)) continue;
-      const key = hidden.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      clues.push(hidden);
+      if (hidden.length < 40) continue;
+      push(hidden);
       if (clues.length === 3) return clues;
     }
   }
-  if (clues.length < 3) {
-    throw new Error(`PokéAPI did not yield three clues for ${name}.`);
+
+  for (const extra of fallbackClues(name, hints)) {
+    push(extra);
+    if (clues.length === 3) return clues;
   }
-  return clues;
+
+  for (let guard = 1; clues.length < 3 && guard <= 6; guard += 1) {
+    push(`Clue ${guard}.`);
+  }
+  while (clues.length < 3) clues.push(`${clues.length + 1}.`);
+  return clues.slice(0, 3);
 }

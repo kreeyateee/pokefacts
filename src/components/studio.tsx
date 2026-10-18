@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Catalogue } from "@/components/catalogue";
 import { ConnectDialog } from "@/components/connect-dialog";
 import { Button } from "@/components/ui/button";
-import { buildKidCard, trackSpeech, type KidCard } from "@/lib/kid-cards";
+import { buildKidCard, trackSpeech, type KidCard, type KidCardKind } from "@/lib/kid-cards";
 import { speakTexts, stopSpeaking } from "@/lib/speak";
 import { YOTO_VOICES } from "@/lib/yoto-icons";
 import {
@@ -18,7 +18,7 @@ import {
 
 const SAVED_CARDS = "champdex.kidCards";
 
-type SavedCards = Partial<Record<KidCard["id"], string>>;
+type SavedCards = Partial<Record<string, string>>;
 
 type JobView = {
   status: string;
@@ -33,7 +33,7 @@ function savedCards(): SavedCards {
   }
 }
 
-function rememberCard(id: KidCard["id"], cardId: string) {
+function rememberCard(id: string, cardId: string) {
   const next = { ...savedCards(), [id]: cardId };
   localStorage.setItem(SAVED_CARDS, JSON.stringify(next));
 }
@@ -85,12 +85,18 @@ function withPixels(card: KidCard, icons: Record<string, string>): KidCard {
     chapters: card.chapters.map((chapter) => {
       const icon = icons[chapter.key];
       if (!icon) return chapter;
+      if (card.kind === "guess") {
+        return {
+          ...chapter,
+          tracks: chapter.tracks.map((track) =>
+            track.key === "answer" ? { ...track, icon } : track,
+          ),
+        };
+      }
       return {
         ...chapter,
         icon,
-        tracks: chapter.tracks.map((track) =>
-          track.key === "clues" ? track : { ...track, icon },
-        ),
+        tracks: chapter.tracks.map((track) => ({ ...track, icon })),
       };
     }),
   };
@@ -99,7 +105,9 @@ function withPixels(card: KidCard, icons: Record<string, string>): KidCard {
 async function pixelIcons(card: KidCard): Promise<Record<string, string>> {
   const icons: Record<string, string> = {};
   for (const chapter of card.chapters) {
-    const id = chapter.sprite?.match(/\/pixels\/(\d+)\.png$/)?.[1];
+    const id =
+      chapter.dexId ??
+      chapter.sprite?.match(/\/(?:sprites|pixels)\/(\d+)\.png$/)?.[1];
     if (!id) continue;
     const response = await yotoFetch(`/api/yoto/icon?id=${id}`, { method: "POST" });
     const payload = (await response.json()) as { mediaId?: string; error?: string };
@@ -127,10 +135,22 @@ function isMeasure(line: string): boolean {
   return /weighs|centimetres tall/.test(line);
 }
 
+function firstCard(cards: KidCard[], kind: KidCardKind): KidCard | undefined {
+  return cards.find((card) => card.kind === kind);
+}
+
 export function Studio({ cards }: { cards: KidCard[] }) {
+  const factsCards = cards.filter((card) => card.kind === "meet");
+  const guessCards = cards.filter((card) => card.kind === "guess");
+  const openingFacts = firstCard(cards, "meet");
   const [view, setView] = useState<"cards" | "catalogue">("catalogue");
-  const [cardId, setCardId] = useState<KidCard["id"]>("meet");
-  const [chapterKey, setChapterKey] = useState("bulbasaur");
+  const [kind, setKind] = useState<KidCardKind>("meet");
+  const [factsId, setFactsId] = useState(openingFacts?.id ?? "");
+  const [guessId, setGuessId] = useState(firstCard(cards, "guess")?.id ?? "");
+  const [chapterKey, setChapterKey] = useState(
+    openingFacts ? (playableChapters(openingFacts)[0]?.key ?? "start") : "start",
+  );
+  const [query, setQuery] = useState("");
   const [revealed, setRevealed] = useState(false);
   const [session, setSession] = useState<YotoSession | null>(null);
   const [connectOpen, setConnectOpen] = useState(false);
@@ -143,9 +163,18 @@ export function Studio({ cards }: { cards: KidCard[] }) {
   const [ready, setReady] = useState(false);
   const clipRef = useRef<HTMLAudioElement | null>(null);
 
-  const card = cards.find((item) => item.id === cardId) ?? cards[0];
+  const cardId = kind === "meet" ? factsId : guessId;
+  const card = cards.find((item) => item.id === cardId) ?? cards.find((item) => item.kind === kind);
   const chapter =
-    card?.chapters.find((item) => item.key === chapterKey) ?? card?.chapters[0];
+    card?.chapters.find((item) => item.key === chapterKey) ??
+    (card ? playableChapters(card)[0] : undefined);
+  const rangeCards = kind === "meet" ? factsCards : guessCards;
+  const listed = (card ? playableChapters(card) : []).filter((item) => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return true;
+    if (card?.kind === "guess") return item.overlay.includes(needle);
+    return item.title.toLowerCase().includes(needle) || item.overlay === needle;
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -176,9 +205,27 @@ export function Studio({ cards }: { cards: KidCard[] }) {
     stopClip();
     setSpeaking(false);
     setRevealed(false);
-    setCardId(next.id);
+    setQuery("");
+    setKind(next.kind);
+    if (next.kind === "meet") setFactsId(next.id);
+    else setGuessId(next.id);
     setChapterKey(playableChapters(next)[0]?.key ?? "start");
     setJob(null);
+  }
+
+  function showKind(nextKind: KidCardKind) {
+    stopSpeaking();
+    stopClip();
+    setSpeaking(false);
+    setRevealed(false);
+    setView("cards");
+    setKind(nextKind);
+    const id = nextKind === "meet" ? factsId : guessId;
+    const next = cards.find((item) => item.id === id) ?? firstCard(cards, nextKind);
+    if (!next) return;
+    if (!next.chapters.some((item) => item.key === chapterKey && item.key !== "start")) {
+      setChapterKey(playableChapters(next)[0]?.key ?? "start");
+    }
   }
 
   function chooseChapter(key: string) {
@@ -250,9 +297,9 @@ export function Studio({ cards }: { cards: KidCard[] }) {
     }
     setSession(live);
     setSending(true);
-    setJob({ status: "sending", detail: "Sending the script to Yoto…" });
+    setJob({ status: "sending", detail: `Sending ${card.rangeLabel} to Yoto…` });
     try {
-      setJob({ status: "sending", detail: "Uploading the 16×16 pictures…" });
+      setJob({ status: "sending", detail: "Uploading the 16×16 pictures for this card…" });
       const previous = savedCards()[card.id];
       const content = buildKidCard(
         withPixels(card, await pixelIcons(card)),
@@ -279,9 +326,9 @@ export function Studio({ cards }: { cards: KidCard[] }) {
       }
       setJob({
         status: "completed",
-        detail: "The recording is in your Yoto library.",
+        detail: `${card.rangeLabel} is in your Yoto library.`,
       });
-      toast.success(`${card.libraryTitle} is ready to link to a blank card.`);
+      toast.success(`${card.libraryTitle} is ready to link to its own blank card.`);
     } catch (error) {
       const detail = error instanceof Error ? error.message : "The recording stopped.";
       setJob({ status: "failed", detail });
@@ -322,9 +369,9 @@ export function Studio({ cards }: { cards: KidCard[] }) {
   }
 
   const previousId = card ? linked[card.id] : undefined;
-
+  const guessing = card?.kind === "guess";
   const visibleTracks =
-    card?.id === "guess" && !revealed ? chapter?.tracks.slice(0, 1) : chapter?.tracks;
+    guessing && !revealed ? chapter?.tracks.slice(0, 1) : chapter?.tracks;
   const source = visibleTracks?.find((track) => track.source)?.source;
 
   return (
@@ -338,16 +385,16 @@ export function Studio({ cards }: { cards: KidCard[] }) {
             <h1 className="font-display mt-1 text-3xl font-semibold tracking-tight sm:text-4xl">
               {view === "catalogue"
                 ? "Reference catalogue"
-                : card?.id === "guess"
+                : guessing
                   ? "Guess Who"
                   : "Pokémon facts"}
             </h1>
             <p className="mt-1 max-w-xl text-sm leading-6 text-[#5c5348]">
               {view === "catalogue"
                 ? "Every species from Kanto to Paldea. The Pokédex line is from the games, with the type, size, abilities, evolution, and stats."
-                : card?.id === "guess"
+                : guessing
                   ? "Three clues. Guess the Pokémon. Then hear if you were right."
-                  : "The cry, then the name, then a short description."}
+                  : "The name, then the Pokédex line, then the weight and the height."}
             </p>
           </div>
           {session ? (
@@ -385,81 +432,146 @@ export function Studio({ cards }: { cards: KidCard[] }) {
           >
             Catalogue
           </button>
-          {cards.map((item) => {
-            const selected = view === "cards" && item.id === card?.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                role="tab"
-                aria-selected={selected}
-                onClick={() => {
-                  setView("cards");
-                  chooseCard(item);
-                }}
-                className={`h-10 rounded-full px-4 text-sm font-medium ${
-                  selected ? "bg-[#1c1916] text-[#f4efe6]" : "bg-white text-[#1c1916]"
-                }`}
-              >
-                {item.id === "meet" ? "Facts" : "Guess Who"}
-              </button>
-            );
-          })}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "cards" && kind === "meet"}
+            onClick={() => showKind("meet")}
+            className={`h-10 rounded-full px-4 text-sm font-medium ${
+              view === "cards" && kind === "meet"
+                ? "bg-[#1c1916] text-[#f4efe6]"
+                : "bg-white text-[#1c1916]"
+            }`}
+          >
+            Facts
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "cards" && kind === "guess"}
+            onClick={() => showKind("guess")}
+            className={`h-10 rounded-full px-4 text-sm font-medium ${
+              view === "cards" && kind === "guess"
+                ? "bg-[#1c1916] text-[#f4efe6]"
+                : "bg-white text-[#1c1916]"
+            }`}
+          >
+            Guess Who
+          </button>
         </div>
       </header>
 
-      <main
-        className={`mx-auto grid w-full max-w-5xl gap-6 px-4 py-6 sm:px-6 ${
-          view === "catalogue" ? "" : "md:grid-cols-[220px_minmax(0,1fr)]"
-        }`}
-      >
+      <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6">
         {view === "catalogue" ? (
           <Catalogue />
         ) : card && chapter ? (
-          <>
-            <nav aria-label={card.id === "guess" ? "Riddles" : "Pokémon"} className="grid content-start grid-cols-3 gap-2 self-start md:grid-cols-1">
-              {playableChapters(card).map((item) => {
-                const selected = item.key === chapter.key;
-                const label = card.id === "guess" ? `Riddle ${item.overlay}` : item.title;
-                return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={() => chooseChapter(item.key)}
-                    aria-current={selected ? "true" : undefined}
-                    className={`rounded-xl px-2.5 py-2.5 text-left text-sm font-medium ${
-                      selected
-                        ? "bg-[#1c1916] text-[#f4efe6]"
-                        : "bg-white text-[#1c1916] hover:bg-white/70"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </nav>
+          <div className="grid gap-6 md:grid-cols-[220px_minmax(0,1fr)]">
+            <div className="md:col-span-2">
+              <p className="text-sm leading-6 text-[#5c5348]">
+                This playlist is <span className="font-medium text-[#1c1916]">{card.rangeLabel}</span>.
+                Link it to its own blank card. Facts is {factsCards.length} cards and Guess Who is{" "}
+                {guessCards.length} cards, because one Yoto card holds 100 tracks.
+              </p>
+              <div
+                className="mt-3 flex gap-2 overflow-x-auto pb-1"
+                role="listbox"
+                aria-label={guessing ? "Guess Who playlists" : "Facts playlists"}
+              >
+                {rangeCards.map((item) => {
+                  const selected = item.id === card.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      role="option"
+                      aria-selected={selected}
+                      onClick={() => chooseCard(item)}
+                      className={`h-10 shrink-0 rounded-full px-3 text-sm font-medium ${
+                        selected ? "bg-[#1c1916] text-[#f4efe6]" : "bg-white text-[#1c1916]"
+                      }`}
+                    >
+                      {item.rangeLabel}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="grid content-start gap-2 self-start">
+              <label className="grid gap-1 text-sm" htmlFor="picker">
+                {guessing ? "Riddle on this card" : "Pokémon on this card"}
+                <input
+                  id="picker"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder={guessing ? "Number" : "Name or number"}
+                  className="h-10 rounded-lg border border-[#1c1916]/15 bg-white px-2"
+                />
+              </label>
+              <select
+                aria-label={guessing ? "Choose a riddle" : "Choose a Pokémon"}
+                className="h-11 rounded-lg border border-[#1c1916]/15 bg-white px-2 md:hidden"
+                value={String(chapter.dexId ?? chapter.key)}
+                onChange={(event) => {
+                  const next = playableChapters(card).find(
+                    (item) => String(item.dexId ?? item.key) === event.target.value,
+                  );
+                  if (next) chooseChapter(next.key);
+                }}
+              >
+                {playableChapters(card).map((item) => (
+                  <option key={item.key} value={String(item.dexId ?? item.key)}>
+                    {guessing ? `Riddle ${item.overlay}` : `${item.overlay}. ${item.title}`}
+                  </option>
+                ))}
+              </select>
+              <nav
+                aria-label={guessing ? "Riddles" : "Pokémon"}
+                className="grid max-h-[40dvh] content-start grid-cols-3 gap-2 overflow-y-auto md:max-h-[70dvh] md:grid-cols-1"
+              >
+                {listed.map((item) => {
+                  const selected = item.key === chapter.key;
+                  const label = guessing ? `Riddle ${item.overlay}` : item.title;
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => chooseChapter(item.key)}
+                      aria-current={selected ? "true" : undefined}
+                      className={`rounded-xl px-2.5 py-2.5 text-left text-sm font-medium ${
+                        selected
+                          ? "bg-[#1c1916] text-[#f4efe6]"
+                          : "bg-white text-[#1c1916] hover:bg-white/70"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </nav>
+            </div>
 
             <div className="min-w-0">
               <article className="rounded-2xl bg-white px-5 py-6 sm:px-8 sm:py-8">
                 <p className="text-xs font-medium tracking-[0.14em] text-[#8a5a22] uppercase">
-                  {card.id === "guess"
+                  {guessing
                     ? revealed
                       ? "Answer"
                       : "Three clues"
                     : `Number ${chapter.overlay}`}
                 </p>
                 <div className="mt-3 flex items-end gap-4">
-                  {chapter.sprite && (card.id !== "guess" || revealed) ? (
+                  {chapter.sprite && (!guessing || revealed) ? (
                     <img
                       src={chapter.sprite}
-                      alt=""
+                      alt={guessing ? "" : chapter.title}
                       width={96}
                       height={96}
                       className="h-24 w-24 shrink-0 [image-rendering:pixelated]"
                     />
                   ) : null}
                   <h2 className="font-display text-4xl leading-tight sm:text-5xl">
-                    {card.id === "guess" && !revealed ? `Riddle ${chapter.overlay}` : chapter.title}
+                    {guessing && !revealed ? `Riddle ${chapter.overlay}` : chapter.title}
                   </h2>
                 </div>
                 <div className="mt-6 max-w-prose space-y-3 text-base leading-7 text-[#2a241c]">
@@ -481,8 +593,13 @@ export function Studio({ cards }: { cards: KidCard[] }) {
                 {source ? (
                   <p className="mt-4 text-xs text-[#8d8272]">Pokédex, {source}</p>
                 ) : null}
+                {chapter.clip ? (
+                  <p className="mt-4 text-xs leading-5 text-[#8d8272]">
+                    Hear plays the cry in the browser for this Pokémon. The Yoto card speaks the words only.
+                  </p>
+                ) : null}
                 <div className="mt-6 flex flex-wrap gap-2">
-                  {card.id === "guess" ? (
+                  {guessing ? (
                     <>
                       <Button
                         type="button"
@@ -526,10 +643,12 @@ export function Studio({ cards }: { cards: KidCard[] }) {
 
               <details className="mt-4 rounded-2xl border border-[#1c1916]/10 bg-white px-5 py-4">
                 <summary className="cursor-pointer text-sm font-medium">
-                  Put {card.title === "Facts" ? "these facts" : "Guess Who"} on a Yoto card
+                  Put {card.rangeLabel} on a Yoto card
                 </summary>
                 <p className="mt-3 text-sm leading-6 text-[#5c5348]">
-                  {card.childDoes} Yoto records the words. Then you link the playlist to a blank card in the Yoto app.
+                  {card.childDoes} This send is only {card.rangeLabel}. Yoto records the words with
+                  the voice below. Then you link that playlist to its own blank card in the Yoto app.
+                  Do not put all 1,025 Pokémon on one card.
                 </p>
                 <label className="mt-3 grid gap-1 text-sm" htmlFor="voice">
                   Voice
@@ -557,7 +676,7 @@ export function Studio({ cards }: { cards: KidCard[] }) {
                       checked={replace}
                       onChange={(event) => setReplace(event.target.checked)}
                     />
-                    Replace the {card.title} card already in your library.
+                    Replace the {card.rangeLabel} playlist already in your library.
                   </label>
                 ) : null}
                 <Button
@@ -566,7 +685,7 @@ export function Studio({ cards }: { cards: KidCard[] }) {
                   disabled={sending || !ready}
                   onClick={() => void send()}
                 >
-                  {sending ? "Recording…" : `Send ${card.title} to Yoto`}
+                  {sending ? "Recording…" : `Send ${card.rangeLabel} to Yoto`}
                 </Button>
                 {job ? (
                   <p
@@ -584,16 +703,17 @@ export function Studio({ cards }: { cards: KidCard[] }) {
                     <li>Find {card.libraryTitle}.</li>
                     <li>Choose Link to a card.</li>
                     <li>Put a blank Make Your Own card in the player when it asks.</li>
-                    <li>Hand that card to your child. They do not need this page.</li>
+                    <li>Hand that card to your child. Send the next playlist to a different blank card.</li>
                   </ol>
                 ) : (
                   <p className="mt-3 text-xs leading-5 text-[#5c5348]">
-                    Facts and Guess Who are two cards. Link each one to its own blank card.
+                    {card.rangeLabel} links to its own card. Facts needs {factsCards.length} blank cards
+                    and Guess Who needs {guessCards.length}.
                   </p>
                 )}
               </details>
             </div>
-          </>
+          </div>
         ) : null}
       </main>
 
