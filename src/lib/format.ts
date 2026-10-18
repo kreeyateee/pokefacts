@@ -92,6 +92,16 @@ export function stripTrailingZero(value: string): string {
   return value.replace(/\.0$/, "");
 }
 
+export function metresSpeech(decimetres: number): string {
+  const metres = decimetres / 10;
+  return `${stripTrailingZero(metres.toFixed(1))} metres`;
+}
+
+export function kilogramsSpeech(hectograms: number): string {
+  const kilograms = hectograms / 10;
+  return `${stripTrailingZero(kilograms.toFixed(1))} kilograms`;
+}
+
 export function heightSpeech(decimeters: number): string {
   const meters = decimeters / 10;
   const totalInches = Math.round(meters * 39.3701);

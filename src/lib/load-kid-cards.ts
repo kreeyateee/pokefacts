@@ -1,46 +1,33 @@
 import { cacheLife } from "next/cache";
 
-import type { FlavorSource } from "@/lib/dex-facts";
-import { cleanFlavor } from "@/lib/format";
+import type { MonSheet } from "@/lib/dex-facts";
 import { kidCardsFromDex, type KidCard } from "@/lib/kid-cards";
-
-const POKE = "https://pokeapi.co/api/v2";
+import { getDossier } from "@/lib/poke";
+import type { Dossier } from "@/lib/types";
 
 const ROSTER_IDS = [1, 4, 7, 25, 133, 39, 143, 94, 321];
 
-type SpeciesPayload = {
-  flavor_text_entries: Array<{
-    flavor_text: string;
-    language: { name: string };
-    version: { name: string };
-  }>;
-};
-
-async function speciesEntries(id: number): Promise<FlavorSource[]> {
-  const response = await fetch(`${POKE}/pokemon-species/${id}/`, {
-    headers: { Accept: "application/json", "User-Agent": "champdex/0.1" },
-  });
-  if (!response.ok) {
-    throw new Error(`PokéAPI returned ${response.status} for species ${id}.`);
-  }
-  const species = (await response.json()) as SpeciesPayload;
-  return species.flavor_text_entries
-    .filter((entry) => entry.language.name === "en")
-    .map((entry) => ({
-      text: cleanFlavor(entry.flavor_text),
-      version: entry.version.name,
-    }));
-}
-
-export async function fetchRosterDex(): Promise<Map<number, FlavorSource[]>> {
-  const rows = await Promise.all(
-    ROSTER_IDS.map(async (id) => [id, await speciesEntries(id)] as const),
-  );
-  return new Map(rows);
+export function sheetFromDossier(dossier: Dossier): MonSheet {
+  const ability = dossier.abilities.find((item) => !item.hidden) ?? dossier.abilities[0];
+  return {
+    id: dossier.id,
+    name: dossier.name,
+    genus: dossier.genus,
+    types: dossier.types,
+    heightDecimetres: dossier.heightDm,
+    weightHectograms: dossier.weightHg,
+    stats: dossier.stats.map((stat) => ({ name: stat.name, value: stat.value })),
+    abilityName: ability?.name ?? null,
+    abilityEffect: ability?.effect ?? null,
+    evolution: dossier.evolution,
+    habitat: dossier.habitat,
+    entries: dossier.flavorSources,
+  };
 }
 
 export async function loadKidCards(): Promise<KidCard[]> {
   "use cache";
   cacheLife("hours");
-  return kidCardsFromDex(await fetchRosterDex());
+  const dossiers = await Promise.all(ROSTER_IDS.map((id) => getDossier(id)));
+  return kidCardsFromDex(dossiers.map(sheetFromDossier));
 }

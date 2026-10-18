@@ -253,7 +253,7 @@ export function Studio({ cards }: { cards: KidCard[] }) {
           <p className="mt-2 text-sm leading-6 text-[#cbbfa8] sm:text-base">
             {card?.id === "guess"
               ? "Three clues. Guess the Pokémon. Then hear if you were right."
-              : "Pick a Pokémon and hear its Pokédex entry."}
+              : "Name, type, the Pokédex entry, and how big it is."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Play mode">
@@ -383,7 +383,7 @@ export function Studio({ cards }: { cards: KidCard[] }) {
                     className="h-10"
                     onClick={() => hear(chapter.tracks.map((track) => trackSpeech(track)))}
                   >
-                    {speaking ? "Stop" : "Hear the fact"}
+                    {speaking ? "Stop" : "Hear the entry"}
                   </Button>
                 )}
               </div>
@@ -464,7 +464,7 @@ export function Studio({ cards }: { cards: KidCard[] }) {
       <footer className="mx-auto w-full max-w-6xl px-4 pb-8 text-xs leading-5 text-[#8d8272]">
         Unofficial fan cards for your own Yoto library. Not made by Nintendo, Game Freak,
         Creatures, or Yoto. Pokémon names are theirs. The words are written for a
-        ages 8 to 12. Each fact is an English Pokédex entry.
+        ages 8 to 12. Each one is a short Pokédex entry.
       </footer>
 
       <ConnectDialog open={connectOpen} onOpenChange={setConnectOpen} />

@@ -15,6 +15,8 @@ function dossier(overrides: Partial<Dossier> = {}): Dossier {
     types: ["grass", "poison"],
     height: "0.7 meters, about 2 feet 4 inches",
     weight: "6.9 kilograms, about 15 pounds",
+    heightDm: 7,
+    weightHg: 69,
     abilities: [
       {
         name: "Overgrow",
@@ -42,6 +44,12 @@ function dossier(overrides: Partial<Dossier> = {}): Dossier {
       {
         version: "Red",
         text: "A strange seed was planted on its back at birth. The plant sprouts and grows with this Pokémon.",
+      },
+    ],
+    flavorSources: [
+      {
+        version: "scarlet",
+        text: "While it is young, it uses the nutrients that are stored in the seed on its back in order to grow.",
       },
     ],
     evolution:

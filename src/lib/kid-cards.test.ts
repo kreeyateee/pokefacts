@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { pickDexEntry, threeClues, type FlavorSource } from "./dex-facts";
+import { dexBlurb, pickDexEntry, threeClues, type FlavorSource, type MonSheet } from "./dex-facts";
 import { buildKidCard, kidCardsFromDex } from "./kid-cards";
 import { pronounce } from "./pronounce";
 
@@ -35,7 +35,36 @@ function entry(name: string): FlavorSource[] {
   ];
 }
 
-function fixtureDex(): Map<number, FlavorSource[]> {
+function sheet(id: number, name: string, entries: FlavorSource[]): MonSheet {
+  const wailord = name === "Wailord";
+  return {
+    id,
+    name,
+    genus: wailord ? "Float Whale Pokémon" : "Seed Pokémon",
+    types: wailord ? ["water"] : ["grass", "poison"],
+    heightDecimetres: wailord ? 145 : 7,
+    weightHectograms: wailord ? 3980 : 69,
+    stats: [
+      { name: "hit points", value: wailord ? 170 : 45 },
+      { name: "attack", value: 49 },
+      { name: "defense", value: 49 },
+      { name: "special attack", value: 65 },
+      { name: "special defense", value: 65 },
+      { name: "speed", value: 45 },
+    ],
+    abilityName: wailord ? "Water Veil" : "Overgrow",
+    abilityEffect: wailord
+      ? "Prevents burns."
+      : "Powers up Grass-type moves when the Pokémon's HP is low.",
+    evolution: wailord
+      ? "Wailmer becomes Wailord at level 40."
+      : `${name} becomes Ivysaur at level 16.`,
+    habitat: "Look for it in grassland.",
+    entries,
+  };
+}
+
+function fixtureSheets(): MonSheet[] {
   const ids = [
     [1, "Bulbasaur"],
     [4, "Charmander"],
@@ -47,7 +76,7 @@ function fixtureDex(): Map<number, FlavorSource[]> {
     [94, "Gengar"],
     [321, "Wailord"],
   ] as const;
-  return new Map(ids.map(([id, name]) => [id, name === "Wailord" ? WAILORD : entry(name)]));
+  return ids.map(([id, name]) => sheet(id, name, name === "Wailord" ? WAILORD : entry(name)));
 }
 
 describe("Pokédex entries", () => {
@@ -64,6 +93,23 @@ describe("Pokédex entries", () => {
     for (const clue of clues) assert.doesNotMatch(clue, /Bulbasaur/);
   });
 
+  it("keeps a dex entry to name, type, description, and size", () => {
+    const text = dexBlurb(
+      {
+        ...sheet(1, "Bulbasaur", entry("Bulbasaur")),
+        evolution:
+          "Eevee becomes Vaporeon with a Water Stone. Eevee becomes Jolteon with a Thunder Stone. Eevee becomes Flareon with a Fire Stone. Eevee becomes Espeon by leveling up once it is very happy during the day.",
+      },
+      "1",
+    );
+    assert.match(text, /^Number 1\. Bulbasaur\. Grass and Poison\./);
+    assert.match(text, /The Seed Pokémon/);
+    assert.match(text, /0\.7 metres\. 6\.9 kilograms\./);
+    assert.match(text, /can become Vaporeon, Jolteon, Flareon, and others/);
+    assert.doesNotMatch(text, /Hit points|Attack |briefing/);
+    assert.ok(text.length < 700);
+  });
+
   it("respells the names the narrator gets wrong", () => {
     const spoken = pronounce(
       "Venusaur, Charmeleon, Wartortle, Blastoise, Eevee, Gengar, and Wailord.",
@@ -76,7 +122,7 @@ describe("Pokédex entries", () => {
 });
 
 describe("cards for ages 8 to 12", () => {
-  const cards = kidCardsFromDex(fixtureDex());
+  const cards = kidCardsFromDex(fixtureSheets());
 
   it("ships facts and guess who", () => {
     assert.deepEqual(
@@ -118,11 +164,22 @@ describe("cards for ages 8 to 12", () => {
         }
       }
     }
+    const bulbasaur = cards[0]?.chapters.find((chapter) => chapter.key === "bulbasaur");
+    assert.equal(bulbasaur?.tracks.length, 1);
+    const bulba = bulbasaur?.tracks[0]?.text ?? "";
+    assert.match(bulba, /Grass and Poison/);
+    assert.match(bulba, /The Seed Pokémon/);
+    assert.match(bulba, /0\.7 metres\. 6\.9 kilograms\./);
+    assert.doesNotMatch(bulba, /Hit points/);
     const wailord = cards[0]?.chapters.find((chapter) => chapter.key === "wailord");
-    assert.match(wailord?.tracks[0]?.text ?? "", /When a small Wailmer is attacked/);
+    const whale = wailord?.tracks[0]?.text ?? "";
+    assert.match(whale, /When a small Wailmer is attacked/);
+    assert.match(whale, /Water\./);
+    assert.match(whale, /Float Whale Pokémon/);
+    assert.match(whale, /14\.5 metres\. 398 kilograms\./);
     assert.match(wailord?.tracks[0]?.spoken ?? "", /Whale mer/);
-    assert.match(wailord?.tracks[0]?.spoken ?? "", /Way lord|Shar pee doh/);
-    assert.doesNotMatch(wailord?.tracks[0]?.text ?? "", /humpback|kilograms/);
+    assert.match(wailord?.tracks[0]?.spoken ?? "", /Way lord/);
+    assert.doesNotMatch(whale, /humpback|Hit points/);
   });
 
   it("makes Guess Who a two-part riddle that changes the picture", () => {

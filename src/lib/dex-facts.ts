@@ -1,4 +1,10 @@
-import { cleanFlavor, versionName, versionRank } from "@/lib/format";
+import {
+  cleanFlavor,
+  kilogramsSpeech,
+  metresSpeech,
+  versionName,
+  versionRank,
+} from "@/lib/format";
 
 export type FlavorSource = {
   text: string;
@@ -47,6 +53,62 @@ export function pickDexEntry(entries: FlavorSource[]): DexLine {
 function hideName(name: string, sentence: string): string {
   return sentence
     .replace(new RegExp(`\\b${name}\\b`, "gi"), "This Pokémon")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export type MonSheet = {
+  id: number;
+  name: string;
+  genus: string;
+  types: string[];
+  heightDecimetres: number;
+  weightHectograms: number;
+  stats: Array<{ name: string; value: number }>;
+  abilityName: string | null;
+  abilityEffect: string | null;
+  evolution: string;
+  habitat: string | null;
+  entries: FlavorSource[];
+};
+
+function typeLine(types: string[]): string {
+  const names = types.map((type) => type.charAt(0).toUpperCase() + type.slice(1));
+  if (names.length === 0) return "";
+  if (names.length === 1) return names[0] ?? "";
+  return `${names[0]} and ${names[1]}`;
+}
+
+/** One short extra line. A long evolution list stays a short list of names. */
+function shortExtra(sheet: MonSheet): string {
+  const cleaned = sheet.evolution.replace(/\s*This briefing is for .+$/i, "").trim();
+  const sentences = cleaned.match(/[^.!?]+[.!?]+/g) ?? [];
+  if (sentences.length > 3) {
+    const names = [...cleaned.matchAll(/becomes ([A-Z][A-Za-z'.-]*)/g)]
+      .map((match) => match[1])
+      .slice(0, 3);
+    if (names.length >= 2) return `It can become ${names.join(", ")}, and others.`;
+  }
+  const about = sentences.find((sentence) =>
+    new RegExp(`\\b${sheet.name}\\b`).test(sentence),
+  );
+  return (about ?? sentences[0] ?? "").trim();
+}
+
+/** Name, type, Pokédex entry, height, weight, and one short extra line. */
+export function dexBlurb(sheet: MonSheet, number: string): string {
+  const entry = pickDexEntry(sheet.entries);
+  const genus = sheet.genus.replace(/POK[eé]MON/gi, "Pokémon");
+  return [
+    `Number ${number}. ${sheet.name}.`,
+    `${typeLine(sheet.types)}.`,
+    `The ${genus}.`,
+    entry.text,
+    `${metresSpeech(sheet.heightDecimetres)}. ${kilogramsSpeech(sheet.weightHectograms)}.`,
+    shortExtra(sheet),
+  ]
+    .filter(Boolean)
+    .join(" ")
     .replace(/\s+/g, " ")
     .trim();
 }

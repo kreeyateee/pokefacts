@@ -188,6 +188,8 @@ export async function getDossier(id: number): Promise<Dossier> {
       .map((type) => type.type.name),
     height: heightSpeech(pokemon.height),
     weight: weightSpeech(pokemon.weight),
+    heightDm: pokemon.height,
+    weightHg: pokemon.weight,
     abilities,
     habitat: habitatSpeech(species.habitat?.name ?? null),
     growth: growthSpeech(species.growth_rate?.name ?? "unknown"),
@@ -197,6 +199,12 @@ export async function getDossier(id: number): Promise<Dossier> {
     isMythical: species.is_mythical,
     isBaby: species.is_baby,
     flavor: pickFlavor(species),
+    flavorSources: species.flavor_text_entries
+      .filter((entry) => entry.language.name === "en")
+      .map((entry) => ({
+        text: cleanFlavor(entry.flavor_text),
+        version: entry.version.name,
+      })),
     evolution: describeChain(chain.chain, pokemon.name),
     stats,
     statTotal: stats.reduce((sum, stat) => sum + stat.value, 0),

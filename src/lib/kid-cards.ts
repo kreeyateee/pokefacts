@@ -1,4 +1,4 @@
-import { pickDexEntry, threeClues, type FlavorSource } from "@/lib/dex-facts";
+import { dexBlurb, pickDexEntry, threeClues, type MonSheet } from "@/lib/dex-facts";
 import { pronounce } from "@/lib/pronounce";
 import type { YotoContent } from "@/lib/yoto-card";
 import { YOTO_ICONS } from "@/lib/yoto-icons";
@@ -111,17 +111,20 @@ export function trackSpeech(track: KidTrack): string {
   return track.spoken;
 }
 
-export function kidCardsFromDex(dex: Map<number, FlavorSource[]>): KidCard[] {
+export function kidCardsFromDex(sheets: MonSheet[]): KidCard[] {
+  const byId = new Map(sheets.map((sheet) => [sheet.id, sheet]));
   const byKey = new Map(ROSTER.map((mon) => [mon.key, mon]));
 
   const facts = ROSTER.map((mon, index) => {
-    const entry = pickDexEntry(dex.get(mon.id) ?? []);
+    const sheet = byId.get(mon.id);
+    if (!sheet) throw new Error(`PokéAPI sheet missing for ${mon.name}.`);
+    const entry = pickDexEntry(sheet.entries);
     const number = String(index + 1);
     return picture(mon.key, mon.name, number, mon.picture, mon.mark, mon.icon, [
       talk(
-        "fact",
+        "entry",
         mon.name,
-        `Number ${number}. ${mon.name}. ${entry.text}`,
+        dexBlurb(sheet, number),
         mon.icon,
         number,
         entry.version,
@@ -132,7 +135,9 @@ export function kidCardsFromDex(dex: Map<number, FlavorSource[]>): KidCard[] {
   const riddles = GUESS_ORDER.map((key, index) => {
     const mon = byKey.get(key);
     if (!mon) throw new Error(`Missing roster entry for ${key}.`);
-    const sources = dex.get(mon.id) ?? [];
+    const sheet = byId.get(mon.id);
+    if (!sheet) throw new Error(`PokéAPI sheet missing for ${mon.name}.`);
+    const sources = sheet.entries;
     const entry = pickDexEntry(sources);
     const clues = threeClues(mon.name, sources);
     const number = String(index + 1);
@@ -161,14 +166,15 @@ export function kidCardsFromDex(dex: Map<number, FlavorSource[]>): KidCard[] {
       title: "Facts",
       libraryTitle: "Champdex: Pokémon Facts",
       recommended: true,
-      blurb: "One English Pokédex entry for each Pokémon.",
-      childDoes: "Turn to a picture and press play. Each picture reads one Pokédex entry.",
+      blurb: "Name, type, the Pokédex entry, then height and weight.",
+      childDoes:
+        "Turn to a picture and press play. You hear the name, the type, the Pokédex entry, and how big it is.",
       chapters: [
         picture("start", "Start here", "Go", "a star", "★", I.star, [
           talk(
             "how",
             "How to play",
-            "Pokémon facts. Turn the wheel, or press the arrows, until you see a picture. Then press play. Each picture is one Pokédex entry. The star is this track. Number 1 is Bulbasaur.",
+            "Pokémon facts. Turn the wheel, or press the arrows, until you see a picture. Then press play. You hear the name, the type, the Pokédex entry, and how big it is. The star is this track. Number 1 is Bulbasaur.",
             I.star,
             "Go",
           ),

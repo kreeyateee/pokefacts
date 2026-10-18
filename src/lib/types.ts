@@ -23,6 +23,10 @@ export type Dossier = {
   types: string[];
   height: string;
   weight: string;
+  /** Height in decimetres, as PokéAPI stores it. */
+  heightDm: number;
+  /** Weight in hectograms, as PokéAPI stores it. */
+  weightHg: number;
   abilities: AbilityNote[];
   habitat: string;
   growth: string;
@@ -32,6 +36,8 @@ export type Dossier = {
   isMythical: boolean;
   isBaby: boolean;
   flavor: FlavorNote[];
+  /** Every English Pokédex entry, with the PokéAPI version slug. */
+  flavorSources: Array<{ text: string; version: string }>;
   evolution: string;
   stats: StatNote[];
   statTotal: number;
