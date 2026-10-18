@@ -6,7 +6,8 @@ import path from "node:path";
 import { describe, it } from "node:test";
 
 import { audioDurationSeconds, cryLeads, cryUrl, mergeCryFirst } from "./cry-audio";
-import { attachCry } from "./yoto-fact-audio";
+import { attachCry, prepareFactTrack } from "./yoto-fact-audio";
+import { LILY_VOICE_ID } from "./kid-cards";
 
 function sine(file: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -255,6 +256,36 @@ describe("fact audio", () => {
       assert.equal(tracks[0]?.display?.icon16x16, "yoto:#shadow-1");
       assert.equal(tracks[1]?.display?.icon16x16, "yoto:#pixel-1");
       assert.notEqual(tracks[0]?.trackUrl, tracks[1]?.trackUrl);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("asks Yoto for one Lily line, not a whole playlist", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-one-"));
+    let posted = "";
+    const fetchImpl: typeof fetch = async (input, init) => {
+      posted = String(init?.body ?? "");
+      assert.match(String(input), /voiceId=pFZP5JQG7iQjIQuC4Bku/);
+      return Response.json({ job: { jobId: "job-line", status: "queued" } });
+    };
+    try {
+      const result = await prepareFactTrack(
+        "x".repeat(24),
+        { text: "Bulbasaur waits in the grass.", title: "Bulbasaur", dexId: 1 },
+        fetchImpl,
+        { speech: path.join(dir, "speech"), rendered: path.join(dir, "rendered") },
+      );
+      assert.equal(result.phase, "speech");
+      assert.equal(result.speechJobId, "job-line");
+      const body = JSON.parse(posted) as {
+        content: { chapters: Array<{ tracks: Array<{ type: string; trackUrl: string; voiceId?: string }> }> };
+      };
+      assert.equal(body.content.chapters.length, 1);
+      assert.equal(body.content.chapters[0]?.tracks.length, 1);
+      assert.equal(body.content.chapters[0]?.tracks[0]?.type, "elevenlabs");
+      assert.equal(body.content.chapters[0]?.tracks[0]?.voiceId, LILY_VOICE_ID);
+      assert.match(body.content.chapters[0]?.tracks[0]?.trackUrl ?? "", /Bulbasaur waits/);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

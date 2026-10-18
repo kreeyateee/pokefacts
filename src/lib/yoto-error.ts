@@ -56,12 +56,66 @@ export function yotoErrorText(data: unknown, fallback: string): string {
   return unique.length > 0 ? unique.join(" ") : fallback;
 }
 
+/** Shown when the public tunnel or origin returns a gateway page. Never include that HTML. */
+export const PUBLIC_LINK_TIMEOUT =
+  "The public link timed out or the server was unreachable. Retry.";
+
+export class SendFailure extends Error {
+  readonly gateway: boolean;
+
+  constructor(message: string, gateway = false) {
+    super(message);
+    this.name = "SendFailure";
+    this.gateway = gateway;
+  }
+}
+
+function serialized(data: unknown): string {
+  if (typeof data === "string") return data;
+  if (data == null) return "";
+  try {
+    return JSON.stringify(data);
+  } catch {
+    return "";
+  }
+}
+
+/** A Cloudflare or origin gateway failure, including an HTML body on any status. */
+export function looksLikeGateway(status: number, data: unknown): boolean {
+  if (status === 502 || status === 504 || status === 524) return true;
+  return /<!doctype|<html[\s>]|<\/html>|trycloudflare|bad gateway|error code 50[24]/i.test(serialized(data));
+}
+
+/** Status text for the page. Gateway and HTML bodies become one short sentence. */
+export function statusErrorText(status: number, data: unknown, fallback: string): string {
+  if (looksLikeGateway(status, data)) return PUBLIC_LINK_TIMEOUT;
+  const text = yotoErrorText(data, fallback);
+  if (looksLikeGateway(0, text)) return PUBLIC_LINK_TIMEOUT;
+  return text;
+}
+
+export function asSendFailure(error: unknown, fallback: string): SendFailure {
+  if (error instanceof SendFailure) return error;
+  const message = error instanceof Error ? error.message : fallback;
+  const gateway = looksLikeGateway(0, message) || /failed to fetch|networkerror/i.test(message);
+  return new SendFailure(gateway ? PUBLIC_LINK_TIMEOUT : message, gateway);
+}
+
+/** Never forward 502 or 504. Cloudflare quick tunnels replace those with an HTML page. */
+export function safeHttpStatus(status: number): number {
+  if (status === 502 || status === 504 || status === 524 || !status) return 422;
+  return status;
+}
+
 /** The JSON we show when Yoto rejects a playlist. `yotoBody` is their response, unedited. */
 export function yotoUpstreamFailure(text: string): {
   error: string;
   message: string;
   yotoBody: string;
 } {
+  if (looksLikeGateway(0, text)) {
+    return { error: PUBLIC_LINK_TIMEOUT, message: PUBLIC_LINK_TIMEOUT, yotoBody: "" };
+  }
   const yotoBody = text.trim().slice(0, 2000);
   let parsed: unknown = yotoBody;
   if (yotoBody) {

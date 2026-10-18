@@ -1,3 +1,5 @@
+import { looksLikeGateway, PUBLIC_LINK_TIMEOUT, safeHttpStatus } from "@/lib/yoto-error";
+
 export function bearerToken(request: Request): string | null {
   const header = request.headers.get("authorization");
   if (!header?.toLowerCase().startsWith("bearer ")) return null;
@@ -20,6 +22,12 @@ export async function forwardYoto(
     signal: AbortSignal.timeout(30_000),
   });
   const text = await response.text();
+  if (looksLikeGateway(response.status, text)) {
+    return Response.json(
+      { error: PUBLIC_LINK_TIMEOUT, message: PUBLIC_LINK_TIMEOUT },
+      { status: safeHttpStatus(response.status) },
+    );
+  }
   return new Response(text || "{}", {
     status: response.status,
     headers: { "Content-Type": "application/json; charset=utf-8" },

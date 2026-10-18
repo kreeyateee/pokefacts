@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { savedCardIsGone, validYotoCardId, yotoErrorText, yotoUpstreamFailure } from "./yoto-error";
+import { savedCardIsGone, statusErrorText, validYotoCardId, yotoErrorText, yotoUpstreamFailure } from "./yoto-error";
 
 describe("Yoto errors", () => {
   it("reads a nested error message instead of a vague status line", () => {
@@ -37,5 +37,18 @@ describe("Yoto errors", () => {
     const shown = yotoErrorText(failure, "Yoto did not accept this card.");
     assert.match(shown, /Request failed with status code 400/);
     assert.match(shown, /\{"message":"Request failed with status code 400"\}/);
+  });
+
+  it("turns a 502 HTML body into a short timeout", () => {
+    const html =
+      "<!DOCTYPE html><html><head><title>trycloudflare.com | 502: Bad gateway</title></head><body>Error code 502</body></html>";
+    const text = statusErrorText(502, { message: html }, "Yoto did not accept this card.");
+    assert.match(text, /The public link timed out or the server was unreachable\. Retry\./);
+    assert.equal(text.includes("<!DOCTYPE"), false);
+    assert.equal(text.includes("already in your library"), false);
+    const failure = yotoUpstreamFailure(html);
+    assert.match(failure.message, /public link timed out/);
+    assert.equal(failure.message.includes("<!DOCTYPE"), false);
+    assert.equal(failure.yotoBody.includes("<!DOCTYPE"), false);
   });
 });

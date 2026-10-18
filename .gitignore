@@ -43,3 +43,5 @@ next-env.d.ts
 
 # cries downloaded while recording a card
 /data/cries
+/data/speech
+/data/rendered

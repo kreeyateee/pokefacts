@@ -8,7 +8,6 @@ import { ConnectDialog } from "@/components/connect-dialog";
 import { Button } from "@/components/ui/button";
 import {
   bulkProgressLabel,
-  chaptersForCries,
   factPoolFromCards,
   factsBulkPlaylists,
   factsPlaylistUpload,
@@ -25,8 +24,22 @@ import {
   type KidCardKind,
 } from "@/lib/kid-cards";
 import { speakTexts, stopSpeaking } from "@/lib/speak";
-import { savedCardIsGone, validYotoCardId, yotoErrorText } from "@/lib/yoto-error";
-import { afterRejectedPlaylist, bulkFailureText, factsBulkUpload } from "@/lib/yoto-send";
+import {
+  asSendFailure,
+  looksLikeGateway,
+  SendFailure,
+  statusErrorText,
+  validYotoCardId,
+} from "@/lib/yoto-error";
+import {
+  afterRejectedPlaylist,
+  applyFinishedAudio,
+  bulkFailureText,
+  factsBulkUpload,
+  renderJobs,
+  type FinishedAudio,
+  type PlaylistUpload,
+} from "@/lib/yoto-send";
 import {
   CARD_KEY,
   ensureSession,
@@ -72,6 +85,21 @@ function savedPlaylistId(playlistId: string, replace: boolean): string | undefin
   return usable;
 }
 
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function readApi(response: Response, fallback: string): Promise<unknown> {
+  const payload = await readBody(response);
+  if (!response.ok || looksLikeGateway(response.status, payload)) {
+    throw new SendFailure(
+      statusErrorText(response.status, payload, fallback),
+      looksLikeGateway(response.status, payload),
+    );
+  }
+  return payload;
+}
+
 async function readBody(response: Response): Promise<unknown> {
   const text = await response.text();
   if (!text) return null;
@@ -113,18 +141,22 @@ function playableChapters(card: KidCard) {
 async function uploadIcon(id: number, shadow = false): Promise<string> {
   const shadowQuery = shadow ? "&shadow=1" : "";
   const response = await yotoFetch(`/api/yoto/icon?id=${id}${shadowQuery}`, { method: "POST" });
-    const payload = (await readBody(response)) as { mediaId?: string };
-    if (!response.ok || !payload?.mediaId) {
-      throw new Error(yotoErrorText(payload, "Yoto did not take the 16×16 picture."));
-    }
-    return payload.mediaId;
+  const payload = (await readApi(response, "Yoto did not take the 16×16 picture.")) as { mediaId?: string };
+  if (!payload?.mediaId) throw new SendFailure("Yoto did not take the 16×16 picture.", false);
+  return payload.mediaId;
 }
 
-async function uploadPixels(card: KidCard): Promise<Record<number, string>> {
+async function uploadPixels(
+  card: KidCard,
+  onProgress?: (done: number, total: number) => void,
+): Promise<Record<number, string>> {
+  const species = card.chapters.filter((chapter) => chapter.dexId);
   const media: Record<number, string> = {};
-  for (const chapter of card.chapters) {
-    if (!chapter.dexId) continue;
-    media[chapter.dexId] = await uploadIcon(chapter.dexId);
+  for (let index = 0; index < species.length; index += 1) {
+    const id = species[index]?.dexId;
+    if (!id) continue;
+    onProgress?.(index + 1, species.length);
+    media[id] = await uploadIcon(id);
   }
   return media;
 }
@@ -397,9 +429,38 @@ export function Studio({ cards }: { cards: KidCard[] }) {
     return live;
   }
 
+  async function pollJob(id: string, headline?: string) {
+    for (let attempt = 0; attempt < 90; attempt += 1) {
+      await delay(2000);
+      const response = await yotoFetch(`/api/yoto/job/${id}`);
+      const payload = await readBody(response);
+      if (!response.ok || looksLikeGateway(response.status, payload)) {
+        throw new SendFailure(
+          statusErrorText(response.status, payload, "Could not check the recording."),
+          looksLikeGateway(response.status, payload),
+        );
+      }
+      const current = jobOf(payload);
+      if (!current) throw new SendFailure("Yoto sent back a recording Yoto could not read.", false);
+      const progress =
+        progressLabel(current.progress) ??
+        (current.status === "queued" ? "Waiting for a voice…" : "Yoto is recording this line…");
+      setJob({
+        status: current.status ?? "processing",
+        detail: headline ? `${headline}. ${progress}` : progress,
+      });
+      if (current.status === "completed") return current;
+      if (current.status === "failed") {
+        const reason = current.error || "Yoto could not finish the recording.";
+        throw new SendFailure(statusErrorText(0, reason, reason), looksLikeGateway(0, reason));
+      }
+    }
+    throw new SendFailure("Yoto is still recording. Check Make Your Own in the Yoto app in a minute.", false);
+  }
+
   async function postPlaylist(
     playlist: KidCard,
-    upload: { voiceId: string; create?: boolean; content: { cardId?: string } },
+    upload: PlaylistUpload,
     headline?: string,
   ): Promise<string | undefined> {
     let attempt = upload;
@@ -411,31 +472,42 @@ export function Studio({ cards }: { cards: KidCard[] }) {
         body: JSON.stringify(attempt),
       });
       const payload = await readBody(response);
-      if (!response.ok) {
-        const decision = afterRejectedPlaylist({
-          playlistId: playlist.id,
-          upload: attempt,
-          status: response.status,
-          body: payload,
-          store: savedCards(),
-          retried,
-        });
-        localStorage.setItem(SAVED_CARDS, JSON.stringify(decision.store));
-        if (decision.action === "retry-create" || decision.store[playlist.id] === undefined) {
-          localStorage.removeItem(CARD_KEY);
+      if (!response.ok || looksLikeGateway(response.status, payload)) {
+        const gateway = looksLikeGateway(response.status, payload);
+        if (!gateway) {
+          const decision = afterRejectedPlaylist({
+            playlistId: playlist.id,
+            upload: attempt,
+            status: response.status,
+            body: payload,
+            store: savedCards(),
+            retried,
+          });
+          localStorage.setItem(SAVED_CARDS, JSON.stringify(decision.store));
+          if (decision.action === "retry-create" || decision.store[playlist.id] === undefined) {
+            localStorage.removeItem(CARD_KEY);
+          }
+          setLinked(savedCards());
+          if (decision.action === "retry-create") {
+            retried = true;
+            setReplace(false);
+            attempt = decision.upload;
+            continue;
+          }
+          throw new SendFailure(decision.message, false);
         }
-        setLinked(savedCards());
-        if (decision.action === "retry-create") {
-          retried = true;
-          setReplace(false);
-          attempt = decision.upload;
-          continue;
-        }
-        throw new Error(decision.message);
+        throw new SendFailure(statusErrorText(response.status, payload, "Yoto did not accept this card."), true);
       }
       const created = jobOf(payload);
+      if (created?.status === "completed") {
+        const newId = validYotoCardId(created.result?.cardId);
+        if (!newId) throw new SendFailure("Yoto did not return the new playlist.", false);
+        rememberCard(playlist.id, newId);
+        setLinked(savedCards());
+        return newId;
+      }
       if (!created?.jobId) {
-        throw new Error("Yoto did not start a recording job.");
+        throw new SendFailure("Yoto did not start a recording job.", false);
       }
       const finished = await pollJob(created.jobId, headline);
       const newId = validYotoCardId(finished.result?.cardId) ?? validYotoCardId(attempt.content.cardId);
@@ -447,35 +519,103 @@ export function Studio({ cards }: { cards: KidCard[] }) {
     }
   }
 
-  async function addCries(cardId: string, playlist: KidCard, headline?: string) {
-    const species = chaptersForCries(playlist);
-    for (let index = 0; index < species.length; index += 1) {
-      const chapter = species[index];
-      if (!chapter?.dexId) continue;
-      const progress = `Adding the cry, ${index + 1} of ${species.length}.`;
-      setJob({
-        status: "processing",
-        detail: headline ? `${headline}. ${progress}` : progress,
-      });
-      const response = await yotoFetch("/api/yoto/cries", {
+  async function discardScratch(cardId: string) {
+    try {
+      await yotoFetch("/api/yoto/track", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          cardId,
-          chapterKey: chapter.key,
-          dexId: chapter.dexId,
-        }),
+        body: JSON.stringify({ discardCardId: cardId }),
       });
-      const payload = await readBody(response);
-      if (!response.ok) {
-        if (response.status === 400 || savedCardIsGone(response.status, payload)) {
-          forgetCard(playlist.id);
-          setLinked(savedCards());
-          setReplace(false);
+    } catch {
+      // A leftover scratch card is not the playlist.
+    }
+  }
+
+  async function renderOneTrack(
+    job: { text: string; title: string; dexId?: number; progress: string },
+    scratch: Set<string>,
+  ): Promise<FinishedAudio> {
+    let speechJobId: string | undefined;
+    let speechCardId: string | undefined;
+    let uploadId: string | undefined;
+    let last = new SendFailure("This track did not finish.", false);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        for (let step = 0; step < 40; step += 1) {
+          setJob({ status: "sending", detail: job.progress });
+          const response = await yotoFetch("/api/yoto/track", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              text: job.text,
+              title: job.title,
+              dexId: job.dexId,
+              speechJobId,
+              speechCardId,
+              uploadId,
+            }),
+          });
+          const payload = (await readApi(response, "This track did not record.")) as {
+            phase?: string;
+            speechJobId?: string;
+            uploadId?: string;
+            trackUrl?: string;
+            duration?: number;
+            fileSize?: number;
+            format?: string;
+            channels?: string;
+          };
+          if (payload.phase === "ready" && payload.trackUrl?.startsWith("yoto:#")) {
+            return payload as FinishedAudio;
+          }
+          if (payload.phase === "speech" && payload.speechJobId) {
+            speechJobId = payload.speechJobId;
+            const finished = await pollJob(payload.speechJobId, job.progress);
+            const cardId = finished.result?.cardId;
+            if (!cardId) throw new SendFailure("Lily did not return a recording.", false);
+            speechCardId = cardId;
+            scratch.add(cardId);
+            uploadId = undefined;
+            continue;
+          }
+          if (payload.phase === "upload" && payload.uploadId) {
+            uploadId = payload.uploadId;
+            speechJobId = undefined;
+            await delay(1000);
+            continue;
+          }
+          throw new SendFailure("This track did not finish.", false);
         }
-        throw new Error(yotoErrorText(payload, `The cry for number ${chapter.dexId} did not upload.`));
+        throw new SendFailure("This track is still recording. Retry.", false);
+      } catch (error) {
+        last = asSendFailure(error, "This track did not finish.");
+        speechJobId = undefined;
+        await delay(600);
       }
     }
+    throw last;
+  }
+
+  async function renderPlaylist(playlist: KidCard, upload: PlaylistUpload, libraryTitle: string) {
+    const jobs = renderJobs(libraryTitle, playlist, upload);
+    const audio: Record<string, FinishedAudio> = {};
+    const scratch = new Set<string>();
+    try {
+      for (const job of jobs) {
+        audio[job.key] = await renderOneTrack(job, scratch);
+      }
+      return audio;
+    } finally {
+      for (const cardId of scratch) await discardScratch(cardId);
+    }
+  }
+
+  async function sendPrepared(playlist: KidCard, upload: PlaylistUpload, headline?: string) {
+    const libraryTitle = upload.content.title || playlist.libraryTitle;
+    const audio = await renderPlaylist(playlist, upload, libraryTitle);
+    const prepared = applyFinishedAudio(upload, audio);
+    if (prepared.create) delete prepared.content.cardId;
+    return postPlaylist(playlist, prepared, headline ?? libraryTitle);
   }
 
   async function send() {
@@ -485,9 +625,8 @@ export function Studio({ cards }: { cards: KidCard[] }) {
     setBulkActive(false);
     setJob({ status: "sending", detail: `Sending ${card.rangeLabel} to Yoto…` });
     try {
-      setJob({ status: "sending", detail: "Uploading the 16×16 pictures for this card…" });
       const savedId = savedPlaylistId(card.id, replace);
-      const upload = randomGuess
+      const base = randomGuess
         ? await (async () => {
             const icons = await uploadGuessIcons(card);
             return guessUpload(card, icons.real, icons.shadow, savedId);
@@ -495,20 +634,18 @@ export function Studio({ cards }: { cards: KidCard[] }) {
         : randomFacts
           ? pokedexUpload(card, await uploadPixels(card), savedId)
           : factsPlaylistUpload(card, await uploadPixels(card), savedId);
-      const recordedId = await postPlaylist(card, upload);
-      if (chaptersForCries(card).length > 0) {
-        if (!recordedId) throw new Error("Yoto recorded Lily but did not return the card.");
-        await addCries(recordedId, card);
-      }
+      const upload: PlaylistUpload = { ...base, create: savedId ? undefined : true };
+      if (upload.create) delete upload.content.cardId;
+      await sendPrepared(card, upload, card.libraryTitle);
       setJob({
         status: "completed",
         detail: `${card.rangeLabel} is in your Yoto library.`,
       });
       toast.success(`${card.libraryTitle} is ready to link to its own blank card.`);
     } catch (error) {
-      const detail = error instanceof Error ? error.message : "The recording stopped.";
-      setJob({ status: "failed", detail });
-      toast.error(detail);
+      const failure = asSendFailure(error, "The recording stopped.");
+      setJob({ status: "failed", detail: failure.message });
+      toast.error(failure.message);
     } finally {
       setSending(false);
     }
@@ -530,20 +667,28 @@ export function Studio({ cards }: { cards: KidCard[] }) {
         const headline = bulkProgressLabel(index + 1, playlists.length);
         setJob({ status: "sending", detail: headline });
         try {
-          const pixels = await uploadPixels(playlist);
-          const recordedId = await postPlaylist(playlist, factsBulkUpload(playlist, pixels), headline);
-          if (!recordedId) throw new Error("Yoto recorded Lily but did not return the card.");
-          await addCries(recordedId, playlist, headline);
+          const pixels = await uploadPixels(playlist, (done, total) => {
+            setJob({
+              status: "sending",
+              detail: `${playlist.libraryTitle}, picture ${done} of ${total}`,
+            });
+          });
+          const upload = factsBulkUpload(playlist, pixels);
+          delete upload.content.cardId;
+          await sendPrepared(playlist, upload, headline);
           createdTitles.push(playlist.libraryTitle);
         } catch (error) {
-          const reason = error instanceof Error ? error.message : "The recording stopped.";
-          throw new Error(
+          const failure = asSendFailure(error, "The recording stopped.");
+          throw new SendFailure(
             bulkFailureText({
               headline,
               rangeLabel: playlist.rangeLabel,
-              reason,
+              reason: failure.message,
               createdTitles,
+              playlistIndex: index + 1,
+              gateway: failure.gateway,
             }),
+            failure.gateway,
           );
         }
       }
@@ -553,40 +698,13 @@ export function Studio({ cards }: { cards: KidCard[] }) {
       });
       toast.success(`All ${playlists.length} Pokefacts playlists are ready to link.`);
     } catch (error) {
-      const detail = error instanceof Error ? error.message : "The recording stopped.";
-      setJob({ status: "failed", detail });
-      toast.error(detail);
+      const failure = asSendFailure(error, "The recording stopped.");
+      setJob({ status: "failed", detail: failure.message });
+      toast.error(failure.message);
     } finally {
       setSending(false);
       setBulkActive(false);
     }
-  }
-
-  async function pollJob(id: string, headline?: string) {
-    for (let attempt = 0; attempt < 90; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      const response = await yotoFetch(`/api/yoto/job/${id}`);
-      const payload = await readBody(response);
-      if (!response.ok) {
-        throw new Error(yotoErrorText(payload, "Could not check the recording."));
-      }
-      const current = jobOf(payload);
-      if (!current) throw new Error("Yoto sent back a recording Yoto could not read.");
-      const progress =
-        progressLabel(current.progress) ??
-        (current.status === "queued"
-          ? "Waiting for a voice…"
-          : "Yoto is recording the pictures…");
-      setJob({
-        status: current.status ?? "processing",
-        detail: headline ? `${headline}. ${progress}` : progress,
-      });
-      if (current.status === "completed") return current;
-      if (current.status === "failed") {
-        throw new Error(current.error || "Yoto could not finish the recording.");
-      }
-    }
-    throw new Error("Yoto is still recording. Check Make Your Own in the Yoto app in a minute.");
   }
 
   function disconnect() {

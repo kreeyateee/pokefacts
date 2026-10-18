@@ -60,7 +60,7 @@ export type KidCard = {
   id: string;
   kind: KidCardKind;
   title: string;
-  /** On-page label, such as "Pokefacts 1 · 1-99". The Yoto title is libraryTitle. */
+  /** On-page label, such as "Pokefacts 1 (1-99)". The Yoto title is libraryTitle. */
   rangeLabel: string;
   libraryTitle: string;
   recommended?: boolean;
@@ -158,11 +158,16 @@ export function bulkProgressLabel(index: number, total: number): string {
   return `Recording ${pokefactsTitle(index)} of ${total}`;
 }
 
-/** On-page label. The middle dot stays here; the Yoto title is `pokefactsTitle`. */
+/** On-page label. ASCII parentheses; the Yoto title is `pokefactsTitle`. */
 export function rangeLabel(kind: KidCardKind, first: number, last: number, index = 1): string {
   const span = first === last ? String(first) : `${first}-${last}`;
-  if (kind === "meet") return `${pokefactsTitle(index)} · ${span}`;
+  if (kind === "meet") return `${pokefactsTitle(index)} (${span})`;
   return `Guess Who ${span}`;
+}
+
+/** One cry-or-speech line while a playlist is recording. */
+export function trackProgressLabel(libraryTitle: string, index: number, total: number): string {
+  return `${libraryTitle}, track ${index} of ${total}`;
 }
 
 function typeIcon(types: string[]): string {

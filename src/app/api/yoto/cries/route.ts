@@ -1,3 +1,4 @@
+import { looksLikeGateway, PUBLIC_LINK_TIMEOUT } from "@/lib/yoto-error";
 import { bearerToken, jsonError } from "@/lib/yoto-proxy";
 import { attachCry } from "@/lib/yoto-fact-audio";
 
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
     return Response.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "The cry could not be added.";
-    return jsonError(message, 502);
+    const text = looksLikeGateway(0, message) ? PUBLIC_LINK_TIMEOUT : message;
+    return jsonError(text, 422);
   }
 }

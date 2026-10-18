@@ -1,4 +1,5 @@
 import { ensureCry } from "@/lib/yoto-fact-audio";
+import { looksLikeGateway, PUBLIC_LINK_TIMEOUT } from "@/lib/yoto-error";
 import { jsonError } from "@/lib/yoto-proxy";
 
 export async function GET(
@@ -20,6 +21,7 @@ export async function GET(
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "That cry could not be played.";
-    return jsonError(message, 502);
+    const text = looksLikeGateway(0, message) ? PUBLIC_LINK_TIMEOUT : message;
+    return jsonError(text, 422);
   }
 }

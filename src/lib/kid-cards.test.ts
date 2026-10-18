@@ -27,8 +27,10 @@ import {
 import { pronounce } from "./pronounce";
 import {
   afterRejectedPlaylist,
+  applyFinishedAudio,
   bulkFailureText,
   factsBulkUpload,
+  renderJobs,
   type PlaylistUpload,
   type SavedCardMap,
 } from "./yoto-send";
@@ -335,11 +337,11 @@ describe("every national species", () => {
     assert.equal(sheets.length, 1025);
     assert.equal(facts.length, 11);
     assert.equal(guess.length, 21);
-    assert.equal(facts[0]?.rangeLabel, "Pokefacts 1 · 1-99");
+    assert.equal(facts[0]?.rangeLabel, "Pokefacts 1 (1-99)");
     assert.equal(facts[0]?.libraryTitle, "Pokefacts 1");
     assert.equal(facts[1]?.libraryTitle, "Pokefacts 2");
     assert.equal(facts[10]?.libraryTitle, "Pokefacts 11");
-    assert.equal(facts[10]?.rangeLabel, "Pokefacts 11 · 991-1025");
+    assert.equal(facts[10]?.rangeLabel, "Pokefacts 11 (991-1025)");
     assert.equal(guess[0]?.libraryTitle, "Guess Who");
     assert.equal(guess[0]?.rangeLabel, "Guess Who 1-49");
     assert.equal(guess[20]?.rangeLabel, "Guess Who 981-1025");
@@ -609,6 +611,49 @@ describe("bulk Facts upload", () => {
     assert.match(stopped, /\{"message":"Request failed with status code 400"\}/);
   });
 
+  it("turns a 502 HTML body into a short timeout and does not claim playlist 1 was saved", () => {
+    const html =
+      "<!DOCTYPE html><html><head><title>trycloudflare.com | 502: Bad gateway</title></head><body>Error code 502</body></html>";
+    const message = bulkFailureText({
+      headline: "Recording Pokefacts 1 of 11",
+      rangeLabel: "Pokefacts 1 (1-99)",
+      reason: html,
+      createdTitles: [],
+      playlistIndex: 1,
+      gateway: true,
+    });
+    assert.match(message, /The public link timed out or the server was unreachable\. Retry\./);
+    assert.equal(message.includes("already in your library"), false);
+    assert.equal(message.includes("<!DOCTYPE"), false);
+    assert.equal(message.includes("·"), false);
+    const plain = bulkFailureText({
+      headline: "Recording Pokefacts 1 of 11",
+      rangeLabel: bulk[0]?.rangeLabel ?? "",
+      reason: "Yoto did not accept this card.",
+      createdTitles: [],
+      playlistIndex: 1,
+    });
+    assert.equal(plain.includes("already in your library"), false);
+    const later = bulkFailureText({
+      headline: "Recording Pokefacts 2 of 11",
+      rangeLabel: bulk[1]?.rangeLabel ?? "",
+      reason: "Yoto did not accept this card.",
+      createdTitles: ["Pokefacts 1"],
+      playlistIndex: 2,
+    });
+    assert.match(later, /Playlists before this one are already in your library/);
+    const gatewayLater = bulkFailureText({
+      headline: "Recording Pokefacts 2 of 11",
+      rangeLabel: bulk[1]?.rangeLabel ?? "",
+      reason: html,
+      createdTitles: ["Pokefacts 1"],
+      playlistIndex: 2,
+      gateway: true,
+    });
+    assert.equal(gatewayLater.includes("already in your library"), false);
+    assert.equal(gatewayLater.includes("<!DOCTYPE"), false);
+  });
+
   it("sends Pokefacts 1 to Yoto with no card id when the bulk flag is set", async () => {
     const first = bulk[0];
     assert.ok(first);
@@ -636,6 +681,71 @@ describe("bulk Facts upload", () => {
       assert.equal(upstream.title, "Pokefacts 1");
       assert.equal(upstream.metadata?.title, "Pokefacts 1");
       assert.equal(Object.hasOwn(upstream, "cardId"), false);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it("creates Pokefacts 1 from one finished track at a time and sends no card id", async () => {
+    const first = bulk[0];
+    assert.ok(first);
+    const script = factsBulkUpload(first, { 1: "pixel" });
+    const jobs = renderJobs(first.libraryTitle, first, script);
+    assert.equal(jobs.filter((job) => job.dexId).length, 99);
+    assert.equal(jobs[12]?.progress, "Pokefacts 1, track 12 of 99");
+    assert.equal(jobs[0]?.progress, "Pokefacts 1, introduction");
+    const audio = Object.fromEntries(
+      jobs.map((job, index) => [
+        job.key,
+        {
+          trackUrl: `yoto:#${String(index).padStart(43, "a")}`,
+          duration: 2,
+          fileSize: 8,
+          format: "mp3",
+          channels: "mono" as const,
+        },
+      ]),
+    );
+    const upload = applyFinishedAudio(script, audio);
+    assert.equal(upload.create, true);
+    assert.equal(upload.content.title, "Pokefacts 1");
+    assert.equal(upload.content.metadata?.title, "Pokefacts 1");
+    assert.equal(Object.hasOwn(upload.content, "cardId"), false);
+    const tracks = (
+      upload.content.content as { chapters: Array<{ tracks: Array<{ type?: string; trackUrl?: string; display?: { icon16x16?: string } }> }> }
+    ).chapters.flatMap((chapter) => chapter.tracks);
+    assert.ok(tracks.length <= YOTO_TRACK_LIMIT);
+    assert.ok(tracks.every((track) => track.type === "audio" && track.trackUrl?.startsWith("yoto:#")));
+    const sneaky = { ...upload, content: { ...upload.content, cardId: "ab12C" } };
+    const original = globalThis.fetch;
+    let url = "";
+    let posted = "";
+    globalThis.fetch = async (input, init) => {
+      url = String(input);
+      posted = String(init?.body ?? "");
+      return new Response(JSON.stringify({ card: { cardId: "ab12C", title: "Pokefacts 1" } }), { status: 200 });
+    };
+    try {
+      const response = await postJob(
+        new Request("http://localhost/api/yoto/job", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${"x".repeat(24)}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(sneaky),
+        }),
+      );
+      assert.equal(response.status, 200);
+      assert.equal(url, "https://api.yotoplay.com/content");
+      const upstream = JSON.parse(posted) as { title?: string; cardId?: string; metadata?: { title?: string } };
+      assert.equal(upstream.title, "Pokefacts 1");
+      assert.equal(upstream.metadata?.title, "Pokefacts 1");
+      assert.equal(Object.hasOwn(upstream, "cardId"), false);
+      const body = (await response.json()) as { status?: string; result?: { cardId?: string; title?: string } };
+      assert.equal(body.status, "completed");
+      assert.equal(body.result?.cardId, "ab12C");
+      assert.equal(body.result?.title, "Pokefacts 1");
     } finally {
       globalThis.fetch = original;
     }

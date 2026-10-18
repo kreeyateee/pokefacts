@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { yotoUpstreamFailure } from "@/lib/yoto-error";
+import { safeHttpStatus, yotoUpstreamFailure } from "@/lib/yoto-error";
 import { bearerToken, jsonError } from "@/lib/yoto-proxy";
 
 function scalePixel(sprite: string, pixel: string): Promise<void> {
@@ -105,7 +105,7 @@ export async function POST(request: Request) {
   const hash = payload?.displayIcon?.mediaId?.replace(/^yoto:#/, "") ?? "";
   const mediaId = /^[A-Za-z0-9_-]{43}$/.test(hash) ? hash : undefined;
   if (!response.ok || !mediaId) {
-    return jsonError(yotoUpstreamFailure(text).message, response.status || 502);
+    return jsonError(yotoUpstreamFailure(text).message, safeHttpStatus(response.status));
   }
   return Response.json({ mediaId });
 }
