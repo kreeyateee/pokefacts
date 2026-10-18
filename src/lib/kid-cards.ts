@@ -11,6 +11,11 @@ export const POKEDEX_PLAYLIST_SIZE = 100;
 
 export const RANDOM_POKEDEX_ID = "meet-random";
 
+/** One Guess Who playlist: 50 riddles, two tracks each, no separate intro. */
+export const GUESS_RIDDLE_COUNT = 50;
+
+export const RANDOM_GUESS_ID = "guess-random";
+
 export type KidTrack = {
   key: string;
   title: string;
@@ -402,5 +407,121 @@ export function pokedexUpload(card: KidCard, mediaById: Record<number, string>, 
     content.metadata.description =
       "One hundred Pokémon drawn at random. Turn the wheel until you see a picture, then press play. You hear the name, the Pokédex line, the weight, and the height. Lily reads every track. Written for ages 8 to 12. Link this playlist to its own card.";
   }
+  return { voiceId: LILY_VOICE_ID, content };
+}
+
+/** The numbered Facts playlists that together cover every national species. */
+export function factsBulkPlaylists(cards: KidCard[]): KidCard[] {
+  return cards.filter((card) => card.kind === "meet" && card.id !== RANDOM_POKEDEX_ID);
+}
+
+function withLily(card: KidCard): KidCard {
+  return {
+    ...card,
+    chapters: card.chapters.map((chapter) => ({
+      ...chapter,
+      tracks: chapter.tracks.map((track) => ({ ...track, voiceId: LILY_VOICE_ID })),
+    })),
+  };
+}
+
+/** One Facts playlist in the full-dex send. Lily reads it. Icons are the real pixels. */
+export function factsPlaylistUpload(card: KidCard, mediaById: Record<number, string>, cardId?: string) {
+  const content = buildKidCard(applyUploadedPixels(withLily(card), mediaById), cardId);
+  content.metadata.description = `${card.rangeLabel}. Turn the wheel until you see a picture, then press play. You hear the name, the Pokédex line, the weight, and the height. Lily reads every track. Written for ages 8 to 12. Link this playlist to its own card.`;
+  return { voiceId: LILY_VOICE_ID, content };
+}
+
+export function guessPoolFromCards(cards: KidCard[]): KidChapter[] {
+  return cards
+    .filter((card) => card.kind === "guess")
+    .flatMap((card) => card.chapters.filter((chapter) => chapter.dexId));
+}
+
+export function shadowPixelPath(id: number): string {
+  return `/pixels/${id}-shadow.png`;
+}
+
+const GUESS_HOWTO =
+  "Guess Who. Fifty riddles, drawn at random. Turn the wheel until you see a dark picture. Press play. Three clues. Shout your guess before the count ends. The next track tells you the answer, and the picture changes to the real Pokémon. ";
+
+/**
+ * One playlist of 50 riddles. Two tracks each fills the 100-track card.
+ * The how-to is in the description and at the start of the first clue.
+ */
+export function randomGuessCard(pool: KidChapter[], random: () => number = Math.random): KidCard {
+  const drawn = drawSample(
+    pool.filter((chapter) => chapter.dexId),
+    GUESS_RIDDLE_COUNT,
+    random,
+  );
+  const chapters = drawn.map((chapter, index) => {
+    const dexId = chapter.dexId as number;
+    const shadow = shadowPixelPath(dexId);
+    const real = `/pixels/${dexId}.png`;
+    const tracks = chapter.tracks.map((track, trackIndex) => {
+      const clue = track.key === "clues" || trackIndex === 0;
+      const text = index === 0 && clue ? `${GUESS_HOWTO}${track.text}` : track.text;
+      return {
+        ...track,
+        text,
+        spoken: pronounce(text),
+        voiceId: LILY_VOICE_ID,
+        icon: clue ? shadow : real,
+      };
+    });
+    return {
+      ...chapter,
+      picture: "a shadow",
+      icon: shadow,
+      sprite: shadow,
+      tracks,
+    };
+  });
+  return {
+    id: RANDOM_GUESS_ID,
+    kind: "guess",
+    title: "Guess Who",
+    rangeLabel: "Random 50",
+    libraryTitle: "Champdex: Guess Who",
+    blurb: "Fifty riddles drawn at random. A shadow, then the real picture.",
+    childDoes:
+      "Pick a dark picture and press play. Three clues, then a count of three. The answer plays next and the picture changes to the real Pokémon.",
+    chapters,
+  };
+}
+
+/**
+ * Clue track and chapter icon are the shadow upload.
+ * The answer track switches to the real 16×16 pixel.
+ */
+export function guessUpload(
+  card: KidCard,
+  realById: Record<number, string>,
+  shadowById: Record<number, string>,
+  cardId?: string,
+) {
+  const prepared: KidCard = {
+    ...card,
+    chapters: withLily(card).chapters.map((chapter) => {
+      const id = chapter.dexId;
+      const shadowMedia = id ? shadowById[id] : undefined;
+      const realMedia = id ? realById[id] : undefined;
+      if (!shadowMedia && !realMedia) return chapter;
+      const shadow = shadowMedia ? `yoto:#${shadowMedia}` : chapter.icon;
+      const real = realMedia ? `yoto:#${realMedia}` : shadow;
+      return {
+        ...chapter,
+        icon: shadow,
+        tracks: chapter.tracks.map((track, trackIndex) => {
+          const clue = track.key === "clues" || trackIndex === 0;
+          return { ...track, voiceId: LILY_VOICE_ID, icon: clue ? shadow : real };
+        }),
+      };
+    }),
+  };
+  const content = buildKidCard(prepared, cardId);
+  content.metadata.description =
+    "Fifty Guess Who riddles drawn at random. Each riddle starts as a dark shadow. The answer track changes the picture to the real Pokémon. Three clues, then a count of three. Lily reads every track. Written for ages 8 to 12. Link this playlist to its own card.";
   return { voiceId: LILY_VOICE_ID, content };
 }

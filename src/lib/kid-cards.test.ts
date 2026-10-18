@@ -8,11 +8,17 @@ import {
   buildKidCard,
   countSpokenTracks,
   factPoolFromCards,
+  factsBulkPlaylists,
+  factsPlaylistUpload,
+  guessPoolFromCards,
+  guessUpload,
   kidCardsFromDex,
   LILY_VOICE_ID,
   mulberry32,
   pokedexUpload,
+  randomGuessCard,
   randomPokedexCard,
+  shadowPixelPath,
   YOTO_TRACK_LIMIT,
 } from "./kid-cards";
 import { pronounce } from "./pronounce";
@@ -366,14 +372,18 @@ describe("every national species", () => {
   });
 });
 
-function pngInfo(id: number) {
-  const bytes = readFileSync(`public/pixels/${id}.png`);
+function pngInfoFile(file: string) {
+  const bytes = readFileSync(file);
   assert.equal(bytes.subarray(12, 16).toString("ascii"), "IHDR");
   return {
     width: bytes.readUInt32BE(16),
     height: bytes.readUInt32BE(20),
     colorType: bytes[25],
   };
+}
+
+function pngInfo(id: number) {
+  return pngInfoFile(`public/pixels/${id}.png`);
 }
 
 describe("random Pokedex playlist", () => {
@@ -457,6 +467,115 @@ describe("random Pokedex playlist", () => {
     } finally {
       globalThis.fetch = original;
     }
+  });
+});
+
+describe("bulk Facts upload", () => {
+  const cards = kidCardsFromDex(listMonSheets());
+  const bulk = factsBulkPlaylists(cards);
+
+  it("covers every national id once and keeps each playlist at or under 100 tracks", () => {
+    assert.equal(bulk.length, 11);
+    const ids = bulk.flatMap((card) =>
+      card.chapters.flatMap((chapter) => (chapter.dexId ? [chapter.dexId] : [])),
+    );
+    assert.deepEqual(
+      ids,
+      Array.from({ length: 1025 }, (_, index) => index + 1),
+    );
+    for (const card of bulk) {
+      assert.ok(countSpokenTracks(card.chapters) <= YOTO_TRACK_LIMIT);
+      assert.ok(countSpokenTracks(card.chapters) > 0);
+      const media = Object.fromEntries(
+        card.chapters.flatMap((chapter) => (chapter.dexId ? [[chapter.dexId, `pixel-${chapter.dexId}`]] : [])),
+      );
+      const sent = factsPlaylistUpload(card, media);
+      assert.equal(sent.voiceId, LILY_VOICE_ID);
+      assert.ok(sent.content.content.chapters.length <= YOTO_TRACK_LIMIT);
+      const tracks = sent.content.content.chapters.flatMap((chapter) => chapter.tracks);
+      assert.ok(tracks.length <= YOTO_TRACK_LIMIT);
+      for (const chapter of sent.content.content.chapters) {
+        for (const track of chapter.tracks) {
+          assert.equal(track.type, "elevenlabs");
+          assert.equal(track.voiceId, LILY_VOICE_ID);
+        }
+        const id = Number(chapter.overlayLabel);
+        if (!Number.isInteger(id) || id < 1) continue;
+        assert.equal(chapter.display.icon16x16, `yoto:#pixel-${id}`);
+        assert.equal(chapter.tracks[0]?.display.icon16x16, `yoto:#pixel-${id}`);
+        assert.match(chapter.tracks[0]?.trackUrl ?? "", /kilograms/);
+      }
+    }
+  });
+});
+
+describe("random Guess Who", () => {
+  const cards = kidCardsFromDex(listMonSheets());
+  const pool = guessPoolFromCards(cards);
+
+  it("draws 50 unique riddles, hides the name, and uses the shadow then the real pixel", () => {
+    const first = randomGuessCard(pool, mulberry32(7));
+    const same = randomGuessCard(pool, mulberry32(7));
+    const second = randomGuessCard(pool, mulberry32(8));
+    assert.equal(first.id, "guess-random");
+    assert.equal(first.chapters.length, 50);
+    assert.equal(countSpokenTracks(first.chapters), 100);
+    assert.equal(first.chapters.some((chapter) => chapter.key === "start"), false);
+    const ids = first.chapters.map((chapter) => chapter.dexId);
+    assert.equal(new Set(ids).size, 50);
+    assert.deepEqual(same.chapters.map((chapter) => chapter.dexId), ids);
+    assert.notDeepEqual(
+      second.chapters.map((chapter) => chapter.dexId),
+      ids,
+    );
+
+    const real: Record<number, string> = {};
+    const shadow: Record<number, string> = {};
+    for (const chapter of first.chapters) {
+      const id = chapter.dexId;
+      assert.equal(typeof id, "number");
+      assert.ok(id !== undefined && id >= 1 && id <= 1025);
+      const name = chapter.title;
+      const clue = chapter.tracks[0];
+      const answer = chapter.tracks[1];
+      assert.ok(clue);
+      assert.ok(answer);
+      assert.match(clue.text, /One\. Two\. Three\./);
+      assert.doesNotMatch(clue.text, new RegExp(escapeRegExp(name), "i"));
+      assert.match(answer.text, new RegExp(`^It is ${escapeRegExp(name)}\\.`));
+      assert.equal(chapter.icon, shadowPixelPath(id as number));
+      assert.equal(clue.icon, `/pixels/${id}-shadow.png`);
+      assert.equal(answer.icon, `/pixels/${id}.png`);
+      assert.equal(chapter.sprite, `/pixels/${id}-shadow.png`);
+      const shadowPng = pngInfoFile(`public/pixels/${id}-shadow.png`);
+      const realPng = pngInfo(id as number);
+      assert.deepEqual(shadowPng, { width: 16, height: 16, colorType: 6 });
+      assert.deepEqual(realPng, { width: 16, height: 16, colorType: 6 });
+      assert.notDeepEqual(
+        readFileSync(`public/pixels/${id}-shadow.png`),
+        readFileSync(`public/pixels/${id}.png`),
+      );
+      real[id as number] = `pixel-${id}`;
+      shadow[id as number] = `shadow-${id}`;
+    }
+
+    const sent = guessUpload(first, real, shadow);
+    assert.equal(sent.voiceId, LILY_VOICE_ID);
+    assert.equal(sent.content.content.chapters.length, 50);
+    const sentTracks = sent.content.content.chapters.flatMap((chapter) => chapter.tracks);
+    assert.equal(sentTracks.length, 100);
+    sent.content.content.chapters.forEach((chapter, index) => {
+      const id = first.chapters[index]?.dexId;
+      assert.equal(chapter.title.startsWith("Riddle "), true);
+      assert.equal(chapter.display.icon16x16, `yoto:#shadow-${id}`);
+      assert.equal(chapter.tracks[0]?.display.icon16x16, `yoto:#shadow-${id}`);
+      assert.equal(chapter.tracks[1]?.display.icon16x16, `yoto:#pixel-${id}`);
+      assert.equal(chapter.tracks[0]?.voiceId, LILY_VOICE_ID);
+      assert.equal(chapter.tracks[1]?.voiceId, LILY_VOICE_ID);
+      assert.equal(chapter.tracks[0]?.type, "elevenlabs");
+      assert.doesNotMatch(chapter.tracks[0]?.trackUrl ?? "", new RegExp(escapeRegExp(first.chapters[index]?.title ?? "XXXX"), "i"));
+      assert.match(chapter.tracks[1]?.trackUrl ?? "", /^It is /);
+    });
   });
 });
 
