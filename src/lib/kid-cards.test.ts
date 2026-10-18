@@ -1,9 +1,20 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import { listMonSheets } from "./catalogue-db";
 import { dexBlurb, pickDexEntry, threeClues, type FlavorSource, type MonSheet } from "./dex-facts";
-import { buildKidCard, countSpokenTracks, kidCardsFromDex, YOTO_TRACK_LIMIT } from "./kid-cards";
+import {
+  buildKidCard,
+  countSpokenTracks,
+  factPoolFromCards,
+  kidCardsFromDex,
+  LILY_VOICE_ID,
+  mulberry32,
+  pokedexUpload,
+  randomPokedexCard,
+  YOTO_TRACK_LIMIT,
+} from "./kid-cards";
 import { pronounce } from "./pronounce";
 import { POST as postJob } from "../app/api/yoto/job/route";
 
@@ -351,6 +362,100 @@ describe("every national species", () => {
         assert.doesNotMatch(clue, new RegExp(escapeRegExp(chapter.title), "i"));
         assert.match(chapter.tracks[1]?.text ?? "", /^It is /);
       }
+    }
+  });
+});
+
+function pngInfo(id: number) {
+  const bytes = readFileSync(`public/pixels/${id}.png`);
+  assert.equal(bytes.subarray(12, 16).toString("ascii"), "IHDR");
+  return {
+    width: bytes.readUInt32BE(16),
+    height: bytes.readUInt32BE(20),
+    colorType: bytes[25],
+  };
+}
+
+describe("random Pokedex playlist", () => {
+  const pool = factPoolFromCards(kidCardsFromDex(listMonSheets()));
+
+  it("sends 100 unique Pokémon with their pixels and Lily’s voice", () => {
+    const first = randomPokedexCard(pool, mulberry32(1));
+    const same = randomPokedexCard(pool, mulberry32(1));
+    const second = randomPokedexCard(pool, mulberry32(2));
+    const ids = first.chapters.map((chapter) => chapter.dexId);
+    assert.equal(ids.length, 100);
+    assert.equal(new Set(ids).size, 100);
+    for (const id of ids) {
+      assert.equal(typeof id, "number");
+      assert.ok(id !== undefined && id >= 1 && id <= 1025);
+      const png = pngInfo(id as number);
+      assert.deepEqual(png, { width: 16, height: 16, colorType: 6 });
+    }
+    assert.deepEqual(
+      same.chapters.map((chapter) => chapter.dexId),
+      ids,
+    );
+    assert.notDeepEqual(
+      second.chapters.map((chapter) => chapter.dexId),
+      ids,
+    );
+    assert.equal(countSpokenTracks(first.chapters), 100);
+    assert.equal(first.chapters.some((chapter) => chapter.key === "start"), false);
+
+    const media = Object.fromEntries(ids.map((id) => [id, `pixel-${id}`]));
+    const sent = pokedexUpload(first, media);
+    assert.equal(sent.voiceId, LILY_VOICE_ID);
+    assert.equal(sent.voiceId, "pFZP5JQG7iQjIQuC4Bku");
+    assert.equal(sent.content.content.chapters.length, 100);
+    sent.content.content.chapters.forEach((chapter, index) => {
+      const id = Number(chapter.overlayLabel);
+      assert.equal(chapter.display.icon16x16, `yoto:#pixel-${id}`);
+      assert.equal(chapter.tracks.length, 1);
+      const track = chapter.tracks[0];
+      assert.equal(track?.type, "elevenlabs");
+      assert.equal(track?.voiceId, LILY_VOICE_ID);
+      assert.equal(track?.display.icon16x16, `yoto:#pixel-${id}`);
+      assert.match(track?.trackUrl ?? "", /kilograms/);
+      assert.match(track?.trackUrl ?? "", /centimetres/);
+      assert.ok((track?.trackUrl.length ?? 0) <= 3000);
+      if (index === 0) assert.match(track?.trackUrl ?? "", /drawn at random/);
+    });
+    const again = pokedexUpload(first, media);
+    assert.deepEqual(
+      again.content.content.chapters.map((chapter) => chapter.overlayLabel),
+      sent.content.content.chapters.map((chapter) => chapter.overlayLabel),
+    );
+  });
+
+  it("the job route accepts this 100-Pokémon playlist", async () => {
+    const card = randomPokedexCard(pool, mulberry32(4));
+    const ids = card.chapters.map((chapter) => chapter.dexId ?? 0);
+    const sent = pokedexUpload(
+      card,
+      Object.fromEntries(ids.map((id) => [id, `pixel-${id}`])),
+    );
+    const original = globalThis.fetch;
+    let url = "";
+    globalThis.fetch = async (input) => {
+      url = String(input);
+      return new Response(JSON.stringify({ jobId: "job-100", status: "queued" }), { status: 202 });
+    };
+    try {
+      const response = await postJob(
+        new Request("http://localhost/api/yoto/job", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${"x".repeat(24)}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(sent),
+        }),
+      );
+      assert.equal(response.status, 202);
+      assert.match(url, /voiceId=pFZP5JQG7iQjIQuC4Bku/);
+    } finally {
+      globalThis.fetch = original;
     }
   });
 });

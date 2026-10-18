@@ -15,7 +15,10 @@ export type YotoContent = {
         key: string;
         title: string;
         trackUrl: string;
+        /** Spoken script. Yoto Labs turns this into an MP3 with voiceId. */
         type: "elevenlabs";
+        /** ElevenLabs voice. Lily is pFZP5JQG7iQjIQuC4Bku. */
+        voiceId?: string;
         overlayLabel: string;
         display: { icon16x16: string };
       }>;

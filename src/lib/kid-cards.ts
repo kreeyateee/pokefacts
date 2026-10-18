@@ -3,6 +3,14 @@ import { pronounce } from "@/lib/pronounce";
 import type { YotoContent } from "@/lib/yoto-card";
 import { iconForType, YOTO_ICONS } from "@/lib/yoto-icons";
 
+/** Lily, the British woman. Yoto Labs records her MP3 from the spoken script. */
+export const LILY_VOICE_ID = "pFZP5JQG7iQjIQuC4Bku";
+
+/** The Pokedex playlist the parent sends: 100 tracks, no extra intro. */
+export const POKEDEX_PLAYLIST_SIZE = 100;
+
+export const RANDOM_POKEDEX_ID = "meet-random";
+
 export type KidTrack = {
   key: string;
   title: string;
@@ -12,6 +20,8 @@ export type KidTrack = {
   spoken: string;
   /** Pixel shown on the player while this part plays. */
   icon: string;
+  /** ElevenLabs voice Yoto uses when it records this track as an MP3. */
+  voiceId?: string;
   overlay: string;
   /** Game the Pokédex line comes from, when this track is an entry. */
   source?: string;
@@ -269,6 +279,7 @@ export function buildKidCard(card: KidCard, cardId?: string): YotoContent {
           title: track.title,
           trackUrl: trackSpeech(track),
           type: "elevenlabs" as const,
+          ...(track.voiceId ? { voiceId: track.voiceId } : {}),
           overlayLabel: track.overlay,
           display: { icon16x16: track.icon },
         })),
@@ -281,4 +292,115 @@ export function buildKidCard(card: KidCard, cardId?: string): YotoContent {
   };
   if (cardId) content.cardId = cardId;
   return content;
+}
+
+/** Deterministic draw so the server render and the browser agree. */
+export function mulberry32(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export function drawSample<T>(items: readonly T[], size: number, random: () => number = Math.random): T[] {
+  const copy = items.slice();
+  const count = Math.min(size, copy.length);
+  for (let index = 0; index < count; index += 1) {
+    const swap = index + Math.floor(random() * (copy.length - index));
+    const current = copy[index];
+    copy[index] = copy[swap] as T;
+    copy[swap] = current as T;
+  }
+  return copy.slice(0, count);
+}
+
+export function factPoolFromCards(cards: KidCard[]): KidChapter[] {
+  return cards
+    .filter((card) => card.kind === "meet")
+    .flatMap((card) => card.chapters.filter((chapter) => chapter.dexId));
+}
+
+const POKEDEX_HOWTO =
+  "One hundred Pokémon, drawn at random. Turn the wheel, or press the arrows, until you see a picture. Then press play. ";
+
+/**
+ * One playlist of 100 Pokémon. The how-to sits on the first track so the
+ * card stays at 100 tracks. Pass the same chapters back to send them.
+ */
+export function randomPokedexCard(
+  pool: KidChapter[],
+  random: () => number = Math.random,
+): KidCard {
+  const drawn = drawSample(
+    pool.filter((chapter) => chapter.dexId),
+    POKEDEX_PLAYLIST_SIZE,
+    random,
+  );
+  const chapters = drawn.map((chapter, index) => {
+    const tracks = chapter.tracks.map((track, trackIndex) => {
+      const text = index === 0 && trackIndex === 0 ? `${POKEDEX_HOWTO}${track.text}` : track.text;
+      return {
+        ...track,
+        text,
+        spoken: pronounce(text),
+        voiceId: LILY_VOICE_ID,
+      };
+    });
+    return {
+      ...chapter,
+      sprite: `/pixels/${chapter.dexId}.png`,
+      tracks,
+    };
+  });
+  return {
+    id: RANDOM_POKEDEX_ID,
+    kind: "meet",
+    title: "Facts",
+    rangeLabel: "Random 100",
+    libraryTitle: "Champdex: Random 100",
+    recommended: true,
+    blurb: "One hundred Pokémon drawn at random. Lily reads each one.",
+    childDoes:
+      "Turn to a picture and press play. You hear the name, then the Pokédex line, then how much it weighs and how tall it is.",
+    chapters,
+  };
+}
+
+/** Swap in the uploaded 16×16 icons. Guess Who clues keep the detective picture. */
+export function applyUploadedPixels(card: KidCard, mediaById: Record<number, string>): KidCard {
+  return {
+    ...card,
+    chapters: card.chapters.map((chapter) => {
+      const media = chapter.dexId ? mediaById[chapter.dexId] : undefined;
+      if (!media) return chapter;
+      const icon = `yoto:#${media}`;
+      if (card.kind === "guess") {
+        return {
+          ...chapter,
+          tracks: chapter.tracks.map((track) =>
+            track.key === "answer" ? { ...track, icon } : track,
+          ),
+        };
+      }
+      return {
+        ...chapter,
+        icon,
+        tracks: chapter.tracks.map((track) => ({ ...track, icon })),
+      };
+    }),
+  };
+}
+
+/** The body the Facts page sends. Voice is Lily. Icons are the pixels just uploaded. */
+export function pokedexUpload(card: KidCard, mediaById: Record<number, string>, cardId?: string) {
+  const content = buildKidCard(applyUploadedPixels(card, mediaById), cardId);
+  if (card.id === RANDOM_POKEDEX_ID) {
+    content.metadata.description =
+      "One hundred Pokémon drawn at random. Turn the wheel until you see a picture, then press play. You hear the name, the Pokédex line, the weight, and the height. Lily reads every track. Written for ages 8 to 12. Link this playlist to its own card.";
+  }
+  return { voiceId: LILY_VOICE_ID, content };
 }

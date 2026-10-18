@@ -1,7 +1,28 @@
-import { readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { bearerToken, jsonError } from "@/lib/yoto-proxy";
+
+function scalePixel(sprite: string, pixel: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      "ffmpeg",
+      ["-y", "-loglevel", "error", "-i", sprite, "-vf", "scale=16:16:flags=neighbor,format=rgba", pixel],
+      { timeout: 20_000 },
+      (error) => (error ? reject(error) : resolve()),
+    );
+  });
+}
+
+async function ensurePixel(file: string, id: string): Promise<void> {
+  try {
+    await access(file);
+  } catch {
+    const sprite = path.join(process.cwd(), "public", "sprites", `${id}.png`);
+    await scalePixel(sprite, file);
+  }
+}
 
 function pixelFile(id: string): string | null {
   if (!/^[1-9]\d{0,3}$/.test(id)) return null;
@@ -20,6 +41,7 @@ export async function POST(request: Request) {
 
   let bytes: Buffer;
   try {
+    await ensurePixel(file, id);
     bytes = await readFile(file);
   } catch {
     return jsonError("That picture is not a national Pokédex icon.");

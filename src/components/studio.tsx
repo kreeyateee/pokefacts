@@ -6,7 +6,18 @@ import { toast } from "sonner";
 import { Catalogue } from "@/components/catalogue";
 import { ConnectDialog } from "@/components/connect-dialog";
 import { Button } from "@/components/ui/button";
-import { buildKidCard, trackSpeech, type KidCard, type KidCardKind } from "@/lib/kid-cards";
+import {
+  applyUploadedPixels,
+  buildKidCard,
+  factPoolFromCards,
+  mulberry32,
+  pokedexUpload,
+  RANDOM_POKEDEX_ID,
+  randomPokedexCard,
+  trackSpeech,
+  type KidCard,
+  type KidCardKind,
+} from "@/lib/kid-cards";
 import { speakTexts, stopSpeaking } from "@/lib/speak";
 import { YOTO_VOICES } from "@/lib/yoto-icons";
 import {
@@ -79,44 +90,18 @@ function playableChapters(card: KidCard) {
   return card.chapters.filter((chapter) => chapter.key !== "start");
 }
 
-function withPixels(card: KidCard, icons: Record<string, string>): KidCard {
-  return {
-    ...card,
-    chapters: card.chapters.map((chapter) => {
-      const icon = icons[chapter.key];
-      if (!icon) return chapter;
-      if (card.kind === "guess") {
-        return {
-          ...chapter,
-          tracks: chapter.tracks.map((track) =>
-            track.key === "answer" ? { ...track, icon } : track,
-          ),
-        };
-      }
-      return {
-        ...chapter,
-        icon,
-        tracks: chapter.tracks.map((track) => ({ ...track, icon })),
-      };
-    }),
-  };
-}
-
-async function pixelIcons(card: KidCard): Promise<Record<string, string>> {
-  const icons: Record<string, string> = {};
+async function uploadPixels(card: KidCard): Promise<Record<number, string>> {
+  const media: Record<number, string> = {};
   for (const chapter of card.chapters) {
-    const id =
-      chapter.dexId ??
-      chapter.sprite?.match(/\/(?:sprites|pixels)\/(\d+)\.png$/)?.[1];
-    if (!id) continue;
-    const response = await yotoFetch(`/api/yoto/icon?id=${id}`, { method: "POST" });
+    if (!chapter.dexId) continue;
+    const response = await yotoFetch(`/api/yoto/icon?id=${chapter.dexId}`, { method: "POST" });
     const payload = (await response.json()) as { mediaId?: string; error?: string };
     if (!response.ok || !payload.mediaId) {
       throw new Error(payload.error || "Yoto did not take the 16×16 picture.");
     }
-    icons[chapter.key] = `yoto:#${payload.mediaId}`;
+    media[chapter.dexId] = payload.mediaId;
   }
-  return icons;
+  return media;
 }
 
 function entryLines(text: string, title: string): string[] {
@@ -142,14 +127,13 @@ function firstCard(cards: KidCard[], kind: KidCardKind): KidCard | undefined {
 export function Studio({ cards }: { cards: KidCard[] }) {
   const factsCards = cards.filter((card) => card.kind === "meet");
   const guessCards = cards.filter((card) => card.kind === "guess");
-  const openingFacts = firstCard(cards, "meet");
-  const [view, setView] = useState<"cards" | "catalogue">("catalogue");
+  const factPool = factPoolFromCards(cards);
+  const [randomCard, setRandomCard] = useState(() => randomPokedexCard(factPool, mulberry32(20261018)));
+  const [view, setView] = useState<"cards" | "catalogue">("cards");
   const [kind, setKind] = useState<KidCardKind>("meet");
-  const [factsId, setFactsId] = useState(openingFacts?.id ?? "");
+  const [factsId, setFactsId] = useState(RANDOM_POKEDEX_ID);
   const [guessId, setGuessId] = useState(firstCard(cards, "guess")?.id ?? "");
-  const [chapterKey, setChapterKey] = useState(
-    openingFacts ? (playableChapters(openingFacts)[0]?.key ?? "start") : "start",
-  );
+  const [chapterKey, setChapterKey] = useState(randomCard.chapters[0]?.key ?? "start");
   const [query, setQuery] = useState("");
   const [revealed, setRevealed] = useState(false);
   const [session, setSession] = useState<YotoSession | null>(null);
@@ -164,11 +148,15 @@ export function Studio({ cards }: { cards: KidCard[] }) {
   const clipRef = useRef<HTMLAudioElement | null>(null);
 
   const cardId = kind === "meet" ? factsId : guessId;
-  const card = cards.find((item) => item.id === cardId) ?? cards.find((item) => item.kind === kind);
+  const card =
+    cardId === RANDOM_POKEDEX_ID
+      ? randomCard
+      : (cards.find((item) => item.id === cardId) ?? cards.find((item) => item.kind === kind));
+  const randomFacts = card?.id === RANDOM_POKEDEX_ID;
   const chapter =
     card?.chapters.find((item) => item.key === chapterKey) ??
     (card ? playableChapters(card)[0] : undefined);
-  const rangeCards = kind === "meet" ? factsCards : guessCards;
+  const rangeCards = kind === "meet" ? [randomCard, ...factsCards] : guessCards;
   const listed = (card ? playableChapters(card) : []).filter((item) => {
     const needle = query.trim().toLowerCase();
     if (!needle) return true;
@@ -221,11 +209,29 @@ export function Studio({ cards }: { cards: KidCard[] }) {
     setView("cards");
     setKind(nextKind);
     const id = nextKind === "meet" ? factsId : guessId;
-    const next = cards.find((item) => item.id === id) ?? firstCard(cards, nextKind);
+    const next =
+      id === RANDOM_POKEDEX_ID
+        ? randomCard
+        : (cards.find((item) => item.id === id) ?? firstCard(cards, nextKind));
     if (!next) return;
     if (!next.chapters.some((item) => item.key === chapterKey && item.key !== "start")) {
       setChapterKey(playableChapters(next)[0]?.key ?? "start");
     }
+  }
+
+  function shufflePokedex() {
+    const next = randomPokedexCard(factPool);
+    stopSpeaking();
+    stopClip();
+    setSpeaking(false);
+    setRevealed(false);
+    setQuery("");
+    setKind("meet");
+    setView("cards");
+    setFactsId(RANDOM_POKEDEX_ID);
+    setRandomCard(next);
+    setChapterKey(next.chapters[0]?.key ?? "start");
+    setJob(null);
   }
 
   function chooseChapter(key: string) {
@@ -301,14 +307,18 @@ export function Studio({ cards }: { cards: KidCard[] }) {
     try {
       setJob({ status: "sending", detail: "Uploading the 16×16 pictures for this card…" });
       const previous = savedCards()[card.id];
-      const content = buildKidCard(
-        withPixels(card, await pixelIcons(card)),
-        replace && previous ? previous : undefined,
-      );
+      const savedId = replace && previous ? previous : undefined;
+      const pixels = await uploadPixels(card);
+      const upload = randomFacts
+        ? pokedexUpload(card, pixels, savedId)
+        : {
+            voiceId,
+            content: buildKidCard(applyUploadedPixels(card, pixels), savedId),
+          };
       const response = await yotoFetch("/api/yoto/job", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ voiceId, content }),
+        body: JSON.stringify(upload),
       });
       const payload: unknown = await response.json();
       if (!response.ok) {
@@ -394,7 +404,9 @@ export function Studio({ cards }: { cards: KidCard[] }) {
                 ? "Every species from Kanto to Paldea. The Pokédex line is from the games, with the type, size, abilities, evolution, and stats."
                 : guessing
                   ? "Three clues. Guess the Pokémon. Then hear if you were right."
-                  : "The name, then the Pokédex line, then the weight and the height."}
+                  : randomFacts
+                    ? "One hundred Pokémon, drawn at random. Lily reads each track."
+                    : "The name, then the Pokédex line, then the weight and the height."}
             </p>
           </div>
           {session ? (
@@ -467,11 +479,29 @@ export function Studio({ cards }: { cards: KidCard[] }) {
         ) : card && chapter ? (
           <div className="grid gap-6 md:grid-cols-[220px_minmax(0,1fr)]">
             <div className="md:col-span-2">
-              <p className="text-sm leading-6 text-[#5c5348]">
-                This playlist is <span className="font-medium text-[#1c1916]">{card.rangeLabel}</span>.
-                Link it to its own blank card. Facts is {factsCards.length} cards and Guess Who is{" "}
-                {guessCards.length} cards, because one Yoto card holds 100 tracks.
-              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="text-sm leading-6 text-[#5c5348]">
+                  {randomFacts ? (
+                    <>
+                      This playlist is the{" "}
+                      <span className="font-medium text-[#1c1916]">100 Pokémon on this page</span>.
+                      Shuffle draws a new hundred. Send uses this list, not a new draw. Lily records
+                      each track as an MP3. One card.
+                    </>
+                  ) : (
+                    <>
+                      This playlist is{" "}
+                      <span className="font-medium text-[#1c1916]">{card.rangeLabel}</span>. Link it
+                      to its own blank card. Guess Who is {guessCards.length} cards.
+                    </>
+                  )}
+                </p>
+                {randomFacts ? (
+                  <Button type="button" variant="outline" className="h-10 px-4" onClick={shufflePokedex}>
+                    Shuffle
+                  </Button>
+                ) : null}
+              </div>
               <div
                 className="mt-3 flex gap-2 overflow-x-auto pb-1"
                 role="listbox"
@@ -646,28 +676,38 @@ export function Studio({ cards }: { cards: KidCard[] }) {
                   Put {card.rangeLabel} on a Yoto card
                 </summary>
                 <p className="mt-3 text-sm leading-6 text-[#5c5348]">
-                  {card.childDoes} This send is only {card.rangeLabel}. Yoto records the words with
-                  the voice below. Then you link that playlist to its own blank card in the Yoto app.
-                  Do not put all 1,025 Pokémon on one card.
+                  {card.childDoes}{" "}
+                  {randomFacts
+                    ? "Send uploads the 16×16 picture for each of these 100 Pokémon. Yoto records Lily’s voice as an MP3 for each track. The how-to is in the playlist description and at the start of the first track."
+                    : `This send is only ${card.rangeLabel}. Then you link that playlist to its own blank card.`}
                 </p>
-                <label className="mt-3 grid gap-1 text-sm" htmlFor="voice">
-                  Voice
-                  <select
-                    id="voice"
-                    value={voiceId}
-                    onChange={(event) => setVoiceId(event.target.value)}
-                    className="h-10 w-full max-w-sm rounded-lg border border-[#1c1916]/15 bg-white px-2"
-                  >
-                    {YOTO_VOICES.map((voice) => (
-                      <option key={voice.id} value={voice.id}>
-                        {voice.name}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="text-xs leading-5 text-[#5c5348]">
-                    {YOTO_VOICES.find((voice) => voice.id === voiceId)?.note}
-                  </span>
-                </label>
+                {randomFacts ? (
+                  <p className="mt-3 text-sm leading-6">
+                    Voice: <span className="font-medium">Lily</span>
+                    <span className="mt-1 block text-xs leading-5 text-[#5c5348]">
+                      British woman. Yoto Labs turns the script into an MP3 with her voice.
+                    </span>
+                  </p>
+                ) : (
+                  <label className="mt-3 grid gap-1 text-sm" htmlFor="voice">
+                    Voice
+                    <select
+                      id="voice"
+                      value={voiceId}
+                      onChange={(event) => setVoiceId(event.target.value)}
+                      className="h-10 w-full max-w-sm rounded-lg border border-[#1c1916]/15 bg-white px-2"
+                    >
+                      {YOTO_VOICES.map((voice) => (
+                        <option key={voice.id} value={voice.id}>
+                          {voice.name}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="text-xs leading-5 text-[#5c5348]">
+                      {YOTO_VOICES.find((voice) => voice.id === voiceId)?.note}
+                    </span>
+                  </label>
+                )}
                 {previousId ? (
                   <label className="mt-3 flex items-start gap-2 text-sm leading-5">
                     <input
@@ -685,7 +725,7 @@ export function Studio({ cards }: { cards: KidCard[] }) {
                   disabled={sending || !ready}
                   onClick={() => void send()}
                 >
-                  {sending ? "Recording…" : `Send ${card.rangeLabel} to Yoto`}
+                  {sending ? "Recording…" : randomFacts ? "Send these 100 to Yoto" : `Send ${card.rangeLabel} to Yoto`}
                 </Button>
                 {job ? (
                   <p
@@ -707,8 +747,9 @@ export function Studio({ cards }: { cards: KidCard[] }) {
                   </ol>
                 ) : (
                   <p className="mt-3 text-xs leading-5 text-[#5c5348]">
-                    {card.rangeLabel} links to its own card. Facts needs {factsCards.length} blank cards
-                    and Guess Who needs {guessCards.length}.
+                    {randomFacts
+                      ? "These 100 Pokémon go on one card, in Lily’s voice, each with its 16×16 picture. The numbered Facts ranges are there if you want a fixed stretch of the dex instead."
+                      : `${card.rangeLabel} links to its own card. Guess Who needs ${guessCards.length} blank cards.`}
                   </p>
                 )}
               </details>
