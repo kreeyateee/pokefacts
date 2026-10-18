@@ -24,7 +24,7 @@ export type KidChapter = {
 };
 
 export type KidCard = {
-  id: "meet" | "guess" | "grow";
+  id: "meet" | "guess";
   title: string;
   libraryTitle: string;
   recommended?: boolean;
@@ -70,12 +70,12 @@ const MEET_END = "Turn to a different picture when you want another one.";
 export const KID_CARDS: KidCard[] = [
   {
     id: "meet",
-    title: "Meet Them",
-    libraryTitle: "Champdex: Meet Them",
+    title: "Facts",
+    libraryTitle: "Champdex: Pokémon Facts",
     recommended: true,
-    blurb: "Eight Pokémon, one picture each. Start here if you only have one blank card.",
+    blurb: "A short fact for each Pokémon.",
     childDoes:
-      "They turn until a picture shows up, press play, and listen. Each picture is a different Pokémon. They can replay any picture.",
+      "They turn to a picture and press play. Each picture tells one Pokémon fact.",
     chapters: [
       picture(
         "start",
@@ -236,7 +236,7 @@ export const KID_CARDS: KidCard[] = [
     id: "guess",
     title: "Guess Who",
     libraryTitle: "Champdex: Guess Who",
-    blurb: "A riddle, a count to three, then the answer. The picture changes when the answer starts.",
+    blurb: "Three clues. Guess the Pokémon. Then hear if you were right.",
     childDoes:
       "They pick a number, hear three clues, and shout a name. They wait through the count. The answer plays next, and the picture on the player changes.",
     chapters: [
@@ -258,114 +258,6 @@ export const KID_CARDS: KidCard[] = [
         ],
       ),
       ...guessChapters(),
-    ],
-  },
-  {
-    id: "grow",
-    title: "Grow Up",
-    libraryTitle: "Champdex: Grow Up",
-    blurb: "Three families, in order. The child turns to the next number when the story says so.",
-    childDoes:
-      "They start at number 1 and turn one picture at a time. The plant family is 1, 2, 3. Fire is 4, 5, 6. Water is 7, 8, 9.",
-    chapters: [
-      picture(
-        "start",
-        "Start here",
-        "Go",
-        "a star",
-        "★",
-        I.star,
-        [
-          talk(
-            "how",
-            "How to grow",
-            "This card shows how Pokémon grow up. Turn the wheel, or press the arrows, until you see a picture. Then press the big button. The pictures go in order. Start at number 1. When I say next, turn to the next number. Numbers 1, 2, and 3 are the plant family. Then comes fire. Then comes water.",
-            I.star,
-            "Go",
-          ),
-        ],
-      ),
-      picture("bulbasaur", "Bulbasaur", "1", "a flower", "❀", I.daisy, [
-        talk(
-          "fact",
-          "Bulbasaur",
-          "Number 1. The picture is a flower. This is Bulbasaur, the baby of the plant family. It is green, with a seed on its back. The seed is just starting. Bulbasaur likes naps in the grass. When you want it to grow, turn to number 2.",
-          I.daisy,
-          "1",
-        ),
-      ]),
-      picture("ivysaur", "Ivysaur", "2", "a cactus", "🌵", I.cactus, [
-        talk(
-          "fact",
-          "Ivysaur",
-          "Number 2. The picture is a cactus, because the plant is getting spiky and tall. This is Ivysaur. The seed has become a bud. Ivysaur is bigger now, about as tall as a kindergartener. The bud drinks sunlight. It is almost ready to bloom. Turn to number 3.",
-          I.cactus,
-          "2",
-        ),
-      ]),
-      picture("venusaur", "Venusaur", "3", "a big flower", "🌼", I.flower, [
-        talk(
-          "fact",
-          "Venusaur",
-          "Number 3. The picture is a big flower. This is Venusaur. The bud opened. Venusaur is taller than a grown-up, and about as heavy as one too. The flower loves the sun. That is the whole plant family. Turn to number 4 for the fire family.",
-          I.flower,
-          "3",
-        ),
-      ]),
-      picture("charmander", "Charmander", "4", "a flame", "🔥", I.fire, [
-        talk(
-          "fact",
-          "Charmander",
-          "Number 4. The picture is a flame. This is Charmander, the baby of the fire family. A small orange lizard. The flame on its tail is bright and warm. Turn to number 5 to hear it grow.",
-          I.fire,
-          "4",
-        ),
-      ]),
-      picture("charmeleon", "Charmeleon", "5", "a fiery face", "🥵", I.fireFace, [
-        talk(
-          "fact",
-          "Charmeleon",
-          "Number 5. The picture is a fiery face. This is Charmeleon. It grew claws, and the flame burns hotter. It is feisty and likes a challenge. Charmeleon is about as tall as a seven-year-old. Turn to number 6. The next one has wings.",
-          I.fireFace,
-          "5",
-        ),
-      ]),
-      picture("charizard", "Charizard", "6", "a dragon", "🦕", I.dragon, [
-        talk(
-          "fact",
-          "Charizard",
-          "Number 6. The picture is a dragon. This is Charizard. Now it has wings, and it can fly. It is about as tall as a tall grown-up. The flame on its tail burns very hot. That is the whole fire family. Turn to number 7 for the water family.",
-          I.dragon,
-          "6",
-        ),
-      ]),
-      picture("squirtle", "Squirtle", "7", "a fish", "🐟", I.fish, [
-        talk(
-          "fact",
-          "Squirtle",
-          "Number 7. The picture is a fish. This is Squirtle, the baby of the water family. A little blue turtle with a tough shell. It shoots water and loves to swim. Turn to number 8.",
-          I.fish,
-          "7",
-        ),
-      ]),
-      picture("wartortle", "Wartortle", "8", "a rubber duck", "🐤", I.duck, [
-        talk(
-          "fact",
-          "Wartortle",
-          "Number 8. The picture is a rubber duck, so you know this one still loves the water. This is Wartortle. Its tail turned fluffy, and its ears did too. The fluffy tail means it is growing up. Wartortle is a strong swimmer. Turn to number 9 for the last one.",
-          I.duck,
-          "8",
-        ),
-      ]),
-      picture("blastoise", "Blastoise", "9", "an octopus", "🐙", I.octopus, [
-        talk(
-          "fact",
-          "Blastoise",
-          "Number 9. The picture is an octopus, for the biggest water one. This is Blastoise. Two water cannons grew on its shell. It can shoot water very hard. It is almost as tall as a grown-up. That is the whole water family. You can turn back to number 1 and hear them grow all over again.",
-          I.octopus,
-          "9",
-        ),
-      ]),
     ],
   },
 ];

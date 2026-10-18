@@ -74,9 +74,14 @@ function progressLabel(progress: unknown): string | null {
   return null;
 }
 
+function playableChapters(card: KidCard) {
+  return card.chapters.filter((chapter) => chapter.key !== "start");
+}
+
 export function Studio() {
   const [cardId, setCardId] = useState<KidCard["id"]>("meet");
-  const [chapterKey, setChapterKey] = useState(KID_CARDS[0]?.chapters[0]?.key ?? "start");
+  const [chapterKey, setChapterKey] = useState("bulbasaur");
+  const [revealed, setRevealed] = useState(false);
   const [session, setSession] = useState<YotoSession | null>(null);
   const [connectOpen, setConnectOpen] = useState(false);
   const [voiceId, setVoiceId] = useState<string>(YOTO_VOICES[0].id);
@@ -112,23 +117,45 @@ export function Studio() {
   function chooseCard(next: KidCard) {
     stopSpeaking();
     setSpeaking(false);
+    setRevealed(false);
     setCardId(next.id);
-    setChapterKey(next.chapters[0]?.key ?? "start");
+    setChapterKey(playableChapters(next)[0]?.key ?? "start");
     setJob(null);
   }
 
-  function hear() {
-    if (!chapter) return;
+  function chooseChapter(key: string) {
+    stopSpeaking();
+    setSpeaking(false);
+    setRevealed(false);
+    setChapterKey(key);
+  }
+
+  function hear(texts: string[]) {
     if (speaking) {
       stopSpeaking();
       setSpeaking(false);
       return;
     }
     setSpeaking(true);
-    speakTexts(
-      chapter.tracks.map((track) => track.text),
-      () => setSpeaking(false),
-    );
+    speakTexts(texts, () => setSpeaking(false));
+  }
+
+  function revealAnswer() {
+    if (!chapter) return;
+    setRevealed(true);
+    const answer = chapter.tracks[1]?.text;
+    if (!answer) return;
+    stopSpeaking();
+    setSpeaking(true);
+    speakTexts([answer], () => setSpeaking(false));
+  }
+
+  function anotherRiddle() {
+    if (!card) return;
+    const rounds = playableChapters(card);
+    const index = rounds.findIndex((item) => item.key === chapter?.key);
+    const next = rounds[(index + 1) % rounds.length];
+    if (next) chooseChapter(next.key);
   }
 
   async function send() {
@@ -215,90 +242,68 @@ export function Studio() {
 
   return (
     <div className="min-h-dvh bg-[radial-gradient(900px_420px_at_0%_-10%,rgba(198,161,91,0.18),transparent_55%),radial-gradient(700px_380px_at_100%_0%,rgba(214,69,50,0.14),transparent_50%),#14110e] text-[#f4efe4]">
-      <header className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 sm:flex-row sm:items-end sm:justify-between">
-        <div className="max-w-xl">
+      <header className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-6">
+        <div>
           <p className="text-xs font-medium tracking-[0.18em] text-[#c6a15b] uppercase">
-            For the Yoto player
+            Champdex
           </p>
           <h1 className="font-display mt-1 text-4xl font-semibold tracking-tight sm:text-5xl">
-            Champdex
+            {card?.id === "guess" ? "Guess Who" : "Pokémon facts"}
           </h1>
           <p className="mt-2 text-sm leading-6 text-[#cbbfa8] sm:text-base">
-            Three spoken cards for a seven-year-old. They put a card in the
-            player, turn to a picture, and press play. This page is only for you.
+            {card?.id === "guess"
+              ? "Three clues. Guess the Pokémon. Then hear if you were right."
+              : "Pick a Pokémon and hear one fact."}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {session ? (
-            <>
-              <span className="rounded-full border border-white/15 px-3 py-1 text-sm">
-                {session.name ? `Yoto · ${session.name}` : "Yoto connected"}
-              </span>
-              <Button variant="outline" onClick={disconnect}>
-                Disconnect
-              </Button>
-            </>
-          ) : (
-            <Button className="h-10 px-4" onClick={() => setConnectOpen(true)}>
-              Connect Yoto
-            </Button>
-          )}
-        </div>
-      </header>
-
-      <main className="mx-auto grid w-full max-w-6xl gap-4 px-4 pb-16 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
+        <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Play mode">
           {KID_CARDS.map((item) => {
             const selected = item.id === card?.id;
             return (
               <button
                 key={item.id}
                 type="button"
+                role="tab"
+                aria-selected={selected}
                 onClick={() => chooseCard(item)}
-                aria-pressed={selected}
-                className={`rounded-2xl border p-4 text-left transition ${
-                  selected
-                    ? "border-[#c6a15b] bg-[#2a231c]"
-                    : "border-white/10 bg-white/5 hover:bg-white/10"
+                className={`h-11 rounded-full px-5 text-sm font-medium ${
+                  selected ? "bg-[#d64532] text-white" : "bg-white/10 text-[#f4efe4]"
                 }`}
               >
-                <span className="flex flex-wrap items-center gap-2">
-                  <span className="font-display text-xl">{item.title}</span>
-                  {item.recommended ? (
-                    <span className="rounded-full bg-[#d64532] px-2 py-0.5 text-[10px] font-semibold tracking-wide text-white uppercase">
-                      Start here
-                    </span>
-                  ) : null}
-                </span>
-                <span className="mt-1 block text-sm leading-5 text-[#cbbfa8]">
-                  {item.blurb}
-                </span>
+                {item.id === "meet" ? "Facts" : "Guess Who"}
               </button>
             );
           })}
+          <span className="ml-auto">
+            {session ? (
+              <button type="button" className="text-sm text-[#cbbfa8] underline" onClick={disconnect}>
+                {session.name ? `Yoto · ${session.name}` : "Yoto connected"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="text-sm text-[#cbbfa8] underline"
+                onClick={() => setConnectOpen(true)}
+              >
+                Put this on a Yoto card
+              </button>
+            )}
+          </span>
         </div>
+      </header>
 
+      <main className="mx-auto w-full max-w-3xl px-4 pb-16">
         {card && chapter ? (
           <section className="rounded-[28px] bg-[#f3ecdf] p-4 text-[#1d1814] sm:p-6">
-            <p className="text-xs font-semibold tracking-[0.16em] text-[#8a5a22] uppercase">
-              What your child does
-            </p>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-[#5c5146]">
-              {card.childDoes}
-            </p>
-
-            <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
-              {card.chapters.map((item) => {
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {playableChapters(card).map((item) => {
                 const selected = item.key === chapter.key;
+                const guessLabel = card.id === "guess";
                 return (
                   <button
                     key={item.key}
                     type="button"
-                    onClick={() => {
-                      stopSpeaking();
-                      setSpeaking(false);
-                      setChapterKey(item.key);
-                    }}
+                    onClick={() => chooseChapter(item.key)}
                     aria-pressed={selected}
                     className={`flex w-20 shrink-0 flex-col items-center gap-1 rounded-2xl border px-2 py-3 text-center ${
                       selected
@@ -307,48 +312,86 @@ export function Studio() {
                     }`}
                   >
                     <span className="grid size-10 place-items-center rounded-xl bg-[#14110e] text-lg text-[#f4efe4]">
-                      {item.mark}
+                      {guessLabel && !selected ? "?" : item.mark}
                     </span>
-                    <span className="text-[11px] leading-4 font-medium">{item.title}</span>
-                    <span className="text-[10px] text-[#6d6256]">{item.overlay}</span>
+                    <span className="text-[11px] leading-4 font-medium">
+                      {guessLabel ? `Riddle ${item.overlay}` : item.title}
+                    </span>
                   </button>
                 );
               })}
             </div>
 
-            <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
-              <div>
-                <p className="text-xs font-semibold tracking-[0.16em] text-[#8a5a22] uppercase">
-                  On the player: {chapter.picture}
-                </p>
-                <h2 className="font-display mt-1 text-3xl">{chapter.title}</h2>
-                <div className="mt-3 grid gap-3">
-                  {chapter.tracks.map((track, index) => (
-                    <p
-                      key={track.key}
-                      className="font-display text-lg leading-8 text-[#2a241c]"
-                    >
-                      {chapter.tracks.length > 1 ? (
-                        <span className="mr-2 text-sm font-sans font-semibold tracking-wide text-[#8a5a22] uppercase">
-                          {index === 0 ? "First" : "Then"}
-                        </span>
-                      ) : null}
-                      {track.text}
-                    </p>
-                  ))}
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" className="h-10 bg-white" onClick={hear}>
-                    {speaking ? "Stop preview" : "Hear this picture"}
-                  </Button>
-                </div>
+            <div className="mt-5">
+              <p className="text-xs font-semibold tracking-[0.16em] text-[#8a5a22] uppercase">
+                {card.id === "guess"
+                  ? revealed
+                    ? chapter.picture
+                    : "Three clues"
+                  : chapter.picture}
+              </p>
+              <h2 className="font-display mt-1 text-4xl">
+                {card.id === "guess" && !revealed
+                  ? `Riddle ${chapter.overlay}`
+                  : chapter.title}
+              </h2>
+              <div className="mt-3 grid gap-3">
+                {(card.id === "guess" && !revealed
+                  ? chapter.tracks.slice(0, 1)
+                  : chapter.tracks
+                ).map((track) => (
+                  <p
+                    key={track.key}
+                    className="font-display text-lg leading-8 text-[#2a241c]"
+                  >
+                    {track.text}
+                  </p>
+                ))}
               </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {card.id === "guess" ? (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-10 bg-white"
+                      onClick={() =>
+                        hear([
+                          (revealed ? chapter.tracks[1] : chapter.tracks[0])?.text ?? "",
+                        ])
+                      }
+                    >
+                      {speaking ? "Stop" : revealed ? "Hear the answer" : "Hear the clues"}
+                    </Button>
+                    {revealed ? (
+                      <Button type="button" className="h-10" onClick={anotherRiddle}>
+                        Another riddle
+                      </Button>
+                    ) : (
+                      <Button type="button" className="h-10" onClick={revealAnswer}>
+                        I guessed
+                      </Button>
+                    )}
+                  </>
+                ) : (
+                  <Button
+                    type="button"
+                    className="h-10"
+                    onClick={() => hear(chapter.tracks.map((track) => track.text))}
+                  >
+                    {speaking ? "Stop" : "Hear the fact"}
+                  </Button>
+                )}
+              </div>
+            </div>
 
-              <aside className="rounded-2xl bg-[#1d1814] p-4 text-[#f4efe4]">
-                <h3 className="font-display text-xl">Send {card.title}</h3>
-                <p className="mt-1 text-sm leading-5 text-[#cbbfa8]">
-                  Yoto records the words, then you link the playlist to a blank card in the Yoto app.
-                </p>
+            <details className="mt-6 rounded-2xl bg-[#1d1814] p-4 text-[#f4efe4]">
+              <summary className="cursor-pointer text-sm font-medium">
+                Put {card.title === "Facts" ? "these facts" : "Guess Who"} on a Yoto card
+              </summary>
+              <p className="mt-3 text-sm leading-5 text-[#cbbfa8]">
+                {card.childDoes} Yoto records the words. Then you link the playlist to a blank card in the Yoto app.
+              </p>
                 <label className="mt-3 grid gap-1 text-sm" htmlFor="voice">
                   Voice
                   <select
@@ -406,11 +449,10 @@ export function Studio() {
                   </ol>
                 ) : (
                   <p className="mt-3 text-xs leading-5 text-[#cbbfa8]">
-                    One blank card is enough. Link Meet Them first.
+                    Facts and Guess Who are two cards. Link each one to its own blank card.
                   </p>
                 )}
-              </aside>
-            </div>
+            </details>
           </section>
         ) : null}
       </main>

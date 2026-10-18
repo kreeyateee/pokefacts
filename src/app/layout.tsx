@@ -16,9 +16,9 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "Champdex",
+  title: "Pokémon facts and Guess Who",
   description:
-    "Spoken Pokémon cards for a Yoto player. A child turns to a picture and presses play.",
+    "Hear a Pokémon fact, or play Guess Who. The same two games can go on a Yoto card.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

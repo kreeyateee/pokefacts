@@ -6,12 +6,13 @@ import { buildKidCard, KID_CARDS } from "./kid-cards";
 const BANNED = [/kill/i, /death/i, /quarry/i, /stat total/i, /capture rate/i, /base stat/i];
 
 describe("cards a seven-year-old can play", () => {
-  it("ships three cards, with Meet Them first", () => {
+  it("ships facts and guess who", () => {
     assert.deepEqual(
       KID_CARDS.map((card) => card.id),
-      ["meet", "guess", "grow"],
+      ["meet", "guess"],
     );
-    assert.equal(KID_CARDS[0]?.recommended, true);
+    assert.equal(KID_CARDS[0]?.title, "Facts");
+    assert.equal(KID_CARDS[1]?.title, "Guess Who");
   });
 
   it("tells the child how to use the player before any facts", () => {
@@ -57,24 +58,12 @@ describe("cards a seven-year-old can play", () => {
     }
   });
 
-  it("walks Grow Up from picture to picture", () => {
-    const grow = KID_CARDS.find((card) => card.id === "grow");
-    assert.ok(grow);
-    const body = grow.chapters.slice(1);
-    assert.equal(body.length, 9);
-    body.slice(0, 8).forEach((chapter, index) => {
-      assert.match(chapter.tracks[0]?.text ?? "", new RegExp(`number ${index + 2}`, "i"));
-    });
-    assert.match(body[8]?.tracks[0]?.text ?? "", /back to number 1/i);
-    assert.match(grow.chapters[0]?.tracks[0]?.text ?? "", /plant family/);
-  });
-
   it("builds a Yoto playlist with one chapter per picture", () => {
     const meet = KID_CARDS[0];
     assert.ok(meet);
     const payload = buildKidCard(meet, "card-meet");
     assert.equal(payload.cardId, "card-meet");
-    assert.equal(payload.title, "Champdex: Meet Them");
+    assert.equal(payload.title, "Champdex: Pokémon Facts");
     assert.equal(payload.content.chapters.length, meet.chapters.length);
     assert.equal(payload.content.chapters[1]?.title, "Bulbasaur");
     assert.equal(payload.content.chapters[1]?.tracks[0]?.type, "elevenlabs");
