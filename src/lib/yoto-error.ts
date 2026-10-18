@@ -5,9 +5,14 @@ export function validYotoCardId(id: string | undefined): string | undefined {
 }
 
 function pushText(parts: string[], value: unknown) {
-  if (typeof value !== "string") return;
-  const text = value.trim();
-  if (text) parts.push(text);
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (text) parts.push(text);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) pushText(parts, item);
+  }
 }
 
 /** Yoto's own words, including a nested error object and a raw body when the message is generic. */
@@ -19,10 +24,16 @@ export function yotoErrorText(data: unknown, fallback: string): string {
       error?: unknown;
       message?: unknown;
       error_description?: unknown;
+      detail?: unknown;
+      errors?: unknown;
+      yotoBody?: unknown;
       job?: { error?: unknown; message?: unknown };
     };
     pushText(parts, row.error_description);
     pushText(parts, row.message);
+    pushText(parts, row.detail);
+    pushText(parts, row.errors);
+    pushText(parts, row.yotoBody);
     if (typeof row.error === "string") pushText(parts, row.error);
     else if (row.error && typeof row.error === "object") {
       const nested = row.error as { message?: unknown; error_description?: unknown; code?: unknown };

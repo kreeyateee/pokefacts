@@ -7,10 +7,12 @@ import { dexBlurb, pickDexEntry, threeClues, type FlavorSource, type MonSheet } 
 import {
   buildKidCard,
   bulkProgressLabel,
+  chaptersForCries,
   countSpokenTracks,
   factPoolFromCards,
   factsBulkPlaylists,
   factsPlaylistUpload,
+  guessPlayOrder,
   guessPoolFromCards,
   guessUpload,
   kidCardsFromDex,
@@ -23,6 +25,13 @@ import {
   YOTO_TRACK_LIMIT,
 } from "./kid-cards";
 import { pronounce } from "./pronounce";
+import {
+  afterRejectedPlaylist,
+  bulkFailureText,
+  factsBulkUpload,
+  type PlaylistUpload,
+  type SavedCardMap,
+} from "./yoto-send";
 import { POST as postJob } from "../app/api/yoto/job/route";
 
 const BANNED = [/kill/i, /death/i, /quarry/i, /stat total/i, /capture rate/i, /base stat/i];
@@ -537,6 +546,99 @@ describe("bulk Facts upload", () => {
     assert.equal(replaced.content.cardId, "ab12C");
     const stale = factsPlaylistUpload(first, { 1: "pixel" }, "deleted-card");
     assert.equal(stale.content.cardId, undefined);
+    const bulkBody = factsBulkUpload(first, { 1: "pixel" });
+    assert.equal(bulkBody.create, true);
+    assert.equal(bulkBody.content.title, "Pokefacts 1");
+    assert.equal(bulkBody.content.metadata?.title, "Pokefacts 1");
+    assert.equal(Object.hasOwn(bulkBody.content, "cardId"), false);
+    assert.equal(JSON.stringify(bulkBody.content).includes('"cardId"'), false);
+  });
+
+  it("drops a stored card id on a 400 and retries that playlist as a create", () => {
+    const yotoBody = JSON.stringify({ message: "Request failed with status code 400" });
+    const store: SavedCardMap = {};
+    const created: string[] = [];
+    for (const card of bulk) store[card.id] = "ab12C";
+    for (const card of bulk) {
+      let upload: PlaylistUpload = factsPlaylistUpload(card, { 1: "pixel" }, store[card.id]);
+      let saved: SavedCardMap = { ...store };
+      let retried = false;
+      let placed = false;
+      while (!placed) {
+        if (upload.content.cardId) {
+          const decision = afterRejectedPlaylist({
+            playlistId: card.id,
+            upload,
+            status: 400,
+            body: { message: "Request failed with status code 400", yotoBody },
+            store: saved,
+            retried,
+          });
+          saved = decision.store;
+          if (!Object.hasOwn(saved, card.id)) delete store[card.id];
+          assert.equal(decision.action, "retry-create");
+          if (decision.action !== "retry-create") break;
+          assert.equal(Object.hasOwn(decision.store, card.id), false);
+          assert.equal(decision.upload.create, true);
+          assert.equal(Object.hasOwn(decision.upload.content, "cardId"), false);
+          assert.equal(decision.upload.content.title, card.libraryTitle);
+          upload = decision.upload;
+          retried = true;
+          continue;
+        }
+        assert.equal(upload.content.title, card.libraryTitle);
+        assert.equal(Object.hasOwn(upload.content, "cardId"), false);
+        created.push(upload.content.title ?? "");
+        placed = true;
+      }
+    }
+    assert.deepEqual(
+      created,
+      Array.from({ length: 11 }, (_, index) => `Pokefacts ${index + 1}`),
+    );
+    assert.equal(created[0], "Pokefacts 1");
+    assert.equal(Object.keys(store).length, 0);
+    const stopped = bulkFailureText({
+      headline: "Recording Pokefacts 1 of 11",
+      rangeLabel: bulk[0]?.rangeLabel ?? "",
+      reason: `Request failed with status code 400 ${yotoBody}`,
+      createdTitles: [],
+    });
+    assert.equal(stopped.includes("already in your library"), false);
+    assert.match(stopped, /Request failed with status code 400/);
+    assert.match(stopped, /\{"message":"Request failed with status code 400"\}/);
+  });
+
+  it("sends Pokefacts 1 to Yoto with no card id when the bulk flag is set", async () => {
+    const first = bulk[0];
+    assert.ok(first);
+    const created = factsBulkUpload(first, { 1: "pixel" });
+    const sneaky = { ...created, content: { ...created.content, cardId: "ab12C" } };
+    const original = globalThis.fetch;
+    let posted = "";
+    globalThis.fetch = async (_input, init) => {
+      posted = String(init?.body ?? "");
+      return new Response(JSON.stringify({ jobId: "job-facts", status: "queued" }), { status: 202 });
+    };
+    try {
+      const response = await postJob(
+        new Request("http://localhost/api/yoto/job", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${"x".repeat(24)}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(sneaky),
+        }),
+      );
+      assert.equal(response.status, 202);
+      const upstream = JSON.parse(posted) as { title?: string; cardId?: string; metadata?: { title?: string } };
+      assert.equal(upstream.title, "Pokefacts 1");
+      assert.equal(upstream.metadata?.title, "Pokefacts 1");
+      assert.equal(Object.hasOwn(upstream, "cardId"), false);
+    } finally {
+      globalThis.fetch = original;
+    }
   });
 
   it("covers every national id once and keeps each playlist at or under 100 tracks", () => {
@@ -549,6 +651,10 @@ describe("bulk Facts upload", () => {
       Array.from({ length: 1025 }, (_, index) => index + 1),
     );
     for (const card of bulk) {
+      assert.equal(
+        chaptersForCries(card).length,
+        card.chapters.filter((chapter) => chapter.dexId).length,
+      );
       assert.ok(countSpokenTracks(card.chapters) <= YOTO_TRACK_LIMIT);
       assert.ok(countSpokenTracks(card.chapters) > 0);
       const media = Object.fromEntries(
@@ -641,6 +747,24 @@ describe("random Guess Who", () => {
       assert.doesNotMatch(chapter.tracks[0]?.trackUrl ?? "", new RegExp(escapeRegExp(first.chapters[index]?.title ?? "XXXX"), "i"));
       assert.match(chapter.tracks[1]?.trackUrl ?? "", /^It is /);
     });
+  });
+
+  it("plays the cry before the clue and before the answer, and keeps the name off the clue", () => {
+    const card = randomGuessCard(pool, mulberry32(7));
+    assert.equal(chaptersForCries(card).length, 50);
+    assert.equal(countSpokenTracks(card.chapters), 100);
+    for (const chapter of card.chapters) {
+      const order = guessPlayOrder(chapter);
+      const name = chapter.title;
+      assert.equal(order.clue[0], "cry");
+      assert.equal(order.answer[0], "cry");
+      assert.doesNotMatch(order.clue[1] ?? "", new RegExp(escapeRegExp(name), "i"));
+      assert.match(order.answer[1] ?? "", new RegExp(`^It is ${escapeRegExp(name)}\\.`));
+      assert.equal(chapter.tracks[0]?.lead, "cry");
+      assert.equal(chapter.tracks[1]?.lead, "cry");
+      assert.equal(chapter.tracks[0]?.icon.includes("-shadow"), true);
+      assert.equal(chapter.tracks[1]?.icon, `/pixels/${chapter.dexId}.png`);
+    }
   });
 });
 

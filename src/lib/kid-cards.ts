@@ -30,6 +30,8 @@ export type KidTrack = {
   overlay: string;
   /** Game the Pokédex line comes from, when this track is an entry. */
   source?: string;
+  /** Play the Pokémon cry before this script. The how-to intro leaves this off. */
+  lead?: "cry";
 };
 
 export type KidChapter = {
@@ -88,6 +90,7 @@ function talk(
   icon: string,
   overlay: string,
   source?: string,
+  lead?: "cry",
 ): KidTrack {
   const readable = text.replace(/\s+/g, " ").trim();
   return {
@@ -98,6 +101,7 @@ function talk(
     icon,
     overlay,
     source,
+    lead,
   };
 }
 
@@ -185,6 +189,7 @@ function factChapter(sheet: MonSheet): KidChapter {
         icon,
         number,
         entry.version || undefined,
+        "cry",
       ),
     ],
     {
@@ -215,6 +220,8 @@ function riddleChapter(sheet: MonSheet): KidChapter {
         `Number ${number}. Three clues. ${clues.join(" ")} Shout your guess. One. Two. Three.`,
         I.detective,
         "?",
+        undefined,
+        "cry",
       ),
       talk(
         "answer",
@@ -223,6 +230,7 @@ function riddleChapter(sheet: MonSheet): KidChapter {
         answerIcon,
         "Yes",
         entry.version || undefined,
+        "cry",
       ),
     ],
     { sprite: `/sprites/${sheet.id}.png`, dexId: sheet.id },
@@ -464,7 +472,7 @@ export function shadowPixelPath(id: number): string {
 }
 
 const GUESS_HOWTO =
-  "Guess Who. Fifty riddles, drawn at random. Turn the wheel until you see a dark picture. Press play. Three clues. Shout your guess before the count ends. The next track tells you the answer, and the picture changes to the real Pokémon. ";
+  "Guess Who. Fifty riddles, drawn at random. You hear the cry, then three clues. Turn the wheel until you see a dark picture. Press play. Shout your guess before the count ends. The next track plays the cry again, then tells you the answer, and the picture changes to the real Pokémon. ";
 
 /**
  * One playlist of 50 riddles. Two tracks each fills the 100-track card.
@@ -505,9 +513,9 @@ export function randomGuessCard(pool: KidChapter[], random: () => number = Math.
     title: "Guess Who",
     rangeLabel: "Random 50",
     libraryTitle: "Guess Who",
-    blurb: "Fifty riddles drawn at random. A shadow, then the real picture.",
+    blurb: "Fifty riddles drawn at random. The cry, then the clue. The cry again, then the answer.",
     childDoes:
-      "Pick a dark picture and press play. Three clues, then a count of three. The answer plays next and the picture changes to the real Pokémon.",
+      "Pick a dark picture and press play. You hear the cry, then three clues, then a count of three. The answer plays the cry again, then the name, and the picture changes.",
     chapters,
   };
 }
@@ -545,6 +553,27 @@ export function guessUpload(
   content.metadata.title = "Guess Who";
   content.title = "Guess Who";
   content.metadata.description =
-    "Guess Who. Fifty riddles drawn at random. Each riddle starts as a dark shadow. The answer track changes the picture to the real pixel. Three clues, then a count of three. Lily reads every track. Written for ages 8 to 12. Link this playlist to its own card.";
+    "Guess Who. Fifty riddles drawn at random. Each track starts with the cry, then Lily. The clue never says the name. The answer says the name. The clue icon is a dark shadow. The answer icon is the real pixel. Written for ages 8 to 12. Link this playlist to its own card.";
   return { voiceId: LILY_VOICE_ID, content };
+}
+
+/** Chapters whose tracks lead with the cry. Facts and Guess Who both qualify. The intro does not. */
+export function chaptersForCries(card: KidCard): Array<{ key: string; dexId: number }> {
+  return card.chapters.flatMap((chapter) => {
+    if (!chapter.dexId) return [];
+    if (!chapter.tracks.some((track) => track.lead === "cry")) return [];
+    return [{ key: chapter.key, dexId: chapter.dexId }];
+  });
+}
+
+/** Clue and answer playback. Both start with the cry. The clue script omits the name. */
+export function guessPlayOrder(chapter: KidChapter): { clue: string[]; answer: string[] } {
+  const line = (track: KidTrack | undefined) => {
+    const script = track?.text ?? "";
+    return track?.lead === "cry" ? ["cry", script] : [script];
+  };
+  return {
+    clue: line(chapter.tracks[0]),
+    answer: line(chapter.tracks[1]),
+  };
 }

@@ -34,5 +34,8 @@ describe("Yoto errors", () => {
     assert.equal(failure.yotoBody, raw);
     assert.match(failure.message, /Request failed with status code 400/);
     assert.match(failure.error, /Request failed with status code 400/);
+    const shown = yotoErrorText(failure, "Yoto did not accept this card.");
+    assert.match(shown, /Request failed with status code 400/);
+    assert.match(shown, /\{"message":"Request failed with status code 400"\}/);
   });
 });

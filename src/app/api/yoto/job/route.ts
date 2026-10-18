@@ -4,6 +4,8 @@ import { bearerToken, forwardYoto, jsonError } from "@/lib/yoto-proxy";
 
 type JobBody = {
   voiceId?: string;
+  /** Bulk Pokefacts sends this so a saved card id cannot turn the job into a replace. */
+  create?: boolean;
   content?: {
     title?: string;
     cardId?: string;
@@ -62,11 +64,14 @@ export async function POST(request: Request) {
     );
   }
 
+  const content = body.content ? { ...body.content } : undefined;
+  if (body.create === true && content) delete content.cardId;
+
   const url = `https://labs.api.yotoplay.com/content/job?voiceId=${encodeURIComponent(voiceId)}`;
   const upstream = await forwardYoto(url, token, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body.content),
+    body: JSON.stringify(content),
   });
   if (upstream.ok) return upstream;
   const text = await upstream.text();

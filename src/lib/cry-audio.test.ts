@@ -149,4 +149,114 @@ describe("fact audio", () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  it("puts the cry first on a Guess Who clue and on the answer", async () => {
+    const clueScript = "Number 1. Three clues. A seed sits on its back. One. Two. Three.";
+    const answerScript = "It is Bulbasaur.";
+    assert.doesNotMatch(clueScript, /Bulbasaur/i);
+    assert.match(answerScript, /^It is Bulbasaur\./);
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-guess-"));
+    const speechPath = path.join(dir, "speech.mp3");
+    await sine(speechPath);
+    const speech = await readFile(speechPath);
+    const cryResponse = await fetch(cryUrl(1));
+    const cry = Buffer.from(await cryResponse.arrayBuffer());
+    const puts: Buffer[] = [];
+    let posted = "";
+    let transcode = 0;
+    const card = {
+      cardId: "card-1",
+      title: "Guess Who",
+      metadata: { title: "Guess Who", description: "Riddles." },
+      content: {
+        chapters: [
+          {
+            key: "bulbasaur",
+            title: "Riddle 1",
+            display: { icon16x16: "yoto:#shadow-1" },
+            tracks: [
+              {
+                key: "bulbasaur-clues",
+                title: "Three clues",
+                type: "audio",
+                trackUrl: "yoto:#clue",
+                overlayLabel: "?",
+                display: { icon16x16: "yoto:#shadow-1" },
+              },
+              {
+                key: "bulbasaur-answer",
+                title: "The answer",
+                type: "audio",
+                trackUrl: "yoto:#answer",
+                overlayLabel: "Yes",
+                display: { icon16x16: "yoto:#pixel-1" },
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = String(input);
+      if (url.includes("/content/card-1") && url.includes("playable=true")) {
+        const playable = structuredClone(card);
+        const tracks = playable.content.chapters[0]?.tracks ?? [];
+        if (tracks[0]) tracks[0].trackUrl = "https://cdn.example/clue.mp3";
+        if (tracks[1]) tracks[1].trackUrl = "https://cdn.example/answer.mp3";
+        return Response.json({ card: playable });
+      }
+      if (url.includes("/content/card-1")) return Response.json({ card });
+      if (url === "https://cdn.example/clue.mp3" || url === "https://cdn.example/answer.mp3") {
+        return new Response(new Uint8Array(speech), { headers: { "Content-Type": "audio/mpeg" } });
+      }
+      if (url === cryUrl(1)) return new Response(new Uint8Array(cry), { headers: { "Content-Type": "audio/ogg" } });
+      if (url.includes("/media/transcode/audio/uploadUrl")) {
+        return Response.json({ upload: { uploadId: `up-${puts.length + 1}`, uploadUrl: "https://upload.example/put" } });
+      }
+      if (url === "https://upload.example/put") {
+        const body = init?.body;
+        puts.push(Buffer.from(body instanceof Uint8Array ? body : new Uint8Array()));
+        return new Response("ok");
+      }
+      if (url.includes("/transcoded")) {
+        transcode += 1;
+        return Response.json({
+          transcode: {
+            transcodedSha256: `guess${transcode}`,
+            transcodedInfo: { duration: 3, fileSize: 1, format: "mp3", channels: "mono" },
+          },
+        });
+      }
+      if (url === "https://api.yotoplay.com/content" && init?.method === "POST") {
+        posted = String(init.body);
+        return Response.json({ card: { cardId: "card-1" } });
+      }
+      throw new Error(`Unexpected ${init?.method ?? "GET"} ${url}`);
+    };
+    try {
+      await attachCry("x".repeat(24), { cardId: "card-1", chapterKey: "bulbasaur", dexId: 1 }, fetchImpl);
+      const payload = JSON.parse(posted) as {
+        content: {
+          chapters: Array<{
+            tracks: Array<{ type: string; trackUrl: string; display?: { icon16x16?: string } }>;
+          }>;
+        };
+      };
+      const tracks = payload.content.chapters[0]?.tracks ?? [];
+      assert.equal(tracks.length, 2);
+      assert.equal(puts.length, 2);
+      for (const [index, track] of tracks.entries()) {
+        assert.equal(track.type, "audio");
+        assert.match(track.trackUrl, /^yoto:#[A-Za-z0-9]+$/);
+        const mixed = puts[index];
+        assert.ok(mixed);
+        assert.equal(await cryLeads(cry, speech, mixed), true);
+      }
+      assert.equal(tracks[0]?.display?.icon16x16, "yoto:#shadow-1");
+      assert.equal(tracks[1]?.display?.icon16x16, "yoto:#pixel-1");
+      assert.notEqual(tracks[0]?.trackUrl, tracks[1]?.trackUrl);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });
