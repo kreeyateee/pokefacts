@@ -262,7 +262,7 @@ export function Studio() {
                     : "border-white/10 bg-white/5 hover:bg-white/10"
                 }`}
               >
-                <span className="flex items-center justify-between gap-2">
+                <span className="flex flex-wrap items-center gap-2">
                   <span className="font-display text-xl">{item.title}</span>
                   {item.recommended ? (
                     <span className="rounded-full bg-[#d64532] px-2 py-0.5 text-[10px] font-semibold tracking-wide text-white uppercase">
@@ -355,14 +355,17 @@ export function Studio() {
                     id="voice"
                     value={voiceId}
                     onChange={(event) => setVoiceId(event.target.value)}
-                    className="h-10 rounded-lg border border-white/15 bg-black/30 px-2"
+                    className="h-10 w-full rounded-lg border border-white/15 bg-black/30 px-2"
                   >
                     {YOTO_VOICES.map((voice) => (
                       <option key={voice.id} value={voice.id}>
-                        {voice.name} · {voice.note}
+                        {voice.name}
                       </option>
                     ))}
                   </select>
+                  <span className="text-xs leading-5 text-[#cbbfa8]">
+                    {YOTO_VOICES.find((voice) => voice.id === voiceId)?.note}
+                  </span>
                 </label>
                 {previousId ? (
                   <label className="mt-3 flex items-start gap-2 text-sm leading-5">
