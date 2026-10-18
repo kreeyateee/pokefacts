@@ -70,4 +70,11 @@ export const YOTO_VOICES = [
   },
 ] as const;
 
-export const YOTO_SCOPES = "user:content:manage offline_access profile";
+/**
+ * The content gateway checks these strings literally. `user:content:manage`
+ * is documented as including `user:content:view`, and reading the scratch
+ * recording also requires `family:library:view`. A refresh keeps the old
+ * grant, so a token minted before these were listed has to be replaced.
+ */
+export const YOTO_SCOPES =
+  "user:content:manage user:content:view family:library:view offline_access profile";

@@ -1,7 +1,21 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, it } from "node:test";
 
-import { savedCardIsGone, statusErrorText, validYotoCardId, yotoErrorText, yotoUpstreamFailure } from "./yoto-error";
+import { prepareFactTrack } from "./yoto-fact-audio";
+import { bulkFailureText } from "./yoto-send";
+import { authorizeSearchParams, clearSavedLoginForScopeGap, SESSION_KEY } from "./yoto-session";
+import { YOTO_SCOPES } from "./yoto-icons";
+import {
+  RECONNECT_YOTO,
+  savedCardIsGone,
+  statusErrorText,
+  validYotoCardId,
+  yotoErrorText,
+  yotoUpstreamFailure,
+} from "./yoto-error";
 
 describe("Yoto errors", () => {
   it("reads a nested error message instead of a vague status line", () => {
@@ -37,6 +51,100 @@ describe("Yoto errors", () => {
     const shown = yotoErrorText(failure, "Yoto did not accept this card.");
     assert.match(shown, /Request failed with status code 400/);
     assert.match(shown, /\{"message":"Request failed with status code 400"\}/);
+  });
+
+  it("clears the saved login when a content read lacks scopes the authorize URL already requests", async () => {
+    const scope =
+      authorizeSearchParams({
+        clientId: "public-client",
+        challenge: "challenge",
+        redirectUri: "https://champdex.example/callback",
+      }).get("scope") ?? "";
+    assert.equal(scope, YOTO_SCOPES);
+    assert.match(scope, /(?:^|\s)user:content:view(?:\s|$)/);
+    assert.match(scope, /(?:^|\s)family:library:view(?:\s|$)/);
+
+    const raw = "User does not have required scope(s): 'user:content:view', 'family:library:view'";
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-scope-"));
+    const urls: string[] = [];
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.startsWith("https://labs.api.yotoplay.com/content/job/")) {
+        return Response.json({
+          job: { jobId: "job-line-1", status: "completed", result: { cardId: "abc12" } },
+        });
+      }
+      if (url.startsWith("https://api.yotoplay.com/content/abc12")) {
+        return Response.json({ message: raw }, { status: 403 });
+      }
+      throw new Error(`Unexpected ${url}`);
+    };
+    const store = new Map<string, string>([
+      [SESSION_KEY, JSON.stringify({ accessToken: "t".repeat(24), clientId: "public-client", expiresAt: 1 })],
+    ]);
+    const storage = {
+      removeItem(key: string) {
+        store.delete(key);
+      },
+    };
+
+    try {
+      await assert.rejects(
+        () =>
+          prepareFactTrack(
+            "t".repeat(24),
+            { text: "Bulbasaur waits in the tall grass.", title: "Bulbasaur", dexId: 1, speechJobId: "job-line-1" },
+            fetchImpl,
+            { speech: path.join(dir, "speech"), rendered: path.join(dir, "rendered") },
+          ),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.equal(error.message, RECONNECT_YOTO);
+          assert.equal(error.message.includes("user:content:view"), false);
+          assert.equal(error.message.includes("family:library:view"), false);
+          return true;
+        },
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+
+    assert.equal(urls.some((url) => url.includes("/content/mine")), false);
+    assert.equal(urls.some((url) => url.includes("/card/family/library")), false);
+    assert.equal(
+      urls.some((url) => url.startsWith("https://api.yotoplay.com/content/abc12")),
+      true,
+    );
+
+    const cleared = clearSavedLoginForScopeGap(raw, storage);
+    assert.equal(cleared, RECONNECT_YOTO);
+    assert.equal(store.has(SESSION_KEY), false);
+
+    const shown = bulkFailureText({
+      headline: "Recording Pokefacts 1 of 11",
+      rangeLabel: "Pokefacts 1 (1-99)",
+      reason: raw,
+      createdTitles: [],
+      playlistIndex: 1,
+    });
+    assert.equal(shown, RECONNECT_YOTO);
+    assert.equal(shown.includes("user:content:view"), false);
+    assert.equal(shown.includes("Retry when you are ready"), false);
+    assert.equal(shown.includes("already in your library"), false);
+    assert.equal(shown.includes("failed"), false);
+    const later = bulkFailureText({
+      headline: "Recording Pokefacts 2 of 11",
+      rangeLabel: "Pokefacts 2 (100-198)",
+      reason: raw,
+      createdTitles: ["Pokefacts 1"],
+      playlistIndex: 2,
+    });
+    assert.equal(later.includes("already in your library"), false);
+    assert.equal(statusErrorText(403, { message: raw, yotoBody: raw }, "Yoto did not accept this card."), RECONNECT_YOTO);
+    const upstream = yotoUpstreamFailure(JSON.stringify({ message: raw }));
+    assert.equal(upstream.message, RECONNECT_YOTO);
+    assert.equal(upstream.yotoBody, "");
   });
 
   it("turns a 502 HTML body into a short timeout", () => {

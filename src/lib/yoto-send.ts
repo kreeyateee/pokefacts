@@ -1,5 +1,11 @@
 import { factsPlaylistUpload, pokefactsTitle, trackProgressLabel, type KidCard } from "@/lib/kid-cards";
-import { looksLikeGateway, PUBLIC_LINK_TIMEOUT, savedCardIsGone, statusErrorText } from "@/lib/yoto-error";
+import {
+  looksLikeGateway,
+  PUBLIC_LINK_TIMEOUT,
+  reconnectMessage,
+  savedCardIsGone,
+  statusErrorText,
+} from "@/lib/yoto-error";
 
 export type SavedCardMap = Partial<Record<string, string>>;
 
@@ -84,6 +90,8 @@ export function bulkFailureText(input: {
   playlistIndex?: number;
   gateway?: boolean;
 }): string {
+  const reconnect = reconnectMessage(input.reason);
+  if (reconnect) return reconnect;
   const gateway = Boolean(input.gateway) || looksLikeGateway(0, input.reason);
   const reason = gateway ? PUBLIC_LINK_TIMEOUT : input.reason.trim() || "The recording stopped.";
   const earlier =

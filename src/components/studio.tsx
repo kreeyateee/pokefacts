@@ -42,6 +42,7 @@ import {
 } from "@/lib/yoto-send";
 import {
   CARD_KEY,
+  clearSavedLoginForScopeGap,
   ensureSession,
   writeSession,
   yotoFetch,
@@ -429,6 +430,17 @@ export function Studio({ cards }: { cards: KidCard[] }) {
     return live;
   }
 
+  function reportFailure(message: string) {
+    const reconnect = clearSavedLoginForScopeGap(message);
+    const detail = reconnect ?? message;
+    if (reconnect) {
+      setSession(null);
+      setConnectOpen(true);
+    }
+    setJob({ status: "failed", detail });
+    toast.error(detail);
+  }
+
   async function pollJob(id: string, headline?: string) {
     for (let attempt = 0; attempt < 90; attempt += 1) {
       await delay(2000);
@@ -644,8 +656,7 @@ export function Studio({ cards }: { cards: KidCard[] }) {
       toast.success(`${card.libraryTitle} is ready to link to its own blank card.`);
     } catch (error) {
       const failure = asSendFailure(error, "The recording stopped.");
-      setJob({ status: "failed", detail: failure.message });
-      toast.error(failure.message);
+      reportFailure(failure.message);
     } finally {
       setSending(false);
     }
@@ -699,8 +710,7 @@ export function Studio({ cards }: { cards: KidCard[] }) {
       toast.success(`All ${playlists.length} Pokefacts playlists are ready to link.`);
     } catch (error) {
       const failure = asSendFailure(error, "The recording stopped.");
-      setJob({ status: "failed", detail: failure.message });
-      toast.error(failure.message);
+      reportFailure(failure.message);
     } finally {
       setSending(false);
       setBulkActive(false);

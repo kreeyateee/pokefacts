@@ -1,3 +1,5 @@
+import { YOTO_SCOPES } from "@/lib/yoto-icons";
+
 /** Yoto card ids are five letters or digits. Anything else is not a playlist we can update. */
 export function validYotoCardId(id: string | undefined): string | undefined {
   if (!id) return undefined;
@@ -86,12 +88,39 @@ export function looksLikeGateway(status: number, data: unknown): boolean {
   return /<!doctype|<html[\s>]|<\/html>|trycloudflare|bad gateway|error code 50[24]/i.test(serialized(data));
 }
 
+/** Shown when the saved grant is older than the authorize URL. Never include the raw scope list. */
+export const RECONNECT_YOTO = "Reconnect Yoto. The saved login is missing permission.";
+
+function namedScopes(text: string): string[] {
+  const quoted = [...text.matchAll(/'([A-Za-z0-9:_-]+)'/g)].map((match) => match[1] ?? "");
+  if (quoted.length > 0) return quoted.filter(Boolean);
+  const line = text.match(/required scope\(s\):\s*([^.]*)/i)?.[1] ?? "";
+  return line
+    .split(/[,\s]+/)
+    .map((scope) => scope.trim())
+    .filter((scope) => scope.includes(":"));
+}
+
+/**
+ * Yoto names scopes the authorize URL already requests.
+ * The live token was minted earlier and a refresh cannot add them.
+ */
+export function reconnectMessage(text: string): string | null {
+  if (text.includes(RECONNECT_YOTO)) return RECONNECT_YOTO;
+  if (!/user does not have required scope/i.test(text)) return null;
+  const named = namedScopes(text);
+  if (named.length === 0) return null;
+  const requested = new Set(YOTO_SCOPES.split(/\s+/));
+  if (!named.every((scope) => requested.has(scope))) return null;
+  return RECONNECT_YOTO;
+}
+
 /** Status text for the page. Gateway and HTML bodies become one short sentence. */
 export function statusErrorText(status: number, data: unknown, fallback: string): string {
   if (looksLikeGateway(status, data)) return PUBLIC_LINK_TIMEOUT;
   const text = yotoErrorText(data, fallback);
   if (looksLikeGateway(0, text)) return PUBLIC_LINK_TIMEOUT;
-  return text;
+  return reconnectMessage(text) ?? text;
 }
 
 export function asSendFailure(error: unknown, fallback: string): SendFailure {
@@ -128,6 +157,8 @@ export function yotoUpstreamFailure(text: string): {
     parsed = null;
   }
   const detail = yotoErrorText(parsed, "Yoto did not accept this card.");
+  const reconnect = reconnectMessage(detail) ?? reconnectMessage(yotoBody);
+  if (reconnect) return { error: reconnect, message: reconnect, yotoBody: "" };
   const message = yotoBody && !detail.includes(yotoBody) ? `${detail} ${yotoBody}` : detail;
   return { error: message, message, yotoBody };
 }

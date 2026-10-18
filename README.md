@@ -34,7 +34,7 @@ The numbered Facts ranges are the playlists the bulk upload sends. The random 10
 1. Run this app and open it.
 2. In the [Yoto developer dashboard](https://dashboard.yoto.dev/), create a **public** client. Copy the client ID. Do not paste the client secret into Champdex.
 3. Add this callback URL to that client: `http://localhost:3847/callback`
-4. In Champdex, choose **Connect Yoto**. The login asks to create Make Your Own content, stay signed in, and read your name. Leave the voice on Lily.
+4. In Champdex, choose **Connect Yoto**. The login asks to create and view Make Your Own content, view your library, stay signed in, and read your name. Leave the voice on Lily.
 5. Open **Facts** and choose **Send all 11 Pokefacts playlists**. Champdex records them one at a time. In the Yoto app they are named Pokefacts 1 through Pokefacts 11. Link each finished playlist to its own blank card.
 6. Or open **Put Random 100 on a Yoto card** and send that smaller list. **Shuffle** draws a different hundred. The send uses the list on screen. Yoto records Lily (`pFZP5JQG7iQjIQuC4Bku`) as an MP3 for each track.
 7. In the Yoto app, open **Make Your Own**, find the Champdex playlist, and choose **Link to a card**.

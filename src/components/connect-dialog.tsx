@@ -102,7 +102,7 @@ export function ConnectDialog({
           </li>
           <li>
             <span className="font-medium text-foreground">3. Grant the field guide.</span>{" "}
-            Login asks to create Make Your Own content, stay signed in, and read your name.
+            Login asks to create and view Make Your Own content, view your library, stay signed in, and read your name.
           </li>
         </ol>
         <form

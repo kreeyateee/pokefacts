@@ -1,3 +1,4 @@
+import { reconnectMessage } from "@/lib/yoto-error";
 import { YOTO_SCOPES } from "@/lib/yoto-icons";
 
 export const SESSION_KEY = "champdex.session";
@@ -63,6 +64,37 @@ export function writeSession(session: YotoSession | null) {
   else localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 }
 
+type SessionStorage = {
+  removeItem(key: string): void;
+};
+
+/**
+ * A Yoto response named scopes this login already requests.
+ * Drop the saved token so the next connect mints a grant that includes them.
+ */
+export function clearSavedLoginForScopeGap(text: string, storage?: SessionStorage): string | null {
+  const message = reconnectMessage(text);
+  if (!message) return null;
+  (storage ?? localStorage).removeItem(SESSION_KEY);
+  return message;
+}
+
+export function authorizeSearchParams(input: {
+  clientId: string;
+  challenge: string;
+  redirectUri: string;
+}): URLSearchParams {
+  return new URLSearchParams({
+    audience: "https://api.yotoplay.com",
+    scope: YOTO_SCOPES,
+    response_type: "code",
+    client_id: input.clientId,
+    code_challenge: input.challenge,
+    code_challenge_method: "S256",
+    redirect_uri: input.redirectUri,
+  });
+}
+
 function decodeJwt(token: string): Record<string, unknown> | null {
   try {
     const part = token.split(".")[1];
@@ -107,14 +139,10 @@ export async function beginYotoLogin(clientId: string) {
   const { verifier, challenge } = await createPkce();
   sessionStorage.setItem(VERIFIER_KEY, verifier);
   localStorage.setItem(CLIENT_KEY, clientId);
-  const params = new URLSearchParams({
-    audience: "https://api.yotoplay.com",
-    scope: YOTO_SCOPES,
-    response_type: "code",
-    client_id: clientId,
-    code_challenge: challenge,
-    code_challenge_method: "S256",
-    redirect_uri: redirectUri(),
+  const params = authorizeSearchParams({
+    clientId,
+    challenge,
+    redirectUri: redirectUri(),
   });
   window.location.assign(
     `https://login.yotoplay.com/authorize?${params.toString()}`,

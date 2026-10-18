@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { cryUrl, mergeCryFirst } from "@/lib/cry-audio";
 import { LILY_VOICE_ID } from "@/lib/kid-cards";
+import { reconnectMessage } from "@/lib/yoto-error";
 
 export type FactCryRequest = {
   cardId: string;
@@ -58,10 +59,15 @@ function cardOf(payload: unknown): CardPayload | null {
 function messageOf(payload: unknown, fallback: string): string {
   if (!payload || typeof payload !== "object") return fallback;
   const row = payload as { message?: string; error?: string | { message?: string } };
-  if (typeof row.message === "string") return row.message;
-  if (typeof row.error === "string") return row.error;
-  if (row.error && typeof row.error.message === "string") return row.error.message;
-  return fallback;
+  const text =
+    typeof row.message === "string"
+      ? row.message
+      : typeof row.error === "string"
+        ? row.error
+        : row.error && typeof row.error.message === "string"
+          ? row.error.message
+          : fallback;
+  return reconnectMessage(text) ?? text;
 }
 
 async function yoto(
