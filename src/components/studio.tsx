@@ -5,7 +5,7 @@ import { toast } from "sonner";
 
 import { ConnectDialog } from "@/components/connect-dialog";
 import { Button } from "@/components/ui/button";
-import { buildKidCard, KID_CARDS, type KidCard } from "@/lib/kid-cards";
+import { buildKidCard, trackSpeech, type KidCard } from "@/lib/kid-cards";
 import { speakTexts, stopSpeaking } from "@/lib/speak";
 import { YOTO_VOICES } from "@/lib/yoto-icons";
 import {
@@ -78,7 +78,7 @@ function playableChapters(card: KidCard) {
   return card.chapters.filter((chapter) => chapter.key !== "start");
 }
 
-export function Studio() {
+export function Studio({ cards }: { cards: KidCard[] }) {
   const [cardId, setCardId] = useState<KidCard["id"]>("meet");
   const [chapterKey, setChapterKey] = useState("bulbasaur");
   const [revealed, setRevealed] = useState(false);
@@ -92,7 +92,7 @@ export function Studio() {
   const [linked, setLinked] = useState<SavedCards>({});
   const [ready, setReady] = useState(false);
 
-  const card = KID_CARDS.find((item) => item.id === cardId) ?? KID_CARDS[0];
+  const card = cards.find((item) => item.id === cardId) ?? cards[0];
   const chapter =
     card?.chapters.find((item) => item.key === chapterKey) ?? card?.chapters[0];
 
@@ -143,7 +143,7 @@ export function Studio() {
   function revealAnswer() {
     if (!chapter) return;
     setRevealed(true);
-    const answer = chapter.tracks[1]?.text;
+    const answer = chapter.tracks[1] ? trackSpeech(chapter.tracks[1]) : undefined;
     if (!answer) return;
     stopSpeaking();
     setSpeaking(true);
@@ -253,11 +253,11 @@ export function Studio() {
           <p className="mt-2 text-sm leading-6 text-[#cbbfa8] sm:text-base">
             {card?.id === "guess"
               ? "Three clues. Guess the Pokémon. Then hear if you were right."
-              : "Pick a Pokémon and hear one fact."}
+              : "Pick a Pokémon and hear its Pokédex entry."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Play mode">
-          {KID_CARDS.map((item) => {
+          {cards.map((item) => {
             const selected = item.id === card?.id;
             return (
               <button
@@ -345,6 +345,11 @@ export function Studio() {
                     className="font-display text-lg leading-8 text-[#2a241c]"
                   >
                     {track.text}
+                    {track.source ? (
+                      <span className="mt-1 block text-xs font-sans tracking-normal text-[#8d8272]">
+                        Pokédex, {track.source}
+                      </span>
+                    ) : null}
                   </p>
                 ))}
               </div>
@@ -355,11 +360,10 @@ export function Studio() {
                       type="button"
                       variant="outline"
                       className="h-10 bg-white"
-                      onClick={() =>
-                        hear([
-                          (revealed ? chapter.tracks[1] : chapter.tracks[0])?.text ?? "",
-                        ])
-                      }
+                      onClick={() => {
+                        const track = revealed ? chapter.tracks[1] : chapter.tracks[0];
+                        if (track) hear([trackSpeech(track)]);
+                      }}
                     >
                       {speaking ? "Stop" : revealed ? "Hear the answer" : "Hear the clues"}
                     </Button>
@@ -377,7 +381,7 @@ export function Studio() {
                   <Button
                     type="button"
                     className="h-10"
-                    onClick={() => hear(chapter.tracks.map((track) => track.text))}
+                    onClick={() => hear(chapter.tracks.map((track) => trackSpeech(track)))}
                   >
                     {speaking ? "Stop" : "Hear the fact"}
                   </Button>
@@ -460,7 +464,7 @@ export function Studio() {
       <footer className="mx-auto w-full max-w-6xl px-4 pb-8 text-xs leading-5 text-[#8d8272]">
         Unofficial fan cards for your own Yoto library. Not made by Nintendo, Game Freak,
         Creatures, or Yoto. Pokémon names are theirs. The words are written for a
-        ages 8 to 12 to hear on a player.
+        ages 8 to 12. Each fact is an English Pokédex entry.
       </footer>
 
       <ConnectDialog open={connectOpen} onOpenChange={setConnectOpen} />

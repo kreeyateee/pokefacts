@@ -1,5 +1,7 @@
 import { Studio } from "@/components/studio";
+import { loadKidCards } from "@/lib/load-kid-cards";
 
-export default function Home() {
-  return <Studio />;
+export default async function Home() {
+  const cards = await loadKidCards();
+  return <Studio cards={cards} />;
 }

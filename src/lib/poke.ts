@@ -61,7 +61,9 @@ type AbilityPayload = {
 };
 
 async function readJson<T>(url: string): Promise<T> {
-  const response = await fetch(url);
+  const response = await fetch(url, {
+    headers: { Accept: "application/json", "User-Agent": "champdex/0.1" },
+  });
   if (!response.ok) {
     throw new Error(`PokéAPI returned ${response.status} for ${url}`);
   }
