@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Fraunces, Outfit } from "next/font/google";
 
+import { LocalOrigin } from "@/components/local-origin";
 import { Toaster } from "@/components/ui/sonner";
 
 import "./globals.css";
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${outfit.variable} ${fraunces.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        <LocalOrigin />
         {children}
         <Toaster />
       </body>

@@ -1,61 +1,89 @@
 # Champdex
 
-Pokémon facts and Guess Who for ages 8 to 12, plus a reference catalogue of all 1,025 national species (1,351 forms). Each catalogue entry uses [PokéAPI](https://pokeapi.co/) game data: an English Pokédex line, the types, the height in centimetres, the weight in kilograms, the abilities (including hidden ones), the base stats, and the evolution. Nine species also keep a short Champdex note. Bulbapedia articles are not copied into it.
+Champdex runs on your computer and sends Pokémon cards to your own Yoto library. It covers all 1,025 national species. You can browse the catalogue, send the Pokefacts playlists, and send a Guess Who game. The pictures, the catalogue, and the app stay on this machine. A public tunnel is optional. Uploads go from this computer to Yoto.
 
-The catalogue pictures are local files in `public/sprites`. A PDF of Pokémon images was not in the workspace, so these are the PokéAPI front sprites (`sprites/pokemon/{id}.png`). The Yoto pictures are 16×16 RGBA icons in `public/pixels`, made from those sprites with `ffmpeg -vf scale=16:16:flags=neighbor,format=rgba`.
+The catalogue is game data from [PokéAPI](https://pokeapi.co/): an English Pokédex line, the types, the height, the weight, the abilities, the base stats, and the evolution. Nine species also have a short Champdex note. Bulbapedia articles are not copied into it.
 
-A spoken fact is the name, then the English Pokédex line, then the weight and the height in full sentences, plus a short evolution, ability, or home line when the catalogue has one. Stats stay on the catalogue page. The audio order is the latest PokéAPI cry, then that reading. Hear plays it that way. On a Yoto card, Labs records Lily (`pFZP5JQG7iQjIQuC4Bku`) from the script, Champdex merges the cry in front, and the merged MP3 is uploaded to Yoto as the track.
+## Install
 
-The main Facts action is **Send all 11 Pokefacts playlists**. Yoto titles them Pokefacts 1 through Pokefacts 11. Champdex builds each track in its own short request, cry first and then Lily, and shows progress such as “Pokefacts 1, track 12 of 99”. It creates the Yoto playlist only after those recordings exist. That bulk send always creates a new playlist. It does not reuse a card id saved in the browser. Replace stays off unless you tick it for a single playlist. If one track fails, Champdex retries that track. If a playlist still fails, it stops and names that playlist. A gateway timeout becomes a short retry sentence, not an HTML page. Together they cover all 1,025 species. Each playlist stays at 100 tracks or fewer: one short intro plus up to 99 Pokémon, and the last card is Pokefacts 11. A smaller Facts option is still there: **100 Pokémon drawn at random**, titled Pokefacts random. Shuffle draws a new hundred. Send uses the hundred on the page.
+You need two programs:
 
-Guess Who is one playlist of **50 riddles drawn at random**. Shuffle draws a new fifty. Send uses the fifty on the page. Each riddle is two tracks, so the card is 100 tracks. The how-to sits in the description and at the start of the first clue. The clue track shows a dark shadow of that Pokémon’s 16×16 pixel (`public/pixels/{id}-shadow.png`). The answer track shows the real pixel (`public/pixels/{id}.png`). On the page, the shadow stays up until the child reveals the answer. The clue never says the name. The answer says “It is {Name}.” Both tracks play the cry first, then Lily.
+- **Node.js 22.14 or newer.** This project is built with Node.js 22.14. The catalogue is a SQLite file, and that reader is included in Node. Install the 22 line from [nodejs.org](https://nodejs.org/), then open a new terminal.
+- **ffmpeg on your PATH.** Each track is a cry, then Lily’s voice. Champdex joins those two files with ffmpeg.
 
-Each fact on the card is one MP3: the cry from `cries/pokemon/latest/{id}.ogg`, then Lily. Yoto stores that file as `yoto:#` audio. Guess Who uses the same cry in front of the clue and again in front of the answer. The first upload is still Lily’s script. The cry is merged after Yoto finishes transcoding, and the track url is the `yoto:#` hash.
-
-- **Catalogue** — search every species from Bulbasaur to Pecharunt.
-- **Facts** — send every Facts playlist, or send the random 100 on the page.
-- **Guess Who** — fifty random riddles. A shadow, then the real picture.
-
-The catalogue lives in SQLite at `data/champdex.sqlite` (no PostgreSQL). Rebuild it from the PokéAPI tables with `npm run catalogue` after those CSV files are in `/tmp/poke-csv`, including `pokemon_species_flavor_text.csv`, `versions.csv`, `version_names.csv`, `pokemon_moves.csv`, `ability_flavor_text.csv`, and `move_flavor_text.csv`. The `pokedex` view has the species id, name, height, weight, the six base stats, types, evolution set, and the PokéAPI `info` line. Abilities and moves are their own tables. Facts and Guess Who are built from that file. The page does not call PokéAPI once per species.
-
-## How the full set is split
-
-A Yoto Make Your Own playlist holds **100 tracks**. Champdex does not put 1,025 Pokémon on one card.
-
-| Playlist | Tracks on a card | Pokémon on a card | What you send |
-| --- | --- | --- | --- |
-| Pokefacts | 1 start track + 1 track each | 99 | **11 playlists**, titled Pokefacts 1 through Pokefacts 11 (the last is numbers 991-1025) |
-| Guess Who | 2 tracks each (shadow clue, then the real pixel) | 50 | **1 playlist**, drawn at random |
-
-The numbered Facts ranges are the playlists the bulk upload sends. The random 100 is a smaller single card if you do not want the full set. Guess Who no longer offers fixed ranges. The clue icon is the shadow. The answer icon, and the picture after you reveal it, is the real 16×16 pixel.
-
-## Send one playlist from home
-
-1. Run this app and open it.
-2. In the [Yoto developer dashboard](https://dashboard.yoto.dev/), create a **public** client. Copy the client ID. Do not paste the client secret into Champdex.
-3. Add this callback URL to that client: `http://localhost:3847/callback`
-4. In Champdex, choose **Connect Yoto**. The login asks to create and view Make Your Own content, view your library, stay signed in, and read your name. Leave the voice on Lily.
-5. Open **Facts** and choose **Send all 11 Pokefacts playlists**. Champdex records them one at a time. In the Yoto app they are named Pokefacts 1 through Pokefacts 11. Link each finished playlist to its own blank card.
-6. Or open **Put Random 100 on a Yoto card** and send that smaller list. **Shuffle** draws a different hundred. The send uses the list on screen. Yoto records Lily (`pFZP5JQG7iQjIQuC4Bku`) as an MP3 for each track.
-7. In the Yoto app, open **Make Your Own**, find the Champdex playlist, and choose **Link to a card**.
-8. Put one blank Make Your Own card in the player when it asks.
-9. Open **Guess Who**. You see 50 riddles and a shadow picture. **Shuffle** draws a different fifty. Send uses the list on screen. The clue icon is the shadow. The answer icon is the real pixel.
-
-## Run it here
+ffmpeg:
 
 ```bash
-npm ci
-npm run dev
+# macOS
+brew install ffmpeg
+
+# Ubuntu or Debian
+sudo apt-get update && sudo apt-get install -y ffmpeg
+
+# Windows, then open a new terminal
+winget install Gyan.FFmpeg
 ```
 
-The app is at [http://localhost:3847](http://localhost:3847).
+Then, in this folder:
 
 ```bash
-npm test
-npm run lint
+npm install
 ```
 
-`NEXT_PUBLIC_YOTO_CLIENT_ID` in `.env.example` is optional. You can paste the client ID in the connect dialog instead. Champdex uses the browser login from [yoto.dev](https://yoto.dev) and never stores a client secret.
+`npm install` and `npm start` are the same on Windows, macOS, and Linux.
+
+## Start
+
+```bash
+npm start
+```
+
+`npm run local` does the same thing. The command checks the catalogue and the pictures, builds the app, then serves it. Leave the terminal open.
+
+Open [http://127.0.0.1:3847](http://127.0.0.1:3847).
+
+That address is this computer. A public tunnel is optional.
+
+## Catalogue, sprites, and pixels
+
+A normal copy of this repository already contains:
+
+- `data/champdex.sqlite` — all 1,025 species
+- `public/sprites` — one picture per species
+- `public/pixels` — the 16×16 icon and the dark shadow for each species
+
+`npm start` checks those files before it serves the app. If the database file is missing and the PokéAPI CSV tables are in `/tmp/poke-csv`, the start command builds the database with the catalogue script. You can also run `npm run catalogue` yourself. Those tables include `pokemon_species_flavor_text.csv`. Champdex does not copy Bulbapedia prose. If the pictures are missing, restore `public/sprites` and `public/pixels` from git.
+
+## Connect Yoto
+
+Champdex uses Yoto’s public login (PKCE). Do not paste a client secret into the app or into `.env`.
+
+1. In the [Yoto developer dashboard](https://dashboard.yoto.dev/), create a **public** client and copy the client ID.
+2. Allow this redirect URI exactly: `http://127.0.0.1:3847/callback`
+3. In Champdex, choose **Connect Yoto**, paste the client ID, and continue. Open the app at `http://127.0.0.1:3847` first. `localhost` is sent to that same address so the login can finish.
+4. Approve the login. It asks for `user:content:manage`, `user:content:view`, `family:library:view`, `offline_access`, and `profile`.
+
+`NEXT_PUBLIC_YOTO_CLIENT_ID` in `.env.example` is optional. You can paste the client ID in the connect dialog instead.
+
+## Send Pokefacts
+
+Open **Facts** and choose **Send all 11 Pokefacts playlists**.
+
+Champdex records one short request per track. The audio is the latest cry, then Lily (`pFZP5JQG7iQjIQuC4Bku`). Yoto titles the playlists exactly Pokefacts 1 through Pokefacts 11. On the page they are labeled like Pokefacts 1 (1-99). Each playlist is created new, with no saved card id on the full send. Each card stays at 100 tracks or fewer: a short intro plus up to 99 Pokémon. Pokefacts 11 is the last card (numbers 991–1025). Together they cover all 1,025 species.
+
+Leave this terminal open until the page says the playlists are ready. In the Yoto app, open **Make Your Own**, find each playlist, and choose **Link to a card**. Put a blank Make Your Own card in the player when it asks.
+
+A smaller Facts option is still there: **100 Pokémon drawn at random**, titled Pokefacts random. Shuffle draws a new hundred. Send uses the hundred on the page.
+
+## Send Guess Who
+
+Open **Guess Who**. You get 50 riddles drawn at random, which is 100 tracks on one card. Shuffle draws a new fifty. Send uses the fifty on the page.
+
+Each riddle is two tracks. The clue plays the cry, then the riddle, and does not say the name. Its picture is the shadow pixel. The answer plays the cry, then “It is {Name}.” Its picture is the real pixel. On the page, the shadow stays up until the answer is revealed.
+
+## Stop
+
+Press Ctrl+C in the terminal. Start again later with `npm start`.
 
 ## What this is not
 

@@ -1,5 +1,8 @@
+import { YOTO_REDIRECT_URI } from "@/lib/local-origin";
 import { reconnectMessage } from "@/lib/yoto-error";
 import { YOTO_SCOPES } from "@/lib/yoto-icons";
+
+export { YOTO_REDIRECT_URI };
 
 export const SESSION_KEY = "champdex.session";
 export const CLIENT_KEY = "champdex.clientId";
@@ -43,8 +46,9 @@ export async function createPkce(): Promise<{
   return { verifier, challenge: base64Url(new Uint8Array(digest)) };
 }
 
+/** PKCE returns here. A public tunnel host is not used. */
 export function redirectUri(): string {
-  return `${window.location.origin}/callback`;
+  return YOTO_REDIRECT_URI;
 }
 
 export function readSession(): YotoSession | null {

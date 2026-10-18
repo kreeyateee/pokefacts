@@ -6,7 +6,13 @@ import { describe, it } from "node:test";
 
 import { prepareFactTrack } from "./yoto-fact-audio";
 import { bulkFailureText } from "./yoto-send";
-import { authorizeSearchParams, clearSavedLoginForScopeGap, SESSION_KEY } from "./yoto-session";
+import {
+  authorizeSearchParams,
+  clearSavedLoginForScopeGap,
+  redirectUri,
+  SESSION_KEY,
+  YOTO_REDIRECT_URI,
+} from "./yoto-session";
 import { YOTO_SCOPES } from "./yoto-icons";
 import {
   RECONNECT_YOTO,
@@ -51,6 +57,29 @@ describe("Yoto errors", () => {
     const shown = yotoErrorText(failure, "Yoto did not accept this card.");
     assert.match(shown, /Request failed with status code 400/);
     assert.match(shown, /\{"message":"Request failed with status code 400"\}/);
+  });
+
+  it("sends the public PKCE login back to this computer", () => {
+    assert.equal(YOTO_REDIRECT_URI, "http://127.0.0.1:3847/callback");
+    assert.equal(redirectUri(), YOTO_REDIRECT_URI);
+    const params = authorizeSearchParams({
+      clientId: "public-client",
+      challenge: "challenge",
+      redirectUri: redirectUri(),
+    });
+    assert.equal(params.get("redirect_uri"), "http://127.0.0.1:3847/callback");
+    assert.equal(params.get("code_challenge_method"), "S256");
+    assert.equal(params.get("response_type"), "code");
+    assert.equal(params.get("scope"), YOTO_SCOPES);
+    for (const scope of [
+      "user:content:manage",
+      "user:content:view",
+      "family:library:view",
+      "offline_access",
+      "profile",
+    ]) {
+      assert.match(params.get("scope") ?? "", new RegExp(`(?:^|\\s)${scope}(?:\\s|$)`));
+    }
   });
 
   it("clears the saved login when a content read lacks scopes the authorize URL already requests", async () => {

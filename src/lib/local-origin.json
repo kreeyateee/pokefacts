@@ -1,0 +1,6 @@
+{
+  "port": 3847,
+  "hostname": "127.0.0.1",
+  "origin": "http://127.0.0.1:3847",
+  "redirectUri": "http://127.0.0.1:3847/callback"
+}

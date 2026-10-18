@@ -12,7 +12,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { beginYotoLogin, CLIENT_KEY, redirectUri } from "@/lib/yoto-session";
+import { LOCAL_APP_ORIGIN } from "@/lib/local-origin";
+import { beginYotoLogin, CLIENT_KEY, redirectUri, YOTO_REDIRECT_URI } from "@/lib/yoto-session";
 
 export function ConnectDialog({
   open,
@@ -22,7 +23,8 @@ export function ConnectDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
-  const [callback, setCallback] = useState("http://localhost:3847/callback");
+  const [callback, setCallback] = useState(YOTO_REDIRECT_URI);
+  const [onHomeMachine, setOnHomeMachine] = useState(false);
   const [pending, setPending] = useState(false);
   const [wasOpen, setWasOpen] = useState(false);
 
@@ -32,6 +34,7 @@ export function ConnectDialog({
       const stored = localStorage.getItem(CLIENT_KEY) ?? "";
       setDraft(stored || process.env.NEXT_PUBLIC_YOTO_CLIENT_ID || "");
       setCallback(redirectUri());
+      setOnHomeMachine(window.location.origin === LOCAL_APP_ORIGIN);
     }
   } else if (!open && wasOpen) {
     setWasOpen(false);
@@ -102,7 +105,8 @@ export function ConnectDialog({
           </li>
           <li>
             <span className="font-medium text-foreground">3. Grant the field guide.</span>{" "}
-            Login asks to create and view Make Your Own content, view your library, stay signed in, and read your name.
+            Login asks for user:content:manage, user:content:view, family:library:view, offline_access, and profile.
+            That is permission to create and view Make Your Own content, view your library, stay signed in, and read your name.
           </li>
         </ol>
         <form
@@ -123,7 +127,12 @@ export function ConnectDialog({
               onChange={(event) => setDraft(event.target.value)}
             />
           </label>
-          <Button type="submit" className="h-10" disabled={pending}>
+          {onHomeMachine ? null : (
+            <p className="text-sm leading-6 text-foreground">
+              Open {LOCAL_APP_ORIGIN} in this browser, then connect. Yoto returns to {YOTO_REDIRECT_URI}.
+            </p>
+          )}
+          <Button type="submit" className="h-10" disabled={pending || !onHomeMachine}>
             {pending ? "Opening Yoto…" : "Continue to Yoto"}
           </Button>
         </form>
