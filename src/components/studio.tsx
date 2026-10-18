@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { Catalogue } from "@/components/catalogue";
 import { ConnectDialog } from "@/components/connect-dialog";
 import { Button } from "@/components/ui/button";
 import { buildKidCard, trackSpeech, type KidCard } from "@/lib/kid-cards";
@@ -127,6 +128,7 @@ function isMeasure(line: string): boolean {
 }
 
 export function Studio({ cards }: { cards: KidCard[] }) {
+  const [view, setView] = useState<"cards" | "catalogue">("catalogue");
   const [cardId, setCardId] = useState<KidCard["id"]>("meet");
   const [chapterKey, setChapterKey] = useState("bulbasaur");
   const [revealed, setRevealed] = useState(false);
@@ -334,12 +336,18 @@ export function Studio({ cards }: { cards: KidCard[] }) {
               Champdex
             </p>
             <h1 className="font-display mt-1 text-3xl font-semibold tracking-tight sm:text-4xl">
-              {card?.id === "guess" ? "Guess Who" : "Pokémon facts"}
+              {view === "catalogue"
+                ? "Reference catalogue"
+                : card?.id === "guess"
+                  ? "Guess Who"
+                  : "Pokémon facts"}
             </h1>
             <p className="mt-1 max-w-xl text-sm leading-6 text-[#5c5348]">
-              {card?.id === "guess"
-                ? "Three clues. Guess the Pokémon. Then hear if you were right."
-                : "The cry, then the name, then a short description."}
+              {view === "catalogue"
+                ? "Every species from Kanto to Paldea. The Pokédex line is from the games, with the type, size, abilities, evolution, and stats."
+                : card?.id === "guess"
+                  ? "Three clues. Guess the Pokémon. Then hear if you were right."
+                  : "The cry, then the name, then a short description."}
             </p>
           </div>
           {session ? (
@@ -361,15 +369,34 @@ export function Studio({ cards }: { cards: KidCard[] }) {
           )}
         </div>
         <div className="mt-4 flex gap-2" role="tablist" aria-label="Play mode">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "catalogue"}
+            onClick={() => {
+              stopSpeaking();
+              stopClip();
+              setSpeaking(false);
+              setView("catalogue");
+            }}
+            className={`h-10 rounded-full px-4 text-sm font-medium ${
+              view === "catalogue" ? "bg-[#1c1916] text-[#f4efe6]" : "bg-white text-[#1c1916]"
+            }`}
+          >
+            Catalogue
+          </button>
           {cards.map((item) => {
-            const selected = item.id === card?.id;
+            const selected = view === "cards" && item.id === card?.id;
             return (
               <button
                 key={item.id}
                 type="button"
                 role="tab"
                 aria-selected={selected}
-                onClick={() => chooseCard(item)}
+                onClick={() => {
+                  setView("cards");
+                  chooseCard(item);
+                }}
                 className={`h-10 rounded-full px-4 text-sm font-medium ${
                   selected ? "bg-[#1c1916] text-[#f4efe6]" : "bg-white text-[#1c1916]"
                 }`}
@@ -381,8 +408,14 @@ export function Studio({ cards }: { cards: KidCard[] }) {
         </div>
       </header>
 
-      <main className="mx-auto grid w-full max-w-5xl gap-6 px-4 py-6 sm:px-6 md:grid-cols-[220px_minmax(0,1fr)]">
-        {card && chapter ? (
+      <main
+        className={`mx-auto grid w-full max-w-5xl gap-6 px-4 py-6 sm:px-6 ${
+          view === "catalogue" ? "" : "md:grid-cols-[220px_minmax(0,1fr)]"
+        }`}
+      >
+        {view === "catalogue" ? (
+          <Catalogue />
+        ) : card && chapter ? (
           <>
             <nav aria-label={card.id === "guess" ? "Riddles" : "Pokémon"} className="grid content-start grid-cols-3 gap-2 self-start md:grid-cols-1">
               {playableChapters(card).map((item) => {
@@ -565,8 +598,8 @@ export function Studio({ cards }: { cards: KidCard[] }) {
       </main>
 
       <footer className="mx-auto w-full max-w-5xl px-4 pb-8 text-xs leading-5 text-[#8d8272] sm:px-6">
-        Unofficial fan cards for your own Yoto library. Not made by Nintendo, Game Freak,
-        Creatures, or Yoto. Pokémon names are theirs. The words are written for ages 8 to 12.
+        Unofficial fan catalogue and cards. Not made by Nintendo, Game Freak, Creatures, or Yoto.
+        Pokémon names and the Pokédex lines are from the games. Champdex notes are written for this app.
       </footer>
 
       <ConnectDialog open={connectOpen} onOpenChange={setConnectOpen} />

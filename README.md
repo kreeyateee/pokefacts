@@ -1,9 +1,16 @@
 # Champdex
 
-Pokémon facts and Guess Who for ages 8 to 12. Each fact starts with the PokéAPI cry, then the name, then a short description in our own words, plus the type, the weight, and the height. The pictures are 16×16 pixels for a Yoto player. Play them in the browser, or send the card to [Yoto](https://yotoplay.com).
+Pokémon facts and Guess Who for ages 8 to 12, plus a reference catalogue of all 1,025 national species (1,351 forms). Each catalogue entry uses [PokéAPI](https://pokeapi.co/) game data: an English Pokédex line, the types, the height in centimetres, the weight in kilograms, the abilities (including hidden ones), the base stats, and the evolution. Nine species also keep a short Champdex note. Bulbapedia articles are not copied into it.
 
+The catalogue pictures are local files in `public/sprites`. A PDF of Pokémon images was not in the workspace, so these are the PokéAPI front sprites (`sprites/pokemon/{id}.png`). The nine Yoto card icons stay 16×16 pixels in `public/pixels`.
+
+Each spoken fact starts with the PokéAPI cry, then the name, then a short description in our own words, plus the type, the weight, and the height. The pictures on the Yoto cards are 16×16 pixels. Play them in the browser, or send the card to [Yoto](https://yotoplay.com).
+
+- **Catalogue** — search every species from Bulbasaur to Pecharunt.
 - **Facts** — pick Bulbasaur, Pikachu, and the rest. You hear the cry, the name, then the Pokédex entries.
 - **Guess Who** — three clues, then you say the name. The answer plays after you guess.
+
+The catalogue lives in SQLite at `data/champdex.sqlite` (no PostgreSQL). Rebuild it from the PokéAPI tables with `npm run catalogue` after those CSV files are in `/tmp/poke-csv`, including `pokemon_species_flavor_text.csv`, `versions.csv`, `version_names.csv`, `pokemon_moves.csv`, `ability_flavor_text.csv`, and `move_flavor_text.csv`. The `pokedex` view has the species id, name, height, weight, the six base stats, types, evolution set, and the PokéAPI `info` line. Abilities and moves are their own tables.
 
 On a Yoto player those are two Make Your Own cards. The child turns to a picture and presses play.
 
