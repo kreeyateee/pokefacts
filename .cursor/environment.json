@@ -1,0 +1,5 @@
+{
+  "name": "Champdex",
+  "install": "npm ci",
+  "start": "exec npm run dev"
+}
