@@ -39,6 +39,10 @@ describe("cards for ages 8 to 12", () => {
           assert.ok(track.text.length < 700);
           assert.ok(track.icon.startsWith("yoto:#"));
           for (const banned of BANNED) assert.doesNotMatch(track.text, banned);
+          assert.doesNotMatch(track.text, /\b(feet|foot|pounds|pound)\b/i);
+          if (card.id === "meet" && chapter.key !== "start") {
+            assert.match(track.text, /metre|kilogram/i);
+          }
         }
       }
     }
@@ -48,7 +52,12 @@ describe("cards for ages 8 to 12", () => {
     const guess = KID_CARDS.find((card) => card.id === "guess");
     assert.ok(guess);
     const riddles = guess.chapters.slice(1);
-    assert.equal(riddles.length, 8);
+    assert.equal(riddles.length, 9);
+    const wailord = riddles.find((chapter) => chapter.key === "wailord");
+    assert.ok(wailord);
+    const spoken = wailord.tracks.map((track) => track.text).join(" ");
+    assert.match(spoken, /14\.5 metres/);
+    assert.match(spoken, /398 kilograms/);
     for (const riddle of riddles) {
       assert.equal(riddle.tracks.length, 2);
       assert.match(riddle.tracks[0]?.text ?? "", /One\. Two\. Three\./);

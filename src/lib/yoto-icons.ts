@@ -10,6 +10,7 @@ export const YOTO_ICONS = {
   fireFace: "yoto:#l7GAkHrUZY1KydakZUyOdoNM34WA5AEsm5v5vhiZOXY",
   dragon: "yoto:#Dsd3p90qIgGz_wQtf92vKep1ZlDU-_t_9_ZzwYD0lkE",
   fish: "yoto:#02qfqNBrky2vF65NYnQphJvzR8GkFrLqCqkYL_8Ejag",
+  wave: "yoto:#VpDy5f9vMyAv6dYe-cZ28wGzCfcDWYh2_DRO3zE66nw",
   duck: "yoto:#3RbFa0wVPQ_dvdwvGcPjoP34tKXmgDvvVWH2UsDgY8s",
   octopus: "yoto:#ynMsNqGg8Hp7iyQGz7UkzvfCg8g9melNfCgbyILW2M0",
   sun: "yoto:#W-2RUBud_e1PlHw03Mj73sqyLKibjZjNfyiQ1GWtvx4",

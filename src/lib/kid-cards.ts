@@ -105,7 +105,7 @@ export const KID_CARDS: KidCard[] = [
           talk(
             "fact",
             "Bulbasaur",
-            `Number 1. The flower. Bulbasaur is a Grass and Poison type, number 001 in the Pokédex. The seed on its back stores energy from sunlight, and it gets bigger as Bulbasaur grows. At level 16 it evolves into Ivysaur. At level 32 the seed blooms and it becomes Venusaur. About 2 feet tall, and about 15 pounds. ${MEET_END}`,
+            `Number 1. The flower. Bulbasaur is born with a seed already on its back. The seed soaks up sunlight, and it grows as Bulbasaur grows. It is Grass and Poison, 0.7 metres tall and 6.9 kilograms. At level 16 it becomes Ivysaur. At level 32 the seed opens into the flower on Venusaur. ${MEET_END}`,
             I.daisy,
             "1",
           ),
@@ -122,7 +122,7 @@ export const KID_CARDS: KidCard[] = [
           talk(
             "fact",
             "Charmander",
-            `Number 2. The flame. Charmander is a Fire type. The flame on its tail is a sign of its health. When Charmander is doing well, that flame burns bright. At level 16 it evolves into Charmeleon. At level 36 it becomes Charizard. About 2 feet tall, and about 19 pounds. ${MEET_END}`,
+            `Number 2. The flame. The flame on Charmander's tail is a sign of its health. A tall, bright flame means Charmander is well. A low flame means it needs rest. It is a Fire type, 0.6 metres tall and 8.5 kilograms. At level 16 it becomes Charmeleon. At level 36, Charizard. ${MEET_END}`,
             I.fire,
             "2",
           ),
@@ -139,7 +139,7 @@ export const KID_CARDS: KidCard[] = [
           talk(
             "fact",
             "Squirtle",
-            `Number 3. The fish, because Squirtle is a Water type. It can pull into its shell, and that shell is hard enough to take a hit. It fights back with a blast of water. At level 16 it evolves into Wartortle. At level 36 it becomes Blastoise, with water cannons on the shell. A bit under 2 feet tall, about 20 pounds. ${MEET_END}`,
+            `Number 3. The fish, for the water. Squirtle pulls its whole body into its shell, then fires a jet of water from the gap. The shell hardens as it grows. It is a Water type, 0.5 metres tall and 9 kilograms. At level 36 that shell carries the cannons of Blastoise. ${MEET_END}`,
             I.fish,
             "3",
           ),
@@ -156,7 +156,7 @@ export const KID_CARDS: KidCard[] = [
           talk(
             "fact",
             "Pikachu",
-            `Number 4. The sun. Pikachu is an Electric type. The red circles on its cheeks are pouches that store electricity, and a shock can jump out when it is startled. Pikachu evolves from Pichu once their bond is strong. A Thunder Stone turns Pikachu into Raichu. Just over a foot tall, about 13 pounds. And yes, it says its own name. ${MEET_END}`,
+            `Number 4. The sun. Pikachu keeps electricity in the red pouches on its cheeks. One is small, 0.4 metres tall and 6 kilograms. When a group of Pikachu gathers, their charge can build until it causes a lightning storm. A Thunder Stone evolves Pikachu into Raichu. ${MEET_END}`,
             I.sun,
             "4",
           ),
@@ -173,7 +173,7 @@ export const KID_CARDS: KidCard[] = [
           talk(
             "fact",
             "Eevee",
-            `Number 5. The dog, for the fluffy coat and pointed ears. Eevee is a Normal type, and its body can evolve eight different ways. Water Stone, Vaporeon. Thunder Stone, Jolteon. Fire Stone, Flareon. A close bond in the day, Espeon. A close bond at night, Umbreon. A Leaf Stone, Leafeon. An Ice Stone, Glaceon. A close bond plus a Fairy move, Sylveon. About 1 foot tall, and about 14 pounds. ${MEET_END}`,
+            `Number 5. The dog, for the coat and the ears. Eevee is a Normal type, 0.3 metres tall and 6.5 kilograms, and its body can evolve eight ways. A Water Stone makes Vaporeon. A Thunder Stone, Jolteon. A Fire Stone, Flareon. Friendship by day, Espeon. Friendship at night, Umbreon. A Leaf Stone, Leafeon. An Ice Stone, Glaceon. Friendship and a Fairy move, Sylveon. ${MEET_END}`,
             I.dog,
             "5",
           ),
@@ -190,7 +190,7 @@ export const KID_CARDS: KidCard[] = [
           talk(
             "fact",
             "Jigglypuff",
-            `Number 6. The music note. Jigglypuff is Normal and Fairy. Its song is a lullaby, and listeners fall asleep. Fall asleep before the song ends and it gets annoyed and draws on your face with a marker. It evolves from Igglybuff. A Moon Stone turns it into Wigglytuff. A bit under 2 feet tall, about 12 pounds. ${MEET_END}`,
+            `Number 6. The music note. Jigglypuff's song puts listeners to sleep in moments. Drop off before the song ends and it puffs up and scribbles on their faces with a marker. It is Normal and Fairy, 0.5 metres tall and 5.5 kilograms. A Moon Stone evolves it into Wigglytuff. ${MEET_END}`,
             I.music,
             "6",
           ),
@@ -207,7 +207,7 @@ export const KID_CARDS: KidCard[] = [
           talk(
             "fact",
             "Snorlax",
-            `Number 7. The bear. Snorlax is a Normal type, almost 7 feet tall and over 1,000 pounds. It falls asleep in the road and will not move. It wakes up to eat. A hungry Snorlax can put away about 900 pounds of food in a day, then go straight back to sleep. It evolves from Munchlax when their bond is strong. ${MEET_END}`,
+            `Number 7. The bear. Once Snorlax falls asleep in the road, it will not budge. It wakes to eat, and it is not satisfied unless it eats at least 400 kilograms of food in a day. It is a Normal type, 2.1 metres tall and 460 kilograms. It evolves from Munchlax through friendship. ${MEET_END}`,
             I.bear,
             "7",
           ),
@@ -224,9 +224,26 @@ export const KID_CARDS: KidCard[] = [
           talk(
             "fact",
             "Gengar",
-            "Number 8. The ghost. Gengar is Ghost and Poison, about 5 feet tall and 90 pounds. It hides in shadows and will slip into yours to give you a scare. A sudden chill can mean it is right there with you. Gastly evolves into Haunter, and Haunter becomes Gengar only when it is traded. You can turn back to any number and hear it again.",
+            `Number 8. The ghost. Gengar hides in a person's shadow and chills the air around them. Step into a cold patch of shade and it may be standing there too. It is Ghost and Poison, 1.5 metres tall and 40.5 kilograms. Haunter becomes Gengar only when traded. ${MEET_END}`,
             I.ghost,
             "8",
+          ),
+        ],
+      ),
+      picture(
+        "wailord",
+        "Wailord",
+        "9",
+        "a wave",
+        "〰",
+        I.wave,
+        [
+          talk(
+            "fact",
+            "Wailord",
+            `Number 9. The wave. Wailord is 14.5 metres long. A humpback whale that long weighs about 30,000 kilograms. Wailord weighs 398 kilograms. It is still a Water type that hunts in a pod, herds fish, and swallows them in one gulp. On one breath it can dive about 3,000 metres. It evolves from Wailmer at level 40. You can turn back to any number and hear it again.`,
+            I.wave,
+            "9",
           ),
         ],
       ),
@@ -278,7 +295,7 @@ function guessChapters(): KidChapter[] {
       clues:
         "I am an Electric type. My cheeks store electricity. I evolve from Pichu, and a Thunder Stone turns me into Raichu.",
       answer:
-        "It is Pikachu. Those red cheek pouches can throw a spark when it is startled. Just over a foot tall, about 13 pounds.",
+        "It is Pikachu. A group of them can build enough charge to start a lightning storm. 0.4 metres tall, and 6 kilograms.",
       icon: I.sun,
       picture: "a sun",
       mark: "☀",
@@ -289,7 +306,7 @@ function guessChapters(): KidChapter[] {
       clues:
         "I am Grass and Poison. I carry a seed that stores sunlight. I evolve at level 16, and later that seed blooms.",
       answer:
-        "It is Bulbasaur. Number 001. At level 32 it becomes Venusaur and the seed opens into a flower.",
+        "It is Bulbasaur. The seed is on its back from the day it is born, and sunlight makes it grow. 0.7 metres tall, and 6.9 kilograms.",
       icon: I.daisy,
       picture: "a flower",
       mark: "❀",
@@ -309,9 +326,9 @@ function guessChapters(): KidChapter[] {
       key: "snorlax",
       name: "Snorlax",
       clues:
-        "I am a Normal type, almost 7 feet tall. I fall asleep in the road. I can eat about 900 pounds of food in a day.",
+        "I am a Normal type, 2.1 metres tall. I fall asleep in the road. I need at least 400 kilograms of food every day.",
       answer:
-        "It is Snorlax. Over 1,000 pounds, and it evolves from Munchlax when their bond is strong.",
+        "It is Snorlax. It weighs 460 kilograms, and it evolves from Munchlax through friendship.",
       icon: I.bear,
       picture: "a bear",
       mark: "🐻",
@@ -353,10 +370,21 @@ function guessChapters(): KidChapter[] {
       clues:
         "I am Ghost and Poison. I hide in shadows. I only finish evolving when I am traded.",
       answer:
-        "It is Gengar. It steps into your shadow to give you a scare. Haunter becomes Gengar by trade.",
+        "It is Gengar. It steps into your shadow and chills the air. Haunter becomes Gengar by trade.",
       icon: I.ghost,
       picture: "a ghost",
       mark: "👻",
+    },
+    {
+      key: "wailord",
+      name: "Wailord",
+      clues:
+        "I am a Water type, 14.5 metres long, and I weigh only 398 kilograms. I hunt in a pod. On one breath I can dive about 3,000 metres.",
+      answer:
+        "It is Wailord. A humpback whale that long weighs about 30,000 kilograms. Wailord evolves from Wailmer at level 40.",
+      icon: I.wave,
+      picture: "a wave",
+      mark: "〰",
     },
   ];
 
