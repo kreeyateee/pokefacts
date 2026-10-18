@@ -405,7 +405,7 @@ export function pokedexUpload(card: KidCard, mediaById: Record<number, string>, 
   const content = buildKidCard(applyUploadedPixels(card, mediaById), cardId);
   if (card.id === RANDOM_POKEDEX_ID) {
     content.metadata.description =
-      "One hundred Pokémon drawn at random. Turn the wheel until you see a picture, then press play. You hear the name, the Pokédex line, the weight, and the height. Lily reads every track. Written for ages 8 to 12. Link this playlist to its own card.";
+      "One hundred Pokémon drawn at random. Turn the wheel until you see a picture, then press play. You hear its cry, then Lily reads the name, the Pokédex line, the weight, and the height. Written for ages 8 to 12. Link this playlist to its own card.";
   }
   return { voiceId: LILY_VOICE_ID, content };
 }
@@ -428,7 +428,7 @@ function withLily(card: KidCard): KidCard {
 /** One Facts playlist in the full-dex send. Lily reads it. Icons are the real pixels. */
 export function factsPlaylistUpload(card: KidCard, mediaById: Record<number, string>, cardId?: string) {
   const content = buildKidCard(applyUploadedPixels(withLily(card), mediaById), cardId);
-  content.metadata.description = `${card.rangeLabel}. Turn the wheel until you see a picture, then press play. You hear the name, the Pokédex line, the weight, and the height. Lily reads every track. Written for ages 8 to 12. Link this playlist to its own card.`;
+  content.metadata.description = `${card.rangeLabel}. Turn the wheel until you see a picture, then press play. You hear its cry, then Lily reads the name, the Pokédex line, the weight, and the height. Written for ages 8 to 12. Link this playlist to its own card.`;
   return { voiceId: LILY_VOICE_ID, content };
 }
 

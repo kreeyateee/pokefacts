@@ -297,7 +297,23 @@ export function Studio({ cards }: { cards: KidCard[] }) {
     speakTexts(texts, () => setSpeaking(false));
   }
 
-  function hearFact(src: string, texts: string[]) {
+  function hearCryThenSpeech(dexId: number, texts: string[]) {
+    const audio = new Audio(`/api/cry/${dexId}`);
+    clipRef.current = audio;
+    setSpeaking(true);
+    let movedOn = false;
+    const speak = () => {
+      if (movedOn) return;
+      movedOn = true;
+      clipRef.current = null;
+      speakTexts(texts, () => setSpeaking(false));
+    };
+    audio.onended = speak;
+    audio.onerror = speak;
+    void audio.play().catch(speak);
+  }
+
+  function hearFact(src: string, texts: string[], dexId?: number) {
     if (speaking) {
       stopSpeaking();
       stopClip();
@@ -312,7 +328,8 @@ export function Studio({ cards }: { cards: KidCard[] }) {
       if (fellBack) return;
       fellBack = true;
       clipRef.current = null;
-      speakTexts(texts, () => setSpeaking(false));
+      if (dexId) hearCryThenSpeech(dexId, texts);
+      else speakTexts(texts, () => setSpeaking(false));
     };
     audio.onended = () => setSpeaking(false);
     audio.onerror = fallback;
@@ -373,6 +390,33 @@ export function Studio({ cards }: { cards: KidCard[] }) {
       rememberCard(playlist.id, newId);
       setLinked(savedCards());
     }
+    return newId;
+  }
+
+  async function addCries(cardId: string, playlist: KidCard, headline?: string) {
+    const species = playlist.chapters.filter((chapter) => chapter.dexId);
+    for (let index = 0; index < species.length; index += 1) {
+      const chapter = species[index];
+      if (!chapter?.dexId) continue;
+      const progress = `Adding the cry, ${index + 1} of ${species.length}.`;
+      setJob({
+        status: "processing",
+        detail: headline ? `${headline}. ${progress}` : progress,
+      });
+      const response = await yotoFetch("/api/yoto/cries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cardId,
+          chapterKey: chapter.key,
+          dexId: chapter.dexId,
+        }),
+      });
+      const payload: unknown = await response.json();
+      if (!response.ok) {
+        throw new Error(messageFrom(payload, `The cry for number ${chapter.dexId} did not upload.`));
+      }
+    }
   }
 
   async function send() {
@@ -393,7 +437,11 @@ export function Studio({ cards }: { cards: KidCard[] }) {
         : randomFacts
           ? pokedexUpload(card, await uploadPixels(card), savedId)
           : factsPlaylistUpload(card, await uploadPixels(card), savedId);
-      await postPlaylist(card, upload);
+      const recordedId = await postPlaylist(card, upload);
+      if (card.kind === "meet") {
+        if (!recordedId) throw new Error("Yoto recorded Lily but did not return the card.");
+        await addCries(recordedId, card);
+      }
       setJob({
         status: "completed",
         detail: `${card.rangeLabel} is in your Yoto library.`,
@@ -423,7 +471,13 @@ export function Studio({ cards }: { cards: KidCard[] }) {
           const previous = savedCards()[playlist.id];
           const savedId = replace && previous ? previous : undefined;
           const pixels = await uploadPixels(playlist);
-          await postPlaylist(playlist, factsPlaylistUpload(playlist, pixels, savedId), headline);
+          const recordedId = await postPlaylist(
+            playlist,
+            factsPlaylistUpload(playlist, pixels, savedId),
+            headline,
+          );
+          if (!recordedId) throw new Error("Yoto recorded Lily but did not return the card.");
+          await addCries(recordedId, playlist, headline);
         } catch (error) {
           const reason = error instanceof Error ? error.message : "The recording stopped.";
           throw new Error(
@@ -771,9 +825,9 @@ export function Studio({ cards }: { cards: KidCard[] }) {
                 {source ? (
                   <p className="mt-4 text-xs text-[#8d8272]">Pokédex, {source}</p>
                 ) : null}
-                {chapter.clip ? (
+                {chapter.dexId && !guessing ? (
                   <p className="mt-4 text-xs leading-5 text-[#8d8272]">
-                    Hear plays the cry in the browser for this Pokémon. The Yoto card speaks the words only.
+                    Hear plays the cry, then the reading. The Yoto card plays that same order.
                   </p>
                 ) : null}
                 <div className="mt-6 flex flex-wrap gap-2">
@@ -804,14 +858,18 @@ export function Studio({ cards }: { cards: KidCard[] }) {
                     <Button
                       type="button"
                       className="h-11 px-5"
-                      onClick={() =>
-                        chapter.clip
-                          ? hearFact(
-                              chapter.clip,
-                              chapter.tracks.map((track) => trackSpeech(track)),
-                            )
-                          : hear(chapter.tracks.map((track) => trackSpeech(track)))
-                      }
+                      onClick={() => {
+                        const texts = chapter.tracks.map((track) => trackSpeech(track));
+                        if (speaking) {
+                          stopSpeaking();
+                          stopClip();
+                          setSpeaking(false);
+                          return;
+                        }
+                        if (chapter.clip) hearFact(chapter.clip, texts, chapter.dexId);
+                        else if (chapter.dexId) hearCryThenSpeech(chapter.dexId, texts);
+                        else hear(texts);
+                      }}
                     >
                       {speaking ? "Stop" : "Hear the entry"}
                     </Button>
@@ -828,8 +886,8 @@ export function Studio({ cards }: { cards: KidCard[] }) {
                   {randomGuess
                     ? "Send uploads a shadow of each 16×16 pixel for the clue, then the real pixel for the answer. Yoto records Lily’s voice as an MP3. The how-to is in the playlist description and at the start of the first clue."
                     : randomFacts
-                      ? "Send uploads the 16×16 picture for each of these 100 Pokémon. Yoto records Lily’s voice as an MP3 for each track. The how-to is in the playlist description and at the start of the first track."
-                      : `This send is only ${card.rangeLabel}. Lily reads it. The button above sends every Facts playlist, one after another.`}
+                      ? "Send records Lily, then puts that Pokémon’s cry in front of her voice and uploads the merged MP3. The how-to is in the playlist description and at the start of the first track."
+                      : `This send is only ${card.rangeLabel}. Each fact is the cry, then Lily. The button above sends every Facts playlist, one after another.`}
                 </p>
                 <p className="mt-3 text-sm leading-6">
                   Voice: <span className="font-medium">Lily</span>

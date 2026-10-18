@@ -1,0 +1,152 @@
+import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { describe, it } from "node:test";
+
+import { audioDurationSeconds, cryLeads, cryUrl, mergeCryFirst } from "./cry-audio";
+import { attachCry } from "./yoto-fact-audio";
+
+function sine(file: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      "ffmpeg",
+      ["-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=1", "-c:a", "libmp3lame", "-q:a", "5", file],
+      { timeout: 20_000 },
+      (error) => (error ? reject(error) : resolve()),
+    );
+  });
+}
+
+describe("fact audio", () => {
+  it("puts the cry first and keeps the merged file longer than the cry", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-fact-"));
+    try {
+      const cryResponse = await fetch(cryUrl(1));
+      assert.equal(cryResponse.ok, true);
+      const cry = Buffer.from(await cryResponse.arrayBuffer());
+      const speechPath = path.join(dir, "speech.mp3");
+      await sine(speechPath);
+      const speech = await readFile(speechPath);
+      const merged = await mergeCryFirst(cry, speech);
+      const cryLength = await audioDurationSeconds(cry, "cry.ogg");
+      const mergedLength = await audioDurationSeconds(merged, "merged.mp3");
+      assert.ok(mergedLength > cryLength);
+      assert.equal(await cryLeads(cry, speech, merged), true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("sends the merged MP3 to Yoto as an audio track", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-send-"));
+    const speechPath = path.join(dir, "speech.mp3");
+    await sine(speechPath);
+    const speech = await readFile(speechPath);
+    const cryResponse = await fetch(cryUrl(1));
+    const cry = Buffer.from(await cryResponse.arrayBuffer());
+    const bag: { audio?: Buffer } = {};
+    let posted = "";
+    const card = {
+      cardId: "card-1",
+      title: "Champdex: Facts 1–99",
+      metadata: { title: "Champdex: Facts 1–99", description: "Facts." },
+      content: {
+        chapters: [
+          {
+            key: "start",
+            title: "Start here",
+            tracks: [
+              {
+                key: "start-how",
+                title: "How to play",
+                type: "audio",
+                trackUrl: "yoto:#intro",
+                overlayLabel: "Go",
+                display: { icon16x16: "yoto:#star" },
+              },
+            ],
+          },
+          {
+            key: "bulbasaur",
+            title: "Bulbasaur",
+            tracks: [
+              {
+                key: "bulbasaur-entry",
+                title: "Bulbasaur",
+                type: "audio",
+                trackUrl: "yoto:#speech",
+                voiceId: "pFZP5JQG7iQjIQuC4Bku",
+                overlayLabel: "1",
+                display: { icon16x16: "yoto:#pixel-1" },
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = String(input);
+      if (url.includes("/content/card-1") && url.includes("playable=true")) {
+        const playable = structuredClone(card);
+        const track = playable.content.chapters[1]?.tracks[0];
+        if (track) track.trackUrl = "https://cdn.example/speech.mp3";
+        return Response.json({ card: playable });
+      }
+      if (url.includes("/content/card-1")) return Response.json({ card });
+      if (url === "https://cdn.example/speech.mp3") {
+        return new Response(new Uint8Array(speech), { headers: { "Content-Type": "audio/mpeg" } });
+      }
+      if (url === cryUrl(1)) {
+        return new Response(new Uint8Array(cry), { headers: { "Content-Type": "audio/ogg" } });
+      }
+      if (url.includes("/media/transcode/audio/uploadUrl")) {
+        assert.match(url, /sha256=[a-f0-9]{64}/);
+        return Response.json({ upload: { uploadId: "up-1", uploadUrl: "https://upload.example/put" } });
+      }
+      if (url === "https://upload.example/put") {
+        const body = init?.body;
+        bag.audio = Buffer.from(body instanceof Uint8Array ? body : new Uint8Array());
+        return new Response("ok");
+      }
+      if (url.includes("/transcoded")) {
+        return Response.json({
+          transcode: {
+            transcodedSha256: "mergedhash",
+            transcodedInfo: { duration: 3, fileSize: bag.audio?.length ?? 1, format: "mp3", channels: "mono" },
+          },
+        });
+      }
+      if (url === "https://api.yotoplay.com/content" && init?.method === "POST") {
+        posted = String(init.body);
+        return Response.json({ card: { cardId: "card-1" } });
+      }
+      throw new Error(`Unexpected ${init?.method ?? "GET"} ${url}`);
+    };
+
+    try {
+      const result = await attachCry("x".repeat(24), { cardId: "card-1", chapterKey: "bulbasaur", dexId: 1 }, fetchImpl);
+      assert.equal(result.trackUrl, "yoto:#mergedhash");
+      const saved = bag.audio;
+      assert.ok(saved);
+      assert.ok(saved.length > cry.length);
+      const payload = JSON.parse(posted) as {
+        cardId: string;
+        content: { chapters: Array<{ key: string; tracks: Array<{ type: string; trackUrl: string; voiceId?: string }> }> };
+      };
+      assert.equal(payload.cardId, "card-1");
+      assert.equal(payload.content.chapters[0]?.tracks[0]?.trackUrl, "yoto:#intro");
+      const fact = payload.content.chapters[1]?.tracks[0];
+      assert.equal(fact?.type, "audio");
+      assert.equal(fact?.trackUrl, "yoto:#mergedhash");
+      assert.equal(fact?.voiceId, undefined);
+      const cryLength = await audioDurationSeconds(cry, "cry.ogg");
+      const mergedLength = await audioDurationSeconds(saved, "merged.mp3");
+      assert.ok(mergedLength > cryLength);
+      assert.equal(await cryLeads(cry, speech, saved), true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});

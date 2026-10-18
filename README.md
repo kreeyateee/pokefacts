@@ -4,13 +4,13 @@ Pokémon facts and Guess Who for ages 8 to 12, plus a reference catalogue of all
 
 The catalogue pictures are local files in `public/sprites`. A PDF of Pokémon images was not in the workspace, so these are the PokéAPI front sprites (`sprites/pokemon/{id}.png`). The Yoto pictures are 16×16 RGBA icons in `public/pixels`, made from those sprites with `ffmpeg -vf scale=16:16:flags=neighbor,format=rgba`.
 
-A spoken fact is the name, then the English Pokédex line, then the weight and the height in full sentences, plus a short evolution, ability, or home line when the catalogue has one. Stats stay on the catalogue page. Play a fact in the browser, or send one playlist to [Yoto](https://yotoplay.com). Nine species still have a cry clip for the Hear button. Everyone else uses the browser voice.
+A spoken fact is the name, then the English Pokédex line, then the weight and the height in full sentences, plus a short evolution, ability, or home line when the catalogue has one. Stats stay on the catalogue page. The audio order is the latest PokéAPI cry, then that reading. Hear plays it that way. On a Yoto card, Labs records Lily (`pFZP5JQG7iQjIQuC4Bku`) from the script, Champdex merges the cry in front, and the merged MP3 is uploaded to Yoto as the track.
 
 The main Facts action is **Send all 11 Facts playlists**. Champdex sends those playlists one after another and shows progress such as “Recording Facts 3 of 11”. If one job fails, it stops and names that playlist. Together they cover all 1,025 species. Each playlist stays at 100 tracks or fewer: one short intro plus up to 99 Pokémon, and the last card is the remainder. A smaller Facts option is still there: **100 Pokémon drawn at random**. Shuffle draws a new hundred. Send uses the hundred on the page.
 
 Guess Who is one playlist of **50 riddles drawn at random**. Shuffle draws a new fifty. Send uses the fifty on the page. Each riddle is two tracks, so the card is 100 tracks. The how-to sits in the description and at the start of the first clue. The clue track shows a dark shadow of that Pokémon’s 16×16 pixel (`public/pixels/{id}-shadow.png`). The answer track shows the real pixel (`public/pixels/{id}.png`). On the page, the shadow stays up until the child reveals the answer.
 
-Each track is an MP3 in Lily’s voice. Yoto Labs records the MP3 from the script. Champdex does not upload a separate recording.
+Each fact on the card is one MP3: the cry from `cries/pokemon/latest/{id}.ogg`, then Lily. Yoto stores that file as `yoto:#` audio. Guess Who stays spoken clues and answers, with no cry.
 
 - **Catalogue** — search every species from Bulbasaur to Pecharunt.
 - **Facts** — send every Facts playlist, or send the random 100 on the page.
