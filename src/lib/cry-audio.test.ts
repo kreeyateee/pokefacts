@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 
+import { POST as postTrack } from "../app/api/yoto/track/route";
 import { audioDurationSeconds, cryLeads, cryUrl, mergeCryFirst } from "./cry-audio";
 import { attachCry, prepareFactTrack } from "./yoto-fact-audio";
 import { LILY_VOICE_ID } from "./kid-cards";
@@ -288,6 +290,45 @@ describe("fact audio", () => {
       assert.match(body.content.chapters[0]?.tracks[0]?.trackUrl ?? "", /Bulbasaur waits/);
     } finally {
       await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("exports prepareFactTrack as the function the track route calls", async () => {
+    assert.equal(typeof prepareFactTrack, "function");
+    assert.equal(prepareFactTrack.name, "prepareFactTrack");
+    const text = "Callable export check for one fact track.";
+    const dexId = 1;
+    const key = createHash("sha256").update(Buffer.from(`${LILY_VOICE_ID}\n${dexId}\n${text}`)).digest("hex");
+    const file = path.join(process.cwd(), "data", "rendered", `${key}.json`);
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(
+      file,
+      JSON.stringify({
+        trackUrl: "yoto:#route-check",
+        duration: 2,
+        fileSize: 12,
+        format: "mp3",
+        channels: "mono",
+      }),
+    );
+    try {
+      const response = await postTrack(
+        new Request("http://champdex.local/api/yoto/track", {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${"t".repeat(24)}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ text, title: "Bulbasaur", dexId }),
+        }),
+      );
+      const body = (await response.json()) as { phase?: string; trackUrl?: string; error?: string };
+      assert.equal(response.status, 200);
+      assert.equal(body.phase, "ready");
+      assert.equal(body.trackUrl, "yoto:#route-check");
+      assert.equal(body.error, undefined);
+    } finally {
+      await rm(file, { force: true });
     }
   });
 });
