@@ -18,9 +18,14 @@ function englishVoice(): SpeechSynthesisVoice | undefined {
   const voices = window.speechSynthesis.getVoices().filter((voice) =>
     voice.lang.toLowerCase().startsWith("en"),
   );
+  const british = voices.filter(
+    (voice) => voice.lang.toLowerCase().startsWith("en-gb") || /uk|british/i.test(voice.name),
+  );
   return (
-    voices.find((voice) => /ana|jenny|samantha|child/i.test(voice.name)) ??
-    voices.find((voice) => voice.lang === "en-US") ??
+    british.find((voice) => /female|sonia|libby|serena|kate|fiona|hazel/i.test(voice.name)) ??
+    british.find((voice) => !/male|daniel|ryan|george|oliver|thomas/i.test(voice.name)) ??
+    british[0] ??
+    voices.find((voice) => /female|samantha|victoria/i.test(voice.name)) ??
     voices[0]
   );
 }
@@ -52,7 +57,7 @@ export function speakTexts(texts: string[], onEnd: () => void) {
     }
     const utterance = new SpeechSynthesisUtterance(piece);
     utterance.rate = 1.08;
-    utterance.pitch = 1.35;
+    utterance.pitch = 1;
     if (voice) utterance.voice = voice;
     utterance.onend = speakNext;
     utterance.onerror = onEnd;
