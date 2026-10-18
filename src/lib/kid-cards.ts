@@ -58,7 +58,7 @@ export type KidCard = {
   id: string;
   kind: KidCardKind;
   title: string;
-  /** Playlist the parent is sending, such as "Facts 1–99". */
+  /** On-page label, such as "Pokefacts 1 · 1-99". The Yoto title is libraryTitle. */
   rangeLabel: string;
   libraryTitle: string;
   recommended?: boolean;
@@ -144,9 +144,16 @@ function chunk<T>(items: T[], size: number): T[][] {
   return groups;
 }
 
-export function rangeLabel(kind: KidCardKind, first: number, last: number): string {
-  const title = kind === "meet" ? "Facts" : "Guess Who";
-  return first === last ? `${title} ${first}` : `${title} ${first}–${last}`;
+/** Yoto playlist name. Plain ASCII, no en dash. */
+export function pokefactsTitle(index: number): string {
+  return `Pokefacts ${index}`;
+}
+
+/** On-page label. The middle dot stays here; the Yoto title is `pokefactsTitle`. */
+export function rangeLabel(kind: KidCardKind, first: number, last: number, index = 1): string {
+  const span = first === last ? String(first) : `${first}-${last}`;
+  if (kind === "meet") return `${pokefactsTitle(index)} · ${span}`;
+  return `Guess Who ${span}`;
 }
 
 function typeIcon(types: string[]): string {
@@ -217,12 +224,12 @@ function riddleChapter(sheet: MonSheet): KidChapter {
   );
 }
 
-function intro(kind: KidCardKind, first: number, last: number, firstName: string): KidChapter {
-  const label = rangeLabel(kind, first, last);
+function intro(kind: KidCardKind, index: number, first: number, last: number, firstName: string): KidChapter {
+  const span = first === last ? String(first) : `${first}-${last}`;
   const text =
     kind === "meet"
-      ? `This card is ${label}. Turn the wheel, or press the arrows, until you see a picture. Then press play. You will hear the name, then the Pokédex line, then how much it weighs and how tall it is. The star is this track. Number ${first} is ${firstName}. Each playlist links to its own card.`
-      : `Guess Who. This card is ${label}. Turn the wheel, or press the arrows, until you see a number. Then press play. Three clues. Call the name before the count of three ends. The answer plays next, and the picture changes to that Pokémon. Start at number ${first}. Each playlist links to its own card.`;
+      ? `This card is Pokefacts ${index}, numbers ${span}. Turn the wheel, or press the arrows, until you see a picture. Then press play. You will hear the cry, then the name, then the Pokédex line, then how much it weighs and how tall it is. The star is this track. Number ${first} is ${firstName}. Each playlist links to its own card.`
+      : `Guess Who. Numbers ${span}. Turn the wheel, or press the arrows, until you see a number. Then press play. Three clues. Call the name before the count of three ends. The answer plays next, and the picture changes to that Pokémon. Start at number ${first}. Each playlist links to its own card.`;
   return picture("start", "Start here", "Go", "a star", "★", I.star, [
     talk("how", kind === "meet" ? "How to play" : "How to play Guess Who", text, I.star, "Go"),
   ]);
@@ -234,17 +241,18 @@ function buildGroup(sheets: MonSheet[], kind: KidCardKind, size: number): KidCar
     const lastSheet = group[group.length - 1];
     const first = firstSheet?.id ?? 0;
     const last = lastSheet?.id ?? first;
-    const label = rangeLabel(kind, first, last);
+    const playlistIndex = index + 1;
+    const label = rangeLabel(kind, first, last, playlistIndex);
     const chapters = [
-      intro(kind, first, last, firstSheet?.name ?? "this Pokémon"),
+      intro(kind, playlistIndex, first, last, firstSheet?.name ?? "this Pokémon"),
       ...group.map((sheet) => (kind === "meet" ? factChapter(sheet) : riddleChapter(sheet))),
     ];
     return {
-      id: `${kind}-${index + 1}`,
+      id: `${kind}-${playlistIndex}`,
       kind,
-      title: kind === "meet" ? "Facts" : "Guess Who",
+      title: kind === "meet" ? "Pokefacts" : "Guess Who",
       rangeLabel: label,
-      libraryTitle: `Champdex: ${label}`,
+      libraryTitle: kind === "meet" ? pokefactsTitle(playlistIndex) : "Guess Who",
       recommended: kind === "meet" && index === 0,
       blurb:
         kind === "meet"
@@ -292,7 +300,7 @@ export function buildKidCard(card: KidCard, cardId?: string): YotoContent {
     },
     metadata: {
       title: card.libraryTitle,
-      description: `${card.rangeLabel}. ${card.blurb} Written for ages 8 to 12. Link this playlist to its own Make Your Own card. One card holds ${YOTO_TRACK_LIMIT} tracks.`,
+      description: `${card.libraryTitle}. ${card.blurb} Written for ages 8 to 12. Link this playlist to its own Make Your Own card. One card holds ${YOTO_TRACK_LIMIT} tracks.`,
     },
   };
   if (cardId) content.cardId = cardId;
@@ -366,7 +374,7 @@ export function randomPokedexCard(
     kind: "meet",
     title: "Facts",
     rangeLabel: "Random 100",
-    libraryTitle: "Champdex: Random 100",
+    libraryTitle: "Pokefacts random",
     recommended: true,
     blurb: "One hundred Pokémon drawn at random. Lily reads each one.",
     childDoes:
@@ -405,7 +413,7 @@ export function pokedexUpload(card: KidCard, mediaById: Record<number, string>, 
   const content = buildKidCard(applyUploadedPixels(card, mediaById), cardId);
   if (card.id === RANDOM_POKEDEX_ID) {
     content.metadata.description =
-      "One hundred Pokémon drawn at random. Turn the wheel until you see a picture, then press play. You hear its cry, then Lily reads the name, the Pokédex line, the weight, and the height. Written for ages 8 to 12. Link this playlist to its own card.";
+      "Pokefacts random. One hundred Pokemon drawn at random. Turn the wheel until you see a picture, then press play. You hear its cry, then Lily reads the name, the dex line, the weight, and the height. Written for ages 8 to 12. Link this playlist to its own card.";
   }
   return { voiceId: LILY_VOICE_ID, content };
 }
@@ -428,7 +436,9 @@ function withLily(card: KidCard): KidCard {
 /** One Facts playlist in the full-dex send. Lily reads it. Icons are the real pixels. */
 export function factsPlaylistUpload(card: KidCard, mediaById: Record<number, string>, cardId?: string) {
   const content = buildKidCard(applyUploadedPixels(withLily(card), mediaById), cardId);
-  content.metadata.description = `${card.rangeLabel}. Turn the wheel until you see a picture, then press play. You hear its cry, then Lily reads the name, the Pokédex line, the weight, and the height. Written for ages 8 to 12. Link this playlist to its own card.`;
+  content.metadata.title = card.libraryTitle;
+  content.title = card.libraryTitle;
+  content.metadata.description = `${card.libraryTitle}. You hear the cry, then Lily reads the name, the dex line, the weight, and the height. Written for ages 8 to 12. Link this playlist to its own card.`;
   return { voiceId: LILY_VOICE_ID, content };
 }
 
@@ -483,7 +493,7 @@ export function randomGuessCard(pool: KidChapter[], random: () => number = Math.
     kind: "guess",
     title: "Guess Who",
     rangeLabel: "Random 50",
-    libraryTitle: "Champdex: Guess Who",
+    libraryTitle: "Guess Who",
     blurb: "Fifty riddles drawn at random. A shadow, then the real picture.",
     childDoes:
       "Pick a dark picture and press play. Three clues, then a count of three. The answer plays next and the picture changes to the real Pokémon.",
@@ -521,7 +531,9 @@ export function guessUpload(
     }),
   };
   const content = buildKidCard(prepared, cardId);
+  content.metadata.title = "Guess Who";
+  content.title = "Guess Who";
   content.metadata.description =
-    "Fifty Guess Who riddles drawn at random. Each riddle starts as a dark shadow. The answer track changes the picture to the real Pokémon. Three clues, then a count of three. Lily reads every track. Written for ages 8 to 12. Link this playlist to its own card.";
+    "Guess Who. Fifty riddles drawn at random. Each riddle starts as a dark shadow. The answer track changes the picture to the real pixel. Three clues, then a count of three. Lily reads every track. Written for ages 8 to 12. Link this playlist to its own card.";
   return { voiceId: LILY_VOICE_ID, content };
 }

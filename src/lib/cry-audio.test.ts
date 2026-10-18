@@ -50,8 +50,8 @@ describe("fact audio", () => {
     let posted = "";
     const card = {
       cardId: "card-1",
-      title: "Champdex: Facts 1–99",
-      metadata: { title: "Champdex: Facts 1–99", description: "Facts." },
+      title: "Pokefacts 1",
+      metadata: { title: "Pokefacts 1", description: "Facts." },
       content: {
         chapters: [
           {

@@ -23,6 +23,7 @@ import {
   type KidCardKind,
 } from "@/lib/kid-cards";
 import { speakTexts, stopSpeaking } from "@/lib/speak";
+import { savedCardIsGone, validYotoCardId, yotoErrorText } from "@/lib/yoto-error";
 import {
   ensureSession,
   writeSession,
@@ -52,17 +53,28 @@ function rememberCard(id: string, cardId: string) {
   localStorage.setItem(SAVED_CARDS, JSON.stringify(next));
 }
 
-function messageFrom(data: unknown, fallback: string): string {
-  if (!data || typeof data !== "object") return fallback;
-  const row = data as {
-    error?: string;
-    message?: string;
-    error_description?: string;
-    job?: { error?: string };
-  };
-  return (
-    row.error_description || row.message || row.error || row.job?.error || fallback
-  );
+function forgetCard(id: string) {
+  const next = savedCards();
+  delete next[id];
+  localStorage.setItem(SAVED_CARDS, JSON.stringify(next));
+}
+
+function savedPlaylistId(playlistId: string, replace: boolean): string | undefined {
+  if (!replace) return undefined;
+  const previous = savedCards()[playlistId];
+  const usable = validYotoCardId(previous);
+  if (previous && !usable) forgetCard(playlistId);
+  return usable;
+}
+
+async function readBody(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return { message: text };
+  }
 }
 
 function jobOf(data: unknown): {
@@ -96,11 +108,11 @@ function playableChapters(card: KidCard) {
 async function uploadIcon(id: number, shadow = false): Promise<string> {
   const shadowQuery = shadow ? "&shadow=1" : "";
   const response = await yotoFetch(`/api/yoto/icon?id=${id}${shadowQuery}`, { method: "POST" });
-  const payload = (await response.json()) as { mediaId?: string; error?: string };
-  if (!response.ok || !payload.mediaId) {
-    throw new Error(payload.error || "Yoto did not take the 16×16 picture.");
-  }
-  return payload.mediaId;
+    const payload = (await readBody(response)) as { mediaId?: string };
+    if (!response.ok || !payload?.mediaId) {
+      throw new Error(yotoErrorText(payload, "Yoto did not take the 16×16 picture."));
+    }
+    return payload.mediaId;
 }
 
 async function uploadPixels(card: KidCard): Promise<Record<number, string>> {
@@ -367,25 +379,32 @@ export function Studio({ cards }: { cards: KidCard[] }) {
 
   async function postPlaylist(
     playlist: KidCard,
-    upload: { voiceId: string; content: unknown },
+    upload: { voiceId: string; content: { cardId?: string } },
     headline?: string,
-  ) {
+    retried = false,
+  ): Promise<string | undefined> {
     const response = await yotoFetch("/api/yoto/job", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(upload),
     });
-    const payload: unknown = await response.json();
+    const payload = await readBody(response);
     if (!response.ok) {
-      throw new Error(messageFrom(payload, "Yoto did not accept this card."));
+      if (!retried && upload.content.cardId && savedCardIsGone(response.status, payload)) {
+        forgetCard(playlist.id);
+        setLinked(savedCards());
+        const content = { ...upload.content };
+        delete content.cardId;
+        return postPlaylist(playlist, { ...upload, content }, headline, true);
+      }
+      throw new Error(yotoErrorText(payload, "Yoto did not accept this card."));
     }
     const created = jobOf(payload);
     if (!created?.jobId) {
       throw new Error("Yoto did not start a recording job.");
     }
     const finished = await pollJob(created.jobId, headline);
-    const previous = savedCards()[playlist.id];
-    const newId = finished.result?.cardId ?? previous;
+    const newId = validYotoCardId(finished.result?.cardId) ?? validYotoCardId(upload.content.cardId);
     if (newId) {
       rememberCard(playlist.id, newId);
       setLinked(savedCards());
@@ -412,9 +431,10 @@ export function Studio({ cards }: { cards: KidCard[] }) {
           dexId: chapter.dexId,
         }),
       });
-      const payload: unknown = await response.json();
+      const payload = await readBody(response);
       if (!response.ok) {
-        throw new Error(messageFrom(payload, `The cry for number ${chapter.dexId} did not upload.`));
+        if (savedCardIsGone(response.status, payload)) forgetCard(playlist.id);
+        throw new Error(yotoErrorText(payload, `The cry for number ${chapter.dexId} did not upload.`));
       }
     }
   }
@@ -427,8 +447,7 @@ export function Studio({ cards }: { cards: KidCard[] }) {
     setJob({ status: "sending", detail: `Sending ${card.rangeLabel} to Yoto…` });
     try {
       setJob({ status: "sending", detail: "Uploading the 16×16 pictures for this card…" });
-      const previous = savedCards()[card.id];
-      const savedId = replace && previous ? previous : undefined;
+      const savedId = savedPlaylistId(card.id, replace);
       const upload = randomGuess
         ? await (async () => {
             const icons = await uploadGuessIcons(card);
@@ -465,11 +484,10 @@ export function Studio({ cards }: { cards: KidCard[] }) {
       for (let index = 0; index < playlists.length; index += 1) {
         const playlist = playlists[index];
         if (!playlist) continue;
-        const headline = `Recording Facts ${index + 1} of ${playlists.length}`;
+        const headline = `Recording Pokefacts ${index + 1} of ${playlists.length}`;
         setJob({ status: "sending", detail: headline });
         try {
-          const previous = savedCards()[playlist.id];
-          const savedId = replace && previous ? previous : undefined;
+          const savedId = savedPlaylistId(playlist.id, replace);
           const pixels = await uploadPixels(playlist);
           const recordedId = await postPlaylist(
             playlist,
@@ -504,9 +522,9 @@ export function Studio({ cards }: { cards: KidCard[] }) {
     for (let attempt = 0; attempt < 90; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 2000));
       const response = await yotoFetch(`/api/yoto/job/${id}`);
-      const payload: unknown = await response.json();
+      const payload = await readBody(response);
       if (!response.ok) {
-        throw new Error(messageFrom(payload, "Could not check the recording."));
+        throw new Error(yotoErrorText(payload, "Could not check the recording."));
       }
       const current = jobOf(payload);
       if (!current) throw new Error("Yoto sent back a recording Yoto could not read.");
@@ -686,10 +704,10 @@ export function Studio({ cards }: { cards: KidCard[] }) {
                   >
                     {sending && bulkActive
                       ? "Recording…"
-                      : `Send all ${factsPlaylists.length} Facts playlists`}
+                      : `Send all ${factsPlaylists.length} Pokefacts playlists`}
                   </Button>
                   <p className="max-w-xl text-sm leading-6 text-[#5c5348]">
-                    Sends every Facts playlist, one after another, so all 1,025 Pokémon are covered.
+                    Sends every Pokefacts playlist, one after another, so all 1,025 Pokémon are covered.
                     Each playlist stays at 100 tracks or fewer. Lily reads every track.
                   </p>
                 </div>

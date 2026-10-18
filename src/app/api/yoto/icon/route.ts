@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { yotoErrorText } from "@/lib/yoto-error";
 import { bearerToken, jsonError } from "@/lib/yoto-proxy";
 
 function scalePixel(sprite: string, pixel: string): Promise<void> {
@@ -96,12 +97,10 @@ export async function POST(request: Request) {
   });
   const payload = (await response.json().catch(() => null)) as {
     displayIcon?: { mediaId?: string };
-    error?: string;
-    message?: string;
   } | null;
   const mediaId = payload?.displayIcon?.mediaId;
   if (!response.ok || !mediaId) {
-    return jsonError(payload?.message || payload?.error || "Yoto did not take that 16×16 picture.", response.status || 502);
+    return jsonError(yotoErrorText(payload, "Yoto did not take that 16×16 picture."), response.status || 502);
   }
   return Response.json({ mediaId });
 }

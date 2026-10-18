@@ -6,7 +6,7 @@ The catalogue pictures are local files in `public/sprites`. A PDF of Pokémon im
 
 A spoken fact is the name, then the English Pokédex line, then the weight and the height in full sentences, plus a short evolution, ability, or home line when the catalogue has one. Stats stay on the catalogue page. The audio order is the latest PokéAPI cry, then that reading. Hear plays it that way. On a Yoto card, Labs records Lily (`pFZP5JQG7iQjIQuC4Bku`) from the script, Champdex merges the cry in front, and the merged MP3 is uploaded to Yoto as the track.
 
-The main Facts action is **Send all 11 Facts playlists**. Champdex sends those playlists one after another and shows progress such as “Recording Facts 3 of 11”. If one job fails, it stops and names that playlist. Together they cover all 1,025 species. Each playlist stays at 100 tracks or fewer: one short intro plus up to 99 Pokémon, and the last card is the remainder. A smaller Facts option is still there: **100 Pokémon drawn at random**. Shuffle draws a new hundred. Send uses the hundred on the page.
+The main Facts action is **Send all 11 Pokefacts playlists**. Yoto titles them Pokefacts 1 through Pokefacts 11. Champdex sends those playlists one after another and shows progress such as “Recording Pokefacts 3 of 11”. If one job fails, it stops and names that playlist, including Yoto’s own error. A deleted playlist id is dropped and the send starts a new playlist. Together they cover all 1,025 species. Each playlist stays at 100 tracks or fewer: one short intro plus up to 99 Pokémon, and the last card is Pokefacts 11. A smaller Facts option is still there: **100 Pokémon drawn at random**, titled Pokefacts random. Shuffle draws a new hundred. Send uses the hundred on the page.
 
 Guess Who is one playlist of **50 riddles drawn at random**. Shuffle draws a new fifty. Send uses the fifty on the page. Each riddle is two tracks, so the card is 100 tracks. The how-to sits in the description and at the start of the first clue. The clue track shows a dark shadow of that Pokémon’s 16×16 pixel (`public/pixels/{id}-shadow.png`). The answer track shows the real pixel (`public/pixels/{id}.png`). On the page, the shadow stays up until the child reveals the answer.
 
@@ -24,7 +24,7 @@ A Yoto Make Your Own playlist holds **100 tracks**. Champdex does not put 1,025 
 
 | Playlist | Tracks on a card | Pokémon on a card | What you send |
 | --- | --- | --- | --- |
-| Facts | 1 start track + 1 track each | 99 | **11 playlists**, sent one after another (the last is Facts 991–1025) |
+| Pokefacts | 1 start track + 1 track each | 99 | **11 playlists**, titled Pokefacts 1 through Pokefacts 11 (the last is numbers 991-1025) |
 | Guess Who | 2 tracks each (shadow clue, then the real pixel) | 50 | **1 playlist**, drawn at random |
 
 The numbered Facts ranges are the playlists the bulk upload sends. The random 100 is a smaller single card if you do not want the full set. Guess Who no longer offers fixed ranges. The clue icon is the shadow. The answer icon, and the picture after you reveal it, is the real 16×16 pixel.
@@ -35,7 +35,7 @@ The numbered Facts ranges are the playlists the bulk upload sends. The random 10
 2. In the [Yoto developer dashboard](https://dashboard.yoto.dev/), create a **public** client. Copy the client ID. Do not paste the client secret into Champdex.
 3. Add this callback URL to that client: `http://localhost:3847/callback`
 4. In Champdex, choose **Connect Yoto**. The login asks to create Make Your Own content, stay signed in, and read your name. Leave the voice on Lily.
-5. Open **Facts** and choose **Send all 11 Facts playlists**. Champdex records them one at a time. Link each finished playlist to its own blank card.
+5. Open **Facts** and choose **Send all 11 Pokefacts playlists**. Champdex records them one at a time. In the Yoto app they are named Pokefacts 1 through Pokefacts 11. Link each finished playlist to its own blank card.
 6. Or open **Put Random 100 on a Yoto card** and send that smaller list. **Shuffle** draws a different hundred. The send uses the list on screen. Yoto records Lily (`pFZP5JQG7iQjIQuC4Bku`) as an MP3 for each track.
 7. In the Yoto app, open **Make Your Own**, find the Champdex playlist, and choose **Link to a card**.
 8. Put one blank Make Your Own card in the player when it asks.

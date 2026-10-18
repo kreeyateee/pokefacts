@@ -220,7 +220,7 @@ describe("cards for ages 8 to 12", () => {
     );
     assert.equal(cards[0]?.kind, "meet");
     assert.equal(cards[1]?.kind, "guess");
-    assert.equal(cards[0]?.title, "Facts");
+    assert.equal(cards[0]?.title, "Pokefacts");
     assert.equal(cards[1]?.title, "Guess Who");
   });
 
@@ -296,7 +296,9 @@ describe("cards for ages 8 to 12", () => {
     const payload = buildKidCard(meet, "card-meet");
     assert.equal(payload.cardId, "card-meet");
     assert.equal(payload.title, meet.libraryTitle);
-    assert.match(payload.title, /Champdex: Facts /);
+    assert.match(payload.title, /^Pokefacts 1$/);
+    assert.equal(payload.metadata.title, payload.title);
+    assert.doesNotMatch(payload.title, /[–—]|Champdex/);
     assert.equal(payload.content.chapters.length, meet.chapters.length);
     assert.equal(payload.content.chapters[1]?.title, "Bulbasaur");
     assert.equal(payload.content.chapters[1]?.tracks[0]?.type, "elevenlabs");
@@ -323,10 +325,21 @@ describe("every national species", () => {
     assert.equal(sheets.length, 1025);
     assert.equal(facts.length, 11);
     assert.equal(guess.length, 21);
-    assert.equal(facts[0]?.rangeLabel, "Facts 1–99");
-    assert.equal(facts[10]?.rangeLabel, "Facts 991–1025");
-    assert.equal(guess[0]?.rangeLabel, "Guess Who 1–49");
-    assert.equal(guess[20]?.rangeLabel, "Guess Who 981–1025");
+    assert.equal(facts[0]?.rangeLabel, "Pokefacts 1 · 1-99");
+    assert.equal(facts[0]?.libraryTitle, "Pokefacts 1");
+    assert.equal(facts[1]?.libraryTitle, "Pokefacts 2");
+    assert.equal(facts[10]?.libraryTitle, "Pokefacts 11");
+    assert.equal(facts[10]?.rangeLabel, "Pokefacts 11 · 991-1025");
+    assert.equal(guess[0]?.libraryTitle, "Guess Who");
+    assert.equal(guess[0]?.rangeLabel, "Guess Who 1-49");
+    assert.equal(guess[20]?.rangeLabel, "Guess Who 981-1025");
+    for (const card of facts) {
+      const payload = buildKidCard(card);
+      assert.equal(payload.title, card.libraryTitle);
+      assert.equal(payload.metadata.title, payload.title);
+      assert.match(payload.title, /^Pokefacts \d+$/);
+      assert.doesNotMatch(`${payload.title} ${payload.metadata.title}`, /[–—]|Champdex/);
+    }
     assert.equal(spokenTracks(facts[0]!), 100);
     assert.equal(spokenTracks(facts[10]!), 36);
     assert.equal(spokenTracks(guess[0]!), 99);
