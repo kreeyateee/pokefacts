@@ -1,5 +1,5 @@
 /**
- * Names the British narrator misreads. The page keeps the real spelling.
+ * Names the narrator misreads. The page keeps the real spelling.
  * The spoken copy uses these respellings so the sound matches the name.
  */
 const SPOKEN_NAMES: ReadonlyArray<readonly [string, string]> = [

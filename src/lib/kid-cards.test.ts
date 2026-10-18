@@ -102,12 +102,45 @@ describe("Pokédex entries", () => {
       },
       "1",
     );
-    assert.match(text, /^Number 1\. Bulbasaur\. Grass and Poison\./);
-    assert.match(text, /The Seed Pokémon/);
-    assert.match(text, /0\.7 metres\. 6\.9 kilograms\./);
-    assert.match(text, /can become Vaporeon, Jolteon, Flareon, and others/);
-    assert.doesNotMatch(text, /Hit points|Attack |briefing/);
-    assert.ok(text.length < 700);
+    assert.match(text, /^This is Bulbasaur\. It is number 1\./);
+    assert.match(text, /It is a Grass and Poison type\./);
+    assert.match(text, /It is the Seed Pokémon\./);
+    assert.match(text, /It weighs 6\.9 kilograms\. It is 70 centimetres tall\./);
+    assert.match(text, /Its ability is Overgrow\. It powers up Grass-type moves when its hit points are low\./);
+    const lowHealth = dexBlurb(
+      {
+        ...sheet(1, "Bulbasaur", entry("Bulbasaur")),
+        abilityEffect: "Strengthens Grass moves to inflict 1.5× damage at 1/3 max HP or less.",
+      },
+      "1",
+    );
+    assert.match(lowHealth, /one and a half times the damage when a third of its hit points are left/);
+    assert.doesNotMatch(lowHealth, /inflict 1\./);
+    const fragment = dexBlurb(
+      {
+        ...sheet(25, "Pikachu", [
+          {
+            version: "yellow",
+            text: "Possesses cheek sacs in which it stores electricity. This clever forest-dweller roasts tough berries.",
+          },
+        ]),
+        genus: "Mouse Pokémon",
+        types: ["electric"],
+        heightDecimetres: 4,
+        weightHectograms: 60,
+        abilityName: "Static",
+        abilityEffect: "Has a 30% chance of paralyzing attacking Pokémon on contact.",
+        evolution: "Pichu becomes Pikachu by leveling up once it is very happy.",
+      },
+      "4",
+    );
+    assert.match(fragment, /It possesses cheek sacs/);
+    assert.match(fragment, /It is an Electric type\./);
+    assert.match(fragment, /It has a 30 percent chance of paralyzing a Pokémon that attacks it\./);
+    assert.match(text, /It can become Vaporeon, Jolteon, Flareon, and others\./);
+    assert.match(text, /It lives in grassland\./);
+    assert.doesNotMatch(text, /\bmetres\b|Attack |briefing/);
+    assert.ok(text.length < 1100);
   });
 
   it("respells the names the narrator gets wrong", () => {
@@ -154,7 +187,7 @@ describe("cards for ages 8 to 12", () => {
         assert.ok(chapter.picture.length > 0);
         for (const track of chapter.tracks) {
           assert.ok(track.text.length > 40);
-          assert.ok(track.text.length < 700);
+          assert.ok(track.text.length < 1100);
           assert.ok(track.spoken.length > 40);
           assert.ok(track.icon.startsWith("yoto:#"));
           for (const banned of BANNED) {
@@ -167,16 +200,18 @@ describe("cards for ages 8 to 12", () => {
     const bulbasaur = cards[0]?.chapters.find((chapter) => chapter.key === "bulbasaur");
     assert.equal(bulbasaur?.tracks.length, 1);
     const bulba = bulbasaur?.tracks[0]?.text ?? "";
-    assert.match(bulba, /Grass and Poison/);
-    assert.match(bulba, /The Seed Pokémon/);
-    assert.match(bulba, /0\.7 metres\. 6\.9 kilograms\./);
-    assert.doesNotMatch(bulba, /Hit points/);
+    assert.match(bulba, /It is a Grass and Poison type\./);
+    assert.match(bulba, /It is the Seed Pokémon\./);
+    assert.match(bulba, /It weighs 6\.9 kilograms\. It is 70 centimetres tall\./);
+    assert.match(bulba, /It becomes Ivysaur at level 16\./);
+    assert.doesNotMatch(bulba, /\bmetres\b|Attack /);
     const wailord = cards[0]?.chapters.find((chapter) => chapter.key === "wailord");
     const whale = wailord?.tracks[0]?.text ?? "";
     assert.match(whale, /When a small Wailmer is attacked/);
-    assert.match(whale, /Water\./);
-    assert.match(whale, /Float Whale Pokémon/);
-    assert.match(whale, /14\.5 metres\. 398 kilograms\./);
+    assert.match(whale, /It is a Water type\./);
+    assert.match(whale, /It is the Float Whale Pokémon\./);
+    assert.match(whale, /It weighs 398 kilograms\. It is 1450 centimetres tall\./);
+    assert.match(whale, /Its ability is Water Veil\./);
     assert.match(wailord?.tracks[0]?.spoken ?? "", /Whale mer/);
     assert.match(wailord?.tracks[0]?.spoken ?? "", /Way lord/);
     assert.doesNotMatch(whale, /humpback|Hit points/);

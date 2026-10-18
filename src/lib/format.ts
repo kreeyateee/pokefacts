@@ -97,6 +97,11 @@ export function metresSpeech(decimetres: number): string {
   return `${stripTrailingZero(metres.toFixed(1))} metres`;
 }
 
+/** PokéAPI stores height in decimetres. One decimetre is ten centimetres. */
+export function centimetresSpeech(decimetres: number): string {
+  return `${decimetres * 10} centimetres`;
+}
+
 export function kilogramsSpeech(hectograms: number): string {
   const kilograms = hectograms / 10;
   return `${stripTrailingZero(kilograms.toFixed(1))} kilograms`;

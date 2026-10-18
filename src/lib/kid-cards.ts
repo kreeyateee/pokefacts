@@ -166,15 +166,15 @@ export function kidCardsFromDex(sheets: MonSheet[]): KidCard[] {
       title: "Facts",
       libraryTitle: "Champdex: Pokémon Facts",
       recommended: true,
-      blurb: "Name, type, the Pokédex entry, then height and weight.",
+      blurb: "The name, the type, the Pokédex entry, how much it weighs, and how tall it is.",
       childDoes:
-        "Turn to a picture and press play. You hear the name, the type, the Pokédex entry, and how big it is.",
+        "Turn to a picture and press play. You hear the name, the type, the Pokédex entry, how much it weighs, and how tall it is.",
       chapters: [
         picture("start", "Start here", "Go", "a star", "★", I.star, [
           talk(
             "how",
             "How to play",
-            "Pokémon facts. Turn the wheel, or press the arrows, until you see a picture. Then press play. You hear the name, the type, the Pokédex entry, and how big it is. The star is this track. Number 1 is Bulbasaur.",
+            "This card is Pokémon facts. Turn the wheel, or press the arrows, until you see a picture. Then press play. You will hear the name, the type, and the Pokédex entry. You will also hear how much it weighs and how tall it is. The star is this track. Number 1 is Bulbasaur.",
             I.star,
             "Go",
           ),

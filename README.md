@@ -1,8 +1,8 @@
 # Champdex
 
-Pokémon facts and Guess Who for ages 8 to 12. Each fact is a short Pokédex entry from PokéAPI: name, type, the description, then height and weight. Play them in the browser, or send the same words to a [Yoto](https://yotoplay.com) card.
+Pokémon facts and Guess Who for ages 8 to 12. Each fact is a short Pokédex entry from PokéAPI, in full sentences: the name, the type, the description, how much it weighs, how tall it is in centimetres, and a few more facts. Play them in the browser, or send the same words to a [Yoto](https://yotoplay.com) card.
 
-- **Facts** — pick Bulbasaur, Pikachu, and the rest. Each one is a short Pokédex entry.
+- **Facts** — pick Bulbasaur, Pikachu, and the rest. Each one says the name, the type, the Pokédex entry, the weight, the height, and a few more facts.
 - **Guess Who** — three clues, then you say the name. The answer plays after you guess.
 
 On a Yoto player those are two Make Your Own cards. The child turns to a picture and presses play.

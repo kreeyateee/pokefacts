@@ -15,10 +15,13 @@ function chunks(text: string): string[] {
 }
 
 function englishVoice(): SpeechSynthesisVoice | undefined {
-  const voices = window.speechSynthesis.getVoices();
+  const voices = window.speechSynthesis.getVoices().filter((voice) =>
+    voice.lang.toLowerCase().startsWith("en"),
+  );
   return (
-    voices.find((voice) => voice.lang === "en-GB") ??
-    voices.find((voice) => voice.lang.startsWith("en"))
+    voices.find((voice) => /ana|jenny|samantha|child/i.test(voice.name)) ??
+    voices.find((voice) => voice.lang === "en-US") ??
+    voices[0]
   );
 }
 
@@ -48,8 +51,8 @@ export function speakTexts(texts: string[], onEnd: () => void) {
       return;
     }
     const utterance = new SpeechSynthesisUtterance(piece);
-    utterance.rate = 0.96;
-    utterance.pitch = 0.92;
+    utterance.rate = 1.08;
+    utterance.pitch = 1.35;
     if (voice) utterance.voice = voice;
     utterance.onend = speakNext;
     utterance.onerror = onEnd;

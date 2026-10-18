@@ -49,6 +49,16 @@ export function iconForType(type: string | undefined): string {
 
 export const YOTO_VOICES = [
   {
+    id: "jBpfuIE2acCO8z3wKNLl",
+    name: "Gigi",
+    note: "Playful cartoon voice, the closest of these to Rotom Dex",
+  },
+  {
+    id: "IKne3meq5aSn9XLyUdCD",
+    name: "Charlie",
+    note: "Quick and hyped, if you want a brighter boy",
+  },
+  {
     id: "JBFqnCBsd6RMkjVDRZzb",
     name: "George",
     note: "Warm field narrator, the voice in Yoto's own example",
