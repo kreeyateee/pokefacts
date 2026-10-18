@@ -1,4 +1,5 @@
 import { YOTO_TRACK_LIMIT } from "@/lib/kid-cards";
+import { yotoUpstreamFailure } from "@/lib/yoto-error";
 import { bearerToken, forwardYoto, jsonError } from "@/lib/yoto-proxy";
 
 type JobBody = {
@@ -62,9 +63,12 @@ export async function POST(request: Request) {
   }
 
   const url = `https://labs.api.yotoplay.com/content/job?voiceId=${encodeURIComponent(voiceId)}`;
-  return forwardYoto(url, token, {
+  const upstream = await forwardYoto(url, token, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body.content),
   });
+  if (upstream.ok) return upstream;
+  const text = await upstream.text();
+  return Response.json(yotoUpstreamFailure(text), { status: upstream.status });
 }

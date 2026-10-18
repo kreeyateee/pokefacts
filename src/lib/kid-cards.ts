@@ -149,6 +149,11 @@ export function pokefactsTitle(index: number): string {
   return `Pokefacts ${index}`;
 }
 
+/** Bulk-send status. Index is 1-based, so the first card is "Recording Pokefacts 1 of 11". */
+export function bulkProgressLabel(index: number, total: number): string {
+  return `Recording ${pokefactsTitle(index)} of ${total}`;
+}
+
 /** On-page label. The middle dot stays here; the Yoto title is `pokefactsTitle`. */
 export function rangeLabel(kind: KidCardKind, first: number, last: number, index = 1): string {
   const span = first === last ? String(first) : `${first}-${last}`;
@@ -435,10 +440,16 @@ function withLily(card: KidCard): KidCard {
 
 /** One Facts playlist in the full-dex send. Lily reads it. Icons are the real pixels. */
 export function factsPlaylistUpload(card: KidCard, mediaById: Record<number, string>, cardId?: string) {
-  const content = buildKidCard(applyUploadedPixels(withLily(card), mediaById), cardId);
-  content.metadata.title = card.libraryTitle;
-  content.title = card.libraryTitle;
-  content.metadata.description = `${card.libraryTitle}. You hear the cry, then Lily reads the name, the dex line, the weight, and the height. Written for ages 8 to 12. Link this playlist to its own card.`;
+  const playlistIndex = Number(/^meet-(\d+)$/.exec(card.id)?.[1]);
+  const title =
+    Number.isInteger(playlistIndex) && playlistIndex >= 1
+      ? pokefactsTitle(playlistIndex)
+      : card.libraryTitle;
+  const usable = cardId && /^[A-Za-z0-9]{5}$/.test(cardId) ? cardId : undefined;
+  const content = buildKidCard(applyUploadedPixels(withLily(card), mediaById), usable);
+  content.metadata.title = title;
+  content.title = title;
+  content.metadata.description = `${title}. You hear the cry, then Lily reads the name, the dex line, the weight, and the height. Written for ages 8 to 12. Link this playlist to its own card.`;
   return { voiceId: LILY_VOICE_ID, content };
 }
 

@@ -45,6 +45,28 @@ export function yotoErrorText(data: unknown, fallback: string): string {
   return unique.length > 0 ? unique.join(" ") : fallback;
 }
 
+/** The JSON we show when Yoto rejects a playlist. `yotoBody` is their response, unedited. */
+export function yotoUpstreamFailure(text: string): {
+  error: string;
+  message: string;
+  yotoBody: string;
+} {
+  const yotoBody = text.trim().slice(0, 2000);
+  let parsed: unknown = yotoBody;
+  if (yotoBody) {
+    try {
+      parsed = JSON.parse(yotoBody) as unknown;
+    } catch {
+      parsed = { message: yotoBody };
+    }
+  } else {
+    parsed = null;
+  }
+  const detail = yotoErrorText(parsed, "Yoto did not accept this card.");
+  const message = yotoBody && !detail.includes(yotoBody) ? `${detail} ${yotoBody}` : detail;
+  return { error: message, message, yotoBody };
+}
+
 /**
  * A saved playlist id that Yoto no longer has. The vague axios 400 is what their
  * updater returns when that id was deleted.

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { savedCardIsGone, validYotoCardId, yotoErrorText } from "./yoto-error";
+import { savedCardIsGone, validYotoCardId, yotoErrorText, yotoUpstreamFailure } from "./yoto-error";
 
 describe("Yoto errors", () => {
   it("reads a nested error message instead of a vague status line", () => {
@@ -26,5 +26,13 @@ describe("Yoto errors", () => {
     );
     assert.equal(savedCardIsGone(404, { error: { message: "Card ab12C does not exist." } }), true);
     assert.equal(savedCardIsGone(400, { error: { message: "Title is too long." } }), false);
+  });
+
+  it("keeps Yoto's raw body when the only message is a status code", () => {
+    const raw = JSON.stringify({ message: "Request failed with status code 400" });
+    const failure = yotoUpstreamFailure(raw);
+    assert.equal(failure.yotoBody, raw);
+    assert.match(failure.message, /Request failed with status code 400/);
+    assert.match(failure.error, /Request failed with status code 400/);
   });
 });

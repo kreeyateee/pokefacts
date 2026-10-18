@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { yotoErrorText } from "@/lib/yoto-error";
+import { yotoUpstreamFailure } from "@/lib/yoto-error";
 import { bearerToken, jsonError } from "@/lib/yoto-proxy";
 
 function scalePixel(sprite: string, pixel: string): Promise<void> {
@@ -95,12 +95,17 @@ export async function POST(request: Request) {
     body: new Uint8Array(bytes),
     signal: AbortSignal.timeout(30_000),
   });
-  const payload = (await response.json().catch(() => null)) as {
-    displayIcon?: { mediaId?: string };
-  } | null;
-  const mediaId = payload?.displayIcon?.mediaId;
+  const text = await response.text();
+  let payload: { displayIcon?: { mediaId?: string } } | null = null;
+  try {
+    payload = text ? (JSON.parse(text) as { displayIcon?: { mediaId?: string } }) : null;
+  } catch {
+    payload = null;
+  }
+  const hash = payload?.displayIcon?.mediaId?.replace(/^yoto:#/, "") ?? "";
+  const mediaId = /^[A-Za-z0-9_-]{43}$/.test(hash) ? hash : undefined;
   if (!response.ok || !mediaId) {
-    return jsonError(yotoErrorText(payload, "Yoto did not take that 16×16 picture."), response.status || 502);
+    return jsonError(yotoUpstreamFailure(text).message, response.status || 502);
   }
   return Response.json({ mediaId });
 }

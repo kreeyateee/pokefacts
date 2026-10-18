@@ -7,6 +7,7 @@ import { Catalogue } from "@/components/catalogue";
 import { ConnectDialog } from "@/components/connect-dialog";
 import { Button } from "@/components/ui/button";
 import {
+  bulkProgressLabel,
   factPoolFromCards,
   factsBulkPlaylists,
   factsPlaylistUpload,
@@ -174,7 +175,7 @@ export function Studio({ cards }: { cards: KidCard[] }) {
   const [revealed, setRevealed] = useState(false);
   const [session, setSession] = useState<YotoSession | null>(null);
   const [connectOpen, setConnectOpen] = useState(false);
-  const [replace, setReplace] = useState(true);
+  const [replace, setReplace] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [sending, setSending] = useState(false);
   const [bulkActive, setBulkActive] = useState(false);
@@ -390,9 +391,12 @@ export function Studio({ cards }: { cards: KidCard[] }) {
     });
     const payload = await readBody(response);
     if (!response.ok) {
-      if (!retried && upload.content.cardId && savedCardIsGone(response.status, payload)) {
+      if (response.status === 400 || savedCardIsGone(response.status, payload)) {
         forgetCard(playlist.id);
         setLinked(savedCards());
+        setReplace(false);
+      }
+      if (!retried && upload.content.cardId && (response.status === 400 || savedCardIsGone(response.status, payload))) {
         const content = { ...upload.content };
         delete content.cardId;
         return postPlaylist(playlist, { ...upload, content }, headline, true);
@@ -433,7 +437,11 @@ export function Studio({ cards }: { cards: KidCard[] }) {
       });
       const payload = await readBody(response);
       if (!response.ok) {
-        if (savedCardIsGone(response.status, payload)) forgetCard(playlist.id);
+        if (response.status === 400 || savedCardIsGone(response.status, payload)) {
+          forgetCard(playlist.id);
+          setLinked(savedCards());
+          setReplace(false);
+        }
         throw new Error(yotoErrorText(payload, `The cry for number ${chapter.dexId} did not upload.`));
       }
     }
@@ -481,17 +489,19 @@ export function Studio({ cards }: { cards: KidCard[] }) {
     setSending(true);
     setBulkActive(true);
     try {
+      setReplace(false);
       for (let index = 0; index < playlists.length; index += 1) {
         const playlist = playlists[index];
         if (!playlist) continue;
-        const headline = `Recording Pokefacts ${index + 1} of ${playlists.length}`;
+        const headline = bulkProgressLabel(index + 1, playlists.length);
         setJob({ status: "sending", detail: headline });
         try {
-          const savedId = savedPlaylistId(playlist.id, replace);
+          forgetCard(playlist.id);
+          setLinked(savedCards());
           const pixels = await uploadPixels(playlist);
           const recordedId = await postPlaylist(
             playlist,
-            factsPlaylistUpload(playlist, pixels, savedId),
+            factsPlaylistUpload(playlist, pixels),
             headline,
           );
           if (!recordedId) throw new Error("Yoto recorded Lily but did not return the card.");
@@ -505,9 +515,9 @@ export function Studio({ cards }: { cards: KidCard[] }) {
       }
       setJob({
         status: "completed",
-        detail: `All ${playlists.length} Facts playlists are in your Yoto library.`,
+        detail: `All ${playlists.length} Pokefacts playlists are in your Yoto library.`,
       });
-      toast.success(`All ${playlists.length} Facts playlists are ready to link.`);
+      toast.success(`All ${playlists.length} Pokefacts playlists are ready to link.`);
     } catch (error) {
       const detail = error instanceof Error ? error.message : "The recording stopped.";
       setJob({ status: "failed", detail });
@@ -679,7 +689,7 @@ export function Studio({ cards }: { cards: KidCard[] }) {
                     <>
                       This playlist is{" "}
                       <span className="font-medium text-[#1c1916]">{card.rangeLabel}</span>. It is one
-                      part of the full Facts set.
+                      part of the full Pokefacts set.
                     </>
                   )}
                 </p>
@@ -905,7 +915,7 @@ export function Studio({ cards }: { cards: KidCard[] }) {
                     ? "Send uploads a shadow of each 16×16 pixel for the clue, then the real pixel for the answer. Yoto records Lily’s voice as an MP3. The how-to is in the playlist description and at the start of the first clue."
                     : randomFacts
                       ? "Send records Lily, then puts that Pokémon’s cry in front of her voice and uploads the merged MP3. The how-to is in the playlist description and at the start of the first track."
-                      : `This send is only ${card.rangeLabel}. Each fact is the cry, then Lily. The button above sends every Facts playlist, one after another.`}
+                      : `This send is only ${card.rangeLabel}. Each fact is the cry, then Lily. The button above sends every Pokefacts playlist, one after another.`}
                 </p>
                 <p className="mt-3 text-sm leading-6">
                   Voice: <span className="font-medium">Lily</span>
@@ -961,8 +971,8 @@ export function Studio({ cards }: { cards: KidCard[] }) {
                     {randomGuess
                       ? "These 50 riddles go on one card. The clue icon is the shadow. The answer icon is the real 16×16 pixel. Lily reads both tracks."
                       : randomFacts
-                        ? "These 100 Pokémon go on one card, in Lily’s voice, each with its 16×16 picture. Send all Facts playlists when you want every species."
-                        : `${card.rangeLabel} links to its own card. Send all Facts playlists to cover every species, one card at a time.`}
+                        ? "These 100 Pokémon go on one card, in Lily’s voice, each with its 16×16 picture. Send all Pokefacts playlists when you want every species."
+                        : `${card.rangeLabel} links to its own card. Send all Pokefacts playlists to cover every species, one card at a time.`}
                   </p>
                 )}
               </details>

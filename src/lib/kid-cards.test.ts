@@ -6,6 +6,7 @@ import { listMonSheets } from "./catalogue-db";
 import { dexBlurb, pickDexEntry, threeClues, type FlavorSource, type MonSheet } from "./dex-facts";
 import {
   buildKidCard,
+  bulkProgressLabel,
   countSpokenTracks,
   factPoolFromCards,
   factsBulkPlaylists,
@@ -481,11 +482,62 @@ describe("random Pokedex playlist", () => {
       globalThis.fetch = original;
     }
   });
+
+  it("returns Yoto's raw 400 body instead of hiding it", async () => {
+    const card = randomPokedexCard(pool, mulberry32(4));
+    const ids = card.chapters.map((chapter) => chapter.dexId ?? 0);
+    const sent = pokedexUpload(
+      card,
+      Object.fromEntries(ids.map((id) => [id, `pixel-${id}`])),
+    );
+    const yotoBody = JSON.stringify({ message: "Request failed with status code 400" });
+    const original = globalThis.fetch;
+    globalThis.fetch = async () => new Response(yotoBody, { status: 400 });
+    try {
+      const response = await postJob(
+        new Request("http://localhost/api/yoto/job", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${"x".repeat(24)}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(sent),
+        }),
+      );
+      assert.equal(response.status, 400);
+      const payload = (await response.json()) as { message?: string; yotoBody?: string };
+      assert.equal(payload.yotoBody, yotoBody);
+      assert.match(payload.message ?? "", /Request failed with status code 400/);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
 });
 
 describe("bulk Facts upload", () => {
   const cards = kidCardsFromDex(listMonSheets());
   const bulk = factsBulkPlaylists(cards);
+
+  it("names the first playlist Pokefacts 1 and does not say Facts 1", () => {
+    const first = bulk[0];
+    assert.ok(first);
+    const progress = bulkProgressLabel(1, bulk.length);
+    const sent = factsPlaylistUpload(first, { 1: "pixel" });
+    assert.equal(progress, "Recording Pokefacts 1 of 11");
+    assert.equal(sent.content.title, "Pokefacts 1");
+    assert.equal(sent.content.metadata.title, "Pokefacts 1");
+    assert.equal(sent.content.cardId, undefined);
+    const shown = `${progress} ${sent.content.title} ${first.rangeLabel}`;
+    assert.equal(shown.includes("Facts 1"), false);
+    assert.equal(shown.includes("Recording Facts"), false);
+    assert.equal(shown.includes("Facts 1–99"), false);
+    assert.equal(shown.includes("–"), false);
+    const replaced = factsPlaylistUpload(first, { 1: "pixel" }, "ab12C");
+    assert.equal(replaced.content.title, "Pokefacts 1");
+    assert.equal(replaced.content.cardId, "ab12C");
+    const stale = factsPlaylistUpload(first, { 1: "pixel" }, "deleted-card");
+    assert.equal(stale.content.cardId, undefined);
+  });
 
   it("covers every national id once and keeps each playlist at or under 100 tracks", () => {
     assert.equal(bulk.length, 11);
