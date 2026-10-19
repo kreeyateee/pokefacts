@@ -2,7 +2,7 @@
 
 Champdex runs on your computer and sends Pokémon cards to your own Yoto library. It covers all 1,025 national species. You can browse the catalogue, send the Pokefacts playlists, and send a Guess Who game. The pictures, the catalogue, and the app stay on this machine. A public tunnel is optional. Uploads go from this computer to Yoto.
 
-The catalogue is game data from [PokéAPI](https://pokeapi.co/): an English Pokédex line, the types, the height, the weight, the abilities, the base stats, and the evolution. Nine species also have a short Champdex note. Bulbapedia articles are not copied into it.
+The catalogue is game data from [PokéAPI](https://pokeapi.co/): an English Pokédex line, the types, the height, the weight, the abilities, the base stats, and the evolution. Nine species also have a short Champdex note. The species page also shows that Pokémon’s Biology section from [Bulbapedia](https://bulbapedia.bulbagarden.net/), under CC BY-NC-SA 2.5. Champdex fetches the section when you open the Pokémon and caches it on this computer. It is not copied into the catalogue file, and it is not read aloud on the Yoto cards.
 
 ## Install
 
@@ -52,7 +52,7 @@ A normal copy of this repository already contains:
 - `public/sprites` — one picture per species
 - `public/pixels` — the 16×16 icon and the dark shadow for each species
 
-`npm start` checks those files before it serves the app. If the database file is missing and the PokéAPI CSV tables are in `/tmp/poke-csv`, the start command builds the database with the catalogue script. You can also run `npm run catalogue` yourself. Those tables include `pokemon_species_flavor_text.csv`. Champdex does not copy Bulbapedia prose. If the pictures are missing, restore `public/sprites` and `public/pixels` from git.
+`npm start` checks those files before it serves the app. If the database file is missing and the PokéAPI CSV tables are in `/tmp/poke-csv`, the start command builds the database with the catalogue script. You can also run `npm run catalogue` yourself. Those tables include `pokemon_species_flavor_text.csv`. Champdex does not copy Bulbapedia prose into the catalogue file. If the pictures are missing, restore `public/sprites` and `public/pixels` from git.
 
 ## Connect Yoto
 

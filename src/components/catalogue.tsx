@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import type { CatalogueEntry, CataloguePage } from "@/lib/catalogue-types";
+import type { BiologyView, CatalogueEntry, CataloguePage } from "@/lib/catalogue-types";
 
 const TYPES = [
   "Normal",
@@ -118,6 +118,8 @@ export function Catalogue() {
   const [selected, setSelected] = useState(1);
   const [entry, setEntry] = useState<CatalogueEntry | null>(null);
   const [entryError, setEntryError] = useState("");
+  const [biology, setBiology] = useState<BiologyView | null>(null);
+  const [biologyFor, setBiologyFor] = useState(0);
   const [showList, setShowList] = useState(true);
 
   useEffect(() => {
@@ -170,6 +172,27 @@ export function Catalogue() {
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
         setEntryError(error instanceof Error ? error.message : "That entry could not be opened.");
+      });
+    return () => controller.abort();
+  }, [selected]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setBiology(null);
+    setBiologyFor(0);
+    void fetch(`/api/catalogue/${selected}/biology`, { signal: controller.signal })
+      .then(async (response) => {
+        const payload = (await response.json()) as { biology?: BiologyView; error?: string };
+        if (!response.ok || !payload.biology) {
+          throw new Error(payload.error || "Biology could not be loaded.");
+        }
+        setBiology(payload.biology);
+        setBiologyFor(selected);
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setBiology({ status: "unavailable", url: "", blocks: [] });
+        setBiologyFor(selected);
       });
     return () => controller.abort();
   }, [selected]);
@@ -382,6 +405,7 @@ export function Catalogue() {
                 <p className="mt-2 max-w-prose text-sm leading-6 text-[#5c5348]">{entry.notes}</p>
               </>
             ) : null}
+            <BiologyPanel biology={biologyFor === entry.id ? biology : null} />
             <div className="mt-5 grid gap-2 sm:grid-cols-2">
               <p className="rounded-xl bg-[#f4efe6] px-4 py-3 font-medium">It weighs {entry.weightLabel}.</p>
               <p className="rounded-xl bg-[#f4efe6] px-4 py-3 font-medium">It is {entry.heightLabel} tall.</p>
@@ -477,6 +501,58 @@ export function Catalogue() {
         ) : null}
       </article>
     </div>
+  );
+}
+
+function BiologyPanel({ biology }: { biology: BiologyView | null }) {
+  return (
+    <section className="mt-6" aria-labelledby="biology-heading">
+      <h3
+        id="biology-heading"
+        className="text-xs font-medium tracking-[0.14em] text-[#8a5a22] uppercase"
+      >
+        Biology
+      </h3>
+      {!biology ? <p className="mt-2 text-sm text-[#5c5348]">Opening the biology section…</p> : null}
+      {biology?.status === "missing" ? (
+        <p className="mt-2 text-sm text-[#5c5348]">No biology section</p>
+      ) : null}
+      {biology?.status === "unavailable" ? (
+        <p className="mt-2 text-sm text-[#5c5348]">Biology could not be loaded.</p>
+      ) : null}
+      {biology?.status === "ready" ? (
+        <>
+          <p className="mt-2 text-xs leading-5 text-[#8d8272]">
+            From <a className="underline" href={biology.url} rel="noreferrer">Bulbapedia</a>. This section is used under CC BY-NC-SA 2.5.
+          </p>
+          <div className="mt-3 max-w-prose">
+            {biology.blocks.map((block, index) => {
+              if (block.kind === "heading") {
+                return (
+                  <h4 key={index} className="mt-4 text-sm font-semibold text-[#1c1916]">
+                    {block.text}
+                  </h4>
+                );
+              }
+              if (block.kind === "list") {
+                return (
+                  <ul key={index} className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-[#2a241c]">
+                    {block.items.map((item, itemIndex) => (
+                      <li key={itemIndex}>{item}</li>
+                    ))}
+                  </ul>
+                );
+              }
+              return (
+                <p key={index} className="mt-2 text-sm leading-6 text-[#2a241c]">
+                  {block.text}
+                </p>
+              );
+            })}
+          </div>
+        </>
+      ) : null}
+    </section>
   );
 }
 

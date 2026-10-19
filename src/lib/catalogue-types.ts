@@ -86,6 +86,18 @@ export type CatalogueEntry = {
   moves: string[];
 };
 
+/** Readable Bulbapedia Biology section. This is on-screen text, not a spoken script. */
+export type BiologyBlock =
+  | { kind: "heading"; level: 3 | 4; text: string }
+  | { kind: "paragraph"; text: string }
+  | { kind: "list"; items: string[] };
+
+export type BiologyView = {
+  status: "ready" | "missing" | "unavailable";
+  url: string;
+  blocks: BiologyBlock[];
+};
+
 export type CataloguePage = {
   total: number;
   species: number;

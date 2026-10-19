@@ -45,3 +45,6 @@ next-env.d.ts
 /data/cries
 /data/speech
 /data/rendered
+
+# Bulbapedia Biology text fetched while browsing the catalogue
+/data/bulbapedia

@@ -36,7 +36,16 @@ import {
 } from "./yoto-send";
 import { POST as postJob } from "../app/api/yoto/job/route";
 
-const BANNED = [/kill/i, /death/i, /quarry/i, /stat total/i, /capture rate/i, /base stat/i];
+const BANNED = [
+  /kill/i,
+  /death/i,
+  /quarry/i,
+  /stat total/i,
+  /capture rate/i,
+  /base stat/i,
+  /Bulbapedia/i,
+  /Creative Commons/i,
+];
 
 const WAILORD: FlavorSource[] = [
   {

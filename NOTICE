@@ -1,0 +1,23 @@
+Bulbapedia Biology sections
+
+Champdex shows the Biology section from a Pokémon's Bulbapedia article on
+the catalogue page for that Pokémon. The text is fetched from
+https://bulbapedia.bulbagarden.net/w/api.php when the page is opened and
+cached in data/bulbapedia/biology.json. It is not spoken on Yoto cards.
+
+Bulbapedia text is Creative Commons Attribution-NonCommercial-ShareAlike 2.5.
+Credit: https://bulbapedia.bulbagarden.net/
+Non-commercial use. Share adaptations under the same license.
+
+Cache format (data/bulbapedia/biology.json), one object keyed by national dex id:
+{
+  "1": {
+    "name": "Bulbasaur",
+    "page": "Bulbasaur_(Pokémon)",
+    "url": "https://bulbapedia.bulbagarden.net/wiki/Bulbasaur_(Pok%C3%A9mon)",
+    "status": "ready",
+    "blocks": [{ "kind": "paragraph", "text": "..." }],
+    "fetchedAt": "2026-10-19T00:00:00.000Z"
+  }
+}
+status is "ready" or "missing". The file is created on this computer and is not a dump of every article.
