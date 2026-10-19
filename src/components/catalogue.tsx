@@ -396,7 +396,7 @@ export function Catalogue({
 
   return (
     <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-      <section className={showList ? "block" : "hidden lg:block"}>
+      <section className={`${showList ? "block" : "hidden lg:block"} self-start`}>
         <label className="grid gap-1 text-sm" htmlFor="catalogue-search">
           Search
           <input
@@ -655,7 +655,7 @@ export function Catalogue({
         </div>
       </section>
 
-      <article className={`pk-card pk-dex px-5 py-6 sm:px-8 sm:py-8 ${showList ? "hidden lg:block" : "block"}`}>
+      <article className={`pk-card pk-dex self-start px-5 py-6 sm:px-8 sm:py-8 ${showList ? "hidden lg:block" : "block"}`}>
         <button
           type="button"
           className="mb-4 text-sm text-muted-foreground underline lg:hidden"

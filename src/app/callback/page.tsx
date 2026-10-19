@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { DONATE_URL } from "@/lib/site";
 import { exchangeCode } from "@/lib/yoto-session";
 
 function CallbackInner() {
@@ -35,12 +36,18 @@ function CallbackInner() {
   }, [code, denied, router]);
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-3 px-6">
-      <p className="text-xs font-medium tracking-[0.18em] text-[#c6a15b] uppercase">
-        Pokefacts
-      </p>
-      <h1 className="font-display text-3xl">Signing in</h1>
-      <p className="text-sm leading-6 text-[#cbbfa8]">{message}</p>
+    <main className="pk-page mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-4 px-6">
+      <div className="pk-banner">
+        <a className="pk-wordmark" href={DONATE_URL} target="_blank" rel="noreferrer">
+          <span className="pk-ball" aria-hidden="true" />
+          <span>
+            <span className="pk-wordmark-name">Pokefacts</span>
+            <span className="pk-wordmark-coffee">Buy me a coffee</span>
+          </span>
+        </a>
+      </div>
+      <h1 className="text-3xl font-bold text-ink">Signing in</h1>
+      <p className="text-sm leading-6 text-muted-foreground">{message}</p>
     </main>
   );
 }
@@ -49,8 +56,8 @@ export default function CallbackPage() {
   return (
     <Suspense
       fallback={
-        <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6">
-          <p className="text-sm text-[#cbbfa8]">Bringing you back from Yoto…</p>
+        <main className="pk-page mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6">
+          <p className="text-sm text-muted-foreground">Bringing you back from Yoto…</p>
         </main>
       }
     >

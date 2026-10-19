@@ -135,7 +135,6 @@ export function formSectionCandidates(sections: WikiSection[], formName: string)
     ...sections.filter((section) => before(section) && partialForm(section, formName) && !exactForm(section, formName)),
     ...sections.filter((section) => before(section) && norm(section.line ?? "") === "forms"),
     ...sections.filter((section) => before(section) && folderSection(section, formName)),
-    ...sections.filter((section) => before(section) && norm(section.line ?? "") === "biology"),
     ...sections.filter((section) => !before(section) && (exactForm(section, formName) || partialForm(section, formName))),
   ];
   const seen = new Set<string>();
@@ -152,6 +151,22 @@ export function formSectionCandidates(sections: WikiSection[], formName: string)
 /** The form's own heading when it sits in Biology. Stats repeats come later. */
 export function pickFormSection(sections: WikiSection[], formName: string): WikiSection | undefined {
   return formSectionCandidates(sections, formName)[0];
+}
+
+/**
+ * Candidates, then the Biology section so a paragraph that names the form
+ * can still be read when Bulbapedia gave it no heading of its own.
+ */
+function sectionsToRead(sections: WikiSection[], formName: string): WikiSection[] {
+  const candidates = formSectionCandidates(sections, formName);
+  const cutoff = gameDataCutoff(sections);
+  const biology = sections.find(
+    (section) => norm(section.line ?? "") === "biology" && beforeGameData(section, cutoff),
+  );
+  if (!biology) return candidates;
+  const index = sectionIndex(biology);
+  if (!index || candidates.some((section) => sectionIndex(section) === index)) return candidates;
+  return [...candidates, biology];
 }
 
 function mentionsForm(text: string, formName: string): boolean {
@@ -296,7 +311,7 @@ export async function loadFormProse(form: CatalogueFormRef, options: LoadOptions
       ownSection = findBiologySection(wikiSections(listed));
     } else {
       pageTitle = redirects[0]?.to || resolved || form.speciesName;
-      candidates = formSectionCandidates(wikiSections(listed), form.formName);
+      candidates = sectionsToRead(wikiSections(listed), form.formName);
     }
   } else {
     let speciesListed: unknown;
@@ -308,7 +323,7 @@ export async function loadFormProse(form: CatalogueFormRef, options: LoadOptions
       return viewFromRow(row);
     }
     pageTitle = titleOf(speciesListed) || form.speciesName;
-    candidates = formSectionCandidates(wikiSections(speciesListed), form.formName);
+    candidates = sectionsToRead(wikiSections(speciesListed), form.formName);
   }
 
   if (ownPage) {

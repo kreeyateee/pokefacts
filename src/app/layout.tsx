@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Fraunces, Outfit } from "next/font/google";
+import { Fredoka, Nunito } from "next/font/google";
 
 import { LocalOrigin } from "@/components/local-origin";
 import { Toaster } from "@/components/ui/sonner";
@@ -7,14 +7,14 @@ import { APP_NAME } from "@/lib/site";
 
 import "./globals.css";
 
-const outfit = Outfit({
+const nunito = Nunito({
   subsets: ["latin"],
-  variable: "--font-outfit",
+  variable: "--font-nunito",
 });
 
-const fraunces = Fraunces({
+const fredoka = Fredoka({
   subsets: ["latin"],
-  variable: "--font-fraunces",
+  variable: "--font-fredoka",
 });
 
 export const metadata: Metadata = {
@@ -27,7 +27,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${outfit.variable} ${fraunces.variable} h-full antialiased`}
+      className={`${nunito.variable} ${fredoka.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <LocalOrigin />

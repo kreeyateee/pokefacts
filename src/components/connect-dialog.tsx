@@ -84,7 +84,7 @@ export function ConnectDialog({
             <span className="font-medium text-foreground">1. Create a public client.</span>{" "}
             In the{" "}
             <a
-              className="underline decoration-[#c6a15b] underline-offset-4"
+              className="font-bold text-poke-red underline decoration-poke-yellow decoration-2 underline-offset-4"
               href="https://dashboard.yoto.dev/"
               target="_blank"
               rel="noreferrer"
