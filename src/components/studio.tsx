@@ -8,6 +8,7 @@ import { PlaybackPanel } from "@/components/playback-panel";
 import { SetupGuide } from "@/components/setup-guide";
 import { StatusBar } from "@/components/status-bar";
 import { ConnectDialog } from "@/components/connect-dialog";
+import { StickerStudio } from "@/components/sticker-studio";
 import { Button } from "@/components/ui/button";
 import {
   applySpeciesSpeech,
@@ -380,6 +381,7 @@ export function Studio({
   const [sending, setSending] = useState(false);
   const [bulkActive, setBulkActive] = useState(false);
   const [job, setJob] = useState<JobView | null>(null);
+  const [stickersOpen, setStickersOpen] = useState(false);
   const [ready, setReady] = useState(false);
   const clipRef = useRef<HTMLAudioElement | null>(null);
   const clipUrl = useRef<string | null>(null);
@@ -1322,6 +1324,9 @@ export function Studio({
           <div className="grid gap-6 md:grid-cols-[220px_minmax(0,1fr)]">
             <div className="md:col-span-2">
               <div className="flex flex-wrap items-center gap-3">
+                <Button type="button" variant="outline" className="h-10 px-4" onClick={() => setStickersOpen(true)}>
+                  Print stickers
+                </Button>
                 <p className="text-sm leading-6 text-muted-foreground">
                   {randomGuess ? (
                     <>
@@ -1730,6 +1735,9 @@ export function Studio({
         if you want to support it.
       </footer>
 
+      {stickersOpen && card ? (
+        <StickerStudio key={card.id} card={card} onClose={() => setStickersOpen(false)} />
+      ) : null}
       <ConnectDialog open={connectOpen} onOpenChange={setConnectOpen} />
     </div>
   );
