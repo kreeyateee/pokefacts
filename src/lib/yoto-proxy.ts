@@ -12,15 +12,24 @@ export async function forwardYoto(
   url: string,
   token: string,
   init?: RequestInit,
+  timeoutMs = 30_000,
 ): Promise<Response> {
   const headers = new Headers(init?.headers);
   headers.set("Accept", "application/json");
   headers.set("Authorization", `Bearer ${token}`);
-  const response = await fetch(url, {
-    ...init,
-    headers,
-    signal: AbortSignal.timeout(30_000),
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...init,
+      headers,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    const timedOut = /abort|timeout/i.test(message);
+    const text = timedOut ? "Yoto did not answer in time. Retry." : message || "Yoto did not answer.";
+    return Response.json({ error: text, message: text }, { status: 422 });
+  }
   const text = await response.text();
   if (looksLikeGateway(response.status, text)) {
     return Response.json(

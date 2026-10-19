@@ -30,7 +30,7 @@ describe("catalogue database", () => {
     for (const item of fire.items) assert.ok(item.types.includes("Fire"));
   });
 
-  it("shows Bulbasaur's PokéAPI Pokédex line, with the Champdex note kept beside it", () => {
+  it("shows Bulbasaur's PokéAPI Pokédex line, with the Pokefacts note kept beside it", () => {
     const entry = getCatalogueEntry(1);
     assert.ok(entry);
     assert.deepEqual(entry.types, ["Grass", "Poison"]);

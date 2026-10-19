@@ -115,6 +115,33 @@ export function searchCatalogue(input: SearchInput = {}): CataloguePage {
   };
 }
 
+/** Every species id matching the catalogue search, in dex order. */
+export function catalogueMatchIds(input: SearchInput = {}): number[] {
+  const q = (input.q ?? "").trim().slice(0, 40);
+  const type = (input.type ?? "").trim();
+  const generation =
+    input.generation && input.generation >= 1 && input.generation <= 9 ? input.generation : 0;
+  const like = `%${q.replace(/[\\%_]/g, "\\$&")}%`;
+  const numeric = /^\d+$/.test(q) ? Number(q) : 0;
+  const where = `
+    WHERE (
+      ? = ''
+      OR s.name LIKE ? ESCAPE '\\'
+      OR (? != 0 AND s.id = ?)
+    )
+    AND (? = '' OR EXISTS (
+      SELECT 1 FROM species_types t
+      WHERE t.species_id = s.id AND t.type_name = ?
+    ))
+    AND (? = 0 OR s.generation = ?)
+  `;
+  const params = [q, like, numeric, numeric, type, type, generation, generation];
+  const rows = db()
+    .prepare(`SELECT s.id FROM species s ${where} ORDER BY s.id`)
+    .all(...params) as Array<{ id: number }>;
+  return rows.map((row) => row.id);
+}
+
 export function getCatalogueEntry(id: number): CatalogueEntry | null {
   const row = db()
     .prepare("SELECT * FROM species WHERE id = ?")

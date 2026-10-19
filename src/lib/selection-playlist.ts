@@ -1,0 +1,275 @@
+import type { BiologyBlock } from "@/lib/catalogue-types";
+import { guessSpoken, type MonSheet } from "@/lib/dex-facts";
+import {
+  factsPlaylistUpload,
+  guessUpload,
+  shadowPixelPath,
+  YOTO_TRACK_LIMIT,
+  type KidCard,
+  type KidChapter,
+  type KidTrack,
+} from "@/lib/kid-cards";
+import { pronounce } from "@/lib/pronounce";
+import { spokenWiki } from "@/lib/spoken-wiki";
+import type { PlaylistUpload } from "@/lib/yoto-send";
+
+/** Who's That Pokémon uses two tracks, so 50 species fill the 100-track card. */
+export type SelectionKind = "whos-that" | "facts" | "advanced";
+
+export type SelectionSpecies = {
+  id: number;
+  name: string;
+  types: string[];
+  genus: string;
+  habitat: string | null;
+  heightLabel: string;
+  weightLabel: string;
+  abilities: Array<{ name: string; info: string; hidden?: boolean }>;
+  evolvesFrom: string | null;
+  evolutions: Array<{ name: string; method: string }>;
+  /** Game Pokédex line. Guess Who clues may use it. It is not read aloud as a citation. */
+  info: string;
+  biology: BiologyBlock[];
+};
+
+export type SelectionBuild = {
+  card: KidCard;
+  /** Species ids that do not fit on the card, in the order they were picked. */
+  refused: number[];
+  title: string;
+};
+
+const ADVANCED_AFTER_NAME = 1700;
+
+export function selectionSpeciesLimit(kind: SelectionKind): number {
+  return kind === "whos-that" ? Math.floor(YOTO_TRACK_LIMIT / 2) : YOTO_TRACK_LIMIT;
+}
+
+/** Yoto content title. A typed title wins. Otherwise the playlist type names the card. */
+export function selectionTitle(kind: SelectionKind, custom?: string): string {
+  const typed = custom?.replace(/[–—]/g, "-").replace(/\s+/g, " ").trim() ?? "";
+  if (typed) return typed.slice(0, 80);
+  if (kind === "whos-that") return "Who's That Pokémon";
+  if (kind === "advanced") return "Advanced facts";
+  return "Facts";
+}
+
+function asSentence(text: string): string {
+  const trimmed = text.replace(/\s+/g, " ").trim();
+  if (!trimmed) return "";
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
+
+function withoutWikiCredit(text: string): string {
+  return text
+    .split(/(?<=[.!?])\s+/)
+    .filter((sentence) => !/bulbapedia|creative commons|\bcc\s*by-nc-sa\b/i.test(sentence))
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function typeSpeech(types: string[]): string {
+  const names = types.map((type) => type.trim()).filter(Boolean).slice(0, 2);
+  if (names.length === 0) return "";
+  const label = names.length === 1 ? names[0] : `${names[0]} and ${names[1]}`;
+  const article = /^[aeiou]/i.test(label ?? "") ? "an" : "a";
+  return `It is ${article} ${label} type.`;
+}
+
+function abilitySpeech(species: SelectionSpecies): string {
+  const ability = species.abilities.find((item) => !item.hidden) ?? species.abilities[0];
+  if (!ability?.name) return "";
+  const named = `Its ability is ${ability.name}.`;
+  const first = ability.info.replace(/\s+/g, " ").trim().split(/(?<=[.!?])\s+/)[0]?.trim() ?? "";
+  if (!first) return named;
+  const short = first.length > 180 ? `${first.slice(0, 177).replace(/\s+\S*$/, "").trim()}.` : asSentence(first);
+  if (!short || short.toLowerCase() === named.toLowerCase()) return named;
+  return `${named} ${short}`;
+}
+
+function evolutionSpeech(species: SelectionSpecies): string {
+  const parts: string[] = [];
+  if (species.evolvesFrom) parts.push(`It grows from ${species.evolvesFrom}.`);
+  for (const evolution of species.evolutions.slice(0, 3)) {
+    const method = evolution.method.replace(/\s+/g, " ").trim().replace(/[.]+$/, "");
+    parts.push(method ? `It becomes ${evolution.name} ${method}.` : `It becomes ${evolution.name}.`);
+  }
+  if (parts.length === 0) parts.push("It does not evolve.");
+  return parts.join(" ");
+}
+
+/** Name, then the first two Biology paragraphs. No height or weight lecture. */
+export function factsSpeech(species: SelectionSpecies): string {
+  return spokenWiki(species.name, species.biology);
+}
+
+/** Biology, then height, weight, type, ability, and evolution. Capped so it is not a wiki dump. */
+export function advancedSpeech(species: SelectionSpecies): string {
+  const name = species.name.replace(/\s+/g, " ").trim();
+  const biology = spokenWiki(name, species.biology);
+  const extra = [
+    species.weightLabel ? `It weighs ${species.weightLabel}.` : "",
+    species.heightLabel ? `It is ${species.heightLabel} tall.` : "",
+    typeSpeech(species.types),
+    abilitySpeech(species),
+    evolutionSpeech(species),
+  ]
+    .filter(Boolean)
+    .join(" ");
+  let text = withoutWikiCredit(`${biology} ${extra}`);
+  const prefix = name ? `${name}. ` : "";
+  const limit = prefix.length + ADVANCED_AFTER_NAME;
+  if (text.startsWith(prefix) && text.length > limit) {
+    const clipped = text.slice(0, limit).replace(/\s+\S*$/, "").trim();
+    text = clipped.length > prefix.length ? clipped : text.slice(0, limit).trim();
+  }
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function decimetres(label: string): number {
+  const centimetres = Number(label.match(/[\d.]+/)?.[0]);
+  if (!Number.isFinite(centimetres) || centimetres <= 0) return 0;
+  return Math.round(centimetres / 10);
+}
+
+function hectograms(label: string): number {
+  const kilograms = Number(label.match(/[\d.]+/)?.[0]);
+  if (!Number.isFinite(kilograms) || kilograms <= 0) return 0;
+  return Math.round(kilograms * 10);
+}
+
+function toSheet(species: SelectionSpecies): MonSheet {
+  const into = species.evolutions.map((evolution) => evolution.name).filter(Boolean);
+  const evolution = evolutionSpeech(species);
+  return {
+    id: species.id,
+    slug: `sel-${species.id}`,
+    name: species.name,
+    genus: species.genus,
+    types: species.types,
+    heightDecimetres: decimetres(species.heightLabel),
+    weightHectograms: hectograms(species.weightLabel),
+    stats: [],
+    abilityName: (species.abilities.find((item) => !item.hidden) ?? species.abilities[0])?.name ?? null,
+    abilityEffect: null,
+    evolution,
+    evolvesFrom: species.evolvesFrom,
+    evolvesInto: into,
+    habitat: species.habitat,
+    entries: species.info ? [{ text: species.info, version: "" }] : [],
+  };
+}
+
+function track(key: string, title: string, text: string, icon: string, overlay: string): KidTrack {
+  const readable = text.replace(/\s+/g, " ").trim();
+  return {
+    key,
+    title,
+    text: readable,
+    spoken: pronounce(readable),
+    icon,
+    overlay,
+    lead: "cry",
+  };
+}
+
+function factChapter(species: SelectionSpecies, text: string): KidChapter {
+  const icon = `/pixels/${species.id}.png`;
+  const overlay = String(species.id);
+  return {
+    key: `sel-${species.id}`,
+    title: species.name,
+    overlay,
+    picture: "this Pokémon",
+    mark: overlay,
+    icon,
+    dexId: species.id,
+    sprite: `/sprites/${species.id}.png`,
+    tracks: [track("entry", species.name, text, icon, overlay)],
+  };
+}
+
+/** Clue then answer. Both lead with the cry. The clue icon is the shadow pixel. */
+function riddleChapter(species: SelectionSpecies): KidChapter {
+  const script = guessSpoken(toSheet(species));
+  const shadow = shadowPixelPath(species.id);
+  const real = `/pixels/${species.id}.png`;
+  const overlay = String(species.id);
+  return {
+    key: `sel-${species.id}`,
+    title: species.name,
+    overlay,
+    picture: "a shadow",
+    mark: "?",
+    icon: shadow,
+    dexId: species.id,
+    sprite: shadow,
+    tracks: [
+      track("clues", "Clues", script.clue, shadow, "?"),
+      track("answer", "The answer", script.answer, real, "Yes"),
+    ],
+  };
+}
+
+/**
+ * One playlist from the picked species, in picked order.
+ * Species past the 100-track cap are listed in `refused` and are not on the card.
+ */
+export function selectionPlaylist(
+  species: readonly SelectionSpecies[],
+  kind: SelectionKind,
+  customTitle?: string,
+): SelectionBuild {
+  const limit = selectionSpeciesLimit(kind);
+  const accepted = species.slice(0, limit);
+  const refused = species.slice(limit).map((item) => item.id);
+  const title = selectionTitle(kind, customTitle);
+  const chapters = accepted.map((item) =>
+    kind === "whos-that" ? riddleChapter(item) : factChapter(item, kind === "advanced" ? advancedSpeech(item) : factsSpeech(item)),
+  );
+  const blurb =
+    kind === "whos-that"
+      ? "The cry, then three clues. The cry again, then the name."
+      : kind === "advanced"
+        ? "The cry, then the name, a short description, and how big it is."
+        : "The cry, then the name and a short description.";
+  const card: KidCard = {
+    id: kind === "whos-that" ? "selection-whos-that" : kind === "advanced" ? "selection-advanced" : "selection-facts",
+    kind: kind === "whos-that" ? "guess" : "meet",
+    title,
+    rangeLabel: title,
+    libraryTitle: title,
+    blurb,
+    childDoes:
+      kind === "whos-that"
+        ? "Pick a dark picture and press play. You hear the cry, then three short clues. The next track plays the cry again, then the name."
+        : "Turn to a picture and press play. You hear the cry, then the reading.",
+    chapters,
+  };
+  return { card, refused, title };
+}
+
+/**
+ * Create body for a picked playlist.
+ * The title is the content title Yoto accepts. metadata.title is left off.
+ * cardId is set only when the caller picked an existing playlist.
+ */
+export function selectionUpload(
+  card: KidCard,
+  realById: Record<number, string>,
+  options: { title: string; shadowById?: Record<number, string>; cardId?: string },
+): PlaylistUpload {
+  const explicit = options.cardId && /^[A-Za-z0-9]{5}$/.test(options.cardId) ? options.cardId : undefined;
+  const base = options.shadowById
+    ? guessUpload(card, realById, options.shadowById, explicit)
+    : factsPlaylistUpload(card, realById, explicit);
+  const content = { ...base.content, title: options.title };
+  if (content.metadata) {
+    const metadata = { ...content.metadata };
+    delete metadata.title;
+    content.metadata = metadata;
+  }
+  if (!explicit) delete content.cardId;
+  return { voiceId: base.voiceId, create: !explicit, content };
+}

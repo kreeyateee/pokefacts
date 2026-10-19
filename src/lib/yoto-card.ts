@@ -63,8 +63,8 @@ export function buildChampCard(
 
   const title =
     entries.length === 1
-      ? `Champdex: ${entries[0]?.name ?? "Briefing"}`
-      : `Champdex · ${entries.length} briefings`;
+      ? `Pokefacts: ${entries[0]?.name ?? "Briefing"}`
+      : `Pokefacts · ${entries.length} briefings`;
 
   const names = entries.map((entry) => entry.name).join(", ");
   const content: YotoContent = {
@@ -72,7 +72,7 @@ export function buildChampCard(
     content: { chapters },
     metadata: {
       title,
-      description: `Champion field notes for ${names}. Spoken for a Yoto Make Your Own card.`,
+      description: `Pokefacts for ${names}. Spoken for a Yoto Make Your Own card.`,
     },
   };
   if (cardId) content.cardId = cardId;

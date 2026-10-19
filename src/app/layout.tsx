@@ -3,6 +3,7 @@ import { Fraunces, Outfit } from "next/font/google";
 
 import { LocalOrigin } from "@/components/local-origin";
 import { Toaster } from "@/components/ui/sonner";
+import { APP_NAME } from "@/lib/site";
 
 import "./globals.css";
 
@@ -17,7 +18,7 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "Pokémon facts and Guess Who",
+  title: APP_NAME,
   description:
     "Hear a Pokémon fact, or play Guess Who. The same two games can go on a Yoto card.",
 };

@@ -18,6 +18,7 @@ export async function GET(
     return new Response(new Uint8Array(bytes), {
       headers: {
         "Content-Type": type,
+        "Content-Length": String(bytes.length),
         "Cache-Control": "public, max-age=86400",
       },
     });

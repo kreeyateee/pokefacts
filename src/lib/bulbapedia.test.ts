@@ -592,4 +592,80 @@ describe("Bulbapedia biology", () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  it("reads Mega Pidgeot from the Forms section, not the species opener or the stats heading", async () => {
+    const sections = [
+      { index: "1", line: "Biology", anchor: "Biology" },
+      { index: "2", line: "Forms", anchor: "Forms" },
+      { index: "4", line: "Game data", anchor: "Game_data" },
+      { index: "17", line: "Mega Pidgeot", anchor: "Mega_Pidgeot" },
+      { index: "27", line: "Mega Evolution", anchor: "Mega_Evolution" },
+    ];
+    assert.equal(pickFormSection(sections, "Mega Pidgeot")?.index, "2");
+    assert.equal(pickFormSection(sections, "Mega Pidgeot")?.line, "Forms");
+
+    const formsHtml = `
+      <h3><span class="mw-headline" id="Forms">Forms</span><span class="mw-editsection"><a href="/edit">edit</a></span></h3>
+      <p>Pidgeot can <a href="/wiki/Mega_Evolution">Mega Evolve</a> into Mega Pidgeot.</p>
+      <figure><figcaption>Mega Pidgeot</figcaption></figure>
+      <p>Pidgeot grows noticeably when it <a href="/wiki/Mega_Evolution">Mega Evolves</a>, developing a larger body and longer, broader wings. Its wingtips and tail feathers are tipped with cyan, and its cream coloring is now white. Its eyes turn magenta and its pupils turn white.</p>
+      <p>As a result of Mega Evolution, Mega Pidgeot's body is much stronger, along with its wings. The crest is sensitive to air currents, acting like a large antenna.<sup class="reference"><a href="#cite_note-1"><span class="cite-bracket">[</span>1<span class="cite-bracket">]</span></a></sup></p>
+      <table><tr><td>Mega Pidgeot</td></tr></table>
+    `;
+    const speciesHtml = `
+      <h2><span class="mw-headline" id="Biology">Biology</span></h2>
+      <p>Pidgeot is an avian Pokémon with large wings, sharp talons, and a short, hooked beak.</p>
+      <p>Pidgeot's powerful wings can stir up windstorms in just a few flaps.</p>
+      <h3><span class="mw-headline" id="Forms">Forms</span></h3>
+      <p>Pidgeot can Mega Evolve into Mega Pidgeot.</p>
+      <p>Pidgeot grows noticeably when it Mega Evolves, developing a larger body and longer, broader wings.</p>
+    `;
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-pidgeot-"));
+    let biologyReads = 0;
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      const page = url.searchParams.get("page");
+      const prop = url.searchParams.get("prop");
+      const section = url.searchParams.get("section") ?? "";
+      if (page === "Mega_Pidgeot" && prop === "sections") {
+        return jsonResponse({
+          parse: {
+            title: "Pidgeot (Pokémon)",
+            redirects: [{ from: "Mega Pidgeot", to: "Pidgeot (Pokémon)" }],
+            sections,
+          },
+        });
+      }
+      if (prop === "text" && section === "17") {
+        return jsonResponse({ parse: { text: "<table><tr><td>Mega Pidgeot base stats</td></tr></table>" } });
+      }
+      if (prop === "text" && section === "2") {
+        return jsonResponse({ parse: { text: formsHtml } });
+      }
+      if (prop === "text" && section === "1") {
+        biologyReads += 1;
+        return jsonResponse({ parse: { text: speciesHtml } });
+      }
+      throw new Error(`Unexpected ${page} ${prop} ${section}`);
+    }) as typeof fetch;
+
+    try {
+      const spoken = await loadFormSpeech(
+        { formId: 10073, speciesId: 18, speciesName: "Pidgeot", formName: "Mega Pidgeot" },
+        {
+          fetchImpl,
+          cacheFile: path.join(dir, "forms.json"),
+          biologyCacheFile: path.join(dir, "biology.json"),
+          sleep: async () => undefined,
+        },
+      );
+      assert.equal(biologyReads, 0);
+      assert.match(spoken.speech, /developing a larger body and longer, broader wings/);
+      assert.match(spoken.speech, /body is much stronger/);
+      assert.equal(spoken.speech.startsWith("Mega Pidgeot."), true);
+      assert.doesNotMatch(spoken.speech, /avian Pokémon|windstorms|base stats|\[1\]|Bulbapedia/i);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });

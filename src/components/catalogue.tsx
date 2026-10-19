@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from "react";
 
-import type { BiologyView, CatalogueEntry, CataloguePage } from "@/lib/catalogue-types";
+import type { BiologyBlock, BiologyView, CatalogueEntry, CataloguePage } from "@/lib/catalogue-types";
+import type { KidCard } from "@/lib/kid-cards";
+import {
+  selectionPlaylist,
+  selectionSpeciesLimit,
+  type SelectionKind,
+  type SelectionSpecies,
+} from "@/lib/selection-playlist";
 
 const TYPES = [
   "Normal",
@@ -107,7 +114,29 @@ function Fact({ label, children }: { label: string; children: string }) {
   );
 }
 
-export function Catalogue() {
+const PLAYLIST_KINDS: Array<{ id: SelectionKind; label: string; detail: string }> = [
+  {
+    id: "whos-that",
+    label: "Who's That Pokémon",
+    detail: "Cry, three clues, then the cry again and the name. Two tracks each, so 50 Pokémon fit.",
+  },
+  {
+    id: "facts",
+    label: "Facts",
+    detail: "Cry, then the name and the first two biology paragraphs.",
+  },
+  {
+    id: "advanced",
+    label: "Advanced facts",
+    detail: "Cry, then the name, biology, height, weight, type, ability, and evolution.",
+  },
+];
+
+export function Catalogue({
+  onSendSelection,
+}: {
+  onSendSelection?: (card: KidCard) => Promise<void>;
+} = {}) {
   const [query, setQuery] = useState("");
   const [type, setType] = useState("");
   const [generation, setGeneration] = useState(0);
@@ -124,6 +153,11 @@ export function Catalogue() {
     Array<{ formId: number; name: string; article: BiologyView }>
   >([]);
   const [showList, setShowList] = useState(true);
+  const [picked, setPicked] = useState<number[]>([]);
+  const [playlistKind, setPlaylistKind] = useState<SelectionKind>("facts");
+  const [playlistTitle, setPlaylistTitle] = useState("");
+  const [buildMessage, setBuildMessage] = useState("");
+  const [building, setBuilding] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -236,6 +270,114 @@ export function Catalogue() {
     .filter(Boolean)
     .join(" ");
   const pages = list ? Math.max(1, Math.ceil(list.total / list.pageSize)) : 1;
+  const pageIds = list?.items.map((item) => item.id) ?? [];
+  const pageAll = pageIds.length > 0 && pageIds.every((id) => picked.includes(id));
+  const speciesLimit = selectionSpeciesLimit(playlistKind);
+
+  function togglePick(id: number) {
+    setPicked((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
+    setBuildMessage("");
+  }
+
+  function togglePage() {
+    setPicked((current) => {
+      if (pageAll) return current.filter((id) => !pageIds.includes(id));
+      const next = [...current];
+      for (const id of pageIds) {
+        if (!next.includes(id)) next.push(id);
+      }
+      return next;
+    });
+    setBuildMessage("");
+  }
+
+  async function selectMatches() {
+    const params = new URLSearchParams();
+    if (query.trim()) params.set("q", query.trim());
+    if (type) params.set("type", type);
+    if (generation) params.set("generation", String(generation));
+    params.set("ids", "1");
+    const response = await fetch(`/api/catalogue?${params.toString()}`);
+    const payload = (await response.json()) as { ids?: number[]; error?: string };
+    if (!response.ok || !payload.ids) {
+      setBuildMessage(payload.error || "Those matches could not be selected.");
+      return;
+    }
+    setPicked((current) => {
+      const next = [...current];
+      for (const id of payload.ids ?? []) {
+        if (!next.includes(id)) next.push(id);
+      }
+      return next;
+    });
+    setBuildMessage("");
+  }
+
+  async function buildPlaylist() {
+    if (picked.length === 0 || building) return;
+    if (picked.length > speciesLimit) {
+      setBuildMessage(
+        playlistKind === "whos-that"
+          ? `Who's That Pokémon uses two tracks for each Pokémon, so 50 fit on a card. ${picked.length} are picked. Nothing was sent.`
+          : `A playlist holds 100 tracks. ${picked.length} are picked. Nothing was sent.`,
+      );
+      return;
+    }
+    setBuilding(true);
+    setBuildMessage("");
+    try {
+      const rows: SelectionSpecies[] = [];
+      for (let index = 0; index < picked.length; index += 1) {
+        const id = picked[index];
+        if (!id) continue;
+        setBuildMessage(`Reading ${index + 1} of ${picked.length}…`);
+        const entryResponse = await fetch(`/api/catalogue/${id}`);
+        const entryPayload = (await entryResponse.json()) as { entry?: CatalogueEntry; error?: string };
+        if (!entryResponse.ok || !entryPayload.entry) {
+          throw new Error(entryPayload.error || "That entry could not be opened.");
+        }
+        const biologyResponse = await fetch(`/api/catalogue/${id}/biology`);
+        const biologyPayload = (await biologyResponse.json()) as { biology?: { blocks?: BiologyBlock[] } };
+        const entry = entryPayload.entry;
+        rows.push({
+          id: entry.id,
+          name: entry.name,
+          types: entry.types,
+          genus: entry.genus,
+          habitat: entry.habitat,
+          heightLabel: entry.heightLabel,
+          weightLabel: entry.weightLabel,
+          abilities: entry.abilities.map((ability) => ({
+            name: ability.name,
+            info: ability.info,
+            hidden: ability.hidden,
+          })),
+          evolvesFrom: entry.evolvesFrom?.name ?? null,
+          evolutions: entry.evolutions.map((evolution) => ({ name: evolution.name, method: evolution.method })),
+          info: entry.info,
+          biology: biologyPayload.biology?.blocks ?? [],
+        });
+      }
+      const built = selectionPlaylist(rows, playlistKind, playlistTitle);
+      if (built.refused.length > 0) {
+        setBuildMessage(
+          `A playlist holds 100 tracks. ${built.refused.length} picked Pokémon did not fit, so nothing was sent.`,
+        );
+        return;
+      }
+      if (!onSendSelection) {
+        setBuildMessage("Connect Yoto, then build the playlist again.");
+        return;
+      }
+      setBuildMessage(`Sending ${built.title} to Yoto…`);
+      await onSendSelection(built.card);
+      setBuildMessage(`${built.title} is in your Yoto library.`);
+    } catch (error: unknown) {
+      setBuildMessage(error instanceof Error ? error.message : "The playlist was not sent.");
+    } finally {
+      setBuilding(false);
+    }
+  }
 
   return (
     <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
@@ -301,6 +443,100 @@ export function Catalogue() {
             ))}
           </select>
         </label>
+        <div className="mt-4 rounded-xl bg-white px-3 py-3">
+          <p className="text-sm font-medium">
+            {picked.length.toLocaleString("en-GB")} Pokémon picked
+          </p>
+          <p className="mt-1 text-xs leading-5 text-[#5c5348]">
+            Playlist order is the order you tick them. Select all on this page checks only the list below.
+          </p>
+          <label className="mt-2 flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={pageAll}
+              onChange={togglePage}
+              disabled={pageIds.length === 0}
+              aria-label="Select all on this page"
+            />
+            Select all on this page
+          </label>
+          <button
+            type="button"
+            className="mt-2 text-sm text-[#8a5a22] underline disabled:opacity-40"
+            disabled={!list || list.total === 0}
+            onClick={() => void selectMatches()}
+          >
+            Select all {list ? list.total.toLocaleString("en-GB") : ""} matches
+          </button>
+          <p className="mt-1 text-xs leading-5 text-[#8d8272]">
+            That adds every species matching this search, type, and region.
+          </p>
+          {picked.length > 0 ? (
+            <button
+              type="button"
+              className="mt-1 text-xs text-[#5c5348] underline"
+              onClick={() => {
+                setPicked([]);
+                setBuildMessage("");
+              }}
+            >
+              Clear the pick
+            </button>
+          ) : null}
+          <fieldset className="mt-3 grid gap-2">
+            <legend className="text-sm font-medium">Playlist type</legend>
+            {PLAYLIST_KINDS.map((option) => (
+              <label key={option.id} className="grid grid-cols-[1rem_minmax(0,1fr)] gap-x-2 text-sm">
+                <input
+                  type="radio"
+                  name="playlist-type"
+                  className="mt-1"
+                  checked={playlistKind === option.id}
+                  onChange={() => {
+                    setPlaylistKind(option.id);
+                    setBuildMessage("");
+                  }}
+                />
+                <span>
+                  <span className="font-medium">{option.label}</span>
+                  <span className="mt-0.5 block text-xs leading-5 text-[#5c5348]">{option.detail}</span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+          <label className="mt-3 grid gap-1 text-sm" htmlFor="playlist-title">
+            Title
+            <input
+              id="playlist-title"
+              value={playlistTitle}
+              onChange={(event) => setPlaylistTitle(event.target.value)}
+              placeholder={
+                playlistKind === "whos-that"
+                  ? "Who's That Pokémon"
+                  : playlistKind === "advanced"
+                    ? "Advanced facts"
+                    : "Facts"
+              }
+              className="h-10 rounded-xl border border-[#1c1916]/15 bg-[#f4efe6] px-3"
+            />
+          </label>
+          <button
+            type="button"
+            className="mt-3 h-10 w-full rounded-full bg-[#1c1916] px-3 text-sm font-medium text-[#f4efe6] disabled:opacity-40"
+            disabled={picked.length === 0 || building}
+            onClick={() => void buildPlaylist()}
+          >
+            {building ? "Building playlist…" : "Build playlist from selection"}
+          </button>
+          {picked.length > speciesLimit ? (
+            <p className="mt-2 text-xs leading-5 text-[#9f2d22]" role="alert">
+              {playlistKind === "whos-that"
+                ? `Who's That Pokémon uses two tracks each, so 50 is the limit. ${picked.length} are picked.`
+                : `A playlist holds 100 tracks. ${picked.length} are picked.`}
+            </p>
+          ) : null}
+          {buildMessage ? <p className="mt-2 text-xs leading-5 text-[#5c5348]">{buildMessage}</p> : null}
+        </div>
         <p className="mt-3 text-xs text-[#8d8272]">
           {list
             ? `${list.total.toLocaleString("en-GB")} of ${list.species.toLocaleString("en-GB")} species`
@@ -321,7 +557,15 @@ export function Catalogue() {
           {list?.items.map((item) => {
             const active = item.id === selected;
             return (
-              <li key={item.id}>
+              <li key={item.id} className="flex items-stretch gap-1">
+                <label className={`flex items-center rounded-xl px-2 ${active ? "bg-[#1c1916]" : "bg-white"}`}>
+                  <input
+                    type="checkbox"
+                    checked={picked.includes(item.id)}
+                    aria-label={`Pick ${item.name}`}
+                    onChange={() => togglePick(item.id)}
+                  />
+                </label>
                 <button
                   type="button"
                   onClick={() => {
@@ -421,7 +665,7 @@ export function Catalogue() {
             {entry.notes ? (
               <>
                 <h3 className="mt-6 text-xs font-medium tracking-[0.14em] text-[#8a5a22] uppercase">
-                  Champdex notes
+                  Notes
                 </h3>
                 <p className="mt-2 max-w-prose text-sm leading-6 text-[#5c5348]">{entry.notes}</p>
               </>

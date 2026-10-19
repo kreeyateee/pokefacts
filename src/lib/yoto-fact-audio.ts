@@ -3,7 +3,7 @@ import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { assertCryFirst, audioContainer, cryUrl, describeClip, mergeCryFirst } from "@/lib/cry-audio";
-import { LILY_VOICE_ID } from "@/lib/kid-cards";
+import { voiceOrLily } from "@/lib/yoto-icons";
 import { RECONNECT_YOTO, reconnectMessage, yotoErrorText } from "@/lib/yoto-error";
 
 export type FactCryRequest = {
@@ -288,6 +288,8 @@ export type TrackPrepareRequest = {
   speechCardId?: string;
   uploadId?: string;
   discardCardId?: string;
+  /** ElevenLabs voice. Lily when this is omitted. */
+  voiceId?: string;
 };
 
 export type TrackPrepareResult = {
@@ -305,17 +307,17 @@ export type TrackPrepareResult = {
 const SPEECH_ROOT = path.join(process.cwd(), "data", "speech");
 const RENDER_ROOT = path.join(process.cwd(), "data", "rendered");
 
-function cacheKey(text: string, dexId?: number): string {
-  return sha256(Buffer.from(`${LILY_VOICE_ID}\n${dexId ?? 0}\n${text}`));
+function cacheKey(text: string, dexId: number | undefined, voiceId: string): string {
+  return sha256(Buffer.from(`${voiceId}\n${dexId ?? 0}\n${text}`));
 }
 
-function speechKey(text: string): string {
-  return sha256(Buffer.from(`${LILY_VOICE_ID}\n${text}`));
+function speechKey(text: string, voiceId: string): string {
+  return sha256(Buffer.from(`${voiceId}\n${text}`));
 }
 
-function scratchContent(text: string, title: string) {
+function scratchContent(text: string, title: string, voiceId: string) {
   return {
-    title: "Champdex scratch",
+    title: "Pokefacts scratch",
     content: {
       chapters: [
         {
@@ -327,15 +329,15 @@ function scratchContent(text: string, title: string) {
               title,
               trackUrl: text,
               type: "elevenlabs",
-              voiceId: LILY_VOICE_ID,
+              voiceId,
             },
           ],
         },
       ],
     },
     metadata: {
-      title: "Champdex scratch",
-      description: "Temporary line. Champdex deletes this.",
+      title: "Pokefacts scratch",
+      description: "Temporary line. Pokefacts deletes this.",
     },
   };
 }
@@ -543,6 +545,7 @@ export async function prepareFactTrack(
   const text = request.text?.replace(/\s+/g, " ").trim() ?? "";
   if (!text || text.length > 3000) throw new Error("That line is empty or longer than Yoto allows.");
   const title = (request.title?.trim() || "Line").slice(0, 80);
+  const voiceId = voiceOrLily(request.voiceId);
   const dexId = request.dexId;
   const species = (request.name?.replace(/\s+/g, " ").trim() || title || (typeof dexId === "number" ? `Number ${dexId}` : "")).slice(0, 40);
   const cryFailure = (error?: unknown) => {
@@ -567,8 +570,8 @@ export async function prepareFactTrack(
 
   // Dex number, not the slot on the card. A Pokefacts playlist never has 142 tracks.
   const label = dexId ? String(dexId) : "intro";
-  const renderedFile = path.join(roots.rendered, `${cacheKey(text, dexId)}.json`);
-  const speechFile = path.join(roots.speech, `${speechKey(text)}.mp3`);
+  const renderedFile = path.join(roots.rendered, `${cacheKey(text, dexId, voiceId)}.json`);
+  const speechFile = path.join(roots.speech, `${speechKey(text, voiceId)}.mp3`);
   const cached = await readRendered(renderedFile);
   // A saved yoto:# hash is only the finished track when this species was mixed cry-first.
   if (cached?.trackUrl.startsWith("yoto:#") && (!dexId || cached.cryFirst === true)) {
@@ -685,11 +688,11 @@ export async function prepareFactTrack(
 
   const created = await yoto(
     token,
-    `https://labs.api.yotoplay.com/content/job?voiceId=${encodeURIComponent(LILY_VOICE_ID)}`,
+    `https://labs.api.yotoplay.com/content/job?voiceId=${encodeURIComponent(voiceId)}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(scratchContent(text, title)),
+      body: JSON.stringify(scratchContent(text, title, voiceId)),
     },
     fetchImpl,
     20_000,

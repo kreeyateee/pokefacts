@@ -86,7 +86,7 @@ export type CatalogueEntry = {
   info: string;
   /** Game the Pokédex line comes from, such as Shield. */
   infoVersion: string;
-  /** Extra Champdex note for a handful of species. */
+  /** Extra Pokefacts note for a handful of species. */
   notes: string | null;
   /** PokéAPI evolution chain, shared by the whole family. */
   evolutionSet: number | null;

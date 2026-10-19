@@ -51,24 +51,30 @@ export const YOTO_VOICES = [
   {
     id: "pFZP5JQG7iQjIQuC4Bku",
     name: "Lily",
-    note: "British woman, a little quicker than a storybook read",
+    note: "British woman",
   },
   {
     id: "JBFqnCBsd6RMkjVDRZzb",
     name: "George",
-    note: "British man, the voice in Yoto's own example",
+    note: "British man",
   },
   {
     id: "nPczCjzI2devNBz1zQrb",
     name: "Brian",
-    note: "Steady storyteller",
+    note: "American man",
   },
   {
     id: "pNInz6obpgDQGcFmaJgB",
     name: "Adam",
-    note: "Direct coach",
+    note: "American man, lower",
   },
 ] as const;
+
+/** Lily when the saved id is missing or not one of the Champdex voices. */
+export function voiceOrLily(id?: string): string {
+  const match = YOTO_VOICES.find((voice) => voice.id === id);
+  return match?.id ?? YOTO_VOICES[0].id;
+}
 
 /**
  * The content gateway checks these strings literally. `user:content:manage`

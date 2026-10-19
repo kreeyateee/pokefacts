@@ -1,5 +1,5 @@
 /**
- * Spoken descriptions written for Champdex.
+ * Spoken descriptions written for Pokefacts.
  * These are our own words. They are not Bulbapedia text.
  */
 export const POKE_DESCRIPTIONS: Record<number, string> = {

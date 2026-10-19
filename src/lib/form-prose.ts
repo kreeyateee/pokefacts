@@ -22,7 +22,11 @@ import { formProse, spokenForm, spokenWiki } from "@/lib/spoken-wiki";
  * section on the species page is used instead of the species Biology lead.
  */
 const CACHE_FILE = path.join(process.cwd(), "data", "bulbapedia", "forms.json");
-const CACHE_REVISION = 1;
+/**
+ * Revision 2 refetches Mega and Gigantamax rows the old parser stored as missing.
+ * A revision 1 row that already has prose is still used.
+ */
+const CACHE_REVISION = 2;
 
 type CacheRow = {
   formId: number;
@@ -87,41 +91,116 @@ function sectionIndex(section: WikiSection | undefined): string {
   return String(section.index);
 }
 
-/**
- * The form's own heading, earliest on the page.
- * Later repeats are stats and type charts. Biology itself is never a form section.
- */
-export function pickFormSection(sections: WikiSection[], formName: string): WikiSection | undefined {
+function gameDataCutoff(sections: WikiSection[]): number {
+  const game = sections.find((section) => norm(section.line ?? "") === "game data");
+  const index = Number(game?.index);
+  return Number.isFinite(index) ? index : Number.POSITIVE_INFINITY;
+}
+
+function beforeGameData(section: WikiSection, cutoff: number): boolean {
+  const index = Number(section.index);
+  return Number.isFinite(index) && index < cutoff;
+}
+
+function exactForm(section: WikiSection, formName: string): boolean {
   const target = norm(formName);
-  const exact = sections.filter((section) => {
-    const line = norm(section.line ?? "");
-    const anchor = norm(section.anchor ?? "");
-    return line === target || anchor === target;
-  });
-  if (exact.length > 0) {
-    return [...exact].sort((a, b) => Number(a.index) - Number(b.index))[0];
-  }
+  return norm(section.line ?? "") === target || norm(section.anchor ?? "") === target;
+}
 
-  const partial = sections.filter((section) => {
-    const line = norm(section.line ?? "");
-    if (!/mega|gigantamax/.test(line)) return false;
-    if (line === "mega evolution" || line === "mega evolutions" || line === "gigantamax") return false;
-    if (line === "biology" || line === "forms" || line === "form data") return false;
-    return line.length > 8 && sameForm(formName, line);
-  });
-  if (partial.length > 0) {
-    return [...partial].sort((a, b) => {
-      const length = norm(b.line ?? "").length - norm(a.line ?? "").length;
-      return length || Number(a.index) - Number(b.index);
-    })[0];
-  }
+function partialForm(section: WikiSection, formName: string): boolean {
+  const line = norm(section.line ?? "");
+  if (!/mega|gigantamax/.test(line)) return false;
+  if (line === "mega evolution" || line === "mega evolutions" || line === "gigantamax") return false;
+  if (line === "biology" || line === "forms" || line === "form data") return false;
+  return line.length > 8 && sameForm(formName, line);
+}
 
-  return sections.find((section) => {
-    const line = norm(section.line ?? "");
-    if (/^gigantamax\b/i.test(formName)) return line === "gigantamax";
-    if (/^mega\b/i.test(formName)) return line === "mega evolution" || line === "mega evolutions";
-    return false;
-  });
+function folderSection(section: WikiSection, formName: string): boolean {
+  const line = norm(section.line ?? "");
+  if (/^gigantamax\b/i.test(formName)) return line === "gigantamax";
+  if (/^mega\b/i.test(formName)) return line === "mega evolution" || line === "mega evolutions";
+  return false;
+}
+
+/**
+ * Where a form's prose can live, best first.
+ * A Biology "Forms" section comes before a later stats heading with the same name.
+ * Mega Pidgeot's description is under Forms. The Base stats "Mega Pidgeot" heading is not.
+ */
+export function formSectionCandidates(sections: WikiSection[], formName: string): WikiSection[] {
+  const cutoff = gameDataCutoff(sections);
+  const before = (section: WikiSection) => beforeGameData(section, cutoff);
+  const ordered = [
+    ...sections.filter((section) => before(section) && exactForm(section, formName)),
+    ...sections.filter((section) => before(section) && partialForm(section, formName) && !exactForm(section, formName)),
+    ...sections.filter((section) => before(section) && norm(section.line ?? "") === "forms"),
+    ...sections.filter((section) => before(section) && folderSection(section, formName)),
+    ...sections.filter((section) => before(section) && norm(section.line ?? "") === "biology"),
+    ...sections.filter((section) => !before(section) && (exactForm(section, formName) || partialForm(section, formName))),
+  ];
+  const seen = new Set<string>();
+  const unique: WikiSection[] = [];
+  for (const section of ordered) {
+    const index = sectionIndex(section);
+    if (!index || seen.has(index)) continue;
+    seen.add(index);
+    unique.push(section);
+  }
+  return unique;
+}
+
+/** The form's own heading when it sits in Biology. Stats repeats come later. */
+export function pickFormSection(sections: WikiSection[], formName: string): WikiSection | undefined {
+  return formSectionCandidates(sections, formName)[0];
+}
+
+function mentionsForm(text: string, formName: string): boolean {
+  const hay = norm(text);
+  const needle = norm(formName);
+  if (needle && hay.includes(needle)) return true;
+  if (sameForm(formName, text)) return true;
+  const other = text.match(/\b(?:Mega|Gigantamax)\s+[A-Z][\w'’.+-]+(?:\s+[A-Z][\w'’.+-]+)?/g) ?? [];
+  const different = other.some((found) => norm(found) !== needle && !sameForm(formName, found));
+  if (different) return false;
+  if (/^mega\b/i.test(formName) && /mega evol/i.test(text)) return true;
+  if (/^gigantamax\b/i.test(formName) && /gigantamax/i.test(text)) return true;
+  return false;
+}
+
+function paragraphKept(text: string): boolean {
+  return formProse([{ kind: "paragraph", text }]).length > 0;
+}
+
+/**
+ * Paragraphs about this form. A "can Mega Evolve" stub is dropped.
+ * A Forms section keeps only paragraphs that name the form.
+ * A heading that is the form keeps the paragraphs under it.
+ */
+export function formSpecificBlocks(blocks: BiologyBlock[], formName: string, sectionLine = ""): BiologyBlock[] {
+  const headingAt = blocks.findIndex(
+    (block) =>
+      block.kind === "heading" &&
+      (norm(block.text) === norm(formName) ||
+        (sameForm(formName, block.text) && /mega|gigantamax/i.test(block.text))),
+  );
+  const dedicated =
+    headingAt >= 0 ||
+    norm(sectionLine) === norm(formName) ||
+    (sameForm(formName, sectionLine) && /mega|gigantamax/i.test(sectionLine));
+  const source = headingAt >= 0 ? blocks.slice(headingAt + 1) : blocks;
+  const paragraphs: BiologyBlock[] = [];
+  for (const block of source) {
+    if (block.kind === "heading") {
+      if (paragraphs.length > 0) break;
+      continue;
+    }
+    if (block.kind !== "paragraph") continue;
+    if (!paragraphKept(block.text)) continue;
+    if (!dedicated && !mentionsForm(block.text, formName)) continue;
+    paragraphs.push(block);
+    if (paragraphs.length === 2) break;
+  }
+  return paragraphs;
 }
 
 function redirectsOf(payload: unknown): Array<{ to?: string }> {
@@ -149,7 +228,12 @@ async function readCache(file: string): Promise<Record<string, CacheRow>> {
 function usableRow(row: unknown, form: CatalogueFormRef): CacheRow | null {
   if (!row || typeof row !== "object") return null;
   const candidate = row as CacheRow;
-  if (candidate.revision !== CACHE_REVISION) return null;
+  const mega = /^(mega|gigantamax)\b/i.test(candidate.formName ?? "");
+  // The old parser cached Mega Pidgeot and other forms as missing after reading a stats heading.
+  if (candidate.revision === 1 && candidate.status === "missing" && mega) return null;
+  const current = candidate.revision === CACHE_REVISION;
+  const olderProse = candidate.revision === 1 && candidate.status === "ready";
+  if (!current && !olderProse) return null;
   if (candidate.formName !== form.formName) return null;
   if (candidate.status !== "ready" && candidate.status !== "missing") return null;
   if (!Array.isArray(candidate.blocks)) return null;
@@ -199,8 +283,9 @@ export async function loadFormProse(form: CatalogueFormRef, options: LoadOptions
   }
 
   let pageTitle = form.speciesName;
-  let section: WikiSection | undefined;
   let ownPage = false;
+  let ownSection: WikiSection | undefined;
+  let candidates: WikiSection[] = [];
 
   if (listed) {
     const redirects = redirectsOf(listed);
@@ -208,10 +293,10 @@ export async function loadFormProse(form: CatalogueFormRef, options: LoadOptions
     if (redirects.length === 0 && norm(resolved) === norm(form.formName)) {
       ownPage = true;
       pageTitle = resolved || form.formName;
-      section = findBiologySection(wikiSections(listed));
+      ownSection = findBiologySection(wikiSections(listed));
     } else {
       pageTitle = redirects[0]?.to || resolved || form.speciesName;
-      section = pickFormSection(wikiSections(listed), form.formName);
+      candidates = formSectionCandidates(wikiSections(listed), form.formName);
     }
   } else {
     let speciesListed: unknown;
@@ -223,44 +308,53 @@ export async function loadFormProse(form: CatalogueFormRef, options: LoadOptions
       return viewFromRow(row);
     }
     pageTitle = titleOf(speciesListed) || form.speciesName;
-    section = pickFormSection(wikiSections(speciesListed), form.formName);
+    candidates = formSectionCandidates(wikiSections(speciesListed), form.formName);
   }
 
-  const index = sectionIndex(section);
-  if (!index && ownPage) {
-    const lead = await parse({ page: asPageParam(pageTitle), prop: "text", section: "0", redirects: "1" });
-    const blocks = biologyBlocks(wikiSectionHtml(lead));
+  if (ownPage) {
+    const index = sectionIndex(ownSection);
+    if (!index) {
+      const lead = await parse({ page: asPageParam(pageTitle), prop: "text", section: "0", redirects: "1" });
+      const blocks = biologyBlocks(wikiSectionHtml(lead));
+      const row = await remember(
+        cacheFile,
+        form,
+        pageTitle,
+        articleUrl(pageTitle),
+        blocks.length > 0 ? "ready" : "missing",
+        blocks,
+      );
+      return viewFromRow(row);
+    }
+    candidates = [ownSection as WikiSection];
+  }
+
+  for (const candidate of candidates) {
+    const index = sectionIndex(candidate);
+    if (!index) continue;
+    const parsed = await parse({
+      page: asPageParam(pageTitle),
+      prop: "text",
+      section: index,
+      redirects: "1",
+    });
+    const blocks = ownPage
+      ? biologyBlocks(wikiSectionHtml(parsed))
+      : formSpecificBlocks(biologyBlocks(wikiSectionHtml(parsed)), form.formName, candidate.line ?? "");
+    if (!formProse(blocks) && !ownPage) continue;
+    if (blocks.length === 0) continue;
     const row = await remember(
       cacheFile,
       form,
       pageTitle,
-      articleUrl(pageTitle),
-      blocks.length > 0 ? "ready" : "missing",
+      articleUrl(pageTitle, candidate.anchor),
+      "ready",
       blocks,
     );
     return viewFromRow(row);
   }
 
-  if (!index) {
-    const row = await remember(cacheFile, form, pageTitle, articleUrl(pageTitle), "missing", []);
-    return viewFromRow(row);
-  }
-
-  const parsed = await parse({
-    page: asPageParam(pageTitle),
-    prop: "text",
-    section: index,
-    redirects: "1",
-  });
-  const blocks = biologyBlocks(wikiSectionHtml(parsed));
-  const row = await remember(
-    cacheFile,
-    form,
-    pageTitle,
-    articleUrl(pageTitle, section?.anchor),
-    blocks.length > 0 ? "ready" : "missing",
-    blocks,
-  );
+  const row = await remember(cacheFile, form, pageTitle, articleUrl(pageTitle), "missing", []);
   return viewFromRow(row);
 }
 

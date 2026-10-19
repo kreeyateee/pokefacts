@@ -75,7 +75,7 @@ export function ConnectDialog({
         <DialogHeader>
           <DialogTitle>Connect a Yoto account</DialogTitle>
           <DialogDescription>
-            Champdex uses the public Yoto developer login. It never asks for a
+            Pokefacts uses the public Yoto developer login. It never asks for a
             client secret. The spoken card lands in your own Make Your Own library.
           </DialogDescription>
         </DialogHeader>

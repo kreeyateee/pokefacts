@@ -37,7 +37,7 @@ function CallbackInner() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-3 px-6">
       <p className="text-xs font-medium tracking-[0.18em] text-[#c6a15b] uppercase">
-        Champdex
+        Pokefacts
       </p>
       <h1 className="font-display text-3xl">Signing in</h1>
       <p className="text-sm leading-6 text-[#cbbfa8]">{message}</p>

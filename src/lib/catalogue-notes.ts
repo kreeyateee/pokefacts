@@ -1,6 +1,6 @@
 /**
  * Original catalogue notes for the species we have studied closely.
- * These are Champdex sentences. They are not Bulbapedia text.
+ * These are Pokefacts sentences. They are not Bulbapedia text.
  */
 export const CATALOGUE_NOTES: Record<number, { looks: string; habits: string }> = {
   1: {

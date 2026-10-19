@@ -1,15 +1,17 @@
-# Champdex
+# Pokefacts
 
-Champdex runs on your computer and sends Pokémon cards to your own Yoto library. It covers all 1,025 national species. You can browse the catalogue, send the Pokefacts playlists, and send a Guess Who game. The pictures, the catalogue, and the app stay on this machine. A public tunnel is optional. Uploads go from this computer to Yoto.
+Pokefacts runs on your computer and sends Pokémon cards to your own Yoto library. It covers all 1,025 national species. You can browse the catalogue, send the Pokefacts playlists, and send a Guess Who game. The pictures, the catalogue, and the app stay on this machine. A public tunnel is optional. Uploads go from this computer to Yoto.
 
-The catalogue is game data from [PokéAPI](https://pokeapi.co/): an English Pokédex line, the types, the height, the weight, the abilities, the base stats, and the evolution. Nine species also have a short Champdex note. The species page also shows that Pokémon’s Biology section from [Bulbapedia](https://bulbapedia.bulbagarden.net/), under CC BY-NC-SA 2.5. Champdex fetches the section when you open the Pokémon and caches it on this computer. It is not copied into the catalogue file, and it is not read aloud on the Yoto cards.
+The app is free. The source is [github.com/kreeyateee/pokefacts](https://github.com/kreeyateee/pokefacts). [Donate](https://buymeacoffee.com/kreeyate) if you want to support it.
+
+The catalogue is game data from [PokéAPI](https://pokeapi.co/): an English Pokédex line, the types, the height, the weight, the abilities, the base stats, and the evolution. Nine species also have a short Pokefacts note. The species page also shows that Pokémon’s Biology section from [Bulbapedia](https://bulbapedia.bulbagarden.net/), under CC BY-NC-SA 2.5. Pokefacts fetches the section when you open the Pokémon and caches it on this computer. It is not copied into the catalogue file, and it is not read aloud on the Yoto cards.
 
 ## Install
 
 You need two programs:
 
 - **Node.js 22.14 or newer.** This project is built with Node.js 22.14. The catalogue is a SQLite file, and that reader is included in Node. Install the 22 line from [nodejs.org](https://nodejs.org/), then open a new terminal.
-- **ffmpeg on your PATH.** Each track is a cry, then Lily’s voice. Champdex joins those two files with ffmpeg.
+- **ffmpeg on your PATH.** Each track is a cry, then Lily’s voice. Pokefacts joins those two files with ffmpeg.
 
 ffmpeg:
 
@@ -52,15 +54,15 @@ A normal copy of this repository already contains:
 - `public/sprites` — one picture per species
 - `public/pixels` — the 16×16 icon and the dark shadow for each species
 
-`npm start` checks those files before it serves the app. If the database file is missing and the PokéAPI CSV tables are in `/tmp/poke-csv`, the start command builds the database with the catalogue script. You can also run `npm run catalogue` yourself. Those tables include `pokemon_species_flavor_text.csv`. Champdex does not copy Bulbapedia prose into the catalogue file. If the pictures are missing, restore `public/sprites` and `public/pixels` from git.
+`npm start` checks those files before it serves the app. If the database file is missing and the PokéAPI CSV tables are in `/tmp/poke-csv`, the start command builds the database with the catalogue script. You can also run `npm run catalogue` yourself. Those tables include `pokemon_species_flavor_text.csv`. Pokefacts does not copy Bulbapedia prose into the catalogue file. If the pictures are missing, restore `public/sprites` and `public/pixels` from git.
 
 ## Connect Yoto
 
-Champdex uses Yoto’s public login (PKCE). Do not paste a client secret into the app or into `.env`.
+Pokefacts uses Yoto’s public login (PKCE). Do not paste a client secret into the app or into `.env`.
 
 1. In the [Yoto developer dashboard](https://dashboard.yoto.dev/), create a **public** client and copy the client ID.
 2. Allow this redirect URI exactly: `http://127.0.0.1:3847/callback`
-3. In Champdex, choose **Connect Yoto**, paste the client ID, and continue. Open the app at `http://127.0.0.1:3847` first. `localhost` is sent to that same address so the login can finish.
+3. In Pokefacts, choose **Connect Yoto**, paste the client ID, and continue. Open the app at `http://127.0.0.1:3847` first. `localhost` is sent to that same address so the login can finish.
 4. Approve the login. It asks for `user:content:manage`, `user:content:view`, `family:library:view`, `offline_access`, and `profile`.
 
 `NEXT_PUBLIC_YOTO_CLIENT_ID` in `.env.example` is optional. You can paste the client ID in the connect dialog instead.
@@ -69,7 +71,7 @@ Champdex uses Yoto’s public login (PKCE). Do not paste a client secret into th
 
 Open **Facts** and choose **Send all 11 Pokefacts playlists**.
 
-Champdex records one short request per track. The audio is the latest cry, then Lily (`pFZP5JQG7iQjIQuC4Bku`). Yoto titles the playlists exactly Pokefacts 1 through Pokefacts 11. On the page they are labeled like Pokefacts 1 (1-99). Each playlist is created new, with no saved card id on the full send. Each card stays at 100 tracks or fewer: a short intro plus up to 99 Pokémon. Pokefacts 11 is the last card (numbers 991–1025). Together they cover all 1,025 species.
+Pokefacts records one short request per track. The audio is the latest cry, then Lily (`pFZP5JQG7iQjIQuC4Bku`). Yoto titles the playlists exactly Pokefacts 1 through Pokefacts 11. On the page they are labeled like Pokefacts 1 (1-99). Each playlist is created new, with no saved card id on the full send. Each card stays at 100 tracks or fewer: a short intro plus up to 99 Pokémon. Pokefacts 11 is the last card (numbers 991–1025). Together they cover all 1,025 species.
 
 Leave this terminal open until the page says the playlists are ready. In the Yoto app, open **Make Your Own**, find each playlist, and choose **Link to a card**. Put a blank Make Your Own card in the player when it asks.
 

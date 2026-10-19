@@ -17,6 +17,8 @@ import {
   guessPoolFromCards,
   guessUpload,
   mulberry32,
+  countSpokenTracks,
+  LILY_VOICE_ID,
   pokedexUpload,
   POKEDEX_HOWTO,
   RANDOM_GUESS_ID,
@@ -24,11 +26,13 @@ import {
   randomGuessCard,
   randomPokedexCard,
   trackSpeech,
+  YOTO_TRACK_LIMIT,
   type KidCard,
   type KidCardKind,
 } from "@/lib/kid-cards";
 import { pronounce } from "@/lib/pronounce";
-import { speakTexts, stopSpeaking } from "@/lib/speak";
+import { APP_NAME, DONATE_URL, SOURCE_URL } from "@/lib/site";
+import { demoHearBody, factTrackBody, readVoiceId, writeVoiceId } from "@/lib/voice-choice";
 import {
   asSendFailure,
   looksLikeGateway,
@@ -36,12 +40,17 @@ import {
   statusErrorText,
   validYotoCardId,
 } from "@/lib/yoto-error";
+import { YOTO_VOICES } from "@/lib/yoto-icons";
 import {
   afterRejectedPlaylist,
   applyFinishedAudio,
   bulkFailureText,
   factsBulkUpload,
+  finishedPlaylistId,
+  freeSlotMessage,
+  libraryPlaylists,
   renderJobs,
+  uploadForPlaylist,
   type FinishedAudio,
   type PlaylistUpload,
 } from "@/lib/yoto-send";
@@ -81,14 +90,6 @@ function forgetCard(id: string) {
   delete next[id];
   localStorage.setItem(SAVED_CARDS, JSON.stringify(next));
   localStorage.removeItem(CARD_KEY);
-}
-
-function savedPlaylistId(playlistId: string, replace: boolean): string | undefined {
-  if (!replace) return undefined;
-  const previous = savedCards()[playlistId];
-  const usable = validYotoCardId(previous);
-  if (previous && !usable) forgetCard(playlistId);
-  return usable;
 }
 
 function delay(ms: number) {
@@ -338,14 +339,20 @@ export function Studio({
   const [revealed, setRevealed] = useState(false);
   const [session, setSession] = useState<YotoSession | null>(null);
   const [connectOpen, setConnectOpen] = useState(false);
-  const [replace, setReplace] = useState(false);
+  const [voiceId, setVoiceId] = useState(LILY_VOICE_ID);
+  const [library, setLibrary] = useState<Array<{ cardId: string; title: string }>>([]);
+  const [libraryNote, setLibraryNote] = useState("");
+  const [targetPlaylist, setTargetPlaylist] = useState("");
   const [speaking, setSpeaking] = useState(false);
+  const [hearError, setHearError] = useState("");
   const [sending, setSending] = useState(false);
   const [bulkActive, setBulkActive] = useState(false);
   const [job, setJob] = useState<JobView | null>(null);
-  const [linked, setLinked] = useState<SavedCards>({});
   const [ready, setReady] = useState(false);
   const clipRef = useRef<HTMLAudioElement | null>(null);
+  const clipUrl = useRef<string | null>(null);
+  const hearAbort = useRef<AbortController | null>(null);
+  const speakingRef = useRef(false);
 
   const cardId = kind === "meet" ? factsId : guessId;
   const card =
@@ -374,20 +381,16 @@ export function Studio({
 
   useEffect(() => {
     let cancelled = false;
+    setVoiceId(readVoiceId(localStorage));
     void ensureSession().then((next) => {
       if (cancelled) return;
       setSession(next);
-      setLinked(savedCards());
       setReady(true);
+      if (next) void loadLibrary();
     });
-    const loadVoices = () => window.speechSynthesis?.getVoices();
-    loadVoices();
-    window.speechSynthesis?.addEventListener("voiceschanged", loadVoices);
     return () => {
       cancelled = true;
-      stopSpeaking();
-      clipRef.current?.pause();
-      window.speechSynthesis?.removeEventListener("voiceschanged", loadVoices);
+      stopDemo();
     };
   }, []);
 
@@ -414,14 +417,24 @@ export function Studio({
   }, [kind, chapter?.dexId, chapter?.title]);
 
   function stopClip() {
-    clipRef.current?.pause();
-    clipRef.current = null;
+    const audio = clipRef.current;
+    if (audio) audio.pause();
+    if (clipUrl.current) {
+      URL.revokeObjectURL(clipUrl.current);
+      clipUrl.current = null;
+    }
+  }
+
+  function stopDemo() {
+    hearAbort.current?.abort();
+    hearAbort.current = null;
+    speakingRef.current = false;
+    stopClip();
+    setSpeaking(false);
   }
 
   function chooseCard(next: KidCard) {
-    stopSpeaking();
-    stopClip();
-    setSpeaking(false);
+    stopDemo();
     setRevealed(false);
     setQuery("");
     setKind(next.kind);
@@ -465,9 +478,7 @@ export function Studio({
   }
 
   function showKind(nextKind: KidCardKind) {
-    stopSpeaking();
-    stopClip();
-    setSpeaking(false);
+    stopDemo();
     setRevealed(false);
     setView("cards");
     setKind(nextKind);
@@ -493,9 +504,7 @@ export function Studio({
 
   function shufflePokedex() {
     const next = randomPokedexCard(factPool);
-    stopSpeaking();
-    stopClip();
-    setSpeaking(false);
+    stopDemo();
     setRevealed(false);
     setQuery("");
     setKind("meet");
@@ -508,9 +517,7 @@ export function Studio({
 
   function shuffleGuess() {
     const next = randomGuessCard(guessPool);
-    stopSpeaking();
-    stopClip();
-    setSpeaking(false);
+    stopDemo();
     setRevealed(false);
     setQuery("");
     setKind("guess");
@@ -522,86 +529,125 @@ export function Studio({
   }
 
   function chooseChapter(key: string) {
-    stopSpeaking();
-    stopClip();
-    setSpeaking(false);
+    stopDemo();
     setRevealed(false);
     setChapterKey(key);
   }
 
-  function hear(texts: string[]) {
-    if (speaking) {
-      stopSpeaking();
-      stopClip();
+  async function requestDemo(text: string, title: string, dexId?: number) {
+    const script = text.replace(/\s+/g, " ").trim();
+    if (!script) {
+      speakingRef.current = false;
       setSpeaking(false);
+      setHearError("This entry has nothing to read.");
       return;
     }
-    setSpeaking(true);
-    speakTexts(texts, () => setSpeaking(false));
-  }
-
-  function hearCryThenSpeech(dexId: number, texts: string[]) {
-    const audio = new Audio(`/api/cry/${dexId}`);
-    clipRef.current = audio;
-    setSpeaking(true);
-    let movedOn = false;
-    const speak = () => {
-      if (movedOn) return;
-      movedOn = true;
-      clipRef.current = null;
-      speakTexts(texts, () => setSpeaking(false));
-    };
-    audio.onended = speak;
-    audio.onerror = speak;
-    void audio.play().catch(speak);
-  }
-
-  function hearFact(src: string, texts: string[], dexId?: number) {
-    if (speaking) {
-      stopSpeaking();
-      stopClip();
+    const controller = new AbortController();
+    hearAbort.current = controller;
+    try {
+      if (!(await connectedSession())) {
+        if (controller.signal.aborted) return;
+        speakingRef.current = false;
+        setSpeaking(false);
+        setHearError("Connect Yoto to hear this entry.");
+        return;
+      }
+      if (controller.signal.aborted) return;
+      const response = await yotoFetch("/api/yoto/hear", {
+        method: "POST",
+        signal: controller.signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(demoHearBody({ text: script, voiceId, dexId, title })),
+      });
+      if (controller.signal.aborted) return;
+      const type = response.headers.get("content-type") ?? "";
+      if (!response.ok || !type.includes("audio")) {
+        const payload = await readBody(response);
+        const message = statusErrorText(response.status, payload, "Could not record this entry.");
+        const reconnect = clearSavedLoginForScopeGap(message);
+        if (reconnect) {
+          setSession(null);
+          setConnectOpen(true);
+        }
+        speakingRef.current = false;
+        setSpeaking(false);
+        setHearError(reconnect ?? message);
+        return;
+      }
+      const blob = await response.blob();
+      if (controller.signal.aborted) return;
+      const url = URL.createObjectURL(blob);
+      if (clipUrl.current) URL.revokeObjectURL(clipUrl.current);
+      clipUrl.current = url;
+      const audio = clipRef.current;
+      if (!audio) throw new Error("Could not play this entry.");
+      audio.src = url;
+      audio.onended = () => {
+        speakingRef.current = false;
+        setSpeaking(false);
+      };
+      audio.onerror = () => {
+        speakingRef.current = false;
+        setSpeaking(false);
+        setHearError("Could not play this entry.");
+      };
+      try {
+        await audio.play();
+      } catch {
+        speakingRef.current = false;
+        setSpeaking(false);
+        setHearError("Press play on the recording.");
+      }
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      speakingRef.current = false;
       setSpeaking(false);
+      const failure = asSendFailure(error, "Could not record this entry.");
+      const reconnect = clearSavedLoginForScopeGap(failure.message);
+      if (reconnect) {
+        setSession(null);
+        setConnectOpen(true);
+      }
+      setHearError(reconnect ?? failure.message);
+    }
+  }
+
+  async function hearScript(load: () => Promise<{ text: string; title: string; dexId?: number } | null>) {
+    if (speakingRef.current) {
+      stopDemo();
       return;
     }
-    const audio = new Audio(src);
-    clipRef.current = audio;
+    speakingRef.current = true;
     setSpeaking(true);
-    let fellBack = false;
-    const fallback = () => {
-      if (fellBack) return;
-      fellBack = true;
-      clipRef.current = null;
-      if (dexId) hearCryThenSpeech(dexId, texts);
-      else speakTexts(texts, () => setSpeaking(false));
-    };
-    audio.onended = () => setSpeaking(false);
-    audio.onerror = fallback;
-    void audio.play().catch(fallback);
-  }
-
-  function hearEntry(texts: string[], dexId?: number) {
-    if (speaking) {
-      stopSpeaking();
-      stopClip();
+    setHearError("");
+    try {
+      const ready = await load();
+      if (!speakingRef.current) return;
+      if (!ready?.text.trim()) {
+        speakingRef.current = false;
+        setSpeaking(false);
+        setHearError("This entry has nothing to read.");
+        return;
+      }
+      await requestDemo(ready.text, ready.title, ready.dexId);
+    } catch (error) {
+      if (!speakingRef.current) return;
+      speakingRef.current = false;
       setSpeaking(false);
-      return;
+      setHearError(asSendFailure(error, "Could not record this entry.").message);
     }
-    if (dexId) hearCryThenSpeech(dexId, texts);
-    else hear(texts);
   }
 
   function revealAnswer() {
     if (!chapter) return;
     setRevealed(true);
-    const answer = chapter.tracks[1] ? trackSpeech(chapter.tracks[1]) : undefined;
+    const answer = chapter.tracks[1];
     if (!answer) return;
-    stopSpeaking();
-    stopClip();
-    if (chapter.dexId) hearCryThenSpeech(chapter.dexId, [answer]);
-    else {
-      setSpeaking(true);
-      speakTexts([answer], () => setSpeaking(false));
-    }
+    void hearScript(async () => ({
+      text: trackSpeech(answer),
+      title: answer.title,
+      dexId: answer.lead === "cry" ? chapter.dexId : undefined,
+    }));
   }
 
   function anotherRiddle() {
@@ -621,6 +667,32 @@ export function Studio({
     }
     setSession(live);
     return live;
+  }
+
+  async function loadLibrary() {
+    try {
+      const response = await yotoFetch("/api/yoto/mine");
+      const payload = await readBody(response);
+      if (!response.ok || looksLikeGateway(response.status, payload)) {
+        const message = statusErrorText(response.status, payload, "Could not load your Yoto playlists.");
+        const reconnect = clearSavedLoginForScopeGap(message);
+        if (reconnect) {
+          setSession(null);
+          setConnectOpen(true);
+        }
+        setLibrary([]);
+        setLibraryNote(reconnect ?? message);
+        return;
+      }
+      const playlists = libraryPlaylists(payload);
+      setLibrary(playlists);
+      setLibraryNote("");
+      setTargetPlaylist((current) => (current && playlists.some((item) => item.cardId === current) ? current : ""));
+    } catch (error) {
+      const failure = asSendFailure(error, "Could not load your Yoto playlists.");
+      setLibrary([]);
+      setLibraryNote(failure.message);
+    }
   }
 
   function reportFailure(message: string) {
@@ -679,7 +751,7 @@ export function Studio({
       const payload = await readBody(response);
       if (!response.ok || looksLikeGateway(response.status, payload)) {
         const gateway = looksLikeGateway(response.status, payload);
-        if (!gateway) {
+        if (!gateway && !attempt.append) {
           const decision = afterRejectedPlaylist({
             playlistId: playlist.id,
             upload: attempt,
@@ -692,34 +764,38 @@ export function Studio({
           if (decision.action === "retry-create" || decision.store[playlist.id] === undefined) {
             localStorage.removeItem(CARD_KEY);
           }
-          setLinked(savedCards());
           if (decision.action === "retry-create") {
             retried = true;
-            setReplace(false);
             attempt = decision.upload;
             continue;
           }
           throw new SendFailure(decision.message, false);
         }
-        throw new SendFailure(statusErrorText(response.status, payload, "Yoto did not accept this card."), true);
+        throw new SendFailure(statusErrorText(response.status, payload, "Yoto did not accept this card."), gateway);
       }
       const created = jobOf(payload);
       if (created?.status === "completed") {
-        const newId = validYotoCardId(created.result?.cardId);
+        const newId = finishedPlaylistId({
+          status: created.status,
+          cardId: created.result?.cardId,
+          create: attempt.create,
+        });
         if (!newId) throw new SendFailure("Yoto did not return the new playlist.", false);
         rememberCard(playlist.id, newId);
-        setLinked(savedCards());
         return newId;
       }
       if (!created?.jobId) {
         throw new SendFailure("Yoto did not start a recording job.", false);
       }
       const finished = await pollJob(created.jobId, headline);
-      const newId = validYotoCardId(finished.result?.cardId) ?? validYotoCardId(attempt.content.cardId);
-      if (newId) {
-        rememberCard(playlist.id, newId);
-        setLinked(savedCards());
-      }
+      const newId = finishedPlaylistId({
+        status: finished.status,
+        cardId: finished.result?.cardId,
+        fallback: attempt.content.cardId,
+        create: attempt.create,
+      });
+      if (!newId) throw new SendFailure("Yoto did not return the new playlist.", false);
+      rememberCard(playlist.id, newId);
       return newId;
     }
   }
@@ -751,15 +827,18 @@ export function Studio({
           const response = await yotoFetch("/api/yoto/track", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              text: job.text,
-              title: job.title,
-              dexId: job.dexId,
-              name: job.name,
-              speechJobId,
-              speechCardId,
-              uploadId,
-            }),
+            body: JSON.stringify(
+              factTrackBody({
+                text: job.text,
+                title: job.title,
+                dexId: job.dexId,
+                name: job.name,
+                voiceId,
+                speechJobId,
+                speechCardId,
+                uploadId,
+              }),
+            ),
           });
           const payload = (await readApi(response, "This track did not record.")) as {
             phase?: string;
@@ -778,7 +857,7 @@ export function Studio({
             speechJobId = payload.speechJobId;
             const finished = await pollJob(payload.speechJobId, job.progress);
             const cardId = finished.result?.cardId;
-            if (!cardId) throw new SendFailure("Lily did not return a recording.", false);
+            if (!cardId) throw new SendFailure("The voice did not return a recording.", false);
             speechCardId = cardId;
             scratch.add(cardId);
             uploadId = undefined;
@@ -832,7 +911,14 @@ export function Studio({
     setBulkActive(false);
     setJob({ status: "sending", detail: `Sending ${card.rangeLabel} to Yoto…` });
     try {
-      const savedId = savedPlaylistId(card.id, replace);
+      const chosenId = validYotoCardId(targetPlaylist);
+      if (chosenId) {
+        const response = await yotoFetch(`/api/yoto/card?id=${encodeURIComponent(chosenId)}`);
+        const summary = (await readApi(response, "Could not read that playlist.")) as { tracks?: number };
+        const adding = countSpokenTracks(card.chapters);
+        const free = YOTO_TRACK_LIMIT - (summary.tracks ?? 0);
+        if (adding > free) throw new SendFailure(freeSlotMessage(free, adding), false);
+      }
       const formKind = card.kind === "mega" || card.kind === "gmax";
       const spokenCard = formKind
         ? card
@@ -853,21 +939,28 @@ export function Studio({
       const base = randomGuess
         ? await (async () => {
             const icons = await uploadGuessIcons(card);
-            return guessUpload(card, icons.real, icons.shadow, savedId);
+            return guessUpload(card, icons.real, icons.shadow, undefined, voiceId);
           })()
         : formKind
-          ? formPlaylistUpload(readyForm, await uploadPixels(readyForm), savedId)
+          ? formPlaylistUpload(readyForm, await uploadPixels(readyForm), undefined, voiceId)
           : randomFacts
-            ? pokedexUpload(spokenCard, await uploadPixels(spokenCard), savedId)
-            : factsPlaylistUpload(spokenCard, await uploadPixels(spokenCard), savedId);
-      const upload: PlaylistUpload = { ...base, create: savedId ? undefined : true };
-      if (upload.create) delete upload.content.cardId;
+            ? pokedexUpload(spokenCard, await uploadPixels(spokenCard), undefined, voiceId)
+            : factsPlaylistUpload(spokenCard, await uploadPixels(spokenCard), undefined, voiceId);
+      const upload = uploadForPlaylist({ ...base, voiceId }, chosenId);
       await sendPrepared(card, upload, card.libraryTitle);
+      const updatedTitle = library.find((item) => item.cardId === chosenId)?.title;
       setJob({
         status: "completed",
-        detail: `${card.rangeLabel} is in your Yoto library.`,
+        detail: chosenId
+          ? `${updatedTitle ?? "The playlist"} was updated.`
+          : `${card.rangeLabel} is in your Yoto library.`,
       });
-      toast.success(`${card.libraryTitle} is ready to link to its own blank card.`);
+      toast.success(
+        chosenId
+          ? `${updatedTitle ?? "The playlist"} was updated.`
+          : `${card.libraryTitle} is ready to link to its own blank card.`,
+      );
+      void loadLibrary();
     } catch (error) {
       const failure = asSendFailure(error, "The recording stopped.");
       reportFailure(failure.message);
@@ -882,9 +975,7 @@ export function Studio({
     setSending(true);
     setBulkActive(true);
     try {
-      setReplace(false);
       for (const playlist of playlists) forgetCard(playlist.id);
-      setLinked(savedCards());
       const createdTitles: string[] = [];
       for (let index = 0; index < playlists.length; index += 1) {
         const playlist = playlists[index];
@@ -907,7 +998,7 @@ export function Studio({
               detail: `${playlist.libraryTitle}, picture ${done} of ${total}`,
             });
           });
-          const upload = factsBulkUpload(spoken, pixels);
+          const upload = factsBulkUpload(spoken, pixels, voiceId);
           delete upload.content.cardId;
           await sendPrepared(playlist, upload, headline);
           createdTitles.push(playlist.libraryTitle);
@@ -943,10 +1034,12 @@ export function Studio({
   function disconnect() {
     writeSession(null);
     setSession(null);
+    setLibrary([]);
+    setLibraryNote("");
+    setTargetPlaylist("");
     toast("Disconnected. Cards already in your library stay there.");
   }
 
-  const previousId = card ? linked[card.id] : undefined;
   const guessing = card?.kind === "guess";
   const formMode = card?.kind === "mega" || card?.kind === "gmax";
   const factReading =
@@ -969,7 +1062,7 @@ export function Studio({
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs font-medium tracking-[0.16em] text-[#8a5a22] uppercase">
-              Champdex
+              {APP_NAME}
             </p>
             <h1 className="font-display mt-1 text-3xl font-semibold tracking-tight sm:text-4xl">
               {view === "catalogue"
@@ -992,23 +1085,41 @@ export function Studio({
                       : "The cry, then the name, then a short description."}
             </p>
           </div>
-          {session ? (
-            <button
-              type="button"
-              className="self-start text-sm text-[#5c5348] underline sm:self-auto"
-              onClick={disconnect}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 self-start sm:self-auto">
+            <a
+              className="text-sm text-[#5c5348] underline"
+              href={SOURCE_URL}
+              target="_blank"
+              rel="noreferrer"
             >
-              {session.name ? `Yoto · ${session.name}` : "Yoto connected"}
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="self-start text-sm text-[#5c5348] underline sm:self-auto"
-              onClick={() => setConnectOpen(true)}
+              GitHub
+            </a>
+            <a
+              className="text-sm text-[#5c5348] underline"
+              href={DONATE_URL}
+              target="_blank"
+              rel="noreferrer"
             >
-              Put this on a Yoto card
-            </button>
-          )}
+              Donate
+            </a>
+            {session ? (
+              <button
+                type="button"
+                className="text-sm text-[#5c5348] underline"
+                onClick={disconnect}
+              >
+                {session.name ? `Yoto · ${session.name}` : "Yoto connected"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="text-sm text-[#5c5348] underline"
+                onClick={() => setConnectOpen(true)}
+              >
+                Put this on a Yoto card
+              </button>
+            )}
+          </div>
         </div>
         <div className="mt-4 flex flex-wrap gap-2" role="tablist" aria-label="Play mode">
           <button
@@ -1016,9 +1127,7 @@ export function Studio({
             role="tab"
             aria-selected={view === "catalogue"}
             onClick={() => {
-              stopSpeaking();
-              stopClip();
-              setSpeaking(false);
+              stopDemo();
               setView("catalogue");
             }}
             className={`h-10 rounded-full px-4 text-sm font-medium ${
@@ -1142,7 +1251,7 @@ export function Studio({
                   </Button>
                   <p className="max-w-xl text-sm leading-6 text-[#5c5348]">
                     Sends every Pokefacts playlist, one after another, so all 1,025 Pokémon are covered.
-                    Each playlist stays at 100 tracks or fewer. Lily reads every track.
+                    Each playlist stays at 100 tracks or fewer. The voice you pick reads every track.
                   </p>
                 </div>
               ) : null}
@@ -1307,7 +1416,23 @@ export function Studio({
                       : "Hear plays the cry, then the reading. The Yoto card plays that same order."}
                   </p>
                 ) : null}
-                <div className="mt-6 flex flex-wrap gap-2">
+                <label className="mt-6 grid max-w-sm gap-1 text-sm" htmlFor="voice">
+                  Voice
+                  <select
+                    id="voice"
+                    aria-label="Voice"
+                    className="h-11 rounded-lg border border-[#1c1916]/15 bg-white px-2"
+                    value={voiceId}
+                    onChange={(event) => setVoiceId(writeVoiceId(localStorage, event.target.value))}
+                  >
+                    {YOTO_VOICES.map((voice) => (
+                      <option key={voice.id} value={voice.id}>
+                        {voice.name} — {voice.note}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="mt-4 flex flex-wrap gap-2">
                   {guessing ? (
                     <>
                       <Button
@@ -1316,7 +1441,12 @@ export function Studio({
                         className="h-11 border-[#1c1916]/15 bg-white px-4 text-[#1c1916]"
                         onClick={() => {
                           const track = revealed ? chapter.tracks[1] : chapter.tracks[0];
-                          if (track) hearEntry([trackSpeech(track)], chapter.dexId);
+                          if (!track) return;
+                          void hearScript(async () => ({
+                            text: trackSpeech(track),
+                            title: track.title,
+                            dexId: track.lead === "cry" ? chapter.dexId : undefined,
+                          }));
                         }}
                       >
                         {speaking ? "Stop" : revealed ? "Hear the answer" : "Hear the clues"}
@@ -1336,14 +1466,9 @@ export function Studio({
                       type="button"
                       className="h-11 px-5"
                       onClick={() => {
-                        void (async () => {
-                          if (speaking) {
-                            stopSpeaking();
-                            stopClip();
-                            setSpeaking(false);
-                            return;
-                          }
+                        void hearScript(async () => {
                           let line = "";
+                          let dexId = chapter.dexId;
                           if (formMode && chapter.formId) {
                             if (!chapter.articleStatus) {
                               await ensureFormProse(card.kind === "gmax" ? "gmax" : "mega");
@@ -1352,25 +1477,32 @@ export function Studio({
                               (item) => item.key === chapter.key,
                             );
                             line = fresh?.tracks[0] ? trackSpeech(fresh.tracks[0]) : "";
+                            dexId = fresh?.tracks[0]?.lead === "cry" ? fresh.dexId : undefined;
                           } else if (chapter.dexId && kind === "meet") {
                             const prefix = chapter.tracks[0]?.text.startsWith(POKEDEX_HOWTO) ? POKEDEX_HOWTO : "";
                             const speech =
                               factReading?.speech ?? (await speciesSpeech(chapter.dexId, chapter.title));
                             line = pronounce(`${prefix}${speech}`.replace(/\s+/g, " ").trim());
+                            dexId = chapter.tracks.some((track) => track.lead === "cry") ? chapter.dexId : undefined;
                           } else {
                             line = chapter.tracks.map((track) => trackSpeech(track)).join(" ");
+                            dexId = chapter.tracks.some((track) => track.lead === "cry") ? chapter.dexId : undefined;
                           }
-                          if (!line) return;
-                          if (chapter.clip) hearFact(chapter.clip, [line], chapter.dexId);
-                          else if (chapter.dexId) hearCryThenSpeech(chapter.dexId, [line]);
-                          else hear([line]);
-                        })();
+                          if (!line) return null;
+                          return { text: line, title: chapter.title, dexId };
+                        });
                       }}
                     >
                       {speaking ? "Stop" : "Hear the entry"}
                     </Button>
                   )}
                 </div>
+                {hearError ? (
+                  <p className="mt-3 text-sm leading-6 text-[#9f2d22]" role="alert">
+                    {hearError}
+                  </p>
+                ) : null}
+                <audio ref={clipRef} controls className="mt-4 w-full max-w-md" preload="none" />
               </article>
 
               <details className="mt-4 rounded-2xl border border-[#1c1916]/10 bg-white px-5 py-4">
@@ -1387,23 +1519,37 @@ export function Studio({
                         ? "Send records Lily locally, mixes that Pokémon’s cry in front, then uploads the merged MP3. The how-to is in the playlist description and at the start of the first track."
                         : `This send is only ${card.rangeLabel}. Each fact is the cry, then Lily. The button above sends every Pokefacts playlist, one after another.`}
                 </p>
-                <p className="mt-3 text-sm leading-6">
-                  Voice: <span className="font-medium">Lily</span>
-                  <span className="mt-1 block text-xs leading-5 text-[#5c5348]">
-                    British woman. Yoto Labs turns the script into an MP3 with her voice.
-                  </span>
+                <p className="mt-3 text-sm leading-6 text-[#5c5348]">
+                  Send uses the voice selected above. Yoto Labs turns the script into an MP3 in that voice.
                 </p>
-                {previousId ? (
-                  <label className="mt-3 flex items-start gap-2 text-sm leading-5">
-                    <input
-                      type="checkbox"
-                      className="mt-1"
-                      checked={replace}
-                      onChange={(event) => setReplace(event.target.checked)}
-                    />
-                    Replace the {card.rangeLabel} playlist already in your library.
-                  </label>
-                ) : null}
+                <label className="mt-3 grid gap-1 text-sm" htmlFor="yoto-playlist">
+                  Add to a Yoto playlist
+                  <select
+                    id="yoto-playlist"
+                    aria-label="Yoto playlist"
+                    className="h-11 rounded-lg border border-[#1c1916]/15 bg-white px-2"
+                    value={targetPlaylist}
+                    onChange={(event) => setTargetPlaylist(event.target.value)}
+                  >
+                    <option value="">New playlist</option>
+                    {library.map((item) => (
+                      <option key={item.cardId} value={item.cardId}>
+                        {item.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {libraryNote ? (
+                  <p className="mt-2 text-sm leading-5 text-[#9f2d22]" role="status">
+                    {libraryNote}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs leading-5 text-[#5c5348]">
+                    {targetPlaylist
+                      ? "Send adds these tracks onto that playlist. Tracks already on it stay."
+                      : "New playlist creates a card and does not replace one you already have."}
+                  </p>
+                )}
                 <Button
                   type="button"
                   className="mt-4 h-11 px-4"
@@ -1455,7 +1601,11 @@ export function Studio({
 
       <footer className="mx-auto w-full max-w-5xl px-4 pb-8 text-xs leading-5 text-[#8d8272] sm:px-6">
         Unofficial fan catalogue and cards. Not made by Nintendo, Game Freak, Creatures, or Yoto.
-        Pokémon names and the Pokédex lines are from the games. Champdex notes are written for this app.
+        Pokémon names and the Pokédex lines are from the games. The short notes are written for this app.{" "}
+        <a className="underline" href={DONATE_URL} target="_blank" rel="noreferrer">
+          Donate
+        </a>{" "}
+        if you want to support it.
       </footer>
 
       <ConnectDialog open={connectOpen} onOpenChange={setConnectOpen} />

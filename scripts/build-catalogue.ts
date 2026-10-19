@@ -716,7 +716,7 @@ function main() {
   db.prepare("INSERT INTO meta (key, value) VALUES (?, ?)").run("forms", String(formCount));
   db.prepare("INSERT INTO meta (key, value) VALUES (?, ?)").run(
     "note",
-    "Champdex catalogue. The Pokédex entry is an English PokéAPI flavor text. Champdex notes are separate. Bulbapedia text is not stored.",
+    "Pokefacts catalogue. The Pokédex entry is an English PokéAPI flavor text. Pokefacts notes are separate. Bulbapedia text is not stored.",
   );
   db.exec(`
     COMMIT;

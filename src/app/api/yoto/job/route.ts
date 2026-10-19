@@ -1,11 +1,14 @@
 import { YOTO_TRACK_LIMIT } from "@/lib/kid-cards";
 import { safeHttpStatus, validYotoCardId, yotoUpstreamFailure } from "@/lib/yoto-error";
 import { bearerToken, forwardYoto, jsonError } from "@/lib/yoto-proxy";
+import { appendToPlaylist, contentCreateBody } from "@/lib/yoto-send";
 
 type JobBody = {
   voiceId?: string;
   /** Bulk Pokefacts sends this so a saved card id cannot turn the job into a replace. */
   create?: boolean;
+  /** Add these tracks onto an existing playlist. This is the one case cardId is sent. */
+  append?: boolean;
   content?: {
     title?: string;
     cardId?: string;
@@ -27,7 +30,7 @@ export async function POST(request: Request) {
 
   const voiceId = body.voiceId?.trim() ?? "";
   if (!/^[A-Za-z0-9]{10,40}$/.test(voiceId)) {
-    return jsonError("Pick one of the Champdex voices.");
+    return jsonError("Pick one of the Pokefacts voices.");
   }
 
   const chapters = body.content?.content?.chapters;
@@ -61,7 +64,7 @@ export async function POST(request: Request) {
       }
       speechCount += 1;
       if (spoken.type !== "elevenlabs") {
-        return jsonError("Champdex cards are spoken with Yoto text to speech.");
+        return jsonError("Pokefacts cards are spoken with Yoto text to speech.");
       }
       if (!spoken.trackUrl || spoken.trackUrl.length > 3000) {
         return jsonError("A briefing is empty or longer than Yoto allows.");
@@ -78,14 +81,32 @@ export async function POST(request: Request) {
   }
 
   const content = body.content ? { ...body.content } : undefined;
+  const appendId =
+    body.append === true && body.create !== true ? validYotoCardId(content?.cardId) : undefined;
   if (body.create === true && content) delete content.cardId;
 
+  if (audioCount > 0 && appendId && content) {
+    return updateExistingPlaylist(token, appendId, content);
+  }
+
   if (audioCount > 0) {
-    const upstream = await forwardYoto("https://api.yotoplay.com/content", token, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(content),
-    });
+    let playlist: ReturnType<typeof contentCreateBody> | undefined;
+    try {
+      playlist = content ? contentCreateBody(content) : undefined;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Yoto did not accept this card.";
+      return jsonError(message);
+    }
+    const upstream = await forwardYoto(
+      "https://api.yotoplay.com/content",
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(playlist),
+      },
+      120_000,
+    );
     const text = await upstream.text();
     if (!upstream.ok) {
       return Response.json(yotoUpstreamFailure(text), { status: safeHttpStatus(upstream.status) });
@@ -98,12 +119,81 @@ export async function POST(request: Request) {
     }
     const row = parsed && typeof parsed === "object" ? (parsed as { cardId?: string; card?: { cardId?: string } }) : {};
     const cardId = validYotoCardId(row.card?.cardId) ?? validYotoCardId(row.cardId);
-    if (!cardId) return jsonError("Yoto stored the audio but did not return the playlist.", 422);
+    if (!cardId) {
+      const yotoBody = text.trim().slice(0, 500);
+      const message = yotoBody
+        ? `Yoto did not return the playlist. ${yotoBody}`
+        : "Yoto did not return the playlist.";
+      return jsonError(message, 422);
+    }
     return Response.json({
       status: "completed",
-      result: { cardId, title: content?.title },
+      result: { cardId, title: playlist?.title },
     });
   }
+
+async function updateExistingPlaylist(
+  token: string,
+  cardId: string,
+  content: NonNullable<JobBody["content"]>,
+): Promise<Response> {
+  const loaded = await forwardYoto(
+    `https://api.yotoplay.com/content/${encodeURIComponent(cardId)}`,
+    token,
+    undefined,
+    60_000,
+  );
+  const loadedText = await loaded.text();
+  if (!loaded.ok) {
+    return Response.json(yotoUpstreamFailure(loadedText), { status: safeHttpStatus(loaded.status) });
+  }
+  let parsed: unknown = null;
+  try {
+    parsed = loadedText ? (JSON.parse(loadedText) as unknown) : null;
+  } catch {
+    parsed = null;
+  }
+  if (parsed && typeof parsed === "object") {
+    const row = parsed as { card?: { cardId?: string }; cardId?: string };
+    if (row.card && typeof row.card === "object" && !row.card.cardId) row.card.cardId = cardId;
+    if (!row.card && !row.cardId) row.cardId = cardId;
+  }
+  let playlist: ReturnType<typeof appendToPlaylist>;
+  try {
+    playlist = appendToPlaylist(parsed as NonNullable<JobBody["content"]>, content);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Yoto did not accept this card.";
+    return jsonError(message);
+  }
+  const upstream = await forwardYoto(
+    "https://api.yotoplay.com/content",
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(playlist),
+    },
+    120_000,
+  );
+  const text = await upstream.text();
+  if (!upstream.ok) {
+    return Response.json(yotoUpstreamFailure(text), { status: safeHttpStatus(upstream.status) });
+  }
+  let returned: unknown = null;
+  try {
+    returned = text ? (JSON.parse(text) as unknown) : null;
+  } catch {
+    returned = null;
+  }
+  const row =
+    returned && typeof returned === "object" ? (returned as { cardId?: string; card?: { cardId?: string } }) : {};
+  const confirmed = validYotoCardId(row.card?.cardId) ?? validYotoCardId(row.cardId) ?? cardId;
+  return Response.json({
+    status: "completed",
+    updated: true,
+    result: { cardId: confirmed, title: playlist.title },
+  });
+}
 
   const url = `https://labs.api.yotoplay.com/content/job?voiceId=${encodeURIComponent(voiceId)}`;
   const upstream = await forwardYoto(url, token, {

@@ -181,7 +181,7 @@ describe("Yoto card payload", () => {
   it("builds an ElevenLabs chapter with a type icon", () => {
     const card = buildChampCard([dossier()], "card-1");
     assert.equal(card.cardId, "card-1");
-    assert.equal(card.title, "Champdex: Bulbasaur");
+    assert.equal(card.title, "Pokefacts: Bulbasaur");
     const chapter = card.content.chapters[0];
     assert.ok(chapter);
     assert.equal(chapter.tracks.length, 3);

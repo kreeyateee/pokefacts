@@ -3,7 +3,7 @@ import { dexBlurb, guessSpoken, pickDexEntry, type MonSheet } from "@/lib/dex-fa
 import { pronounce } from "@/lib/pronounce";
 import { spokenWiki } from "@/lib/spoken-wiki";
 import type { YotoContent } from "@/lib/yoto-card";
-import { iconForType, YOTO_ICONS } from "@/lib/yoto-icons";
+import { iconForType, voiceOrLily, YOTO_ICONS } from "@/lib/yoto-icons";
 
 /** Lily, the British woman. Yoto Labs records her MP3 from the spoken script. */
 export const LILY_VOICE_ID = "pFZP5JQG7iQjIQuC4Bku";
@@ -418,14 +418,20 @@ export function applyUploadedPixels(card: KidCard, mediaById: Record<number, str
   };
 }
 
-/** The body the Facts page sends. Voice is Lily. Icons are the pixels just uploaded. */
-export function pokedexUpload(card: KidCard, mediaById: Record<number, string>, cardId?: string) {
-  const content = buildKidCard(applyUploadedPixels(card, mediaById), cardId);
+/** The body the Facts page sends. Icons are the pixels just uploaded. */
+export function pokedexUpload(
+  card: KidCard,
+  mediaById: Record<number, string>,
+  cardId?: string,
+  voiceId: string = LILY_VOICE_ID,
+) {
+  const spoken = voiceOrLily(voiceId);
+  const content = buildKidCard(applyUploadedPixels(withVoice(card, spoken), mediaById), cardId);
   if (card.id === RANDOM_POKEDEX_ID) {
     content.metadata.description =
       "Pokefacts random. One hundred Pokemon drawn at random. Turn the wheel until you see a picture, then press play. You hear its cry, then Lily reads the name and a short description. Written for ages 8 to 12. Link this playlist to its own card.";
   }
-  return { voiceId: LILY_VOICE_ID, content };
+  return { voiceId: spoken, content };
 }
 
 /** The numbered Facts playlists that together cover every national species. */
@@ -433,29 +439,36 @@ export function factsBulkPlaylists(cards: KidCard[]): KidCard[] {
   return cards.filter((card) => card.kind === "meet" && card.id !== RANDOM_POKEDEX_ID);
 }
 
-function withLily(card: KidCard): KidCard {
+function withVoice(card: KidCard, voiceId: string): KidCard {
+  const spoken = voiceOrLily(voiceId);
   return {
     ...card,
     chapters: card.chapters.map((chapter) => ({
       ...chapter,
-      tracks: chapter.tracks.map((track) => ({ ...track, voiceId: LILY_VOICE_ID })),
+      tracks: chapter.tracks.map((track) => ({ ...track, voiceId: spoken })),
     })),
   };
 }
 
-/** One Facts playlist in the full-dex send. Lily reads it. Icons are the real pixels. */
-export function factsPlaylistUpload(card: KidCard, mediaById: Record<number, string>, cardId?: string) {
+/** One Facts playlist in the full-dex send. Icons are the real pixels. */
+export function factsPlaylistUpload(
+  card: KidCard,
+  mediaById: Record<number, string>,
+  cardId?: string,
+  voiceId: string = LILY_VOICE_ID,
+) {
+  const spoken = voiceOrLily(voiceId);
   const playlistIndex = Number(/^meet-(\d+)$/.exec(card.id)?.[1]);
   const title =
     Number.isInteger(playlistIndex) && playlistIndex >= 1
       ? pokefactsTitle(playlistIndex)
       : card.libraryTitle;
   const usable = cardId && /^[A-Za-z0-9]{5}$/.test(cardId) ? cardId : undefined;
-  const content = buildKidCard(applyUploadedPixels(withLily(card), mediaById), usable);
+  const content = buildKidCard(applyUploadedPixels(withVoice(card, spoken), mediaById), usable);
   content.metadata.title = title;
   content.title = title;
   content.metadata.description = `${title}. You hear the cry, then Lily reads the name and a short description. Written for ages 8 to 12. Link this playlist to its own card.`;
-  return { voiceId: LILY_VOICE_ID, content };
+  return { voiceId: spoken, content };
 }
 
 export function guessPoolFromCards(cards: KidCard[]): KidChapter[] {
@@ -520,10 +533,12 @@ export function guessUpload(
   realById: Record<number, string>,
   shadowById: Record<number, string>,
   cardId?: string,
+  voiceId: string = LILY_VOICE_ID,
 ) {
+  const spoken = voiceOrLily(voiceId);
   const prepared: KidCard = {
     ...card,
-    chapters: withLily(card).chapters.map((chapter) => {
+    chapters: withVoice(card, spoken).chapters.map((chapter) => {
       const id = chapter.dexId;
       const shadowMedia = id ? shadowById[id] : undefined;
       const realMedia = id ? realById[id] : undefined;
@@ -535,7 +550,7 @@ export function guessUpload(
         icon: shadow,
         tracks: chapter.tracks.map((track, trackIndex) => {
           const clue = track.key === "clues" || trackIndex === 0;
-          return { ...track, voiceId: LILY_VOICE_ID, icon: clue ? shadow : real };
+          return { ...track, voiceId: spoken, icon: clue ? shadow : real };
         }),
       };
     }),
@@ -545,7 +560,7 @@ export function guessUpload(
   content.title = "Guess Who";
   content.metadata.description =
     "Guess Who. Fifty riddles drawn at random. Each track starts with the cry, then Lily. The clue never says the name. The answer says the name. The clue icon is a dark shadow. The answer icon is the real pixel. Written for ages 8 to 12. Link this playlist to its own card.";
-  return { voiceId: LILY_VOICE_ID, content };
+  return { voiceId: spoken, content };
 }
 
 /** Chapters whose tracks lead with the cry. Facts and Guess Who both qualify. The intro does not. */
@@ -647,15 +662,21 @@ export function formPlaylist(kind: "mega" | "gmax", forms: readonly FormPlaylist
 }
 
 /** Same upload shape as Pokefacts. The Yoto title is the playlist name, with no stale card id. */
-export function formPlaylistUpload(card: KidCard, mediaById: Record<number, string>, cardId?: string) {
+export function formPlaylistUpload(
+  card: KidCard,
+  mediaById: Record<number, string>,
+  cardId?: string,
+  voiceId: string = LILY_VOICE_ID,
+) {
+  const spoken = voiceOrLily(voiceId);
   const title = card.kind === "gmax" ? "Gigantamax" : "Mega Evolutions";
   const usable = cardId && /^[A-Za-z0-9]{5}$/.test(cardId) ? cardId : undefined;
-  const content = buildKidCard(applyUploadedPixels(withLily(card), mediaById), usable);
+  const content = buildKidCard(applyUploadedPixels(withVoice(card, spoken), mediaById), usable);
   content.title = title;
   content.metadata.title = title;
   content.metadata.description = `${title}. You hear the cry, then Lily reads the form. Written for ages 8 to 12. Link this playlist to its own card.`;
   if (!usable) delete content.cardId;
-  return { voiceId: LILY_VOICE_ID, content };
+  return { voiceId: spoken, content };
 }
 
 /** Clue and answer playback. Both start with the cry. The clue script omits the name. */

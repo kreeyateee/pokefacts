@@ -35,7 +35,9 @@ import {
   afterRejectedPlaylist,
   applyFinishedAudio,
   bulkFailureText,
+  contentCreateBody,
   factsBulkUpload,
+  finishedPlaylistId,
   renderJobs,
   type PlaylistUpload,
   type SavedCardMap,
@@ -435,6 +437,8 @@ describe("every national species", () => {
         const clue = chapter.tracks[0]?.text ?? "";
         assert.doesNotMatch(clue, new RegExp(escapeRegExp(chapter.title), "i"));
         assert.match(chapter.tracks[1]?.text ?? "", /^It is /);
+        assert.equal(chapter.tracks[0]?.lead, "cry");
+        assert.equal(chapter.tracks[1]?.lead, "cry");
       }
     }
   });
@@ -811,14 +815,122 @@ describe("bulk Facts upload", () => {
       );
       assert.equal(response.status, 200);
       assert.equal(url, "https://api.yotoplay.com/content");
-      const upstream = JSON.parse(posted) as { title?: string; cardId?: string; metadata?: { title?: string } };
+      const upstream = JSON.parse(posted) as {
+        title?: string;
+        cardId?: string;
+        metadata?: { title?: string; media?: { duration?: number; fileSize?: number } };
+        content?: {
+          chapters?: Array<{
+            key?: string;
+            tracks?: Array<{ uid?: string; type?: string; trackUrl?: string }>;
+          }>;
+        };
+      };
       assert.equal(upstream.title, "Pokefacts 1");
-      assert.equal(upstream.metadata?.title, "Pokefacts 1");
+      assert.equal(Object.hasOwn(upstream.metadata ?? {}, "title"), false);
+      assert.equal(typeof upstream.metadata?.media?.duration, "number");
       assert.equal(Object.hasOwn(upstream, "cardId"), false);
+      const postedTracks = upstream.content?.chapters?.flatMap((chapter) => chapter.tracks ?? []) ?? [];
+      assert.ok(postedTracks.length > 0);
+      assert.ok(postedTracks.every((track) => Boolean(track.uid) && (track.uid?.length ?? 0) <= 20 && track.type === "audio"));
+      assert.ok(upstream.content?.chapters?.every((chapter) => (chapter.key?.length ?? 0) <= 20 && (chapter.key?.length ?? 0) > 0));
       const body = (await response.json()) as { status?: string; result?: { cardId?: string; title?: string } };
       assert.equal(body.status, "completed");
       assert.equal(body.result?.cardId, "ab12C");
       assert.equal(body.result?.title, "Pokefacts 1");
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it("builds a Yoto create body the content API accepts and does not claim a card without an id", () => {
+    const icon = "yoto:#aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const created = contentCreateBody({
+      title: "Pokefacts 1",
+      cardId: "ab12C",
+      metadata: { title: "Pokefacts 1", description: "Cry, then Lily." },
+      content: {
+        chapters: [
+          {
+            key: "this-chapter-key-is-way-too-long",
+            title: "Bulbasaur",
+            display: { icon16x16: icon },
+            tracks: [
+              {
+                key: "this-track-key-is-also-too-long",
+                title: "Bulbasaur",
+                trackUrl: "yoto:#bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                type: "audio",
+                format: "opus",
+                channels: 1,
+                duration: 12,
+                fileSize: 3400,
+                display: { icon16x16: icon },
+                voiceId: "pFZP5JQG7iQjIQuC4Bku",
+              },
+            ],
+          },
+        ],
+      },
+    });
+    assert.equal(Object.hasOwn(created, "cardId"), false);
+    assert.equal(Object.hasOwn(created.metadata ?? {}, "title"), false);
+    const chapter = (created.content as { chapters: Array<{ key: string; tracks: Array<{ key: string; uid?: string; voiceId?: string; format?: string; channels?: string }> }> }).chapters[0];
+    assert.ok(chapter);
+    assert.ok(chapter.key.length <= 20);
+    assert.ok((chapter.tracks[0]?.key.length ?? 0) <= 20);
+    assert.equal(chapter.tracks[0]?.uid, chapter.tracks[0]?.key);
+    assert.equal(chapter.tracks[0]?.voiceId, undefined);
+    assert.equal(chapter.tracks[0]?.format, "opus");
+    assert.equal(chapter.tracks[0]?.channels, "mono");
+    assert.throws(() =>
+      contentCreateBody({
+        title: "Pokefacts 1",
+        content: {
+          chapters: [
+            {
+              key: "start",
+              title: "Start",
+              display: { icon16x16: "/pixels/1.png" },
+              tracks: [],
+            },
+          ],
+        },
+      }),
+      /picture/,
+    );
+    assert.equal(finishedPlaylistId({ status: "completed", create: true, fallback: "ab12C" }), undefined);
+    assert.equal(finishedPlaylistId({ status: "completed", cardId: "ab12C", create: true }), "ab12C");
+    assert.equal(finishedPlaylistId({ status: "completed", cardId: "not-a-card", create: true, fallback: "ab12C" }), undefined);
+  });
+
+  it("shows Yoto's create error and does not treat it as a new card", async () => {
+    const first = bulk[0];
+    assert.ok(first);
+    const script = factsBulkUpload(first, { 1: "a".repeat(43) });
+    const jobs = renderJobs(first.libraryTitle, first, script);
+    const audio = Object.fromEntries(
+      jobs.map((job, index) => [
+        job.key,
+        { trackUrl: `yoto:#${String(index).padStart(43, "b")}`, duration: 2, fileSize: 8, format: "opus", channels: "mono" as const },
+      ]),
+    );
+    const upload = applyFinishedAudio(script, audio);
+    const yotoBody = JSON.stringify({ error: { code: "bad-request", message: "metadata.title is not allowed" } });
+    const original = globalThis.fetch;
+    globalThis.fetch = async () => new Response(yotoBody, { status: 400 });
+    try {
+      const response = await postJob(
+        new Request("http://localhost/api/yoto/job", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${"x".repeat(24)}`, "Content-Type": "application/json" },
+          body: JSON.stringify(upload),
+        }),
+      );
+      assert.equal(response.ok, false);
+      const body = (await response.json()) as { message?: string; error?: string; yotoBody?: string };
+      assert.match(`${body.message} ${body.error} ${body.yotoBody}`, /metadata\.title is not allowed/);
+      assert.equal(body.message?.includes("in your Yoto library"), false);
     } finally {
       globalThis.fetch = original;
     }
