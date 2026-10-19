@@ -7,6 +7,7 @@ import { access, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
+import { productionBuildArgs } from "./next-build-args.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const config = JSON.parse(
@@ -155,9 +156,14 @@ console.log("");
 
 if (checkOnly) process.exit(0);
 
-console.log("Building the production app…");
+const buildArgs = productionBuildArgs();
+console.log(
+  buildArgs.includes("--webpack")
+    ? "Building the production app with Webpack…"
+    : "Building the production app…",
+);
 const nextBin = path.join(root, "node_modules", "next", "dist", "bin", "next");
-const buildCode = await run(process.execPath, [nextBin, "build"]);
+const buildCode = await run(process.execPath, [nextBin, ...buildArgs]);
 if (buildCode !== 0) {
   fail("The production build failed. Fix the error above, then run npm start again.");
 }
