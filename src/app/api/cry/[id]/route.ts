@@ -1,3 +1,4 @@
+import { audioContainer } from "@/lib/cry-audio";
 import { ensureCry } from "@/lib/yoto-fact-audio";
 import { looksLikeGateway, PUBLIC_LINK_TIMEOUT } from "@/lib/yoto-error";
 import { jsonError } from "@/lib/yoto-proxy";
@@ -13,9 +14,10 @@ export async function GET(
   }
   try {
     const bytes = await ensureCry(dexId);
+    const type = audioContainer(bytes) === "mp3" ? "audio/mpeg" : "audio/ogg";
     return new Response(new Uint8Array(bytes), {
       headers: {
-        "Content-Type": "audio/ogg",
+        "Content-Type": type,
         "Cache-Control": "public, max-age=86400",
       },
     });

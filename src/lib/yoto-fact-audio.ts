@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { cryLeads, cryUrl, mergeCryFirst } from "@/lib/cry-audio";
+import { audioContainer, cryLeads, cryUrl, mergeCryFirst } from "@/lib/cry-audio";
 import { LILY_VOICE_ID } from "@/lib/kid-cards";
 import { RECONNECT_YOTO, reconnectMessage } from "@/lib/yoto-error";
 
@@ -83,25 +83,28 @@ async function yoto(
   return fetchImpl(url, { ...init, headers, signal: AbortSignal.timeout(timeoutMs) });
 }
 
-export async function ensureCry(id: number, fetchImpl: typeof fetch = fetch): Promise<Buffer> {
+export async function ensureCry(
+  id: number,
+  fetchImpl: typeof fetch = fetch,
+  cacheDir: string = CRY_CACHE,
+): Promise<Buffer> {
   if (!Number.isInteger(id) || id < 1 || id > 1025) {
-    throw new Error("That cry is not in the national Pokédex.");
+    throw new Error(`That cry is not in the national Pokédex (${id}).`);
   }
-  await mkdir(CRY_CACHE, { recursive: true });
-  const file = path.join(CRY_CACHE, `${id}.ogg`);
+  await mkdir(cacheDir, { recursive: true });
+  const file = path.join(cacheDir, `${id}.ogg`);
   try {
-    await access(file);
-    return await readFile(file);
+    const cached = await readFile(file);
+    if (audioContainer(cached)) return cached;
   } catch {
-    const response = await fetchImpl(cryUrl(id), { signal: AbortSignal.timeout(30_000) });
-    if (!response.ok) throw new Error(`The cry for number ${id} could not be downloaded.`);
-    const bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.subarray(0, 4).toString("ascii") !== "OggS") {
-      throw new Error(`The cry for number ${id} was not an Ogg file.`);
-    }
-    await writeFile(file, bytes);
-    return bytes;
+    // Missing cache is downloaded below. A saved error page is replaced.
   }
+  const response = await fetchImpl(cryUrl(id), { signal: AbortSignal.timeout(30_000) });
+  if (!response.ok) throw new Error(`The cry for number ${id} could not be downloaded (HTTP ${response.status}).`);
+  const bytes = Buffer.from(await response.arrayBuffer());
+  if (!audioContainer(bytes)) throw new Error(`The cry for number ${id} was not an Ogg or MP3 file.`);
+  await writeFile(file, bytes);
+  return bytes;
 }
 
 async function loadCard(token: string, cardId: string, playable: boolean, fetchImpl: typeof fetch): Promise<CardPayload> {
@@ -463,6 +466,38 @@ async function pollUpload(
   return undefined;
 }
 
+function clipReason(text: string): string {
+  const clean = text.replace(/\s+/g, " ").trim();
+  if (!clean || /<!doctype|<html[\s>]/i.test(clean) || /^Command failed:/i.test(clean)) return "";
+  return clean.length > 160 ? `${clean.slice(0, 157)}...` : clean;
+}
+
+function underlyingReason(error: unknown): string {
+  if (!(error instanceof Error)) return "";
+  const extra = error as Error & { stderr?: unknown; cause?: unknown };
+  const stderrText = Buffer.isBuffer(extra.stderr)
+    ? extra.stderr.toString("utf8")
+    : typeof extra.stderr === "string"
+      ? extra.stderr
+      : "";
+  const stderrLine = stderrText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .at(-1);
+  const fromStderr = clipReason(stderrLine ?? "");
+  if (fromStderr) return fromStderr;
+  let message = error.message;
+  if (/^fetch failed$/i.test(message.trim()) && extra.cause instanceof Error && extra.cause.message) {
+    message = extra.cause.message;
+  }
+  const lines = message
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !/^Command failed:/i.test(line));
+  return clipReason(lines.at(-1) ?? "");
+}
+
 /**
  * One short step of a single track: start Lily, merge the cry, or collect the yoto:# hash.
  * The browser calls this once per track, then creates the playlist.
@@ -471,7 +506,7 @@ export async function prepareFactTrack(
   token: string,
   request: TrackPrepareRequest,
   fetchImpl: typeof fetch = fetch,
-  roots: { speech: string; rendered: string } = { speech: SPEECH_ROOT, rendered: RENDER_ROOT },
+  roots: { speech: string; rendered: string; cries?: string } = { speech: SPEECH_ROOT, rendered: RENDER_ROOT },
 ): Promise<TrackPrepareResult> {
   if (request.discardCardId && !request.text?.trim()) {
     await discardCard(token, request.discardCardId, fetchImpl);
@@ -481,10 +516,18 @@ export async function prepareFactTrack(
   const text = request.text?.replace(/\s+/g, " ").trim() ?? "";
   if (!text || text.length > 3000) throw new Error("That line is empty or longer than Yoto allows.");
   const title = (request.title?.trim() || "Line").slice(0, 80);
-  if (request.dexId != null && (!Number.isInteger(request.dexId) || request.dexId < 1 || request.dexId > 1025)) {
-    throw new Error("That cry is not in the national Pokédex.");
-  }
   const dexId = request.dexId;
+  const species = (request.name?.replace(/\s+/g, " ").trim() || title || (typeof dexId === "number" ? `Number ${dexId}` : "")).slice(0, 40);
+  const cryFailure = (error?: unknown) => {
+    if (error instanceof Error && error.message === RECONNECT_YOTO) return error;
+    const lead = `${species} cry could not be added.`;
+    if (error instanceof Error && (error.message === lead || error.message.startsWith(`${lead} `))) return error;
+    const reason = error == null ? "" : underlyingReason(error);
+    return new Error(reason ? `${lead} ${reason}` : lead);
+  };
+  if (dexId != null && (!Number.isInteger(dexId) || dexId < 1 || dexId > 1025)) {
+    throw cryFailure(new Error(`That cry is not in the national Pokédex (${String(dexId)}).`));
+  }
   if (request.speechJobId && !/^[\w-]{8,80}$/.test(request.speechJobId)) {
     throw new Error("That recording job id does not look right.");
   }
@@ -496,8 +539,6 @@ export async function prepareFactTrack(
   }
 
   const label = dexId ? String(dexId) : "intro";
-  const species = (request.name?.replace(/\s+/g, " ").trim() || title || (dexId ? `Number ${dexId}` : "")).slice(0, 40);
-  const cryError = () => new Error(`${species} cry could not be added.`);
   const renderedFile = path.join(roots.rendered, `${cacheKey(text, dexId)}.json`);
   const speechFile = path.join(roots.speech, `${speechKey(text)}.mp3`);
   const cached = await readRendered(renderedFile);
@@ -514,13 +555,15 @@ export async function prepareFactTrack(
   }
 
   const readyFrom = async (uploadId: string, polls: number): Promise<TrackPrepareResult> => {
-    if (dexId && !(await readCryMark(uploadMarkPath(roots.rendered, uploadId)))) throw cryError();
+    if (dexId && !(await readCryMark(uploadMarkPath(roots.rendered, uploadId)))) {
+      throw cryFailure(new Error("The saved upload is not a cry-first mix."));
+    }
     let uploaded: UploadedAudio | undefined;
     try {
       uploaded = await pollUpload(token, uploadId, label, fetchImpl, polls);
     } catch (error) {
       if (!dexId) throw error;
-      throw cryError();
+      throw cryFailure(error);
     }
     if (!uploaded?.trackUrl.startsWith("yoto:#")) return { phase: "upload", uploadId };
     await writeRendered(renderedFile, uploaded, Boolean(dexId));
@@ -539,13 +582,14 @@ export async function prepareFactTrack(
   const mix = async (speech: Buffer): Promise<Buffer> => {
     if (!dexId) return speech;
     try {
-      const cry = await ensureCry(dexId, fetchImpl);
+      const cry = await ensureCry(dexId, fetchImpl, roots.cries ?? CRY_CACHE);
       const merged = await mergeCryFirst(cry, speech);
-      if (!(await cryLeads(cry, speech, merged))) throw cryError();
+      if (!(await cryLeads(cry, speech, merged))) {
+        throw new Error("The merged audio did not start with the cry.");
+      }
       return merged;
     } catch (error) {
-      if (error instanceof Error && error.message === cryError().message) throw error;
-      throw cryError();
+      throw cryFailure(error);
     }
   };
 
@@ -558,8 +602,7 @@ export async function prepareFactTrack(
       return await readyFrom(uploadId, 4);
     } catch (error) {
       if (!dexId) throw error;
-      if (error instanceof Error && error.message === cryError().message) throw error;
-      throw cryError();
+      throw cryFailure(error);
     }
   };
 
@@ -579,10 +622,8 @@ export async function prepareFactTrack(
       await discardCard(token, cardId, fetchImpl);
       return await fromSpeechFile();
     } catch (error) {
-      if (error instanceof Error && error.message === RECONNECT_YOTO) throw error;
       if (!dexId) throw error;
-      if (error instanceof Error && error.message === cryError().message) throw error;
-      throw cryError();
+      throw cryFailure(error);
     }
   };
 

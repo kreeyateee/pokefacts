@@ -8,7 +8,7 @@ import { describe, it } from "node:test";
 
 import { POST as postJob } from "../app/api/yoto/job/route";
 import { POST as postTrack } from "../app/api/yoto/track/route";
-import { audioDurationSeconds, cryLeads, cryUrl, mergeCryFirst } from "./cry-audio";
+import { audioContainer, audioDurationSeconds, cryLeads, cryUrl, mergeCryFirst } from "./cry-audio";
 import { guessUpload, LILY_VOICE_ID, type KidCard } from "./kid-cards";
 import { applyFinishedAudio, factsBulkUpload, renderJobs } from "./yoto-send";
 import { attachCry, prepareFactTrack } from "./yoto-fact-audio";
@@ -643,8 +643,6 @@ describe("fact audio", () => {
       assert.notEqual(clueMixed.equals(clueSpeech), true);
       assert.notEqual(answerMixed.equals(answerSpeech), true);
 
-      const missingCry = path.join(process.cwd(), "data", "cries", "25.ogg");
-      await rm(missingCry, { force: true });
       const missingPuts: Buffer[] = [];
       const missingFetch: typeof fetch = async (input, init) => {
         const url = String(input);
@@ -679,12 +677,16 @@ describe("fact audio", () => {
               speechJobId: "job-missing",
             },
             missingFetch,
-            { speech: path.join(dir, "missing-speech"), rendered: path.join(dir, "missing-rendered") },
+            {
+              speech: path.join(dir, "missing-speech"),
+              rendered: path.join(dir, "missing-rendered"),
+              cries: path.join(dir, "missing-cries"),
+            },
           ),
         (error: unknown) => {
           assert.ok(error instanceof Error);
-          assert.match(error.message, /Pikachu/);
-          assert.match(error.message, /cry/);
+          assert.match(error.message, /Pikachu cry could not be added\./);
+          assert.match(error.message, /HTTP 404/);
           return true;
         },
       );
@@ -713,7 +715,144 @@ describe("fact audio", () => {
       );
     } finally {
       await rm(dir, { recursive: true, force: true });
-      await rm(path.join(process.cwd(), "data", "cries", "25.ogg"), { force: true });
+    }
+  });
+
+  it("puts Pikachu's MP3 cry first and names the reason when the cry cannot be mixed", async () => {
+    const response = await fetch(cryUrl(25));
+    assert.equal(response.status, 200);
+    const cry = Buffer.from(await response.arrayBuffer());
+    assert.equal(cry.subarray(0, 4).toString("ascii") === "OggS", false);
+    assert.equal(audioContainer(cry), "mp3");
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-pika-"));
+    const speechPath = path.join(dir, "speech.mp3");
+    await sine(speechPath, 660);
+    const speech = await readFile(speechPath);
+    const merged = await mergeCryFirst(cry, speech);
+    const cryLength = await audioDurationSeconds(cry, "cry.mp3");
+    const mergedLength = await audioDurationSeconds(merged, "merged.mp3");
+    assert.ok(mergedLength > cryLength);
+    assert.equal(await cryLeads(cry, speech, merged), true);
+
+    const puts: Buffer[] = [];
+    const roots = {
+      speech: path.join(dir, "cache-speech"),
+      rendered: path.join(dir, "cache-rendered"),
+      cries: path.join(dir, "cache-cries"),
+    };
+    const text = "Pikachu waits in the tall grass. It weighs 6 kilograms.";
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = String(input);
+      if (url.includes("/content/job/job-pika")) {
+        return Response.json({ job: { jobId: "job-pika", status: "completed", result: { cardId: "pika1" } } });
+      }
+      if (url.includes("/content/pika1") && url.includes("playable=true")) {
+        return Response.json({
+          card: { content: { chapters: [{ tracks: [{ trackUrl: "https://cdn.example/pika1.mp3" }] }] } },
+        });
+      }
+      if (url.includes("/content/pika1") && init?.method === "DELETE") return new Response(null, { status: 200 });
+      if (url === "https://cdn.example/pika1.mp3") return new Response(new Uint8Array(speech));
+      if (url === cryUrl(25)) return new Response(new Uint8Array(cry), { headers: { "Content-Type": "audio/ogg" } });
+      if (url.includes("/media/transcode/audio/uploadUrl")) {
+        return Response.json({ upload: { uploadId: "up-pika", uploadUrl: "https://upload.example/pika" } });
+      }
+      if (url === "https://upload.example/pika") {
+        const body = init?.body;
+        puts.push(Buffer.from(body instanceof Uint8Array ? body : new Uint8Array()));
+        return new Response("ok");
+      }
+      if (url.includes("/transcoded")) {
+        return Response.json({
+          transcode: {
+            transcodedSha256: "pikamerged",
+            transcodedInfo: { duration: 3, fileSize: puts.at(-1)?.length ?? 1, format: "mp3", channels: "mono" },
+          },
+        });
+      }
+      throw new Error(`Unexpected ${init?.method ?? "GET"} ${url}`);
+    };
+
+    try {
+      const ready = await prepareFactTrack(
+        "x".repeat(24),
+        { text, title: "Pikachu", name: "Pikachu", dexId: 25, speechJobId: "job-pika" },
+        fetchImpl,
+        roots,
+      );
+      assert.equal(ready.phase, "ready");
+      assert.equal(ready.trackUrl, "yoto:#pikamerged");
+      const mixed = puts.at(-1);
+      assert.ok(mixed);
+      assert.equal(mixed.equals(speech), false);
+      assert.equal(await cryLeads(cry, speech, mixed), true);
+
+      const bogusPuts: Buffer[] = [];
+      const bogusFetch: typeof fetch = async (input, init) => {
+        const url = String(input);
+        if (url.includes("/content/job/job-bogus")) {
+          return Response.json({ job: { jobId: "job-bogus", status: "completed", result: { cardId: "bogus" } } });
+        }
+        if (url.includes("/content/bogus") && url.includes("playable=true")) {
+          return Response.json({
+            card: { content: { chapters: [{ tracks: [{ trackUrl: "https://cdn.example/bogus.mp3" }] }] } },
+          });
+        }
+        if (url.includes("/content/bogus") && init?.method === "DELETE") return new Response(null, { status: 200 });
+        if (url === "https://cdn.example/bogus.mp3") return new Response(new Uint8Array(speech));
+        if (url === cryUrl(25)) return new Response(Buffer.concat([Buffer.from("OggS"), Buffer.alloc(128)]));
+        if (url.includes("/uploadUrl") || url.includes("upload.example")) {
+          bogusPuts.push(Buffer.from("voice-only"));
+          return new Response("nope", { status: 500 });
+        }
+        throw new Error(`Unexpected ${init?.method ?? "GET"} ${url}`);
+      };
+      await assert.rejects(
+        () =>
+          prepareFactTrack(
+            "x".repeat(24),
+            {
+              text: "A broken Pikachu cry must not upload Lily alone.",
+              title: "Pikachu",
+              name: "Pikachu",
+              dexId: 25,
+              speechJobId: "job-bogus",
+            },
+            bogusFetch,
+            {
+              speech: path.join(dir, "bogus-speech"),
+              rendered: path.join(dir, "bogus-rendered"),
+              cries: path.join(dir, "bogus-cries"),
+            },
+          ),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.match(error.message, /Pikachu cry could not be added\. \S+/);
+          assert.equal(error.message.includes("filter_complex"), false);
+          assert.equal(error.message.includes("libmp3lame"), false);
+          assert.ok(error.message.length < 240);
+          return true;
+        },
+      );
+      assert.equal(bogusPuts.length, 0);
+
+      await assert.rejects(
+        () =>
+          prepareFactTrack(
+            "x".repeat(24),
+            { text: "Pikachu needs a real national dex id.", title: "Pikachu", name: "Pikachu", dexId: 0 },
+            fetchImpl,
+            roots,
+          ),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.match(error.message, /Pikachu cry could not be added\./);
+          assert.match(error.message, /national Pokédex \(0\)/);
+          return true;
+        },
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
     }
   });
 });
