@@ -60,7 +60,7 @@ async function yoto(
 
 function scratchContent(text: string, title: string, voiceId: string) {
   return {
-    title: "Champdex demo",
+    title: "Pokefacts demo",
     content: {
       chapters: [
         {
@@ -211,9 +211,11 @@ async function recordVoice(
   for (let attempt = 0; attempt < polls && !(fields.status === "completed" && fields.cardId); attempt += 1) {
     if (fields.status === "failed") throw new Error(fields.error || "Yoto could not record this line.");
     if (attempt > 0) await wait(1000);
+    const jobId = fields.jobId;
+    if (!jobId) throw new Error(fields.error || "Yoto did not start this line.");
     const status = await yoto(
       token,
-      `https://labs.api.yotoplay.com/content/job/${encodeURIComponent(fields.jobId)}`,
+      `https://labs.api.yotoplay.com/content/job/${encodeURIComponent(jobId)}`,
       undefined,
       fetchImpl,
       15_000,

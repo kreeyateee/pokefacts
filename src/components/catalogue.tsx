@@ -33,24 +33,24 @@ const TYPES = [
 ] as const;
 
 const TYPE_CHIP: Record<string, string> = {
-  Normal: "bg-[#a8a77a] text-[#1c1916]",
+  Normal: "bg-[#a8a77a] text-ink",
   Fire: "bg-[#ee8130] text-white",
   Water: "bg-[#6390f0] text-white",
-  Electric: "bg-[#f7d02c] text-[#1c1916]",
-  Grass: "bg-[#7ac74c] text-[#1c1916]",
-  Ice: "bg-[#96d9d6] text-[#1c1916]",
+  Electric: "bg-[#f7d02c] text-ink",
+  Grass: "bg-[#7ac74c] text-ink",
+  Ice: "bg-[#96d9d6] text-ink",
   Fighting: "bg-[#c22e28] text-white",
   Poison: "bg-[#a33ea1] text-white",
-  Ground: "bg-[#e2bf65] text-[#1c1916]",
-  Flying: "bg-[#a98ff3] text-[#1c1916]",
+  Ground: "bg-[#e2bf65] text-ink",
+  Flying: "bg-[#a98ff3] text-ink",
   Psychic: "bg-[#f95587] text-white",
-  Bug: "bg-[#a6b91a] text-[#1c1916]",
-  Rock: "bg-[#b6a136] text-[#1c1916]",
+  Bug: "bg-[#a6b91a] text-ink",
+  Rock: "bg-[#b6a136] text-ink",
   Ghost: "bg-[#735797] text-white",
   Dragon: "bg-[#6f35fc] text-white",
   Dark: "bg-[#705746] text-white",
-  Steel: "bg-[#b7b7ce] text-[#1c1916]",
-  Fairy: "bg-[#d685ad] text-[#1c1916]",
+  Steel: "bg-[#b7b7ce] text-ink",
+  Fairy: "bg-[#d685ad] text-ink",
 };
 
 const REGIONS = [
@@ -66,7 +66,7 @@ const REGIONS = [
 ];
 
 function chipClass(type: string): string {
-  return TYPE_CHIP[type] ?? "bg-[#efe8dc] text-[#1c1916]";
+  return TYPE_CHIP[type] ?? "bg-[#efe8dc] text-ink";
 }
 
 function numberLabel(id: number): string {
@@ -89,13 +89,22 @@ function spriteSrc(id: number): string {
   return `/sprites/${id}.png`;
 }
 
+function statFill(name: string): string {
+  if (name === "HP") return "bg-[#3dce5a]";
+  if (name === "Attack") return "bg-[#f08030]";
+  if (name === "Defense") return "bg-[#ffcb05]";
+  if (name === "Special Attack") return "bg-[#6890f0]";
+  if (name === "Special Defense") return "bg-[#78c850]";
+  return "bg-[#f85888]";
+}
+
 function TypeChips({ types }: { types: string[] }) {
   return (
     <span className="flex flex-wrap gap-1.5">
       {types.map((type) => (
         <span
           key={type}
-          className={`rounded-full px-2 py-0.5 text-[11px] font-semibold tracking-wide uppercase ${chipClass(type)}`}
+          className={`rounded-full border-2 border-[#16324f] px-2 py-0.5 text-[11px] font-bold tracking-wide uppercase ${chipClass(type)}`}
         >
           {type}
         </span>
@@ -107,8 +116,8 @@ function TypeChips({ types }: { types: string[] }) {
 function Fact({ label, children }: { label: string; children: string }) {
   if (!children) return null;
   return (
-    <div className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-2 border-b border-[#1c1916]/10 py-2 text-sm">
-      <span className="text-[#8a5a22]">{label}</span>
+    <div className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-2 border-b border-ink/15 py-2 text-sm">
+      <span className="font-bold text-poke-red">{label}</span>
       <span>{children}</span>
     </div>
   );
@@ -134,8 +143,14 @@ const PLAYLIST_KINDS: Array<{ id: SelectionKind; label: string; detail: string }
 
 export function Catalogue({
   onSendSelection,
+  playlists = [],
+  playlistTarget = "",
+  onPlaylistTarget,
 }: {
   onSendSelection?: (card: KidCard) => Promise<void>;
+  playlists?: Array<{ cardId: string; title: string }>;
+  playlistTarget?: string;
+  onPlaylistTarget?: (cardId: string) => void;
 } = {}) {
   const [query, setQuery] = useState("");
   const [type, setType] = useState("");
@@ -392,7 +407,7 @@ export function Catalogue({
               setPage(1);
             }}
             placeholder="Name or number"
-            className="h-11 rounded-xl border border-[#1c1916]/15 bg-white px-3"
+            className="pk-field"
           />
         </label>
         <div className="mt-3 flex flex-wrap gap-1.5">
@@ -402,9 +417,8 @@ export function Catalogue({
               setType("");
               setPage(1);
             }}
-            className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-              type === "" ? "bg-[#1c1916] text-[#f4efe6]" : "bg-white text-[#1c1916]"
-            }`}
+            className="pk-pill px-3 text-xs"
+            aria-pressed={type === ""}
           >
             All types
           </button>
@@ -416,8 +430,8 @@ export function Catalogue({
                 setType(name);
                 setPage(1);
               }}
-              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                type === name ? "ring-2 ring-[#1c1916] ring-offset-2 ring-offset-[#f4efe6]" : ""
+              className={`rounded-full border-2 border-[#16324f] px-2.5 py-1 text-xs font-bold ${
+                type === name ? "ring-2 ring-white ring-offset-2 ring-offset-[#16324f]" : ""
               } ${chipClass(name)}`}
             >
               {name}
@@ -433,7 +447,7 @@ export function Catalogue({
               setGeneration(Number(event.target.value));
               setPage(1);
             }}
-            className="h-10 rounded-xl border border-[#1c1916]/15 bg-white px-2"
+            className="pk-field"
           >
             <option value={0}>All regions</option>
             {REGIONS.map((region, index) => (
@@ -443,11 +457,11 @@ export function Catalogue({
             ))}
           </select>
         </label>
-        <div className="mt-4 rounded-xl bg-white px-3 py-3">
+        <div className="pk-card mt-4 px-3 py-3">
           <p className="text-sm font-medium">
             {picked.length.toLocaleString("en-GB")} Pokémon picked
           </p>
-          <p className="mt-1 text-xs leading-5 text-[#5c5348]">
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
             Playlist order is the order you tick them. Select all on this page checks only the list below.
           </p>
           <label className="mt-2 flex items-center gap-2 text-sm">
@@ -462,19 +476,19 @@ export function Catalogue({
           </label>
           <button
             type="button"
-            className="mt-2 text-sm text-[#8a5a22] underline disabled:opacity-40"
+            className="mt-2 text-sm font-bold text-poke-red underline decoration-poke-yellow decoration-2 disabled:opacity-40"
             disabled={!list || list.total === 0}
             onClick={() => void selectMatches()}
           >
             Select all {list ? list.total.toLocaleString("en-GB") : ""} matches
           </button>
-          <p className="mt-1 text-xs leading-5 text-[#8d8272]">
+          <p className="mt-1 text-xs leading-5 pk-quiet">
             That adds every species matching this search, type, and region.
           </p>
           {picked.length > 0 ? (
             <button
               type="button"
-              className="mt-1 text-xs text-[#5c5348] underline"
+              className="mt-1 text-xs text-muted-foreground underline"
               onClick={() => {
                 setPicked([]);
                 setBuildMessage("");
@@ -499,7 +513,7 @@ export function Catalogue({
                 />
                 <span>
                   <span className="font-medium">{option.label}</span>
-                  <span className="mt-0.5 block text-xs leading-5 text-[#5c5348]">{option.detail}</span>
+                  <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{option.detail}</span>
                 </span>
               </label>
             ))}
@@ -517,40 +531,62 @@ export function Catalogue({
                     ? "Advanced facts"
                     : "Facts"
               }
-              className="h-10 rounded-xl border border-[#1c1916]/15 bg-[#f4efe6] px-3"
+              className="pk-field"
             />
           </label>
+          <label className="mt-3 grid gap-1 text-sm" htmlFor="catalogue-playlist">
+            Add to a Yoto playlist
+            <select
+              id="catalogue-playlist"
+              aria-label="Yoto playlist"
+              className="pk-field"
+              value={playlistTarget}
+              onChange={(event) => onPlaylistTarget?.(event.target.value)}
+            >
+              <option value="">New playlist</option>
+              {playlists.map((item) => (
+                <option key={item.cardId} value={item.cardId}>
+                  {item.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="mt-1 text-xs leading-5 pk-quiet">
+            {playlistTarget
+              ? "Build adds these tracks onto that playlist. Tracks already on it stay."
+              : "New playlist creates a card and does not replace one you already have."}
+          </p>
           <button
             type="button"
-            className="mt-3 h-10 w-full rounded-full bg-[#1c1916] px-3 text-sm font-medium text-[#f4efe6] disabled:opacity-40"
+            className="mt-3 h-11 w-full rounded-full border-[3px] border-ink bg-poke-red px-3 font-heading text-sm font-bold text-white shadow-[3px_3px_0_var(--ink)] disabled:opacity-40"
             disabled={picked.length === 0 || building}
             onClick={() => void buildPlaylist()}
           >
             {building ? "Building playlist…" : "Build playlist from selection"}
           </button>
           {picked.length > speciesLimit ? (
-            <p className="mt-2 text-xs leading-5 text-[#9f2d22]" role="alert">
+            <p className="mt-2 text-xs leading-5 pk-danger" role="alert">
               {playlistKind === "whos-that"
                 ? `Who's That Pokémon uses two tracks each, so 50 is the limit. ${picked.length} are picked.`
                 : `A playlist holds 100 tracks. ${picked.length} are picked.`}
             </p>
           ) : null}
-          {buildMessage ? <p className="mt-2 text-xs leading-5 text-[#5c5348]">{buildMessage}</p> : null}
+          {buildMessage ? <p className="mt-2 text-xs leading-5 text-muted-foreground">{buildMessage}</p> : null}
         </div>
-        <p className="mt-3 text-xs text-[#8d8272]">
+        <p className="mt-3 text-xs pk-quiet">
           {list
             ? `${list.total.toLocaleString("en-GB")} of ${list.species.toLocaleString("en-GB")} species`
             : "Opening the catalogue…"}
         </p>
         {listError ? (
-          <p className="mt-3 text-sm text-[#9f2d22]" role="alert">
+          <p className="mt-3 text-sm pk-danger" role="alert">
             {listError}
           </p>
         ) : null}
-        <ul className="mt-2 grid max-h-[70vh] gap-1 overflow-auto pr-1">
-          {loadingList && !list ? <li className="text-sm text-[#5c5348]">Loading entries…</li> : null}
+        <ul className="mt-2 grid max-h-[70vh] gap-2 overflow-auto pr-1">
+          {loadingList && !list ? <li className="text-sm text-muted-foreground">Loading entries…</li> : null}
           {list?.items.length === 0 ? (
-            <li className="rounded-xl bg-white px-3 py-4 text-sm text-[#5c5348]">
+            <li className="pk-card px-3 py-4 text-sm text-muted-foreground">
               Nothing matches that search.
             </li>
           ) : null}
@@ -558,7 +594,7 @@ export function Catalogue({
             const active = item.id === selected;
             return (
               <li key={item.id} className="flex items-stretch gap-1">
-                <label className={`flex items-center rounded-xl px-2 ${active ? "bg-[#1c1916]" : "bg-white"}`}>
+                <label className={`flex items-center rounded-xl border-[3px] border-ink px-2 shadow-[2px_2px_0_var(--ink)] ${active ? "bg-poke-yellow" : "bg-white"}`}>
                   <input
                     type="checkbox"
                     checked={picked.includes(item.id)}
@@ -573,9 +609,7 @@ export function Catalogue({
                     setShowList(false);
                   }}
                   aria-current={active ? "true" : undefined}
-                  className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left ${
-                    active ? "bg-[#1c1916] text-[#f4efe6]" : "bg-white text-[#1c1916]"
-                  }`}
+                  className="pk-choice flex w-full items-center gap-2 px-3 py-2"
                 >
                   <img
                     src={spriteSrc(item.id)}
@@ -601,18 +635,18 @@ export function Catalogue({
         <div className="mt-3 flex items-center justify-between gap-2 text-sm">
           <button
             type="button"
-            className="rounded-full bg-white px-3 py-1.5 disabled:opacity-40"
+            className="pk-pill disabled:opacity-40"
             disabled={page <= 1}
             onClick={() => setPage((current) => Math.max(1, current - 1))}
           >
             Previous
           </button>
-          <span className="text-xs text-[#5c5348]">
+          <span className="text-xs text-muted-foreground">
             Page {page} of {pages}
           </span>
           <button
             type="button"
-            className="rounded-full bg-white px-3 py-1.5 disabled:opacity-40"
+            className="pk-pill disabled:opacity-40"
             disabled={page >= pages}
             onClick={() => setPage((current) => current + 1)}
           >
@@ -621,25 +655,25 @@ export function Catalogue({
         </div>
       </section>
 
-      <article className={`rounded-2xl bg-white px-5 py-6 sm:px-8 sm:py-8 ${showList ? "hidden lg:block" : "block"}`}>
+      <article className={`pk-card pk-dex px-5 py-6 sm:px-8 sm:py-8 ${showList ? "hidden lg:block" : "block"}`}>
         <button
           type="button"
-          className="mb-4 text-sm text-[#5c5348] underline lg:hidden"
+          className="mb-4 text-sm text-muted-foreground underline lg:hidden"
           onClick={() => setShowList(true)}
         >
           Back to the list
         </button>
         {entryError ? (
-          <p className="text-sm text-[#9f2d22]" role="alert">
+          <p className="text-sm pk-danger" role="alert">
             {entryError}
           </p>
         ) : null}
         {entry?.id !== selected && !entryError ? (
-          <p className="text-sm text-[#5c5348]">Opening the entry…</p>
+          <p className="text-sm text-muted-foreground">Opening the entry…</p>
         ) : null}
         {entry && entry.id === selected ? (
           <>
-            <p className="text-xs font-medium tracking-[0.14em] text-[#8a5a22] uppercase">
+            <p className="pk-kicker">
               {numberLabel(entry.id)} · {entry.region}
             </p>
             <div className="mt-3 flex items-end gap-4">
@@ -648,32 +682,32 @@ export function Catalogue({
                 alt=""
                 width={96}
                 height={96}
-                className="h-24 w-24 shrink-0 bg-[#f4efe6] object-contain [image-rendering:pixelated]"
+                className="pk-sprite"
               />
               <div>
                 <h2 className="font-display text-4xl leading-tight sm:text-5xl">{entry.name}</h2>
-                <p className="mt-1 text-sm text-[#5c5348]">The {entry.genus}</p>
+                <p className="mt-1 text-sm text-muted-foreground">The {entry.genus}</p>
                 <div className="mt-2">
                   <TypeChips types={entry.types} />
                 </div>
               </div>
             </div>
-            <p className="mt-6 max-w-prose text-base leading-7 text-[#2a241c]">{entry.info}</p>
+            <p className="mt-6 max-w-prose text-base leading-7 text-foreground">{entry.info}</p>
             {entry.infoVersion ? (
-              <p className="mt-2 text-xs text-[#8d8272]">Pokédex line from {entry.infoVersion}.</p>
+              <p className="mt-2 text-xs pk-quiet">Pokédex line from {entry.infoVersion}.</p>
             ) : null}
             {entry.notes ? (
               <>
-                <h3 className="mt-6 text-xs font-medium tracking-[0.14em] text-[#8a5a22] uppercase">
+                <h3 className="mt-6 pk-kicker">
                   Notes
                 </h3>
-                <p className="mt-2 max-w-prose text-sm leading-6 text-[#5c5348]">{entry.notes}</p>
+                <p className="mt-2 max-w-prose text-sm leading-6 text-muted-foreground">{entry.notes}</p>
               </>
             ) : null}
             <BiologyPanel biology={biologyFor === entry.id ? biology : null} />
             <div className="mt-5 grid gap-2 sm:grid-cols-2">
-              <p className="rounded-xl bg-[#f4efe6] px-4 py-3 font-medium">It weighs {entry.weightLabel}.</p>
-              <p className="rounded-xl bg-[#f4efe6] px-4 py-3 font-medium">It is {entry.heightLabel} tall.</p>
+              <p className="pk-soft px-4 py-3">It weighs {entry.weightLabel}.</p>
+              <p className="pk-soft px-4 py-3">It is {entry.heightLabel} tall.</p>
             </div>
             <div className="mt-4">
               <Fact label="Ability">{abilityText}</Fact>
@@ -685,32 +719,32 @@ export function Catalogue({
               <Fact label="Catch rate">{String(entry.captureRate)}</Fact>
               <Fact label="Growth">{entry.growth}</Fact>
             </div>
-            <h3 className="mt-6 text-xs font-medium tracking-[0.14em] text-[#8a5a22] uppercase">Matchups</h3>
+            <h3 className="mt-6 pk-kicker">Matchups</h3>
             <div className="mt-2 grid gap-3 text-sm">
               <MatchRow label="Weak" matches={entry.weak} empty="No extra weaknesses." />
               <MatchRow label="Resists" matches={entry.resist} empty="No resistances." />
               <MatchRow label="Immune" matches={entry.immune} empty="No immunities." />
             </div>
-            <h3 className="mt-6 text-xs font-medium tracking-[0.14em] text-[#8a5a22] uppercase">Moves</h3>
+            <h3 className="mt-6 pk-kicker">Moves</h3>
             {entry.moves.length === 0 ? (
-              <p className="mt-2 text-sm text-[#5c5348]">No moves are on file.</p>
+              <p className="mt-2 text-sm text-muted-foreground">No moves are on file.</p>
             ) : (
               <ul className="mt-2 flex max-h-40 flex-wrap gap-1.5 overflow-auto">
                 {entry.moves.map((move) => (
-                  <li key={move} className="rounded-full bg-[#f4efe6] px-2 py-0.5 text-xs">
+                  <li key={move} className="rounded-full border-2 border-ink bg-white px-2 py-0.5 text-xs font-bold">
                     {move}
                   </li>
                 ))}
               </ul>
             )}
-            <h3 className="mt-6 text-xs font-medium tracking-[0.14em] text-[#8a5a22] uppercase">Base stats</h3>
+            <h3 className="mt-6 pk-kicker">Base stats</h3>
             <ul className="mt-2 grid gap-1.5">
               {entry.stats.map((stat) => (
                 <li key={stat.name} className="grid grid-cols-[7.5rem_minmax(0,1fr)_2.5rem] items-center gap-2 text-sm">
                   <span>{stat.name}</span>
-                  <span className="h-2 overflow-hidden rounded-full bg-[#f4efe6]">
+                  <span className="h-3 overflow-hidden rounded-full border-2 border-ink bg-white">
                     <span
-                      className="block h-full rounded-full bg-[#8a5a22]"
+                      className={`block h-full ${statFill(stat.name)}`}
                       style={{ width: `${Math.min(100, (stat.value / 255) * 100)}%` }}
                     />
                   </span>
@@ -720,23 +754,23 @@ export function Catalogue({
             </ul>
             {entry.forms.length > 0 ? (
               <>
-                <h3 className="mt-6 text-xs font-medium tracking-[0.14em] text-[#8a5a22] uppercase">
+                <h3 className="mt-6 pk-kicker">
                   Other forms
                 </h3>
                 <ul className="mt-2 grid gap-2 sm:grid-cols-2">
                   {entry.forms.map((form) => (
-                    <li key={form.id} className="rounded-xl bg-[#f4efe6] px-3 py-2 text-sm">
+                    <li key={form.id} className="pk-soft px-3 py-2 text-sm font-normal">
                       <p className="font-medium">{form.name}</p>
                       <div className="mt-1">
                         <TypeChips types={form.types} />
                       </div>
-                      <p className="mt-1 text-[#5c5348]">
+                      <p className="mt-1 text-muted-foreground">
                         {form.heightLabel} · {form.weightLabel}
                       </p>
                       {formNotes
                         .filter((note) => note.formId === form.id && note.article.status === "ready")
                         .map((note) => (
-                          <div key={note.formId} className="mt-2 text-[#2a241c]">
+                          <div key={note.formId} className="mt-2 text-foreground">
                             {note.article.blocks.map((block, index) =>
                               block.kind === "paragraph" ? (
                                 <p key={index} className="mt-1 leading-6">
@@ -744,7 +778,7 @@ export function Catalogue({
                                 </p>
                               ) : null,
                             )}
-                            <p className="mt-2 text-xs leading-5 text-[#8d8272]">
+                            <p className="mt-2 text-xs leading-5 pk-quiet">
                               From{" "}
                               <a className="underline" href={note.article.url} rel="noreferrer">
                                 Bulbapedia
@@ -761,7 +795,7 @@ export function Catalogue({
             <div className="mt-6 flex gap-2">
               <button
                 type="button"
-                className="h-10 rounded-full bg-[#f4efe6] px-4 text-sm disabled:opacity-40"
+                className="pk-pill text-sm disabled:opacity-40"
                 disabled={entry.id <= 1}
                 onClick={() => {
                   setSelected(entry.id - 1);
@@ -772,7 +806,7 @@ export function Catalogue({
               </button>
               <button
                 type="button"
-                className="h-10 rounded-full bg-[#f4efe6] px-4 text-sm disabled:opacity-40"
+                className="pk-pill text-sm disabled:opacity-40"
                 disabled={!list || entry.id >= list.species}
                 onClick={() => {
                   setSelected(entry.id + 1);
@@ -794,34 +828,34 @@ function BiologyPanel({ biology }: { biology: BiologyView | null }) {
     <section className="mt-6" aria-labelledby="biology-heading">
       <h3
         id="biology-heading"
-        className="text-xs font-medium tracking-[0.14em] text-[#8a5a22] uppercase"
+        className="pk-kicker"
       >
         Biology
       </h3>
-      {!biology ? <p className="mt-2 text-sm text-[#5c5348]">Opening the biology section…</p> : null}
+      {!biology ? <p className="mt-2 text-sm text-muted-foreground">Opening the biology section…</p> : null}
       {biology?.status === "missing" ? (
-        <p className="mt-2 text-sm text-[#5c5348]">No biology section</p>
+        <p className="mt-2 text-sm text-muted-foreground">No biology section</p>
       ) : null}
       {biology?.status === "unavailable" ? (
-        <p className="mt-2 text-sm text-[#5c5348]">Biology could not be loaded.</p>
+        <p className="mt-2 text-sm text-muted-foreground">Biology could not be loaded.</p>
       ) : null}
       {biology?.status === "ready" ? (
         <>
-          <p className="mt-2 text-xs leading-5 text-[#8d8272]">
+          <p className="mt-2 text-xs leading-5 pk-quiet">
             From <a className="underline" href={biology.url} rel="noreferrer">Bulbapedia</a>. This section is used under CC BY-NC-SA 2.5.
           </p>
           <div className="mt-3 max-w-prose">
             {biology.blocks.map((block, index) => {
               if (block.kind === "heading") {
                 return (
-                  <h4 key={index} className="mt-4 text-sm font-semibold text-[#1c1916]">
+                  <h4 key={index} className="mt-4 text-sm font-semibold text-ink">
                     {block.text}
                   </h4>
                 );
               }
               if (block.kind === "list") {
                 return (
-                  <ul key={index} className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-[#2a241c]">
+                  <ul key={index} className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-foreground">
                     {block.items.map((item, itemIndex) => (
                       <li key={itemIndex}>{item}</li>
                     ))}
@@ -829,7 +863,7 @@ function BiologyPanel({ biology }: { biology: BiologyView | null }) {
                 );
               }
               return (
-                <p key={index} className="mt-2 text-sm leading-6 text-[#2a241c]">
+                <p key={index} className="mt-2 text-sm leading-6 text-foreground">
                   {block.text}
                 </p>
               );
@@ -852,12 +886,12 @@ function MatchRow({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="w-16 text-[#8a5a22]">{label}</span>
-      {matches.length === 0 ? <span className="text-[#5c5348]">{empty}</span> : null}
+      <span className="w-16 font-bold text-poke-red">{label}</span>
+      {matches.length === 0 ? <span className="text-muted-foreground">{empty}</span> : null}
       {matches.map((match) => (
         <span
           key={match.type}
-          className={`rounded-full px-2 py-0.5 text-[11px] font-semibold tracking-wide uppercase ${chipClass(match.type)}`}
+          className={`rounded-full border-2 border-[#16324f] px-2 py-0.5 text-[11px] font-bold tracking-wide uppercase ${chipClass(match.type)}`}
         >
           {match.type} {multiplierLabel(match.multiplier)}
         </span>

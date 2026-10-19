@@ -107,7 +107,7 @@ function namedScopes(text: string): string[] {
  */
 export function reconnectMessage(text: string): string | null {
   if (text.includes(RECONNECT_YOTO)) return RECONNECT_YOTO;
-  if (!/user does not have required scope/i.test(text)) return null;
+  if (!/user does not have (?:the )?required scope/i.test(text)) return null;
   const named = namedScopes(text);
   if (named.length === 0) return null;
   const requested = new Set(YOTO_SCOPES.split(/\s+/));

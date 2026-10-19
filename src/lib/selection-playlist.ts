@@ -258,18 +258,18 @@ export function selectionPlaylist(
 export function selectionUpload(
   card: KidCard,
   realById: Record<number, string>,
-  options: { title: string; shadowById?: Record<number, string>; cardId?: string },
+  options: { title: string; shadowById?: Record<number, string>; cardId?: string; voiceId?: string },
 ): PlaylistUpload {
   const explicit = options.cardId && /^[A-Za-z0-9]{5}$/.test(options.cardId) ? options.cardId : undefined;
   const base = options.shadowById
-    ? guessUpload(card, realById, options.shadowById, explicit)
-    : factsPlaylistUpload(card, realById, explicit);
+    ? guessUpload(card, realById, options.shadowById, explicit, options.voiceId)
+    : factsPlaylistUpload(card, realById, explicit, options.voiceId);
   const content = { ...base.content, title: options.title };
-  if (content.metadata) {
-    const metadata = { ...content.metadata };
-    delete metadata.title;
-    content.metadata = metadata;
-  }
+  const description = options.shadowById
+    ? `${options.title}. Each track starts with the cry. The clue never says the name. The answer says the name. The clue picture is a shadow. The answer picture is the real pixel.`
+    : `${options.title}. You hear the cry, then the reading. Written for ages 8 to 12.`;
+  const metadata: { description: string; title?: string } = { description };
+  content.metadata = metadata as typeof content.metadata;
   if (!explicit) delete content.cardId;
   return { voiceId: base.voiceId, create: !explicit, content };
 }

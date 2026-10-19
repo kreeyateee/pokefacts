@@ -33,15 +33,22 @@ import type { BiologyBlock } from "./catalogue-types";
 import { pronounce } from "./pronounce";
 import {
   afterRejectedPlaylist,
+  appendToPlaylist,
   applyFinishedAudio,
   bulkFailureText,
   contentCreateBody,
   factsBulkUpload,
   finishedPlaylistId,
+  freeSlotMessage,
+  libraryPlaylists,
   renderJobs,
+  uploadForPlaylist,
   type PlaylistUpload,
   type SavedCardMap,
 } from "./yoto-send";
+import { YOTO_VOICES } from "./yoto-icons";
+import { factTrackBody } from "./voice-choice";
+import { GET as getMine } from "../app/api/yoto/mine/route";
 import { POST as postJob } from "../app/api/yoto/job/route";
 
 const BANNED = [
@@ -1254,5 +1261,266 @@ describe("biology speech and form playlists", () => {
     assert.match(spoken, /belly is now white/);
     assert.match(spoken, /wings burn hotter/);
     assert.doesNotMatch(spoken, /draconic, bipedal|Bulbapedia|Creative Commons/i);
+  });
+});
+
+describe("voice and playlist build-up", () => {
+  const george = YOTO_VOICES[1]?.id ?? "";
+  const icon = "yoto:#aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const oldUrl = "yoto:#bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+  const newUrl = "yoto:#ccccccccccccccccccccccccccccccccccccccccccc";
+
+  it("puts the selected voice on the track payload", () => {
+    assert.equal(george, "JBFqnCBsd6RMkjVDRZzb");
+    const track = factTrackBody({
+      text: "Ivysaur waits in the grass.",
+      title: "Ivysaur",
+      dexId: 2,
+      name: "Ivysaur",
+      voiceId: george,
+    });
+    assert.equal(track.voiceId, george);
+    const card = {
+      id: "meet-1",
+      kind: "meet" as const,
+      title: "Pokefacts",
+      rangeLabel: "Pokefacts 1 (1-1)",
+      libraryTitle: "Pokefacts 1",
+      blurb: "Facts.",
+      childDoes: "Listen.",
+      chapters: [
+        {
+          key: "bulbasaur",
+          title: "Bulbasaur",
+          overlay: "1",
+          picture: "this Pokémon",
+          mark: "1",
+          icon: "/pixels/1.png",
+          dexId: 1,
+          tracks: [
+            {
+              key: "entry",
+              title: "Bulbasaur",
+              text: "Bulbasaur waits.",
+              spoken: "Bulbasaur waits.",
+              icon: "/pixels/1.png",
+              overlay: "1",
+            },
+          ],
+        },
+      ],
+    };
+    const sent = factsPlaylistUpload(card, { 1: "pixel" }, undefined, george);
+    assert.equal(sent.voiceId, george);
+    assert.equal(sent.content.content.chapters[0]?.tracks[0]?.voiceId, george);
+  });
+
+  it("lists real playlist titles and turns a missing scope into the reconnect message", async () => {
+    const listed = libraryPlaylists({
+      cards: [
+        { cardId: "ab12C", title: "Bedtime" },
+        { cardId: "nope", title: "Skip me" },
+        { cardId: "de34F", metadata: { title: "Car rides" } },
+      ],
+    });
+    assert.deepEqual(
+      listed.map((item) => item.title),
+      ["Bedtime", "Car rides"],
+    );
+    const original = globalThis.fetch;
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify({ message: "The user does not have the required scope(s): 'family:library:view'." }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      });
+    try {
+      const response = await getMine(
+        new Request("http://localhost/api/yoto/mine", {
+          headers: { Authorization: `Bearer ${"x".repeat(24)}` },
+        }),
+      );
+      const body = (await response.json()) as { message?: string };
+      assert.equal(body.message, "Reconnect Yoto. The saved login is missing permission.");
+      assert.equal(JSON.stringify(body).includes("family:library:view"), false);
+      assert.equal(JSON.stringify(body).includes("<"), false);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it("appends to the chosen playlist and sends no card id for a new playlist", async () => {
+    const addition: PlaylistUpload = {
+      voiceId: george,
+      append: true,
+      content: {
+        title: "Pokefacts extra",
+        cardId: "ab12C",
+        metadata: { description: "More facts.", title: "do not keep" },
+        content: {
+          chapters: [
+            {
+              key: "ivysaur",
+              title: "Ivysaur",
+              overlayLabel: "2",
+              display: { icon16x16: icon },
+              tracks: [
+                {
+                  key: "entry",
+                  title: "Ivysaur",
+                  trackUrl: newUrl,
+                  type: "audio",
+                  duration: 3,
+                  fileSize: 9,
+                  format: "mp3",
+                  channels: "mono",
+                  display: { icon16x16: icon },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    };
+    const created = uploadForPlaylist(addition, "");
+    assert.equal(created.create, true);
+    assert.equal(created.append, false);
+    assert.equal(Object.hasOwn(created.content, "cardId"), false);
+    const kept = uploadForPlaylist(addition, "ab12C");
+    assert.equal(kept.append, true);
+    assert.equal(kept.content.cardId, "ab12C");
+    assert.equal(kept.create, undefined);
+
+    const merged = appendToPlaylist(
+      {
+        cardId: "ab12C",
+        title: "Bedtime",
+        metadata: { title: "Bedtime", description: "Already there." },
+        content: {
+          chapters: [
+            {
+              key: "old",
+              title: "Old story",
+              tracks: [{ key: "old-1", uid: "old-1", title: "Keep me", type: "audio", trackUrl: oldUrl, duration: 2, fileSize: 4 }],
+            },
+          ],
+        },
+      },
+      addition.content,
+    );
+    assert.equal(merged.cardId, "ab12C");
+    assert.equal(merged.title, "Bedtime");
+    assert.equal(Object.hasOwn(merged.metadata ?? {}, "title"), false);
+    const chapters = (merged.content as { chapters: Array<{ tracks: Array<{ trackUrl?: string }> }> }).chapters;
+    assert.equal(chapters.length, 2);
+    assert.equal(chapters[0]?.tracks[0]?.trackUrl, oldUrl);
+    assert.equal(chapters[1]?.tracks[0]?.trackUrl, newUrl);
+
+    assert.throws(
+      () =>
+        appendToPlaylist(
+          {
+            cardId: "ab12C",
+            title: "Bedtime",
+            content: {
+              chapters: [
+                {
+                  key: "old",
+                  title: "Old",
+                  tracks: Array.from({ length: 100 }, (_, index) => ({ key: `old${index}`, trackUrl: oldUrl })),
+                },
+              ],
+            },
+          },
+          addition.content,
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.equal(error.message, freeSlotMessage(0, 1));
+        assert.match(error.message, /0 free slots left/);
+        return true;
+      },
+    );
+
+    const original = globalThis.fetch;
+    let posted = "";
+    let sawGet = false;
+    globalThis.fetch = async (input, init) => {
+      const url = String(input);
+      if (url.includes("/content/ab12C") && (!init?.method || init.method === "GET")) {
+        sawGet = true;
+        return Response.json({
+          card: {
+            cardId: "ab12C",
+            title: "Bedtime",
+            metadata: { title: "Bedtime", description: "Already there." },
+            content: {
+              chapters: [
+                {
+                  key: "old",
+                  title: "Old story",
+                  tracks: [{ key: "old-1", uid: "old-1", title: "Keep me", type: "audio", trackUrl: oldUrl, duration: 2, fileSize: 4 }],
+                },
+              ],
+            },
+          },
+        });
+      }
+      if (url === "https://api.yotoplay.com/content" && init?.method === "POST") {
+        posted = String(init.body ?? "");
+        return Response.json({ card: { cardId: "ab12C", title: "Bedtime" } });
+      }
+      throw new Error(`Unexpected ${init?.method ?? "GET"} ${url}`);
+    };
+    try {
+      const response = await postJob(
+        new Request("http://localhost/api/yoto/job", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${"x".repeat(24)}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(kept),
+        }),
+      );
+      assert.equal(response.status, 200);
+      assert.equal(sawGet, true);
+      const upstream = JSON.parse(posted) as {
+        cardId?: string;
+        title?: string;
+        metadata?: { title?: string };
+        content?: { chapters?: Array<{ tracks?: Array<{ trackUrl?: string }> }> };
+      };
+      assert.equal(upstream.cardId, "ab12C");
+      assert.equal(upstream.title, "Bedtime");
+      assert.equal(Object.hasOwn(upstream.metadata ?? {}, "title"), false);
+      const sentChapters = upstream.content?.chapters ?? [];
+      assert.equal(sentChapters[0]?.tracks?.[0]?.trackUrl, oldUrl);
+      assert.equal(sentChapters.at(-1)?.tracks?.[0]?.trackUrl, newUrl);
+      const body = (await response.json()) as { status?: string; updated?: boolean; result?: { cardId?: string } };
+      assert.equal(body.status, "completed");
+      assert.equal(body.updated, true);
+      assert.equal(body.result?.cardId, "ab12C");
+
+      posted = "";
+      globalThis.fetch = async (input, init) => {
+        posted = String(init?.body ?? "");
+        return Response.json({ card: { cardId: "zz99Z", title: "Pokefacts extra" } });
+      };
+      const fresh = await postJob(
+        new Request("http://localhost/api/yoto/job", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${"x".repeat(24)}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(created),
+        }),
+      );
+      assert.equal(fresh.status, 200);
+      const createdBody = JSON.parse(posted) as { cardId?: string };
+      assert.equal(Object.hasOwn(createdBody, "cardId"), false);
+    } finally {
+      globalThis.fetch = original;
+    }
   });
 });

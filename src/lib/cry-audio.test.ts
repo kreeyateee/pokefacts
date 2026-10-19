@@ -6,8 +6,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 
+import { POST as postHear } from "../app/api/yoto/hear/route";
 import { POST as postJob } from "../app/api/yoto/job/route";
 import { POST as postTrack } from "../app/api/yoto/track/route";
+import { prepareDemoAudio } from "./yoto-demo";
+import { demoHearBody } from "./voice-choice";
+import { YOTO_VOICES } from "./yoto-icons";
 import { assertCryFirst, audioContainer, audioDurationSeconds, cryLeads, cryUrl, mergeCryFirst, YOTO_MP3_ARGS } from "./cry-audio";
 import { ffmpegCommand, ffprobeCommand } from "./ffmpeg-bin";
 import { guessUpload, LILY_VOICE_ID, type KidCard } from "./kid-cards";
@@ -1068,6 +1072,109 @@ describe("fact audio", () => {
           return true;
         },
       );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("hear the entry", () => {
+  const george = YOTO_VOICES.find((voice) => voice.name === "George")?.id ?? "";
+
+  it("sends the selected voice and returns playable audio, not the script", async () => {
+    assert.equal(george, "JBFqnCBsd6RMkjVDRZzb");
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-hear-"));
+    const speech = Buffer.concat([Buffer.from("ID3"), Buffer.alloc(180, 7)]);
+    let labsUrl = "";
+    let posted = "";
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = String(input);
+      if (url.includes("labs.api.yotoplay.com/content/job?") && init?.method === "POST") {
+        labsUrl = url;
+        posted = String(init.body ?? "");
+        return Response.json({ job: { jobId: "job-hear", status: "completed", result: { cardId: "abc12" } } });
+      }
+      if (url.includes("/content/abc12") && url.includes("playable=true")) {
+        return Response.json({
+          card: { content: { chapters: [{ tracks: [{ trackUrl: "https://cdn.example/hear.mp3" }] }] } },
+        });
+      }
+      if (url === "https://cdn.example/hear.mp3") return new Response(new Uint8Array(speech));
+      if (init?.method === "DELETE") return new Response(null, { status: 200 });
+      throw new Error(`Unexpected ${init?.method ?? "GET"} ${url}`);
+    };
+    const request = demoHearBody({
+      text: "Bulbasaur waits in the grass. This line is from Bulbapedia.",
+      title: "Bulbasaur",
+      voiceId: george,
+      dexId: 1,
+    });
+    assert.equal(request.voiceId, george);
+    assert.equal(request.text.includes("Bulbapedia"), false);
+    try {
+      const audio = await prepareDemoAudio("x".repeat(24), request, fetchImpl, {
+        speech: path.join(dir, "speech"),
+        cryTimeoutMs: 40,
+        wait: async () => undefined,
+        merge: () => new Promise<Buffer>(() => undefined),
+        loadCry: async () => Buffer.concat([Buffer.from("OggS"), Buffer.alloc(32, 1)]),
+      });
+      assert.match(labsUrl, /voiceId=JBFqnCBsd6RMkjVDRZzb/);
+      const scratch = JSON.parse(posted) as {
+        content: { chapters: Array<{ tracks: Array<{ voiceId?: string; trackUrl?: string }> }> };
+      };
+      assert.equal(scratch.content.chapters[0]?.tracks[0]?.voiceId, george);
+      assert.equal(scratch.content.chapters[0]?.tracks[0]?.trackUrl?.includes("Bulbapedia"), false);
+      assert.equal(audio.cryFirst, false);
+      assert.equal(audio.audio.subarray(0, 3).toString("ascii"), "ID3");
+      assert.equal(audio.audio.includes(Buffer.from("Bulbasaur")), false);
+
+      const original = globalThis.fetch;
+      globalThis.fetch = fetchImpl;
+      try {
+        const response = await postHear(
+          new Request("http://localhost/api/yoto/hear", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${"t".repeat(24)}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ text: request.text, title: request.title, voiceId: request.voiceId }),
+          }),
+        );
+        assert.equal(response.status, 200);
+        assert.match(response.headers.get("content-type") ?? "", /audio/);
+        const bytes = Buffer.from(await response.arrayBuffer());
+        assert.equal(bytes.subarray(0, 3).toString("ascii"), "ID3");
+        assert.equal(bytes.toString("utf8").includes("Bulbasaur"), false);
+      } finally {
+        globalThis.fetch = original;
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("asks Yoto Labs for the selected voice on a fact track", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-voice-"));
+    let posted = "";
+    const fetchImpl: typeof fetch = async (input, init) => {
+      posted = String(init?.body ?? "");
+      assert.match(String(input), /voiceId=JBFqnCBsd6RMkjVDRZzb/);
+      return Response.json({ job: { jobId: "job-george", status: "queued" } });
+    };
+    try {
+      const result = await prepareFactTrack(
+        "x".repeat(24),
+        { text: "Ivysaur grows in the sun.", title: "Ivysaur", dexId: 2, voiceId: george },
+        fetchImpl,
+        { speech: path.join(dir, "speech"), rendered: path.join(dir, "rendered") },
+      );
+      assert.equal(result.phase, "speech");
+      const body = JSON.parse(posted) as {
+        content: { chapters: Array<{ tracks: Array<{ voiceId?: string }> }> };
+      };
+      assert.equal(body.content.chapters[0]?.tracks[0]?.voiceId, george);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
