@@ -1,7 +1,7 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { BiologyBlock, BiologyView } from "@/lib/catalogue-types";
+import { readJsonObject, updateJsonObject } from "@/lib/json-cache";
 
 export type { BiologyBlock, BiologyView };
 
@@ -247,13 +247,7 @@ function wikiError(code: string, message: string): WikiError {
 }
 
 async function readCache(file: string): Promise<Record<string, CacheRow>> {
-  try {
-    const parsed = JSON.parse(await readFile(file, "utf8")) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-    return parsed as Record<string, CacheRow>;
-  } catch {
-    return {};
-  }
+  return (await readJsonObject(file)) as Record<string, CacheRow>;
 }
 
 function usableRow(row: unknown, name: string): CacheRow | null {
@@ -266,24 +260,8 @@ function usableRow(row: unknown, name: string): CacheRow | null {
   return candidate;
 }
 
-let cacheWrites = Promise.resolve();
-
-function enqueueWrite(task: () => Promise<void>): Promise<void> {
-  const run = cacheWrites.then(task, task);
-  cacheWrites = run.then(
-    () => undefined,
-    () => undefined,
-  );
-  return run;
-}
-
 async function storeRow(file: string, id: number, row: CacheRow): Promise<void> {
-  await enqueueWrite(async () => {
-    const all = await readCache(file);
-    all[String(id)] = row;
-    await mkdir(path.dirname(file), { recursive: true });
-    await writeFile(file, `${JSON.stringify(all, null, 2)}\n`);
-  });
+  await updateJsonObject(file, String(id), row);
 }
 
 function viewFromRow(row: CacheRow): BiologyView {

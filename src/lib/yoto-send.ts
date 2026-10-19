@@ -146,6 +146,48 @@ function uploadChapters(upload: PlaylistUpload): UploadTrack[][] {
   return chapters.map((chapter) => (Array.isArray(chapter.tracks) ? chapter.tracks : []));
 }
 
+/** Tracks prepared at once. Three overlaps ffmpeg and Yoto uploads; four is the ceiling. */
+export const TRACK_POOL_SIZE = 3;
+export const TRACK_POOL_CAP = 4;
+
+export function trackPoolSize(requested = TRACK_POOL_SIZE): number {
+  const size = Math.trunc(requested);
+  if (!Number.isFinite(size) || size < 1) return 1;
+  return Math.min(TRACK_POOL_CAP, size);
+}
+
+/**
+ * Run `worker` over `items` with at most `limit` in flight.
+ * A failure stops new work. Tracks already running finish, then the error is thrown.
+ */
+export async function mapPool<T, R>(
+  items: readonly T[],
+  worker: (item: T, index: number) => Promise<R>,
+  limit = TRACK_POOL_SIZE,
+): Promise<R[]> {
+  const width = Math.min(trackPoolSize(limit), items.length);
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  let failure: unknown;
+  async function run(): Promise<void> {
+    for (;;) {
+      if (failure !== undefined) return;
+      const index = cursor;
+      cursor += 1;
+      if (index >= items.length) return;
+      try {
+        results[index] = await worker(items[index] as T, index);
+      } catch (error) {
+        if (failure === undefined) failure = error;
+        return;
+      }
+    }
+  }
+  if (width > 0) await Promise.all(Array.from({ length: width }, () => run()));
+  if (failure !== undefined) throw failure;
+  return results;
+}
+
 /** One browser request per track. Species lines use "Pokefacts 1, track 12 of 99". */
 export function renderJobs(libraryTitle: string, card: KidCard, upload: PlaylistUpload): RenderJob[] {
   const chapters = uploadChapters(upload);

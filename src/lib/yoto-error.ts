@@ -82,6 +82,12 @@ function serialized(data: unknown): string {
   }
 }
 
+/** Yoto asked this one call to slow down. Other tracks keep going. */
+export function isRateLimited(status: number, data: unknown): boolean {
+  if (status === 429) return true;
+  return /rate limit|too many requests|slow down/i.test(serialized(data));
+}
+
 /** A Cloudflare or origin gateway failure, including an HTML body on any status. */
 export function looksLikeGateway(status: number, data: unknown): boolean {
   if (status === 502 || status === 504 || status === 524) return true;

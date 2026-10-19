@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { audioContainer, mergeCryFirst } from "@/lib/cry-audio";
-import { ensureCry } from "@/lib/yoto-fact-audio";
+import { ensureCry, readCachedMergedMp3 } from "@/lib/yoto-fact-audio";
 import { reconnectMessage, yotoErrorText } from "@/lib/yoto-error";
 import { spokenForDemo } from "@/lib/voice-choice";
 import { voiceOrLily } from "@/lib/yoto-icons";
@@ -28,6 +28,8 @@ type DemoOptions = {
   cryTimeoutMs?: number;
   wait?: (ms: number) => Promise<void>;
   polls?: number;
+  /** Folder of merged MP3s. Hear plays one of these instead of calling Lily. */
+  rendered?: string;
 };
 
 const DEMO_ROOT = path.join(process.cwd(), "data", "demo");
@@ -55,7 +57,16 @@ async function yoto(
   const headers = new Headers(init?.headers);
   headers.set("Authorization", `Bearer ${token}`);
   headers.set("Accept", "application/json");
-  return fetchImpl(url, { ...init, headers, signal: AbortSignal.timeout(timeoutMs) });
+  let last: Response | undefined;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const response = await fetchImpl(url, { ...init, headers, signal: AbortSignal.timeout(timeoutMs) });
+    last = response;
+    if (response.status !== 429 || attempt === 3) return response;
+    const retryAfter = Number(response.headers.get("retry-after"));
+    const wait = Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(20_000, retryAfter * 1000) : Math.min(8_000, 500 * 2 ** attempt);
+    await new Promise((resolve) => setTimeout(resolve, wait));
+  }
+  return last as Response;
 }
 
 function scratchContent(text: string, title: string, voiceId: string) {
@@ -141,6 +152,11 @@ export async function prepareDemoAudio(
   const dexId = request.dexId;
   if (dexId != null && (!Number.isInteger(dexId) || dexId < 1 || dexId > 1025)) {
     throw new Error(`That cry is not in the national Pokédex (${String(dexId)}).`);
+  }
+
+  if (dexId) {
+    const cached = await readCachedMergedMp3(text, voiceId, dexId, options.rendered);
+    if (cached) return { audio: cached, cryFirst: true };
   }
 
   const speech = await recordVoice(token, text, title, voiceId, fetchImpl, options);

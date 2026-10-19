@@ -12,12 +12,16 @@ function exeName(tool: "ffmpeg" | "ffprobe"): string {
   return process.platform === "win32" ? `${tool}.exe` : tool;
 }
 
-function dirHasTool(dir: string, tool: "ffmpeg" | "ffprobe"): boolean {
-  return Boolean(dir) && existsSync(path.join(dir, exeName(tool)));
+/** Keep turbopack from tracing the ffmpeg install. A full build is thousands of files. */
+function toolPath(dir: string, tool: "ffmpeg" | "ffprobe"): string {
+  return path.join(/* turbopackIgnore: true */ dir, exeName(tool));
 }
 
-/** Directory that actually contains ffmpeg, ignoring a PATH entry whose folder was deleted. */
-export function ffmpegBinDir(): string | null {
+function dirHasTool(dir: string, tool: "ffmpeg" | "ffprobe"): boolean {
+  return Boolean(dir) && existsSync(toolPath(dir, tool));
+}
+
+function locateFfmpegBinDir(): string | null {
   const fromEnv = process.env.FFMPEG_BIN?.trim();
   if (fromEnv && dirHasTool(fromEnv, "ffmpeg")) return fromEnv;
   if (dirHasTool(WINGET_FFMPEG_902, "ffmpeg")) return WINGET_FFMPEG_902;
@@ -28,14 +32,25 @@ export function ffmpegBinDir(): string | null {
   return null;
 }
 
+let locatedDir: string | null | undefined;
+let locatedCommands: { ffmpeg: string; ffprobe: string } | undefined;
+
+/** Directory that actually contains ffmpeg, ignoring a PATH entry whose folder was deleted. Resolved once. */
+export function ffmpegBinDir(): string | null {
+  if (locatedDir === undefined) locatedDir = locateFfmpegBinDir();
+  return locatedDir;
+}
+
 /** Put the working ffmpeg folder on PATH for this process, even when the shell PATH is stale. */
 export function ensureFfmpegPath(): void {
   const dir = ffmpegBinDir();
   if (!dir) return;
   const current = process.env.PATH ?? "";
-  const listed = current
-    .split(path.delimiter)
-    .some((entry) => entry.length > 0 && path.resolve(entry).toLowerCase() === path.resolve(dir).toLowerCase());
+  const wanted = path.resolve(/* turbopackIgnore: true */ dir).toLowerCase();
+  const listed = current.split(path.delimiter).some((entry) => {
+    if (!entry) return false;
+    return path.resolve(/* turbopackIgnore: true */ entry).toLowerCase() === wanted;
+  });
   if (!listed) {
     const next = `${dir}${path.delimiter}${current}`;
     process.env.PATH = next;
@@ -44,10 +59,15 @@ export function ensureFfmpegPath(): void {
 }
 
 function command(tool: "ffmpeg" | "ffprobe"): string {
-  ensureFfmpegPath();
-  const dir = ffmpegBinDir();
-  if (!dir || !dirHasTool(dir, tool)) return tool;
-  return path.join(dir, exeName(tool));
+  if (!locatedCommands) {
+    ensureFfmpegPath();
+    const dir = ffmpegBinDir();
+    locatedCommands = {
+      ffmpeg: dir && dirHasTool(dir, "ffmpeg") ? toolPath(dir, "ffmpeg") : "ffmpeg",
+      ffprobe: dir && dirHasTool(dir, "ffprobe") ? toolPath(dir, "ffprobe") : "ffprobe",
+    };
+  }
+  return locatedCommands[tool];
 }
 
 export function ffmpegCommand(): string {

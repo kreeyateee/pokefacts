@@ -15,8 +15,8 @@ import { YOTO_VOICES } from "./yoto-icons";
 import { assertCryFirst, audioContainer, audioDurationSeconds, cryLeads, cryUrl, mergeCryFirst, YOTO_MP3_ARGS } from "./cry-audio";
 import { ffmpegCommand, ffprobeCommand } from "./ffmpeg-bin";
 import { guessUpload, LILY_VOICE_ID, type KidCard } from "./kid-cards";
-import { applyFinishedAudio, factsBulkUpload, renderJobs } from "./yoto-send";
-import { attachCry, prepareFactTrack } from "./yoto-fact-audio";
+import { applyFinishedAudio, factsBulkUpload, mapPool, renderJobs, TRACK_POOL_SIZE, trackPoolSize } from "./yoto-send";
+import { attachCry, prepareFactTrack, renderedCacheKey } from "./yoto-fact-audio";
 
 function sine(file: string, frequency = 440): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -1076,6 +1076,83 @@ describe("fact audio", () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  it("schedules track jobs with a pool bigger than one", async () => {
+    assert.ok(TRACK_POOL_SIZE > 1);
+    assert.equal(trackPoolSize(100), 4);
+    assert.ok(trackPoolSize(TRACK_POOL_SIZE) > 1);
+    let active = 0;
+    let peak = 0;
+    const finished: number[] = [];
+    const results = await mapPool(
+      [0, 1, 2, 3, 4, 5],
+      async (item) => {
+        active += 1;
+        peak = Math.max(peak, active);
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        active -= 1;
+        finished.push(item);
+        return item;
+      },
+      TRACK_POOL_SIZE,
+    );
+    assert.equal(peak, TRACK_POOL_SIZE);
+    assert.deepEqual(results, [0, 1, 2, 3, 4, 5]);
+    assert.equal(finished.length, 6);
+  });
+
+  it("reuses a cached merged file and yoto hash instead of calling ffmpeg", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-reuse-"));
+    const text = "Oddish stores moonlight in its leaves.";
+    const voiceId = LILY_VOICE_ID;
+    const dexId = 43;
+    const key = renderedCacheKey(text, dexId, voiceId);
+    const legacy = createHash("sha256").update(Buffer.from(`${voiceId}\n${dexId}\n${text}`)).digest("hex");
+    assert.notEqual(key, legacy);
+    const rendered = path.join(dir, "rendered");
+    await mkdir(rendered, { recursive: true });
+    const merged = Buffer.concat([Buffer.from([0xff, 0xfb, 0x90, 0x00]), Buffer.alloc(180, 2)]);
+    await writeFile(path.join(rendered, `${key}.mp3`), merged);
+    await writeFile(
+      path.join(rendered, `${key}.json`),
+      JSON.stringify({
+        trackUrl: "yoto:#cachedmix",
+        duration: 2,
+        fileSize: merged.length,
+        format: "mp3",
+        channels: "mono",
+        cryFirst: true,
+      }),
+    );
+    let ffmpegCalls = 0;
+    let networkCalls = 0;
+    const fetchImpl: typeof fetch = async () => {
+      networkCalls += 1;
+      throw new Error("A cached mix must not call Yoto or download the cry.");
+    };
+    try {
+      const ready = await prepareFactTrack(
+        "x".repeat(24),
+        { text, title: "Oddish", name: "Oddish", dexId, voiceId },
+        fetchImpl,
+        {
+          speech: path.join(dir, "speech"),
+          rendered,
+          cries: path.join(dir, "cries"),
+          merge: async () => {
+            ffmpegCalls += 1;
+            throw new Error("ffmpeg should not run");
+          },
+        },
+      );
+      assert.equal(ffmpegCalls, 0);
+      assert.equal(networkCalls, 0);
+      assert.equal(ready.phase, "ready");
+      assert.equal(ready.trackUrl, "yoto:#cachedmix");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("hear the entry", () => {
@@ -1114,6 +1191,7 @@ describe("hear the entry", () => {
     try {
       const audio = await prepareDemoAudio("x".repeat(24), request, fetchImpl, {
         speech: path.join(dir, "speech"),
+        rendered: path.join(dir, "rendered"),
         cryTimeoutMs: 40,
         wait: async () => undefined,
         merge: () => new Promise<Buffer>(() => undefined),
@@ -1175,6 +1253,41 @@ describe("hear the entry", () => {
         content: { chapters: Array<{ tracks: Array<{ voiceId?: string }> }> };
       };
       assert.equal(body.content.chapters[0]?.tracks[0]?.voiceId, george);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("plays a cached merged file without asking Lily to speak again", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-hear-cache-"));
+    const text = "Bellsprout plants its feet and waits.";
+    const rendered = path.join(dir, "rendered");
+    await mkdir(rendered, { recursive: true });
+    const key = renderedCacheKey(text, 69, LILY_VOICE_ID);
+    const merged = Buffer.concat([Buffer.from([0xff, 0xfb, 0x90, 0x00]), Buffer.alloc(180, 4)]);
+    await writeFile(path.join(rendered, `${key}.mp3`), merged);
+    let calls = 0;
+    const fetchImpl: typeof fetch = async () => {
+      calls += 1;
+      throw new Error("Lily should not record a cached mix.");
+    };
+    try {
+      const audio = await prepareDemoAudio(
+        "x".repeat(24),
+        { text, title: "Bellsprout", voiceId: LILY_VOICE_ID, dexId: 69 },
+        fetchImpl,
+        {
+          speech: path.join(dir, "speech"),
+          rendered,
+          merge: async () => {
+            calls += 1;
+            throw new Error("ffmpeg should not run");
+          },
+        },
+      );
+      assert.equal(calls, 0);
+      assert.equal(audio.cryFirst, true);
+      assert.equal(audio.audio.equals(merged), true);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

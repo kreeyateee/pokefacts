@@ -1,8 +1,16 @@
 import { createHash } from "node:crypto";
-import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { assertCryFirst, audioContainer, cryUrl, describeClip, mergeCryFirst } from "@/lib/cry-audio";
+import {
+  assertCryFirst,
+  audioContainer,
+  CRY_MIX_PAD_SECONDS,
+  CRY_MIX_VOLUME,
+  cryUrl,
+  describeClip,
+  mergeCryFirst,
+} from "@/lib/cry-audio";
 import { voiceOrLily } from "@/lib/yoto-icons";
 import { RECONNECT_YOTO, reconnectMessage, yotoErrorText } from "@/lib/yoto-error";
 
@@ -41,6 +49,7 @@ type CardPayload = {
 };
 
 const CRY_CACHE = path.join(process.cwd(), "data", "cries");
+const cryMemory = new Map<string, Buffer>();
 
 function sha256(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
@@ -77,6 +86,12 @@ function transcodeFailure(body: unknown, label: string, kind: "track" | "cry"): 
   return `${lead} ${extra.length > 140 ? `${extra.slice(0, 137)}...` : extra}`;
 }
 
+function rateLimitWait(response: Response, attempt: number): number {
+  const retryAfter = Number(response.headers.get("retry-after"));
+  if (Number.isFinite(retryAfter) && retryAfter > 0) return Math.min(20_000, retryAfter * 1000);
+  return Math.min(8_000, 500 * 2 ** attempt);
+}
+
 async function yoto(
   token: string,
   url: string,
@@ -87,7 +102,14 @@ async function yoto(
   const headers = new Headers(init?.headers);
   headers.set("Authorization", `Bearer ${token}`);
   headers.set("Accept", "application/json");
-  return fetchImpl(url, { ...init, headers, signal: AbortSignal.timeout(timeoutMs) });
+  let last: Response | undefined;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const response = await fetchImpl(url, { ...init, headers, signal: AbortSignal.timeout(timeoutMs) });
+    last = response;
+    if (response.status !== 429 || attempt === 3) return response;
+    await new Promise((resolve) => setTimeout(resolve, rateLimitWait(response, attempt)));
+  }
+  return last as Response;
 }
 
 export async function ensureCry(
@@ -98,13 +120,19 @@ export async function ensureCry(
   if (!Number.isInteger(id) || id < 1 || id > 1025) {
     throw new Error(`That cry is not in the national Pokédex (${id}).`);
   }
+  const memoryKey = `${cacheDir}\n${id}`;
+  const remembered = cryMemory.get(memoryKey);
+  if (remembered) return remembered;
   await mkdir(cacheDir, { recursive: true });
   const file = path.join(cacheDir, `${id}.ogg`);
   try {
     const cached = await readFile(file);
     if (audioContainer(cached)) {
       const info = await describeClip(cached, `cry.${audioContainer(cached)}`);
-      if (info.audioStreams >= 1 && Number.isFinite(info.duration) && info.duration >= 0.05) return cached;
+      if (info.audioStreams >= 1 && Number.isFinite(info.duration) && info.duration >= 0.05) {
+        cryMemory.set(memoryKey, cached);
+        return cached;
+      }
     }
   } catch {
     // Missing cache is downloaded below. A saved error page is replaced.
@@ -128,6 +156,7 @@ export async function ensureCry(
     );
   }
   await writeFile(file, bytes);
+  cryMemory.set(memoryKey, bytes);
   return bytes;
 }
 
@@ -180,7 +209,7 @@ async function uploadMerged(
     if (!put.ok) throw new Error("Yoto did not store the cry and the reading.");
   }
   for (let attempt = 0; attempt < maxPolls; attempt += 1) {
-    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 1000));
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 400));
     const statusUrl = `https://api.yotoplay.com/media/upload/${encodeURIComponent(uploadId)}/transcoded?loudnorm=false`;
     const status = await yoto(token, statusUrl, undefined, fetchImpl);
     const body = (await readJson(status)) as {
@@ -307,12 +336,89 @@ export type TrackPrepareResult = {
 const SPEECH_ROOT = path.join(process.cwd(), "data", "speech");
 const RENDER_ROOT = path.join(process.cwd(), "data", "rendered");
 
-function cacheKey(text: string, dexId: number | undefined, voiceId: string): string {
-  return sha256(Buffer.from(`${voiceId}\n${dexId ?? 0}\n${text}`));
+function mixToken(): string {
+  return `volume=${CRY_MIX_VOLUME}\npad=${CRY_MIX_PAD_SECONDS}`;
+}
+
+/** Cache identity for a finished mix: voice, cry volume, pad, dex number, and the script. */
+export function renderedCacheKey(text: string, dexId: number | undefined, voiceId: string): string {
+  const line = text.replace(/\s+/g, " ").trim();
+  return sha256(Buffer.from(`${voiceOrLily(voiceId)}\n${mixToken()}\n${dexId ?? 0}\n${line}`));
+}
+
+function legacyRenderedKey(text: string, dexId: number | undefined, voiceId: string): string {
+  const line = text.replace(/\s+/g, " ").trim();
+  return sha256(Buffer.from(`${voiceOrLily(voiceId)}\n${dexId ?? 0}\n${line}`));
 }
 
 function speechKey(text: string, voiceId: string): string {
   return sha256(Buffer.from(`${voiceId}\n${text}`));
+}
+
+async function writeBytesAtomic(file: string, bytes: Buffer): Promise<void> {
+  await mkdir(path.dirname(file), { recursive: true });
+  const tmp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.tmp`);
+  await writeFile(tmp, bytes);
+  try {
+    await rename(tmp, file);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "EEXIST" && code !== "EPERM" && code !== "EACCES") {
+      await rm(tmp, { force: true });
+      throw error;
+    }
+    await rm(file, { force: true });
+    try {
+      await rename(tmp, file);
+    } catch (renameError) {
+      await rm(tmp, { force: true });
+      throw renameError;
+    }
+  }
+}
+
+async function readMp3File(file: string): Promise<Buffer | undefined> {
+  try {
+    const bytes = await readFile(file);
+    if (bytes.length < 128 || audioContainer(bytes) !== "mp3") return undefined;
+    if (bytes.subarray(0, 3).toString("ascii") === "ID3") return undefined;
+    return bytes;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Merged 128 kb/s MP3 for this script, voice, and volume. Missing means it still has to be mixed. */
+export async function readCachedMergedMp3(
+  text: string,
+  voiceId: string,
+  dexId: number | undefined,
+  renderedRoot: string = RENDER_ROOT,
+): Promise<Buffer | undefined> {
+  return readMp3File(path.join(renderedRoot, `${renderedCacheKey(text, dexId, voiceId)}.mp3`));
+}
+
+function readyPayload(cached: StoredAudio): TrackPrepareResult {
+  return {
+    phase: "ready",
+    trackUrl: cached.trackUrl,
+    duration: cached.duration,
+    fileSize: cached.fileSize,
+    format: cached.format,
+    channels: cached.channels,
+  };
+}
+
+async function readReady(
+  jsonFile: string,
+  dexId: number | undefined,
+  mp3File?: string,
+): Promise<TrackPrepareResult | undefined> {
+  const cached = await readRendered(jsonFile);
+  if (!cached?.trackUrl.startsWith("yoto:#")) return undefined;
+  if (dexId && cached.cryFirst !== true) return undefined;
+  if (mp3File && !(await readMp3File(mp3File))) return undefined;
+  return readyPayload(cached);
 }
 
 function scratchContent(text: string, title: string, voiceId: string) {
@@ -461,7 +567,7 @@ async function pollUpload(
   maxPolls: number,
 ): Promise<UploadedAudio | undefined> {
   for (let attempt = 0; attempt < maxPolls; attempt += 1) {
-    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 1000));
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 400));
     const statusUrl = `https://api.yotoplay.com/media/upload/${encodeURIComponent(uploadId)}/transcoded?loudnorm=false`;
     const status = await yoto(token, statusUrl, undefined, fetchImpl, 15_000);
     const body = (await readJson(status)) as {
@@ -535,7 +641,12 @@ export async function prepareFactTrack(
   token: string,
   request: TrackPrepareRequest,
   fetchImpl: typeof fetch = fetch,
-  roots: { speech: string; rendered: string; cries?: string } = { speech: SPEECH_ROOT, rendered: RENDER_ROOT },
+  roots: {
+    speech: string;
+    rendered: string;
+    cries?: string;
+    merge?: (cry: Buffer, speech: Buffer) => Promise<Buffer>;
+  } = { speech: SPEECH_ROOT, rendered: RENDER_ROOT },
 ): Promise<TrackPrepareResult> {
   if (request.discardCardId && !request.text?.trim()) {
     await discardCard(token, request.discardCardId, fetchImpl);
@@ -570,20 +681,17 @@ export async function prepareFactTrack(
 
   // Dex number, not the slot on the card. A Pokefacts playlist never has 142 tracks.
   const label = dexId ? String(dexId) : "intro";
-  const renderedFile = path.join(roots.rendered, `${cacheKey(text, dexId, voiceId)}.json`);
+  const renderedFile = path.join(roots.rendered, `${renderedCacheKey(text, dexId, voiceId)}.json`);
+  const mergedFile = path.join(roots.rendered, `${renderedCacheKey(text, dexId, voiceId)}.mp3`);
   const speechFile = path.join(roots.speech, `${speechKey(text, voiceId)}.mp3`);
-  const cached = await readRendered(renderedFile);
-  // A saved yoto:# hash is only the finished track when this species was mixed cry-first.
-  if (cached?.trackUrl.startsWith("yoto:#") && (!dexId || cached.cryFirst === true)) {
-    return {
-      phase: "ready",
-      trackUrl: cached.trackUrl,
-      duration: cached.duration,
-      fileSize: cached.fileSize,
-      format: cached.format,
-      channels: cached.channels,
-    };
-  }
+  const fresh = await readReady(renderedFile, dexId, dexId ? mergedFile : undefined);
+  if (fresh) return fresh;
+  // Hashes written before the volume was part of the key. Those mixes used volume 4 and a 0.35s pad.
+  const legacy = await readReady(
+    path.join(roots.rendered, `${legacyRenderedKey(text, dexId, voiceId)}.json`),
+    dexId,
+  );
+  if (legacy) return legacy;
 
   const readyFrom = async (uploadId: string, polls: number): Promise<TrackPrepareResult> => {
     if (dexId && !(await readCryMark(uploadMarkPath(roots.rendered, uploadId)))) {
@@ -608,7 +716,20 @@ export async function prepareFactTrack(
     };
   };
 
-  if (request.uploadId) return readyFrom(request.uploadId, 4);
+  if (request.uploadId) return readyFrom(request.uploadId, 8);
+
+  if (dexId) {
+    const cachedMix = await readMp3File(mergedFile);
+    if (cachedMix) {
+      try {
+        const uploadId = await openUpload(token, label, cachedMix, fetchImpl);
+        await writeCryMark(uploadMarkPath(roots.rendered, uploadId));
+        return await readyFrom(uploadId, 8);
+      } catch (error) {
+        throw cryFailure(error);
+      }
+    }
+  }
 
   const fromSpeechFile = async (): Promise<TrackPrepareResult> => {
     let speech: Buffer;
@@ -629,9 +750,11 @@ export async function prepareFactTrack(
     if (dexId) {
       try {
         const cry = await ensureCry(dexId, fetchImpl, roots.cries ?? CRY_CACHE);
-        const merged = await mergeCryFirst(cry, speech);
+        const mix = roots.merge ?? mergeCryFirst;
+        const merged = await mix(cry, speech);
         await assertCryFirst(cry, speech, merged);
         if (merged === speech) throw new Error("The cry was not mixed in front of Lily.");
+        await writeBytesAtomic(mergedFile, merged);
         audio = merged;
       } catch (error) {
         throw cryFailure(error);
@@ -641,7 +764,7 @@ export async function prepareFactTrack(
     try {
       const uploadId = await openUpload(token, label, audio, fetchImpl);
       if (dexId) await writeCryMark(uploadMarkPath(roots.rendered, uploadId));
-      return await readyFrom(uploadId, 4);
+      return await readyFrom(uploadId, 8);
     } catch (error) {
       if (!dexId) throw error;
       throw cryFailure(error);

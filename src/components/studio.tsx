@@ -37,6 +37,7 @@ import { APP_NAME, DONATE_URL, SOURCE_URL } from "@/lib/site";
 import { demoHearBody, factTrackBody, readVoiceId, writeVoiceId } from "@/lib/voice-choice";
 import {
   asSendFailure,
+  isRateLimited,
   looksLikeGateway,
   SendFailure,
   statusErrorText,
@@ -51,6 +52,7 @@ import {
   finishedPlaylistId,
   freeSlotMessage,
   libraryPlaylists,
+  mapPool,
   renderJobs,
   uploadForPlaylist,
   type FinishedAudio,
@@ -151,10 +153,25 @@ function playableChapters(card: KidCard) {
 
 async function uploadIcon(id: number, shadow = false): Promise<string> {
   const shadowQuery = shadow ? "&shadow=1" : "";
-  const response = await yotoFetch(`/api/yoto/icon?id=${id}${shadowQuery}`, { method: "POST" });
-  const payload = (await readApi(response, "Yoto did not take the 16×16 picture.")) as { mediaId?: string };
-  if (!payload?.mediaId) throw new SendFailure("Yoto did not take the 16×16 picture.", false);
-  return payload.mediaId;
+  const fallback = "Yoto did not take the 16×16 picture.";
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const response = await yotoFetch(`/api/yoto/icon?id=${id}${shadowQuery}`, { method: "POST" });
+    const payload = await readBody(response);
+    if (isRateLimited(response.status, payload) && attempt < 3) {
+      await delay(Math.min(8_000, 800 * (attempt + 1)));
+      continue;
+    }
+    if (!response.ok || looksLikeGateway(response.status, payload)) {
+      throw new SendFailure(
+        statusErrorText(response.status, payload, fallback),
+        looksLikeGateway(response.status, payload),
+      );
+    }
+    const mediaId = (payload as { mediaId?: string } | null)?.mediaId;
+    if (!mediaId) throw new SendFailure(fallback, false);
+    return mediaId;
+  }
+  throw new SendFailure(fallback, false);
 }
 
 async function uploadPixels(
@@ -168,12 +185,14 @@ async function uploadPixels(
     return true;
   });
   const media: Record<number, string> = {};
-  for (let index = 0; index < species.length; index += 1) {
-    const id = species[index]?.dexId;
-    if (!id) continue;
-    onProgress?.(index + 1, species.length);
+  let finished = 0;
+  await mapPool(species, async (chapter) => {
+    const id = chapter.dexId;
+    if (!id) return;
     media[id] = await uploadIcon(id);
-  }
+    finished += 1;
+    onProgress?.(finished, species.length);
+  });
   return media;
 }
 
@@ -201,12 +220,13 @@ async function speechesFor(
     ids.push(chapter.dexId);
   }
   const map: Record<number, string> = {};
-  for (let index = 0; index < ids.length; index += 1) {
-    const id = ids[index];
-    if (!id) continue;
-    onProgress?.(index + 1, ids.length);
+  let finished = 0;
+  await mapPool(ids, async (id) => {
+    if (!id) return;
     map[id] = await speciesSpeech(id, names.get(id) ?? "This Pokémon");
-  }
+    finished += 1;
+    onProgress?.(finished, ids.length);
+  });
   return map;
 }
 
@@ -285,11 +305,15 @@ async function uploadGuessIcons(card: KidCard): Promise<{
 }> {
   const real: Record<number, string> = {};
   const shadow: Record<number, string> = {};
-  for (const chapter of card.chapters) {
-    if (!chapter.dexId) continue;
-    real[chapter.dexId] = await uploadIcon(chapter.dexId);
-    shadow[chapter.dexId] = await uploadIcon(chapter.dexId, true);
-  }
+  await mapPool(
+    card.chapters.filter((chapter) => chapter.dexId),
+    async (chapter) => {
+      const id = chapter.dexId;
+      if (!id) return;
+      real[id] = await uploadIcon(id);
+      shadow[id] = await uploadIcon(id, true);
+    },
+  );
   return { real, shadow };
 }
 
@@ -468,14 +492,18 @@ export function Studio({
       const source = nextKind === "mega" ? megaRef.current : gmaxRef.current;
       let current = source;
       const pending = current.chapters.filter((chapter) => chapter.formId && !chapter.articleStatus);
-      for (let index = 0; index < pending.length; index += 1) {
-        const chapter = pending[index];
-        if (!chapter?.formId) continue;
-        onProgress?.(`${current.libraryTitle}, description ${index + 1} of ${pending.length}`);
-        const reading = await formReading(chapter.formId);
-        current = withFormReading(current, chapter.formId, reading);
-        rememberForm(nextKind, current);
+      let finished = 0;
+      const readings = await mapPool(pending, async (chapter) => {
+        const reading = chapter.formId ? await formReading(chapter.formId) : null;
+        finished += 1;
+        onProgress?.(`${current.libraryTitle}, description ${finished} of ${pending.length}`);
+        return { formId: chapter.formId, reading };
+      });
+      for (const item of readings) {
+        if (!item.formId || !item.reading) continue;
+        current = withFormReading(current, item.formId, item.reading);
       }
+      if (readings.length > 0) rememberForm(nextKind, current);
     })();
     formLoad.current[nextKind] = job;
     return job;
@@ -710,11 +738,15 @@ export function Studio({
     toast.error(detail);
   }
 
-  async function pollJob(id: string, headline?: string, mark?: { done?: number; total?: number }) {
-    for (let attempt = 0; attempt < 90; attempt += 1) {
-      await delay(2000);
+  async function pollJob(id: string, headline?: string, mark?: { done: number; total: number }) {
+    for (let attempt = 0; attempt < 150; attempt += 1) {
+      await delay(attempt < 8 ? 400 : 1000);
       const response = await yotoFetch(`/api/yoto/job/${id}`);
       const payload = await readBody(response);
+      if (isRateLimited(response.status, payload)) {
+        await delay(Math.min(8_000, 1_000 * (attempt + 1)));
+        continue;
+      }
       if (!response.ok || looksLikeGateway(response.status, payload)) {
         throw new SendFailure(
           statusErrorText(response.status, payload, "Could not check the recording."),
@@ -819,8 +851,9 @@ export function Studio({
   }
 
   async function renderOneTrack(
-    job: { text: string; title: string; dexId?: number; name?: string; progress: string; done?: number; total?: number },
+    job: { text: string; title: string; dexId?: number; name?: string; progress: string },
     scratch: Set<string>,
+    mark: { done: number; total: number },
   ): Promise<FinishedAudio> {
     let speechJobId: string | undefined;
     let speechCardId: string | undefined;
@@ -829,7 +862,7 @@ export function Studio({
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         for (let step = 0; step < 40; step += 1) {
-          setJob({ status: "sending", detail: job.progress, done: job.done, total: job.total });
+          setJob({ status: "sending", detail: job.progress, done: mark.done, total: mark.total });
           const response = await yotoFetch("/api/yoto/track", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -846,7 +879,18 @@ export function Studio({
               }),
             ),
           });
-          const payload = (await readApi(response, "This track did not record.")) as {
+          const body = await readBody(response);
+          if (isRateLimited(response.status, body)) {
+            await delay(Math.min(8_000, 700 * (step + 1)));
+            continue;
+          }
+          if (!response.ok || looksLikeGateway(response.status, body)) {
+            throw new SendFailure(
+              statusErrorText(response.status, body, "This track did not record."),
+              looksLikeGateway(response.status, body),
+            );
+          }
+          const payload = body as {
             phase?: string;
             speechJobId?: string;
             uploadId?: string;
@@ -861,10 +905,7 @@ export function Studio({
           }
           if (payload.phase === "speech" && payload.speechJobId) {
             speechJobId = payload.speechJobId;
-            const finished = await pollJob(payload.speechJobId, job.progress, {
-              done: job.done,
-              total: job.total,
-            });
+            const finished = await pollJob(payload.speechJobId, job.progress, mark);
             const cardId = finished.result?.cardId;
             if (!cardId) throw new SendFailure("The voice did not return a recording.", false);
             speechCardId = cardId;
@@ -875,7 +916,7 @@ export function Studio({
           if (payload.phase === "upload" && payload.uploadId) {
             uploadId = payload.uploadId;
             speechJobId = undefined;
-            await delay(1000);
+            await delay(300);
             continue;
           }
           throw new SendFailure("This track did not finish.", false);
@@ -883,9 +924,11 @@ export function Studio({
         throw new SendFailure("This track is still recording. Retry.", false);
       } catch (error) {
         last = asSendFailure(error, "This track did not finish.");
-        speechJobId = undefined;
-        uploadId = undefined;
-        await delay(600);
+        if (!isRateLimited(0, last.message) && /could not record|did not start|does not look right/i.test(last.message)) {
+          speechJobId = undefined;
+          uploadId = undefined;
+        }
+        await delay(isRateLimited(0, last.message) ? Math.min(8_000, 1_000 * (attempt + 1)) : 600);
       }
     }
     throw last;
@@ -895,13 +938,21 @@ export function Studio({
     const jobs = renderJobs(libraryTitle, playlist, upload);
     const audio: Record<string, FinishedAudio> = {};
     const scratch = new Set<string>();
+    const mark = { done: 0, total: jobs.length };
     try {
-      for (const job of jobs) {
-        audio[job.key] = await renderOneTrack(job, scratch);
-      }
+      await mapPool(jobs, async (job) => {
+        audio[job.key] = await renderOneTrack(job, scratch, mark);
+        mark.done += 1;
+        setJob({
+          status: "sending",
+          detail: `${libraryTitle}, ${mark.done} of ${mark.total}`,
+          done: mark.done,
+          total: mark.total,
+        });
+      });
       return audio;
     } finally {
-      for (const cardId of scratch) await discardScratch(cardId);
+      await mapPool([...scratch], (cardId) => discardScratch(cardId));
     }
   }
 

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
@@ -268,6 +268,50 @@ describe("Bulbapedia biology", () => {
         loadBiology("Bulbasaur", 1, { fetchImpl, cacheFile, sleep: async () => undefined }),
       );
       assert.equal(calls, 3);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("stores two species at once without dropping either row", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-wiki-parallel-"));
+    const cacheFile = path.join(dir, "biology.json");
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      const page = url.searchParams.get("page") ?? "";
+      if (url.searchParams.get("prop") === "sections") {
+        return jsonResponse({
+          parse: {
+            sections: [{ toclevel: 1, level: "2", line: "Biology", index: "1", anchor: "Biology" }],
+          },
+        });
+      }
+      const name = page.startsWith("Ivysaur") ? "Ivysaur" : "Bulbasaur";
+      return jsonResponse({
+        parse: { text: `<h2><span class="mw-headline" id="Biology">Biology</span></h2><p>${name} keeps this paragraph.</p>` },
+      });
+    }) as typeof fetch;
+    try {
+      const [first, second] = await Promise.all([
+        loadBiology("Bulbasaur", 1, { fetchImpl, cacheFile, sleep: async () => undefined }),
+        loadBiology("Ivysaur", 2, { fetchImpl, cacheFile, sleep: async () => undefined }),
+      ]);
+      assert.equal(first.status, "ready");
+      assert.equal(second.status, "ready");
+      const saved = JSON.parse(await readFile(cacheFile, "utf8")) as Record<string, { name?: string }>;
+      assert.equal(saved["1"]?.name, "Bulbasaur");
+      assert.equal(saved["2"]?.name, "Ivysaur");
+      let refetched = 0;
+      const again = await loadBiology("Bulbasaur", 1, {
+        fetchImpl: (async () => {
+          refetched += 1;
+          throw new Error("cached biology was fetched again");
+        }) as typeof fetch,
+        cacheFile,
+        sleep: async () => undefined,
+      });
+      assert.equal(refetched, 0);
+      assert.equal(again.status, "ready");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

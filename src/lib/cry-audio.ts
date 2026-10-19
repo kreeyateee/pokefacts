@@ -21,12 +21,16 @@ export function audioContainer(bytes: Buffer): "ogg" | "mp3" | null {
   return null;
 }
 
+/** Cry gain and the silence after it. The rendered-file cache key includes both. */
+export const CRY_MIX_VOLUME = 4;
+export const CRY_MIX_PAD_SECONDS = 0.35;
+
 /**
  * Cry at the front, then speech.
  * Volume 4 and a short pad match the mix already used for these cards.
  */
 const MERGE_FILTER =
-  "[0:a]volume=4,apad=pad_dur=0.35,aformat=sample_fmts=s16:sample_rates=44100:channel_layouts=mono[a0];" +
+  `[0:a]volume=${CRY_MIX_VOLUME},apad=pad_dur=${CRY_MIX_PAD_SECONDS},aformat=sample_fmts=s16:sample_rates=44100:channel_layouts=mono[a0];` +
   "[1:a]aformat=sample_fmts=s16:sample_rates=44100:channel_layouts=mono[a1];" +
   "[a0][a1]concat=n=2:v=0:a=1[out]";
 
@@ -285,7 +289,7 @@ export async function cryLeads(cry: Buffer, speech: Buffer, merged: Buffer): Pro
   const cryName = `cry.${audioContainer(cry) ?? "bin"}`;
   const speechName = `speech.${audioContainer(speech) ?? "bin"}`;
   const [loud, spoken, mix] = await Promise.all([
-    pcm(cry, cryName, "volume=4,aformat=sample_fmts=s16:sample_rates=44100:channel_layouts=mono"),
+    pcm(cry, cryName, `volume=${CRY_MIX_VOLUME},aformat=sample_fmts=s16:sample_rates=44100:channel_layouts=mono`),
     pcm(speech, speechName),
     pcm(merged, "merged.mp3"),
   ]);
