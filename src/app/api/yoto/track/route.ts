@@ -10,6 +10,7 @@ export async function POST(request: Request) {
     text?: string;
     title?: string;
     dexId?: number;
+    name?: string;
     speechJobId?: string;
     speechCardId?: string;
     uploadId?: string;

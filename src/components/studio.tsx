@@ -544,7 +544,7 @@ export function Studio({ cards }: { cards: KidCard[] }) {
   }
 
   async function renderOneTrack(
-    job: { text: string; title: string; dexId?: number; progress: string },
+    job: { text: string; title: string; dexId?: number; name?: string; progress: string },
     scratch: Set<string>,
   ): Promise<FinishedAudio> {
     let speechJobId: string | undefined;
@@ -562,6 +562,7 @@ export function Studio({ cards }: { cards: KidCard[] }) {
               text: job.text,
               title: job.title,
               dexId: job.dexId,
+              name: job.name,
               speechJobId,
               speechCardId,
               uploadId,
@@ -602,6 +603,7 @@ export function Studio({ cards }: { cards: KidCard[] }) {
       } catch (error) {
         last = asSendFailure(error, "This track did not finish.");
         speechJobId = undefined;
+        uploadId = undefined;
         await delay(600);
       }
     }

@@ -114,6 +114,8 @@ export type RenderJob = {
   title: string;
   text: string;
   dexId?: number;
+  /** Species name, used when a cry cannot be added. */
+  name?: string;
   progress: string;
 };
 
@@ -132,14 +134,19 @@ export function renderJobs(libraryTitle: string, card: KidCard, upload: Playlist
   const chapters = uploadChapters(upload);
   const rows = chapters.flatMap((tracks, index) => {
     const source = card.chapters[index];
+    if (!source) {
+      throw new Error("A playlist chapter has no Pokémon to attach a cry to.");
+    }
     return tracks.map((track, trackIndex) => {
-      const sourceTrack = source?.tracks[trackIndex];
-      const dexId = sourceTrack?.lead === "cry" ? source?.dexId : undefined;
+      const sourceTrack = source.tracks[trackIndex];
+      // Every track in a species chapter starts with that cry, even if `lead` was dropped.
+      const dexId = source.dexId;
       return {
         key: track.key ?? "",
         title: track.title ?? sourceTrack?.title ?? "Line",
         text: track.trackUrl ?? "",
         dexId,
+        name: dexId ? source.title : undefined,
       };
     });
   });

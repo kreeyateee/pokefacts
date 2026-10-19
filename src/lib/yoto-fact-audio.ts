@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { cryUrl, mergeCryFirst } from "@/lib/cry-audio";
+import { cryLeads, cryUrl, mergeCryFirst } from "@/lib/cry-audio";
 import { LILY_VOICE_ID } from "@/lib/kid-cards";
-import { reconnectMessage } from "@/lib/yoto-error";
+import { RECONNECT_YOTO, reconnectMessage } from "@/lib/yoto-error";
 
 export type FactCryRequest = {
   cardId: string;
@@ -254,6 +254,8 @@ export type TrackPrepareRequest = {
   text?: string;
   title?: string;
   dexId?: number;
+  /** Pokémon name. Cry failures name this species. */
+  name?: string;
   speechJobId?: string;
   speechCardId?: string;
   uploadId?: string;
@@ -333,9 +335,11 @@ function httpsAudio(card: CardPayload): string {
   return "";
 }
 
-async function readRendered(file: string): Promise<UploadedAudio | undefined> {
+type StoredAudio = UploadedAudio & { cryFirst?: boolean };
+
+async function readRendered(file: string): Promise<StoredAudio | undefined> {
   try {
-    const parsed = JSON.parse(await readFile(file, "utf8")) as UploadedAudio;
+    const parsed = JSON.parse(await readFile(file, "utf8")) as StoredAudio;
     if (parsed.trackUrl?.startsWith("yoto:#")) return parsed;
   } catch {
     return undefined;
@@ -343,9 +347,27 @@ async function readRendered(file: string): Promise<UploadedAudio | undefined> {
   return undefined;
 }
 
-async function writeRendered(file: string, audio: UploadedAudio): Promise<void> {
+async function writeRendered(file: string, audio: UploadedAudio, cryFirst: boolean): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, JSON.stringify(audio));
+  await writeFile(file, JSON.stringify({ ...audio, cryFirst }));
+}
+
+function uploadMarkPath(renderedRoot: string, uploadId: string): string {
+  return path.join(renderedRoot, `upload-${uploadId}.json`);
+}
+
+async function readCryMark(file: string): Promise<boolean> {
+  try {
+    const parsed = JSON.parse(await readFile(file, "utf8")) as { cryFirst?: boolean };
+    return parsed.cryFirst === true;
+  } catch {
+    return false;
+  }
+}
+
+async function writeCryMark(file: string): Promise<void> {
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, JSON.stringify({ cryFirst: true }));
 }
 
 async function fileExists(file: string): Promise<boolean> {
@@ -474,47 +496,94 @@ export async function prepareFactTrack(
   }
 
   const label = dexId ? String(dexId) : "intro";
+  const species = (request.name?.replace(/\s+/g, " ").trim() || title || (dexId ? `Number ${dexId}` : "")).slice(0, 40);
+  const cryError = () => new Error(`${species} cry could not be added.`);
   const renderedFile = path.join(roots.rendered, `${cacheKey(text, dexId)}.json`);
   const speechFile = path.join(roots.speech, `${speechKey(text)}.mp3`);
   const cached = await readRendered(renderedFile);
-  if (cached?.trackUrl.startsWith("yoto:#")) return { phase: "ready", ...cached };
+  // A saved yoto:# hash is only the finished track when this species was mixed cry-first.
+  if (cached?.trackUrl.startsWith("yoto:#") && (!dexId || cached.cryFirst === true)) {
+    return {
+      phase: "ready",
+      trackUrl: cached.trackUrl,
+      duration: cached.duration,
+      fileSize: cached.fileSize,
+      format: cached.format,
+      channels: cached.channels,
+    };
+  }
 
   const readyFrom = async (uploadId: string, polls: number): Promise<TrackPrepareResult> => {
-    const uploaded = await pollUpload(token, uploadId, label, fetchImpl, polls);
+    if (dexId && !(await readCryMark(uploadMarkPath(roots.rendered, uploadId)))) throw cryError();
+    let uploaded: UploadedAudio | undefined;
+    try {
+      uploaded = await pollUpload(token, uploadId, label, fetchImpl, polls);
+    } catch (error) {
+      if (!dexId) throw error;
+      throw cryError();
+    }
     if (!uploaded?.trackUrl.startsWith("yoto:#")) return { phase: "upload", uploadId };
-    await writeRendered(renderedFile, uploaded);
-    return { phase: "ready", ...uploaded };
+    await writeRendered(renderedFile, uploaded, Boolean(dexId));
+    return {
+      phase: "ready",
+      trackUrl: uploaded.trackUrl,
+      duration: uploaded.duration,
+      fileSize: uploaded.fileSize,
+      format: uploaded.format,
+      channels: uploaded.channels,
+    };
   };
 
   if (request.uploadId) return readyFrom(request.uploadId, 4);
 
   const mix = async (speech: Buffer): Promise<Buffer> => {
     if (!dexId) return speech;
-    const cry = await ensureCry(dexId, fetchImpl);
-    return mergeCryFirst(cry, speech);
+    try {
+      const cry = await ensureCry(dexId, fetchImpl);
+      const merged = await mergeCryFirst(cry, speech);
+      if (!(await cryLeads(cry, speech, merged))) throw cryError();
+      return merged;
+    } catch (error) {
+      if (error instanceof Error && error.message === cryError().message) throw error;
+      throw cryError();
+    }
   };
 
   const fromSpeechFile = async (): Promise<TrackPrepareResult> => {
-    const speech = await readFile(speechFile);
-    const audio = await mix(speech);
-    const uploadId = await openUpload(token, label, audio, fetchImpl);
-    return readyFrom(uploadId, 4);
+    try {
+      const speech = await readFile(speechFile);
+      const audio = await mix(speech);
+      const uploadId = await openUpload(token, label, audio, fetchImpl);
+      if (dexId) await writeCryMark(uploadMarkPath(roots.rendered, uploadId));
+      return await readyFrom(uploadId, 4);
+    } catch (error) {
+      if (!dexId) throw error;
+      if (error instanceof Error && error.message === cryError().message) throw error;
+      throw cryError();
+    }
   };
 
   if (await fileExists(speechFile)) return fromSpeechFile();
 
   const fromCard = async (cardId: string): Promise<TrackPrepareResult> => {
-    const playable = await loadCard(token, cardId, true, fetchImpl);
-    const source = httpsAudio(playable);
-    if (!source) throw new Error("Lily's recording is not ready to download.");
-    const speechResponse = await fetchImpl(source, { signal: AbortSignal.timeout(20_000) });
-    if (!speechResponse.ok) throw new Error("Lily's recording could not be downloaded.");
-    const speech = Buffer.from(await speechResponse.arrayBuffer());
-    if (speech.length < 128) throw new Error("Lily's recording was empty.");
-    await mkdir(path.dirname(speechFile), { recursive: true });
-    await writeFile(speechFile, speech);
-    await discardCard(token, cardId, fetchImpl);
-    return fromSpeechFile();
+    try {
+      const playable = await loadCard(token, cardId, true, fetchImpl);
+      const source = httpsAudio(playable);
+      if (!source) throw new Error("Lily's recording is not ready to download.");
+      const speechResponse = await fetchImpl(source, { signal: AbortSignal.timeout(20_000) });
+      if (!speechResponse.ok) throw new Error("Lily's recording could not be downloaded.");
+      const speech = Buffer.from(await speechResponse.arrayBuffer());
+      if (speech.length < 128) throw new Error("Lily's recording was empty.");
+      await mkdir(path.dirname(speechFile), { recursive: true });
+      await writeFile(speechFile, speech);
+      await discardCard(token, cardId, fetchImpl);
+      return await fromSpeechFile();
+    } catch (error) {
+      if (error instanceof Error && error.message === RECONNECT_YOTO) throw error;
+      if (!dexId) throw error;
+      if (error instanceof Error && error.message === cryError().message) throw error;
+      throw cryError();
+    }
   };
 
   if (request.speechCardId) return fromCard(request.speechCardId);

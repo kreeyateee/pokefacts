@@ -6,16 +6,18 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 
+import { POST as postJob } from "../app/api/yoto/job/route";
 import { POST as postTrack } from "../app/api/yoto/track/route";
 import { audioDurationSeconds, cryLeads, cryUrl, mergeCryFirst } from "./cry-audio";
+import { guessUpload, LILY_VOICE_ID, type KidCard } from "./kid-cards";
+import { applyFinishedAudio, factsBulkUpload, renderJobs } from "./yoto-send";
 import { attachCry, prepareFactTrack } from "./yoto-fact-audio";
-import { LILY_VOICE_ID } from "./kid-cards";
 
-function sine(file: string): Promise<void> {
+function sine(file: string, frequency = 440): Promise<void> {
   return new Promise((resolve, reject) => {
     execFile(
       "ffmpeg",
-      ["-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=1", "-c:a", "libmp3lame", "-q:a", "5", file],
+      ["-y", "-loglevel", "error", "-f", "lavfi", "-i", `sine=frequency=${frequency}:duration=1`, "-c:a", "libmp3lame", "-q:a", "5", file],
       { timeout: 20_000 },
       (error) => (error ? reject(error) : resolve()),
     );
@@ -299,7 +301,9 @@ describe("fact audio", () => {
     const text = "Callable export check for one fact track.";
     const dexId = 1;
     const key = createHash("sha256").update(Buffer.from(`${LILY_VOICE_ID}\n${dexId}\n${text}`)).digest("hex");
+    const speechHash = createHash("sha256").update(Buffer.from(`${LILY_VOICE_ID}\n${text}`)).digest("hex");
     const file = path.join(process.cwd(), "data", "rendered", `${key}.json`);
+    const speechFile = path.join(process.cwd(), "data", "speech", `${speechHash}.mp3`);
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(
       file,
@@ -311,6 +315,15 @@ describe("fact audio", () => {
         channels: "mono",
       }),
     );
+    await rm(speechFile, { force: true });
+    const original = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      const url = String(input);
+      if (url.includes("labs.api.yotoplay.com/content/job")) {
+        return Response.json({ job: { jobId: "job-line-route", status: "queued" } });
+      }
+      throw new Error(`Unexpected ${init?.method ?? "GET"} ${url}`);
+    };
     try {
       const response = await postTrack(
         new Request("http://champdex.local/api/yoto/track", {
@@ -319,16 +332,388 @@ describe("fact audio", () => {
             authorization: `Bearer ${"t".repeat(24)}`,
             "content-type": "application/json",
           },
-          body: JSON.stringify({ text, title: "Bulbasaur", dexId }),
+          body: JSON.stringify({ text, title: "Bulbasaur", name: "Bulbasaur", dexId }),
         }),
       );
-      const body = (await response.json()) as { phase?: string; trackUrl?: string; error?: string };
+      const body = (await response.json()) as { phase?: string; trackUrl?: string; speechJobId?: string; error?: string };
       assert.equal(response.status, 200);
-      assert.equal(body.phase, "ready");
-      assert.equal(body.trackUrl, "yoto:#route-check");
+      assert.equal(body.phase, "speech");
+      assert.equal(body.speechJobId, "job-line-route");
+      assert.equal(body.trackUrl, undefined);
       assert.equal(body.error, undefined);
     } finally {
+      globalThis.fetch = original;
       await rm(file, { force: true });
+      await rm(speechFile, { force: true });
+    }
+  });
+
+  it("sends a fact and a Guess Who clue and answer as cry-first audio, and fails a missing cry", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-payload-"));
+    const cryPath = path.join(process.cwd(), "data", "cries", "1.ogg");
+    let cry: Buffer;
+    try {
+      cry = await readFile(cryPath);
+    } catch {
+      const response = await fetch(cryUrl(1));
+      assert.equal(response.ok, true);
+      cry = Buffer.from(await response.arrayBuffer());
+    }
+    const clueSpeechPath = path.join(dir, "clue.mp3");
+    const answerSpeechPath = path.join(dir, "answer.mp3");
+    const factSpeechPath = path.join(dir, "fact.mp3");
+    await sine(factSpeechPath, 440);
+    await sine(clueSpeechPath, 523);
+    await sine(answerSpeechPath, 880);
+    const factSpeech = await readFile(factSpeechPath);
+    const clueSpeech = await readFile(clueSpeechPath);
+    const answerSpeech = await readFile(answerSpeechPath);
+    const roots = { speech: path.join(dir, "speech"), rendered: path.join(dir, "rendered") };
+
+    const fact: KidCard = {
+      id: "meet-1",
+      kind: "meet",
+      title: "Pokefacts",
+      rangeLabel: "Pokefacts 1 (1-1)",
+      libraryTitle: "Pokefacts 1",
+      blurb: "Facts.",
+      childDoes: "Listen.",
+      chapters: [
+        {
+          key: "bulbasaur",
+          title: "Bulbasaur",
+          overlay: "1",
+          picture: "this Pokémon",
+          mark: "1",
+          icon: "/pixels/1.png",
+          dexId: 1,
+          tracks: [
+            {
+              key: "entry",
+              title: "Bulbasaur",
+              text: "Bulbasaur waits in the tall grass. It weighs 6.9 kilograms.",
+              spoken: "Bulbasaur waits in the tall grass. It weighs 6.9 kilograms.",
+              icon: "/pixels/1.png",
+              overlay: "1",
+              voiceId: LILY_VOICE_ID,
+            },
+          ],
+        },
+      ],
+    };
+    const clueText = "Number 1. Three clues. A seed sits on its back. One. Two. Three.";
+    const answerText = "It is Bulbasaur.";
+    assert.doesNotMatch(clueText, /Bulbasaur/i);
+    assert.match(answerText, /^It is Bulbasaur\./);
+    const guess: KidCard = {
+      id: "guess-random",
+      kind: "guess",
+      title: "Guess Who",
+      rangeLabel: "Random 50",
+      libraryTitle: "Guess Who",
+      blurb: "Riddles.",
+      childDoes: "Guess.",
+      chapters: [
+        {
+          key: "bulbasaur",
+          title: "Bulbasaur",
+          overlay: "1",
+          picture: "a shadow",
+          mark: "?",
+          icon: "/pixels/1-shadow.png",
+          dexId: 1,
+          sprite: "/pixels/1-shadow.png",
+          tracks: [
+            {
+              key: "clues",
+              title: "Three clues",
+              text: clueText,
+              spoken: clueText,
+              icon: "/pixels/1-shadow.png",
+              overlay: "?",
+              voiceId: LILY_VOICE_ID,
+            },
+            {
+              key: "answer",
+              title: "The answer",
+              text: answerText,
+              spoken: answerText,
+              icon: "/pixels/1.png",
+              overlay: "Yes",
+              voiceId: LILY_VOICE_ID,
+            },
+          ],
+        },
+      ],
+    };
+
+    const puts: Buffer[] = [];
+    const fetchFor = (speech: Buffer, cardId: string, jobId: string, hash: string): typeof fetch => {
+      return async (input, init) => {
+        const url = String(input);
+        if (url.includes(`/content/job/${jobId}`)) {
+          return Response.json({
+            job: { jobId, status: "completed", result: { cardId } },
+          });
+        }
+        if (url.includes(`/content/${cardId}`) && url.includes("playable=true")) {
+          return Response.json({
+            card: {
+              content: {
+                chapters: [{ tracks: [{ trackUrl: `https://cdn.example/${cardId}.mp3`, type: "audio" }] }],
+              },
+            },
+          });
+        }
+        if (url.includes(`/content/${cardId}`) && init?.method === "DELETE") return new Response(null, { status: 200 });
+        if (url === `https://cdn.example/${cardId}.mp3`) {
+          return new Response(new Uint8Array(speech), { headers: { "Content-Type": "audio/mpeg" } });
+        }
+        if (url === cryUrl(1)) return new Response(new Uint8Array(cry), { headers: { "Content-Type": "audio/ogg" } });
+        if (url.includes("/media/transcode/audio/uploadUrl")) {
+          return Response.json({
+            upload: { uploadId: `up-${hash}`, uploadUrl: `https://upload.example/${hash}` },
+          });
+        }
+        if (url === `https://upload.example/${hash}`) {
+          const body = init?.body;
+          puts.push(Buffer.from(body instanceof Uint8Array ? body : new Uint8Array()));
+          return new Response("ok");
+        }
+        if (url.includes("/transcoded")) {
+          return Response.json({
+            transcode: {
+              transcodedSha256: hash,
+              transcodedInfo: { duration: 3, fileSize: puts.at(-1)?.length ?? 1, format: "mp3", channels: "mono" },
+            },
+          });
+        }
+        throw new Error(`Unexpected ${init?.method ?? "GET"} ${url}`);
+      };
+    };
+
+    const finish = async (text: string, title: string, speech: Buffer, cardId: string, jobId: string, hash: string) => {
+      const result = await prepareFactTrack(
+        "x".repeat(24),
+        { text, title, dexId: 1, name: "Bulbasaur", speechJobId: jobId },
+        fetchFor(speech, cardId, jobId, hash),
+        roots,
+      );
+      assert.equal(result.phase, "ready");
+      assert.equal(result.trackUrl, `yoto:#${hash}`);
+      return result;
+    };
+
+    try {
+      const factUpload = factsBulkUpload(fact, { 1: "pixel" });
+      const factJobs = renderJobs("Pokefacts 1", fact, factUpload);
+      assert.equal(factJobs.length, 1);
+      assert.equal(factJobs[0]?.dexId, 1);
+      assert.equal(factJobs[0]?.name, "Bulbasaur");
+      assert.match(factJobs[0]?.text ?? "", /kilograms/);
+      const factAudio = await finish(
+        factJobs[0]?.text ?? "",
+        factJobs[0]?.title ?? "",
+        factSpeech,
+        "fact1",
+        "job-fact-1",
+        "factmergedhash",
+      );
+      const factReady = applyFinishedAudio(factUpload, {
+        [factJobs[0]?.key ?? ""]: {
+          trackUrl: factAudio.trackUrl ?? "",
+          duration: factAudio.duration,
+          fileSize: factAudio.fileSize,
+          format: factAudio.format,
+          channels: factAudio.channels,
+        },
+      });
+      assert.equal(factReady.create, true);
+      assert.equal(factReady.content.title, "Pokefacts 1");
+      assert.equal(Object.hasOwn(factReady.content, "cardId"), false);
+      const factTrack = (
+        factReady.content.content as {
+          chapters: Array<{ tracks: Array<{ type?: string; trackUrl?: string; voiceId?: string; display?: { icon16x16?: string } }> }>;
+        }
+      ).chapters[0]?.tracks[0];
+      assert.equal(factTrack?.type, "audio");
+      assert.equal(factTrack?.trackUrl, "yoto:#factmergedhash");
+      assert.equal(factTrack?.voiceId, undefined);
+      assert.equal(factTrack?.display?.icon16x16, "yoto:#pixel");
+      const factMixed = puts.at(-1);
+      assert.ok(factMixed);
+      assert.equal(await cryLeads(cry, factSpeech, factMixed), true);
+
+      const original = globalThis.fetch;
+      let posted = "";
+      let postedUrl = "";
+      globalThis.fetch = async (input, init) => {
+        postedUrl = String(input);
+        posted = String(init?.body ?? "");
+        return new Response(JSON.stringify({ card: { cardId: "ab12C", title: "Pokefacts 1" } }), { status: 200 });
+      };
+      try {
+        const response = await postJob(
+          new Request("http://champdex.local/api/yoto/job", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${"x".repeat(24)}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(factReady),
+          }),
+        );
+        assert.equal(response.status, 200);
+        assert.equal(postedUrl, "https://api.yotoplay.com/content");
+        const upstream = JSON.parse(posted) as {
+          title?: string;
+          cardId?: string;
+          content?: { chapters?: Array<{ tracks?: Array<{ type?: string; trackUrl?: string }> }> };
+        };
+        assert.equal(upstream.title, "Pokefacts 1");
+        assert.equal(Object.hasOwn(upstream, "cardId"), false);
+        assert.equal(upstream.content?.chapters?.[0]?.tracks?.[0]?.type, "audio");
+        assert.equal(upstream.content?.chapters?.[0]?.tracks?.[0]?.trackUrl, "yoto:#factmergedhash");
+        assert.equal(JSON.stringify(upstream).includes("elevenlabs"), false);
+        assert.equal(JSON.stringify(upstream).includes("yoto:#lily"), false);
+      } finally {
+        globalThis.fetch = original;
+      }
+
+      const guessBase = guessUpload(guess, { 1: "pixel-1" }, { 1: "shadow-1" });
+      const guessUploadBody = { ...guessBase, create: true as const, content: { ...guessBase.content } };
+      delete guessUploadBody.content.cardId;
+      const guessJobs = renderJobs("Guess Who", guess, guessUploadBody);
+      assert.equal(guessJobs.length, 2);
+      assert.equal(guessJobs[0]?.dexId, 1);
+      assert.equal(guessJobs[1]?.dexId, 1);
+      assert.equal(guessJobs[0]?.name, "Bulbasaur");
+      assert.equal(guessJobs[1]?.name, "Bulbasaur");
+      assert.doesNotMatch(guessJobs[0]?.text ?? "", /Bulbasaur/i);
+      assert.match(guessJobs[1]?.text ?? "", /^It is Bulbasaur\./);
+      const clueAudio = await finish(guessJobs[0]?.text ?? "", guessJobs[0]?.title ?? "", clueSpeech, "clue1", "job-clue-1", "cluemergedhash");
+      const answerAudio = await finish(
+        guessJobs[1]?.text ?? "",
+        guessJobs[1]?.title ?? "",
+        answerSpeech,
+        "answ1",
+        "job-answer-1",
+        "answermergedhash",
+      );
+      const guessReady = applyFinishedAudio(guessUploadBody, {
+        [guessJobs[0]?.key ?? ""]: {
+          trackUrl: clueAudio.trackUrl ?? "",
+          duration: clueAudio.duration,
+          fileSize: clueAudio.fileSize,
+          format: clueAudio.format,
+          channels: clueAudio.channels,
+        },
+        [guessJobs[1]?.key ?? ""]: {
+          trackUrl: answerAudio.trackUrl ?? "",
+          duration: answerAudio.duration,
+          fileSize: answerAudio.fileSize,
+          format: answerAudio.format,
+          channels: answerAudio.channels,
+        },
+      });
+      const guessTracks = (
+        guessReady.content.content as {
+          chapters: Array<{
+            display?: { icon16x16?: string };
+            tracks: Array<{ type?: string; trackUrl?: string; voiceId?: string; display?: { icon16x16?: string } }>;
+          }>;
+        }
+      ).chapters[0];
+      assert.equal(guessTracks?.display?.icon16x16, "yoto:#shadow-1");
+      assert.equal(guessTracks?.tracks[0]?.type, "audio");
+      assert.equal(guessTracks?.tracks[1]?.type, "audio");
+      assert.equal(guessTracks?.tracks[0]?.trackUrl, "yoto:#cluemergedhash");
+      assert.equal(guessTracks?.tracks[1]?.trackUrl, "yoto:#answermergedhash");
+      assert.equal(guessTracks?.tracks[0]?.voiceId, undefined);
+      assert.equal(guessTracks?.tracks[1]?.voiceId, undefined);
+      assert.equal(guessTracks?.tracks[0]?.display?.icon16x16, "yoto:#shadow-1");
+      assert.equal(guessTracks?.tracks[1]?.display?.icon16x16, "yoto:#pixel-1");
+      assert.equal(JSON.stringify(guessReady.content).includes("elevenlabs"), false);
+      const clueMixed = puts.at(-2);
+      const answerMixed = puts.at(-1);
+      assert.ok(clueMixed);
+      assert.ok(answerMixed);
+      assert.equal(await cryLeads(cry, clueSpeech, clueMixed), true);
+      assert.equal(await cryLeads(cry, answerSpeech, answerMixed), true);
+      assert.notEqual(clueMixed.equals(clueSpeech), true);
+      assert.notEqual(answerMixed.equals(answerSpeech), true);
+
+      const missingCry = path.join(process.cwd(), "data", "cries", "25.ogg");
+      await rm(missingCry, { force: true });
+      const missingPuts: Buffer[] = [];
+      const missingFetch: typeof fetch = async (input, init) => {
+        const url = String(input);
+        if (url.includes("/content/job/job-missing")) {
+          return Response.json({
+            job: { jobId: "job-missing", status: "completed", result: { cardId: "miss1" } },
+          });
+        }
+        if (url.includes("/content/miss1") && url.includes("playable=true")) {
+          return Response.json({
+            card: { content: { chapters: [{ tracks: [{ trackUrl: "https://cdn.example/miss1.mp3" }] }] } },
+          });
+        }
+        if (url.includes("/content/miss1") && init?.method === "DELETE") return new Response(null, { status: 200 });
+        if (url === "https://cdn.example/miss1.mp3") return new Response(new Uint8Array(factSpeech));
+        if (url === cryUrl(25)) return new Response("missing", { status: 404 });
+        if (url.includes("/uploadUrl") || url.includes("upload.example")) {
+          missingPuts.push(Buffer.from("voice-only"));
+          return new Response("nope", { status: 500 });
+        }
+        throw new Error(`Unexpected ${init?.method ?? "GET"} ${url}`);
+      };
+      await assert.rejects(
+        () =>
+          prepareFactTrack(
+            "x".repeat(24),
+            {
+              text: "Pikachu waits in the tall grass. It weighs 6 kilograms.",
+              title: "Pikachu",
+              name: "Pikachu",
+              dexId: 25,
+              speechJobId: "job-missing",
+            },
+            missingFetch,
+            { speech: path.join(dir, "missing-speech"), rendered: path.join(dir, "missing-rendered") },
+          ),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.match(error.message, /Pikachu/);
+          assert.match(error.message, /cry/);
+          return true;
+        },
+      );
+      assert.equal(missingPuts.length, 0);
+
+      await assert.rejects(
+        () =>
+          prepareFactTrack(
+            "x".repeat(24),
+            {
+              text: "A voice-only upload must not count as Bulbasaur's finished track.",
+              title: "Bulbasaur",
+              name: "Bulbasaur",
+              dexId: 1,
+              uploadId: "voice-only-upload",
+            },
+            fetchFor(factSpeech, "fact1", "job-fact-1", "factmergedhash"),
+            roots,
+          ),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.match(error.message, /Bulbasaur/);
+          assert.match(error.message, /cry/);
+          return true;
+        },
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+      await rm(path.join(process.cwd(), "data", "cries", "25.ogg"), { force: true });
     }
   });
 });
