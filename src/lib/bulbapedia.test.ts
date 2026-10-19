@@ -52,7 +52,7 @@ describe("Bulbapedia biology", () => {
       .map((block) => (block.kind === "list" ? block.items.join(" ") : block.text))
       .join("\n");
     assert.match(text, /quadrupedal amphibian Pokémon/);
-    assert.match(text, /using its vines to climb a tree/);
+    assert.doesNotMatch(text, /using its vines to climb a tree/);
     assert.match(text, /naps in bright sunlight/);
     assert.match(text, /Physiology/);
     assert.match(text, /three sharp claws/);
@@ -71,6 +71,37 @@ describe("Bulbapedia biology", () => {
       blocks.some((block) => block.kind === "heading" && block.text === "Biology"),
       false,
     );
+  });
+
+  it("keeps Venusaur's Biology prose when a contents box comes first", () => {
+    const html = `
+      <div class="mw-parser-output">
+        <div id="toc" class="toc" role="navigation" aria-labelledby="mw-toc-heading">
+          <h2 id="mw-toc-heading">Contents</h2>
+          <ul>
+            <li class="toclevel-1"><a href="#Biology"><span class="toctext">Biology</span></a>
+              <ul><li class="toclevel-2"><a href="#Forms"><span class="toctext">Forms</span></a></li></ul>
+            </li>
+          </ul>
+        </div>
+        <h2><span class="mw-headline" id="Biology">Biology</span><span class="mw-editsection"><a href="/w/index.php?action=edit">edit</a></span></h2>
+        <figure class="mw-halign-left" typeof="mw:File/Thumb"><img src="/leaves.png" /><figcaption>Venusaur with its leaves closed</figcaption></figure>
+        <p>Venusaur is a squat, quadrupedal amphibian Pokémon with bumpy, blue-green skin. It has small, circular red eyes and a short, blunt snout.<sup class="reference"><a href="#cite_note-1"><span class="cite-bracket">[</span>1<span class="cite-bracket">]</span></a></sup></p>
+        <h3><span class="mw-headline" id="Forms">Forms</span></h3>
+        <p>Venusaur has two forms: Mega Venusaur and Gigantamax Venusaur.</p>
+        <h2><span class="mw-headline" id="Game_data">Game data</span></h2>
+        <p>This Pokédex table must stay off the biology section.</p>
+      </div>
+    `;
+    const blocks = biologyBlocks(html);
+    const text = blocks
+      .map((block) => (block.kind === "list" ? block.items.join(" ") : block.text))
+      .join("\n");
+    assert.match(text, /squat, quadrupedal amphibian Pokémon/);
+    assert.match(text, /short, blunt snout/);
+    assert.match(text, /Forms/);
+    assert.match(text, /Mega Venusaur and Gigantamax Venusaur/);
+    assert.doesNotMatch(text, /leaves closed|Contents|Game data|Pokédex table|\[1\]|\[edit\]/i);
   });
 
   it("builds wiki titles for names that are not plain words", () => {

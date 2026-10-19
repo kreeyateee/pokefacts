@@ -17,6 +17,9 @@ export const BULBAPEDIA_USER_AGENT = "Champdex/0.1 (private household; mjlane90@
 
 const CACHE_FILE = path.join(process.cwd(), "data", "bulbapedia", "biology.json");
 
+/** Bump when the HTML reader changes, so an older empty result is fetched again. */
+const CACHE_REVISION = 2;
+
 type CacheRow = {
   name: string;
   page: string;
@@ -24,6 +27,7 @@ type CacheRow = {
   status: "ready" | "missing";
   blocks: BiologyBlock[];
   fetchedAt: string;
+  revision: number;
 };
 
 type WikiSection = {
@@ -94,7 +98,7 @@ function decodeEntities(text: string): string {
 
 function plain(html: string): string {
   return decodeEntities(html.replace(/<br\s*\/?>/gi, " ").replace(/<[^>]+>/g, " "))
-    .replace(/\[(?:\d+|note \d+)\]/gi, "")
+    .replace(/\[(?:\d+|note \d+|citation needed)\]/gi, "")
     .replace(/\s+/g, " ")
     .replace(/\s+([,.;:!?])/g, "$1")
     .replace(/\(\s+/g, "(")
@@ -109,10 +113,13 @@ function classNames(openTag: string): string[] {
 
 function shouldSkip(openTag: string, name: string): boolean {
   const classes = classNames(openTag);
-  if (name === "table" || name === "script" || name === "style") return true;
-  if (name === "sup" && classes.includes("reference")) return true;
+  if (name === "table" || name === "script" || name === "style" || name === "figure") return true;
+  if (name === "sup" && (classes.includes("reference") || classes.includes("noexcerpt"))) return true;
   if (name === "span" && classes.includes("mw-editsection")) return true;
   if (name === "ol" && classes.includes("references")) return true;
+  if ((name === "div" || name === "nav") && (classes.includes("toc") || /\bid\s*=\s*["']toc["']/i.test(openTag))) {
+    return true;
+  }
   if (
     name === "div" &&
     (classes.includes("mw-references-wrap") ||
@@ -162,20 +169,13 @@ function removeRegions(html: string): string {
   return out;
 }
 
-function liftCaptions(html: string): string {
-  return html.replace(/<figure\b[^>]*>[\s\S]*?<\/figure>/gi, (figure) => {
-    const caption = figure.match(/<figcaption\b[^>]*>([\s\S]*?)<\/figcaption>/i);
-    return caption ? `<p>${caption[1]}</p>` : "";
-  });
-}
-
 function isBiologyHeading(text: string): boolean {
   return /^biology$/i.test(text);
 }
 
 /** Lead HTML from the Biology section, including its subsections, as readable blocks. */
 export function biologyBlocks(html: string): BiologyBlock[] {
-  const cleaned = liftCaptions(removeRegions(html));
+  const cleaned = removeRegions(html);
   const blocks: BiologyBlock[] = [];
   const re = /<(h[2-4]|p|li)\b[^>]*>([\s\S]*?)<\/\1>/gi;
   let list: string[] | null = null;
@@ -194,7 +194,8 @@ export function biologyBlocks(html: string): BiologyBlock[] {
     if (!text) continue;
     if (tag === "h2") {
       flushList();
-      if (isBiologyHeading(text)) continue;
+      // A contents box uses its own h2 before Biology. That is not the next article section.
+      if (isBiologyHeading(text) || /^contents$/i.test(text)) continue;
       break;
     }
     if (tag === "li") {
@@ -259,6 +260,7 @@ async function readCache(file: string): Promise<Record<string, CacheRow>> {
 function usableRow(row: unknown, name: string): CacheRow | null {
   if (!row || typeof row !== "object") return null;
   const candidate = row as CacheRow;
+  if (candidate.revision !== CACHE_REVISION) return null;
   if (candidate.name !== name) return null;
   if (candidate.status !== "ready" && candidate.status !== "missing") return null;
   if (!Array.isArray(candidate.blocks)) return null;
@@ -368,7 +370,15 @@ export async function loadBiology(name: string, id: number, options: LoadOptions
   } catch (error) {
     const code = error instanceof Error ? (error as WikiError).code : "";
     if (code === "missingtitle") {
-      const row: CacheRow = { name, page, url, status: "missing", blocks: [], fetchedAt: new Date().toISOString() };
+      const row: CacheRow = {
+        name,
+        page,
+        url,
+        status: "missing",
+        blocks: [],
+        fetchedAt: new Date().toISOString(),
+        revision: CACHE_REVISION,
+      };
       await storeRow(cacheFile, id, row).catch(() => undefined);
       return viewFromRow(row);
     }
@@ -377,7 +387,15 @@ export async function loadBiology(name: string, id: number, options: LoadOptions
 
   const section = biologySection(sectionsOf(listed));
   if (!section || section.index === undefined || section.index === null || String(section.index) === "") {
-    const row: CacheRow = { name, page, url, status: "missing", blocks: [], fetchedAt: new Date().toISOString() };
+    const row: CacheRow = {
+      name,
+      page,
+      url,
+      status: "missing",
+      blocks: [],
+      fetchedAt: new Date().toISOString(),
+      revision: CACHE_REVISION,
+    };
     await storeRow(cacheFile, id, row).catch(() => undefined);
     return viewFromRow(row);
   }
@@ -395,6 +413,7 @@ export async function loadBiology(name: string, id: number, options: LoadOptions
     status: blocks.length > 0 ? "ready" : "missing",
     blocks,
     fetchedAt: new Date().toISOString(),
+    revision: CACHE_REVISION,
   };
   await storeRow(cacheFile, id, row).catch(() => undefined);
   return viewFromRow(row);
