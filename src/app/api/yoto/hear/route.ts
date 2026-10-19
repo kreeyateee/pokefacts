@@ -28,7 +28,7 @@ export async function POST(request: Request) {
       headers: {
         "Content-Type": kind === "ogg" ? "audio/ogg" : "audio/mpeg",
         "Cache-Control": "no-store",
-        "X-Champdex-Cry": result.cryFirst ? "1" : "0",
+        "X-Pokefacts-Cry": result.cryFirst ? "1" : "0",
       },
     });
   } catch (error) {

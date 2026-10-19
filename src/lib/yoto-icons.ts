@@ -70,7 +70,7 @@ export const YOTO_VOICES = [
   },
 ] as const;
 
-/** Lily when the saved id is missing or not one of the Champdex voices. */
+/** Lily when the saved id is missing or not one of the Pokefacts voices. */
 export function voiceOrLily(id?: string): string {
   const match = YOTO_VOICES.find((voice) => voice.id === id);
   return match?.id ?? YOTO_VOICES[0].id;

@@ -1,5 +1,5 @@
 /**
- * Home start path: check the local data, build, then serve Champdex.
+ * Home start path: check the local data, build, then serve Pokefacts.
  * Yoto login uses the loopback redirect. A public tunnel is not required.
  */
 import { execFile, spawn } from "node:child_process";
@@ -105,14 +105,14 @@ async function countNames(dir, pattern) {
 
 if (!nodeIsNewEnough()) {
   fail(
-    `Champdex needs Node.js 22.14 or newer. This machine is running ${process.versions.node}.\n` +
+    `Pokefacts needs Node.js 22.14 or newer. This machine is running ${process.versions.node}.\n` +
       "Install the 22 line from https://nodejs.org/ and open a new terminal.",
   );
 }
 
 if (!(await ffmpegOnPath())) {
   fail(
-    `ffmpeg is not on PATH. Champdex uses it to put each cry in front of Lily's voice.\n${ffmpegHint()}`,
+    `ffmpeg is not on PATH. Pokefacts uses it to put each cry in front of Lily's voice.\n${ffmpegHint()}`,
   );
 }
 
@@ -128,16 +128,16 @@ if (!(await exists(sqlitePath))) {
     ]);
     if (code !== 0 || !(await exists(sqlitePath))) {
       fail(
-        "Could not build data/champdex.sqlite. The catalogue uses PokéAPI game data. Champdex does not copy Bulbapedia articles.",
+        "Could not build data/champdex.sqlite. The catalogue uses PokéAPI game data. Pokefacts does not copy Bulbapedia articles.",
       );
     }
   } else {
     fail(
       "data/champdex.sqlite is missing.\n" +
-        "That file ships with the Champdex git repository, together with public/sprites and public/pixels.\n" +
+        "That file ships with the Pokefacts git repository, together with public/sprites and public/pixels.\n" +
         "Clone the full repository, or restore those paths from git.\n" +
         "If the PokéAPI CSV tables are already on this computer, put them in /tmp/poke-csv and run: npm run catalogue\n" +
-        "Champdex does not copy Bulbapedia articles.",
+        "Pokefacts does not copy Bulbapedia articles.",
     );
   }
 }
@@ -178,7 +178,7 @@ if (sprites < 1025 || pixels < 1025 || shadows < 1025) {
 const origin = config.origin;
 const redirect = config.redirectUri;
 console.log("");
-console.log("Champdex");
+console.log("Pokefacts");
 console.log(`Open ${origin}`);
 console.log(`Yoto redirect URI: ${redirect}`);
 console.log("A public tunnel is not required. Leave this window open while the cards upload.");
@@ -199,7 +199,7 @@ if (buildCode !== 0) {
 }
 
 console.log("");
-console.log(`Champdex is at ${origin}`);
+console.log(`Pokefacts is at ${origin}`);
 console.log(`Allow this redirect in the Yoto developer dashboard: ${redirect}`);
 console.log("");
 

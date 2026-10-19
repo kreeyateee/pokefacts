@@ -84,7 +84,7 @@ export async function POST(request: Request) {
 
   const url = new URL("https://api.yotoplay.com/media/displayIcons/user/me/upload");
   url.searchParams.set("autoConvert", "false");
-  url.searchParams.set("filename", shadow ? `champdex-${id}-shadow` : `champdex-${id}`);
+  url.searchParams.set("filename", shadow ? `pokefacts-${id}-shadow` : `pokefacts-${id}`);
 
   const response = await fetch(url, {
     method: "POST",

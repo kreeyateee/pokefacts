@@ -190,7 +190,7 @@ async function uploadMerged(
   const hash = sha256(audio);
   const uploadUrl = new URL("https://api.yotoplay.com/media/transcode/audio/uploadUrl");
   uploadUrl.searchParams.set("sha256", hash);
-  uploadUrl.searchParams.set("filename", `champdex-${dexId}-cry.mp3`);
+  uploadUrl.searchParams.set("filename", `pokefacts-${dexId}-cry.mp3`);
   const created = await yoto(token, uploadUrl.toString(), undefined, fetchImpl);
   const createdBody = (await readJson(created)) as {
     upload?: { uploadId?: string; uploadUrl?: string | null };
@@ -538,7 +538,7 @@ async function openUpload(
 ): Promise<string> {
   const uploadUrl = new URL("https://api.yotoplay.com/media/transcode/audio/uploadUrl");
   uploadUrl.searchParams.set("sha256", sha256(audio));
-  uploadUrl.searchParams.set("filename", `champdex-${label}.mp3`);
+  uploadUrl.searchParams.set("filename", `pokefacts-${label}.mp3`);
   const created = await yoto(token, uploadUrl.toString(), undefined, fetchImpl, 20_000);
   const createdBody = (await readJson(created)) as {
     upload?: { uploadId?: string; uploadUrl?: string | null };
