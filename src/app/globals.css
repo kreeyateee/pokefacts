@@ -400,6 +400,47 @@
   font-weight: 800;
 }
 
+.pk-bar {
+  height: 0.7rem;
+  overflow: hidden;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.pk-bar-fill {
+  height: 100%;
+  background: var(--poke-yellow);
+  transition: width 200ms ease;
+}
+
+.pk-bar-fill.pk-bar-failed {
+  background: var(--destructive);
+}
+
+.pk-bar-indeterminate {
+  width: 35%;
+  animation: pk-bar-slide 1.1s ease-in-out infinite;
+}
+
+@keyframes pk-bar-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pk-bar-indeterminate {
+    animation: none;
+    width: 100%;
+    opacity: 0.45;
+  }
+}
+
 .pk-danger {
   color: var(--destructive);
   font-weight: 800;

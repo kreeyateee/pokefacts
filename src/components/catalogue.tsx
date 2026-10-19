@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 
+import { StatusBar } from "@/components/status-bar";
 import type { BiologyBlock, BiologyView, CatalogueEntry, CataloguePage } from "@/lib/catalogue-types";
 import type { KidCard } from "@/lib/kid-cards";
+import { YOTO_VOICES } from "@/lib/yoto-icons";
 import {
   selectionPlaylist,
   selectionSpeciesLimit,
@@ -143,14 +145,22 @@ const PLAYLIST_KINDS: Array<{ id: SelectionKind; label: string; detail: string }
 
 export function Catalogue({
   onSendSelection,
+  onBuildStart,
   playlists = [],
   playlistTarget = "",
   onPlaylistTarget,
+  voiceId = "",
+  onVoiceId,
+  job = null,
 }: {
   onSendSelection?: (card: KidCard) => Promise<void>;
+  onBuildStart?: () => void;
   playlists?: Array<{ cardId: string; title: string }>;
   playlistTarget?: string;
   onPlaylistTarget?: (cardId: string) => void;
+  voiceId?: string;
+  onVoiceId?: (voiceId: string) => void;
+  job?: { status: string; detail: string; done?: number; total?: number } | null;
 } = {}) {
   const [query, setQuery] = useState("");
   const [type, setType] = useState("");
@@ -172,6 +182,8 @@ export function Catalogue({
   const [playlistKind, setPlaylistKind] = useState<SelectionKind>("facts");
   const [playlistTitle, setPlaylistTitle] = useState("");
   const [buildMessage, setBuildMessage] = useState("");
+  const [buildProgress, setBuildProgress] = useState<{ done: number; total: number } | null>(null);
+  const [buildFailed, setBuildFailed] = useState(false);
   const [building, setBuilding] = useState(false);
 
   useEffect(() => {
@@ -331,6 +343,8 @@ export function Catalogue({
   async function buildPlaylist() {
     if (picked.length === 0 || building) return;
     if (picked.length > speciesLimit) {
+      setBuildFailed(true);
+      setBuildProgress(null);
       setBuildMessage(
         playlistKind === "whos-that"
           ? `Who's That Pokémon uses two tracks for each Pokémon, so 50 fit on a card. ${picked.length} are picked. Nothing was sent.`
@@ -338,13 +352,17 @@ export function Catalogue({
       );
       return;
     }
+    onBuildStart?.();
     setBuilding(true);
+    setBuildFailed(false);
     setBuildMessage("");
+    setBuildProgress({ done: 0, total: picked.length });
     try {
       const rows: SelectionSpecies[] = [];
       for (let index = 0; index < picked.length; index += 1) {
         const id = picked[index];
         if (!id) continue;
+        setBuildProgress({ done: index + 1, total: picked.length });
         setBuildMessage(`Reading ${index + 1} of ${picked.length}…`);
         const entryResponse = await fetch(`/api/catalogue/${id}`);
         const entryPayload = (await entryResponse.json()) as { entry?: CatalogueEntry; error?: string };
@@ -375,24 +393,35 @@ export function Catalogue({
       }
       const built = selectionPlaylist(rows, playlistKind, playlistTitle);
       if (built.refused.length > 0) {
+        setBuildFailed(true);
         setBuildMessage(
           `A playlist holds 100 tracks. ${built.refused.length} picked Pokémon did not fit, so nothing was sent.`,
         );
         return;
       }
       if (!onSendSelection) {
+        setBuildFailed(true);
         setBuildMessage("Connect Yoto, then build the playlist again.");
         return;
       }
       setBuildMessage(`Sending ${built.title} to Yoto…`);
+      setBuildProgress(null);
       await onSendSelection(built.card);
+      setBuildProgress({ done: rows.length, total: rows.length });
       setBuildMessage(`${built.title} is in your Yoto library.`);
     } catch (error: unknown) {
+      setBuildFailed(true);
       setBuildMessage(error instanceof Error ? error.message : "The playlist was not sent.");
     } finally {
       setBuilding(false);
     }
   }
+
+  const sendJob = building && job && job.status !== "completed" ? job : null;
+  const statusLabel = sendJob?.detail || buildMessage;
+  const statusDone = sendJob ? sendJob.done : buildProgress?.done;
+  const statusTotal = sendJob ? sendJob.total : buildProgress?.total;
+  const statusFailed = sendJob ? sendJob.status === "failed" : buildFailed;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
@@ -531,9 +560,31 @@ export function Catalogue({
                     ? "Advanced facts"
                     : "Facts"
               }
-              className="pk-field"
-            />
+            className="pk-field"
+          />
           </label>
+          {onVoiceId ? (
+            <label className="mt-3 grid gap-1 text-sm" htmlFor="catalogue-voice">
+              Voice
+              <select
+                id="catalogue-voice"
+                aria-label="Voice"
+                className="pk-field"
+                value={voiceId}
+                disabled={building}
+                onChange={(event) => onVoiceId(event.target.value)}
+              >
+                {YOTO_VOICES.map((voice) => (
+                  <option key={voice.id} value={voice.id}>
+                    {voice.name} — {voice.note}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {onVoiceId ? (
+            <p className="mt-1 text-xs leading-5 pk-quiet">This voice reads every track on the playlist.</p>
+          ) : null}
           <label className="mt-3 grid gap-1 text-sm" htmlFor="catalogue-playlist">
             Add to a Yoto playlist
             <select
@@ -571,7 +622,14 @@ export function Catalogue({
                 : `A playlist holds 100 tracks. ${picked.length} are picked.`}
             </p>
           ) : null}
-          {buildMessage ? <p className="mt-2 text-xs leading-5 text-muted-foreground">{buildMessage}</p> : null}
+          {statusLabel ? (
+            <StatusBar
+              label={statusLabel}
+              done={statusDone}
+              total={statusTotal}
+              failed={statusFailed}
+            />
+          ) : null}
         </div>
         <p className="mt-3 text-xs pk-quiet">
           {list

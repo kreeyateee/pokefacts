@@ -173,10 +173,7 @@ async function postToken(body: Record<string, string>): Promise<TokenResponse> {
 
 export async function exchangeCode(code: string): Promise<YotoSession> {
   const verifier = sessionStorage.getItem(VERIFIER_KEY);
-  const clientId =
-    localStorage.getItem(CLIENT_KEY) ??
-    process.env.NEXT_PUBLIC_YOTO_CLIENT_ID ??
-    "";
+  const clientId = localStorage.getItem(CLIENT_KEY) ?? "";
   if (!verifier || !clientId) {
     throw new Error("The login session expired. Connect Yoto again.");
   }

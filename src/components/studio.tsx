@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Catalogue } from "@/components/catalogue";
+import { StatusBar } from "@/components/status-bar";
 import { ConnectDialog } from "@/components/connect-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -71,6 +72,8 @@ type SavedCards = Partial<Record<string, string>>;
 type JobView = {
   status: string;
   detail: string;
+  done?: number;
+  total?: number;
 };
 
 function savedCards(): SavedCards {
@@ -707,7 +710,7 @@ export function Studio({
     toast.error(detail);
   }
 
-  async function pollJob(id: string, headline?: string) {
+  async function pollJob(id: string, headline?: string, mark?: { done?: number; total?: number }) {
     for (let attempt = 0; attempt < 90; attempt += 1) {
       await delay(2000);
       const response = await yotoFetch(`/api/yoto/job/${id}`);
@@ -726,6 +729,8 @@ export function Studio({
       setJob({
         status: current.status ?? "processing",
         detail: headline ? `${headline}. ${progress}` : progress,
+        done: mark?.done,
+        total: mark?.total,
       });
       if (current.status === "completed") return current;
       if (current.status === "failed") {
@@ -814,7 +819,7 @@ export function Studio({
   }
 
   async function renderOneTrack(
-    job: { text: string; title: string; dexId?: number; name?: string; progress: string },
+    job: { text: string; title: string; dexId?: number; name?: string; progress: string; done?: number; total?: number },
     scratch: Set<string>,
   ): Promise<FinishedAudio> {
     let speechJobId: string | undefined;
@@ -824,7 +829,7 @@ export function Studio({
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         for (let step = 0; step < 40; step += 1) {
-          setJob({ status: "sending", detail: job.progress });
+          setJob({ status: "sending", detail: job.progress, done: job.done, total: job.total });
           const response = await yotoFetch("/api/yoto/track", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -856,7 +861,10 @@ export function Studio({
           }
           if (payload.phase === "speech" && payload.speechJobId) {
             speechJobId = payload.speechJobId;
-            const finished = await pollJob(payload.speechJobId, job.progress);
+            const finished = await pollJob(payload.speechJobId, job.progress, {
+              done: job.done,
+              total: job.total,
+            });
             const cardId = finished.result?.cardId;
             if (!cardId) throw new SendFailure("The voice did not return a recording.", false);
             speechCardId = cardId;
@@ -930,11 +938,14 @@ export function Studio({
       const upload = uploadForPlaylist(prepared, chosenId);
       await sendPrepared(playlist, upload, playlist.libraryTitle);
       const updatedTitle = library.find((item) => item.cardId === chosenId)?.title;
+      const tracks = countSpokenTracks(playlist.chapters);
       setJob({
         status: "completed",
         detail: chosenId
           ? `${updatedTitle ?? "The playlist"} was updated.`
           : `${playlist.libraryTitle} is in your Yoto library.`,
+        done: tracks,
+        total: tracks,
       });
       toast.success(
         chosenId
@@ -974,7 +985,12 @@ export function Studio({
           : applySpeciesSpeech(
               card,
               await speechesFor(card, (done, total) => {
-                setJob({ status: "sending", detail: `${card.libraryTitle}, description ${done} of ${total}` });
+                setJob({
+                  status: "sending",
+                  detail: `${card.libraryTitle}, description ${done} of ${total}`,
+                  done,
+                  total,
+                });
               }),
             );
       if (card.kind === "mega" || card.kind === "gmax") {
@@ -996,11 +1012,14 @@ export function Studio({
       const upload = uploadForPlaylist({ ...base, voiceId }, chosenId);
       await sendPrepared(card, upload, card.libraryTitle);
       const updatedTitle = library.find((item) => item.cardId === chosenId)?.title;
+      const tracks = countSpokenTracks(card.chapters);
       setJob({
         status: "completed",
         detail: chosenId
           ? `${updatedTitle ?? "The playlist"} was updated.`
           : `${card.rangeLabel} is in your Yoto library.`,
+        done: tracks,
+        total: tracks,
       });
       toast.success(
         chosenId
@@ -1028,7 +1047,7 @@ export function Studio({
         const playlist = playlists[index];
         if (!playlist) continue;
         const headline = bulkProgressLabel(index + 1, playlists.length);
-        setJob({ status: "sending", detail: headline });
+        setJob({ status: "sending", detail: headline, done: index, total: playlists.length });
         try {
           const spoken = applySpeciesSpeech(
             playlist,
@@ -1036,6 +1055,8 @@ export function Studio({
               setJob({
                 status: "sending",
                 detail: `${playlist.libraryTitle}, description ${done} of ${total}`,
+                done,
+                total,
               });
             }),
           );
@@ -1043,6 +1064,8 @@ export function Studio({
             setJob({
               status: "sending",
               detail: `${playlist.libraryTitle}, picture ${done} of ${total}`,
+              done,
+              total,
             });
           });
           const upload = factsBulkUpload(spoken, pixels, voiceId);
@@ -1067,6 +1090,8 @@ export function Studio({
       setJob({
         status: "completed",
         detail: `All ${playlists.length} Pokefacts playlists are in your Yoto library.`,
+        done: playlists.length,
+        total: playlists.length,
       });
       toast.success(`All ${playlists.length} Pokefacts playlists are ready to link.`);
     } catch (error) {
@@ -1207,9 +1232,13 @@ export function Studio({
         {view === "catalogue" ? (
           <Catalogue
             onSendSelection={sendSelection}
+            onBuildStart={() => setJob(null)}
             playlists={library}
             playlistTarget={targetPlaylist}
             onPlaylistTarget={setTargetPlaylist}
+            voiceId={voiceId}
+            onVoiceId={(id) => setVoiceId(writeVoiceId(localStorage, id))}
+            job={job}
           />
         ) : card && chapter ? (
           <div className="grid gap-6 md:grid-cols-[220px_minmax(0,1fr)]">
@@ -1273,14 +1302,12 @@ export function Studio({
                 </div>
               ) : null}
               {job ? (
-                <p
-                  className={`mt-3 text-sm leading-6 ${
-                    job.status === "failed" ? "pk-danger" : "pk-status"
-                  }`}
-                  role="status"
-                >
-                  {job.detail}
-                </p>
+                <StatusBar
+                  label={job.detail}
+                  done={job.done}
+                  total={job.total}
+                  failed={job.status === "failed"}
+                />
               ) : null}
               <div
                 className="mt-3 flex gap-2 overflow-x-auto pb-1"
@@ -1576,14 +1603,12 @@ export function Studio({
                         : `Send ${card.rangeLabel} to Yoto`}
                 </Button>
                 {job ? (
-                  <p
-                    className={`mt-3 text-sm leading-6 ${
-                      job.status === "failed" ? "pk-danger" : "pk-status"
-                    }`}
-                    role="status"
-                  >
-                    {job.detail}
-                  </p>
+                  <StatusBar
+                    label={job.detail}
+                    done={job.done}
+                    total={job.total}
+                    failed={job.status === "failed"}
+                  />
                 ) : null}
                 {job?.status === "completed" ? (
                   <ol className="mt-3 grid list-decimal gap-2 pl-4 text-sm leading-6">

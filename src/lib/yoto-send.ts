@@ -131,6 +131,9 @@ export type RenderJob = {
   /** Species name, used when a cry cannot be added. */
   name?: string;
   progress: string;
+  /** Finished tracks so far, including this one when it has started. */
+  done?: number;
+  total?: number;
 };
 
 type UploadTrack = { key?: string; title?: string; trackUrl?: string };
@@ -167,9 +170,9 @@ export function renderJobs(libraryTitle: string, card: KidCard, upload: Playlist
   const total = rows.filter((row) => row.dexId).length;
   let seen = 0;
   return rows.map((row) => {
-    if (!row.dexId) return { ...row, progress: `${libraryTitle}, introduction` };
+    if (!row.dexId) return { ...row, progress: `${libraryTitle}, introduction`, done: seen, total };
     seen += 1;
-    return { ...row, progress: trackProgressLabel(libraryTitle, seen, total) };
+    return { ...row, progress: trackProgressLabel(libraryTitle, seen, total), done: seen, total };
   });
 }
 

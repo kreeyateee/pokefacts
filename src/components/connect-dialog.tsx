@@ -31,8 +31,7 @@ export function ConnectDialog({
   if (open && !wasOpen) {
     setWasOpen(true);
     if (typeof window !== "undefined") {
-      const stored = localStorage.getItem(CLIENT_KEY) ?? "";
-      setDraft(stored || process.env.NEXT_PUBLIC_YOTO_CLIENT_ID || "");
+      setDraft(localStorage.getItem(CLIENT_KEY) ?? "");
       setCallback(redirectUri());
       setOnHomeMachine(window.location.origin === LOCAL_APP_ORIGIN);
     }
