@@ -3,7 +3,8 @@ import { dexBlurb, guessSpoken, pickDexEntry, type MonSheet } from "@/lib/dex-fa
 import { pronounce } from "@/lib/pronounce";
 import { spokenWiki } from "@/lib/spoken-wiki";
 import type { YotoContent } from "@/lib/yoto-card";
-import { iconForType, voiceOrLily, YOTO_ICONS } from "@/lib/yoto-icons";
+import { chosenVoice, isPiperVoice } from "@/lib/piper-voice";
+import { iconForType, YOTO_ICONS } from "@/lib/yoto-icons";
 
 /** Lily, the British woman. Yoto Labs records her MP3 from the spoken script. */
 export const LILY_VOICE_ID = "pFZP5JQG7iQjIQuC4Bku";
@@ -425,7 +426,7 @@ export function pokedexUpload(
   cardId?: string,
   voiceId: string = LILY_VOICE_ID,
 ) {
-  const spoken = voiceOrLily(voiceId);
+  const spoken = chosenVoice(voiceId);
   const content = buildKidCard(applyUploadedPixels(withVoice(card, spoken), mediaById), cardId);
   if (card.id === RANDOM_POKEDEX_ID) {
     content.metadata.description =
@@ -440,7 +441,7 @@ export function factsBulkPlaylists(cards: KidCard[]): KidCard[] {
 }
 
 function withVoice(card: KidCard, voiceId: string): KidCard {
-  const spoken = voiceOrLily(voiceId);
+  const spoken = chosenVoice(voiceId);
   return {
     ...card,
     chapters: card.chapters.map((chapter) => ({
@@ -457,7 +458,7 @@ export function factsPlaylistUpload(
   cardId?: string,
   voiceId: string = LILY_VOICE_ID,
 ) {
-  const spoken = voiceOrLily(voiceId);
+  const spoken = chosenVoice(voiceId);
   const playlistIndex = Number(/^meet-(\d+)$/.exec(card.id)?.[1]);
   const title =
     Number.isInteger(playlistIndex) && playlistIndex >= 1
@@ -535,7 +536,7 @@ export function guessUpload(
   cardId?: string,
   voiceId: string = LILY_VOICE_ID,
 ) {
-  const spoken = voiceOrLily(voiceId);
+  const spoken = chosenVoice(voiceId);
   const prepared: KidCard = {
     ...card,
     chapters: withVoice(card, spoken).chapters.map((chapter) => {
@@ -668,13 +669,14 @@ export function formPlaylistUpload(
   cardId?: string,
   voiceId: string = LILY_VOICE_ID,
 ) {
-  const spoken = voiceOrLily(voiceId);
+  const spoken = chosenVoice(voiceId);
   const title = card.kind === "gmax" ? "Gigantamax" : "Mega Evolutions";
   const usable = cardId && /^[A-Za-z0-9]{5}$/.test(cardId) ? cardId : undefined;
   const content = buildKidCard(applyUploadedPixels(withVoice(card, spoken), mediaById), usable);
   content.title = title;
   content.metadata.title = title;
-  content.metadata.description = `${title}. You hear the cry, then Lily reads the form. Written for ages 8 to 12. Link this playlist to its own card.`;
+  const reader = isPiperVoice(spoken) ? "Piper" : "Lily";
+  content.metadata.description = `${title}. You hear the cry, then ${reader} reads the form. Written for ages 8 to 12. Link this playlist to its own card.`;
   if (!usable) delete content.cardId;
   return { voiceId: spoken, content };
 }

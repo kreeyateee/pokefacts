@@ -9,9 +9,12 @@ import {
   CRY_MIX_VOLUME,
   cryUrl,
   describeClip,
+  encodeYotoMp3,
+  inputContainer,
   mergeCryFirst,
 } from "@/lib/cry-audio";
-import { voiceOrLily } from "@/lib/yoto-icons";
+import { synthesizePiper, type PiperSynthOptions } from "@/lib/piper";
+import { chosenVoice, isPiperVoice } from "@/lib/piper-voice";
 import { RECONNECT_YOTO, reconnectMessage, yotoErrorText } from "@/lib/yoto-error";
 
 export type FactCryRequest = {
@@ -343,12 +346,12 @@ function mixToken(): string {
 /** Cache identity for a finished mix: voice, cry volume, pad, dex number, and the script. */
 export function renderedCacheKey(text: string, dexId: number | undefined, voiceId: string): string {
   const line = text.replace(/\s+/g, " ").trim();
-  return sha256(Buffer.from(`${voiceOrLily(voiceId)}\n${mixToken()}\n${dexId ?? 0}\n${line}`));
+  return sha256(Buffer.from(`${chosenVoice(voiceId)}\n${mixToken()}\n${dexId ?? 0}\n${line}`));
 }
 
 function legacyRenderedKey(text: string, dexId: number | undefined, voiceId: string): string {
   const line = text.replace(/\s+/g, " ").trim();
-  return sha256(Buffer.from(`${voiceOrLily(voiceId)}\n${dexId ?? 0}\n${line}`));
+  return sha256(Buffer.from(`${chosenVoice(voiceId)}\n${dexId ?? 0}\n${line}`));
 }
 
 function speechKey(text: string, voiceId: string): string {
@@ -646,6 +649,7 @@ export async function prepareFactTrack(
     rendered: string;
     cries?: string;
     merge?: (cry: Buffer, speech: Buffer) => Promise<Buffer>;
+    piper?: PiperSynthOptions;
   } = { speech: SPEECH_ROOT, rendered: RENDER_ROOT },
 ): Promise<TrackPrepareResult> {
   if (request.discardCardId && !request.text?.trim()) {
@@ -656,7 +660,7 @@ export async function prepareFactTrack(
   const text = request.text?.replace(/\s+/g, " ").trim() ?? "";
   if (!text || text.length > 3000) throw new Error("That line is empty or longer than Yoto allows.");
   const title = (request.title?.trim() || "Line").slice(0, 80);
-  const voiceId = voiceOrLily(request.voiceId);
+  const voiceId = chosenVoice(request.voiceId);
   const dexId = request.dexId;
   const species = (request.name?.replace(/\s+/g, " ").trim() || title || (typeof dexId === "number" ? `Number ${dexId}` : "")).slice(0, 40);
   const cryFailure = (error?: unknown) => {
@@ -683,7 +687,10 @@ export async function prepareFactTrack(
   const label = dexId ? String(dexId) : "intro";
   const renderedFile = path.join(roots.rendered, `${renderedCacheKey(text, dexId, voiceId)}.json`);
   const mergedFile = path.join(roots.rendered, `${renderedCacheKey(text, dexId, voiceId)}.mp3`);
-  const speechFile = path.join(roots.speech, `${speechKey(text, voiceId)}.mp3`);
+  const speechFile = path.join(
+    roots.speech,
+    `${speechKey(text, voiceId)}.${isPiperVoice(voiceId) ? "wav" : "mp3"}`,
+  );
   const fresh = await readReady(renderedFile, dexId, dexId ? mergedFile : undefined);
   if (fresh) return fresh;
   // Hashes written before the volume was part of the key. Those mixes used volume 4 and a 0.35s pad.
@@ -739,9 +746,13 @@ export async function prepareFactTrack(
       if (!dexId) throw error;
       throw cryFailure(error);
     }
-    if (!audioContainer(speech) || speech.length < 128) {
+    const kind = inputContainer(speech);
+    const min = kind === "wav" ? 44 : 128;
+    if (!kind || speech.length < min) {
       await rm(speechFile, { force: true });
-      const bad = new Error("Lily's recording was not an Ogg or MP3 file.");
+      const bad = new Error(
+        isPiperVoice(voiceId) ? "Piper did not write a recording." : "Lily's recording was not an Ogg or MP3 file.",
+      );
       if (!dexId) throw bad;
       throw cryFailure(bad);
     }
@@ -753,12 +764,14 @@ export async function prepareFactTrack(
         const mix = roots.merge ?? mergeCryFirst;
         const merged = await mix(cry, speech);
         await assertCryFirst(cry, speech, merged);
-        if (merged === speech) throw new Error("The cry was not mixed in front of Lily.");
+        if (merged === speech) throw new Error("The cry was not mixed in front of the reading.");
         await writeBytesAtomic(mergedFile, merged);
         audio = merged;
       } catch (error) {
         throw cryFailure(error);
       }
+    } else if (kind === "wav") {
+      audio = await encodeYotoMp3(speech);
     }
 
     try {
@@ -772,6 +785,14 @@ export async function prepareFactTrack(
   };
 
   if (await fileExists(speechFile)) return fromSpeechFile();
+
+  if (isPiperVoice(voiceId)) {
+    const wav = await synthesizePiper(text, roots.piper);
+    if (inputContainer(wav) !== "wav" || wav.length < 44) throw new Error("Piper did not write a recording.");
+    await mkdir(path.dirname(speechFile), { recursive: true });
+    await writeFile(speechFile, wav);
+    return fromSpeechFile();
+  }
 
   const fromCard = async (cardId: string): Promise<TrackPrepareResult> => {
     try {

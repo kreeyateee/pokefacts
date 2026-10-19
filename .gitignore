@@ -46,5 +46,8 @@ next-env.d.ts
 /data/speech
 /data/rendered
 
+# Piper binary and British voice model. Tens of megabytes. Downloaded once.
+/data/piper
+
 # Bulbapedia Biology text fetched while browsing the catalogue
 /data/bulbapedia

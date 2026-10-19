@@ -1,4 +1,4 @@
-import { voiceOrLily } from "@/lib/yoto-icons";
+import { chosenVoice } from "@/lib/piper-voice";
 
 export const VOICE_STORAGE_KEY = "champdex.voiceId";
 
@@ -8,11 +8,11 @@ type VoiceStorage = {
 };
 
 export function readVoiceId(storage: VoiceStorage): string {
-  return voiceOrLily(storage.getItem(VOICE_STORAGE_KEY) ?? undefined);
+  return chosenVoice(storage.getItem(VOICE_STORAGE_KEY));
 }
 
 export function writeVoiceId(storage: Required<Pick<VoiceStorage, "getItem" | "setItem">>, id: string): string {
-  const voiceId = voiceOrLily(id);
+  const voiceId = chosenVoice(id);
   storage.setItem(VOICE_STORAGE_KEY, voiceId);
   return voiceId;
 }
@@ -22,7 +22,7 @@ export function spokenForDemo(text: string): string {
   return text.replace(/\bBulbapedia\b/gi, "").replace(/\s+/g, " ").trim();
 }
 
-/** Body for the Hear request. The voice id is the one the labs job must use. */
+/** Body for the Hear request. A Yoto Labs voice is sent to Labs. Piper is spoken on this computer. */
 export function demoHearBody(input: { text: string; voiceId?: string; dexId?: number; title?: string }): {
   text: string;
   voiceId: string;
@@ -31,14 +31,14 @@ export function demoHearBody(input: { text: string; voiceId?: string; dexId?: nu
 } {
   const body: { text: string; voiceId: string; title?: string; dexId?: number } = {
     text: spokenForDemo(input.text),
-    voiceId: voiceOrLily(input.voiceId),
+    voiceId: chosenVoice(input.voiceId),
   };
   if (input.title?.trim()) body.title = input.title.trim().slice(0, 80);
   if (input.dexId) body.dexId = input.dexId;
   return body;
 }
 
-/** Body for one fact-track step. `voiceId` is what Yoto Labs records. */
+/** Body for one fact-track step. A Yoto Labs voice is recorded there. Piper stays on this computer. */
 export function factTrackBody(input: {
   text: string;
   title: string;
@@ -61,7 +61,7 @@ export function factTrackBody(input: {
   return {
     text: input.text,
     title: input.title,
-    voiceId: voiceOrLily(input.voiceId),
+    voiceId: chosenVoice(input.voiceId),
     ...(input.dexId != null ? { dexId: input.dexId } : {}),
     ...(input.name ? { name: input.name } : {}),
     ...(input.speechJobId ? { speechJobId: input.speechJobId } : {}),

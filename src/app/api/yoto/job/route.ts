@@ -1,4 +1,5 @@
 import { YOTO_TRACK_LIMIT } from "@/lib/kid-cards";
+import { isPiperVoice } from "@/lib/piper-voice";
 import { safeHttpStatus, validYotoCardId, yotoUpstreamFailure } from "@/lib/yoto-error";
 import { bearerToken, forwardYoto, jsonError } from "@/lib/yoto-proxy";
 import { appendToPlaylist, contentCreateBody } from "@/lib/yoto-send";
@@ -29,7 +30,8 @@ export async function POST(request: Request) {
   }
 
   const voiceId = body.voiceId?.trim() ?? "";
-  if (!/^[A-Za-z0-9]{10,40}$/.test(voiceId)) {
+  const piper = isPiperVoice(voiceId);
+  if (!piper && !/^[A-Za-z0-9]{10,40}$/.test(voiceId)) {
     return jsonError("Pick one of the Pokefacts voices.");
   }
 
@@ -78,6 +80,9 @@ export async function POST(request: Request) {
   }
   if (audioCount > 0 && speechCount > 0) {
     return jsonError("Finished audio and spoken text cannot share one card.");
+  }
+  if (piper && speechCount > 0) {
+    return jsonError("Piper records on this computer.");
   }
 
   const content = body.content ? { ...body.content } : undefined;

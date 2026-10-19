@@ -43,7 +43,7 @@ import {
   statusErrorText,
   validYotoCardId,
 } from "@/lib/yoto-error";
-import { YOTO_VOICES } from "@/lib/yoto-icons";
+import { isPiperVoice, PICKER_VOICES } from "@/lib/piper-voice";
 import {
   afterRejectedPlaylist,
   applyFinishedAudio,
@@ -577,7 +577,8 @@ export function Studio({
     const controller = new AbortController();
     hearAbort.current = controller;
     try {
-      if (!(await connectedSession())) {
+      const piper = isPiperVoice(voiceId);
+      if (!piper && !(await connectedSession())) {
         if (controller.signal.aborted) return;
         speakingRef.current = false;
         setSpeaking(false);
@@ -585,7 +586,7 @@ export function Studio({
         return;
       }
       if (controller.signal.aborted) return;
-      const response = await yotoFetch("/api/yoto/hear", {
+      const response = await (piper ? fetch : yotoFetch)("/api/yoto/hear", {
         method: "POST",
         signal: controller.signal,
         headers: { "Content-Type": "application/json" },
@@ -1514,12 +1515,18 @@ export function Studio({
                     value={voiceId}
                     onChange={(event) => setVoiceId(writeVoiceId(localStorage, event.target.value))}
                   >
-                    {YOTO_VOICES.map((voice) => (
+                    {PICKER_VOICES.map((voice) => (
                       <option key={voice.id} value={voice.id}>
                         {voice.name} — {voice.note}
                       </option>
                     ))}
                   </select>
+                  {isPiperVoice(voiceId) ? (
+                    <p className="mt-2 text-xs leading-5 pk-quiet">
+                      Cori, British. Piper reads on this computer, so Hear works before you connect Yoto. Send still
+                      needs a Yoto login.
+                    </p>
+                  ) : null}
                 </label>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {guessing ? (
@@ -1609,7 +1616,9 @@ export function Studio({
                         : `This send is only ${card.rangeLabel}. Each fact is the cry, then the selected voice. The button above sends every Pokefacts playlist, one after another.`}
                 </p>
                 <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                  Send uses the voice selected above. Yoto Labs turns the script into an MP3 in that voice.
+                  {isPiperVoice(voiceId)
+                    ? "Send uses Piper on this computer. The cry is mixed in front, then that MP3 is uploaded."
+                    : "Send uses the voice selected above. Yoto Labs turns the script into an MP3 in that voice."}
                 </p>
                 <label className="mt-3 grid gap-1 text-sm" htmlFor="yoto-playlist">
                   Add to a Yoto playlist

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { StatusBar } from "@/components/status-bar";
 import type { BiologyBlock, BiologyView, CatalogueEntry, CataloguePage } from "@/lib/catalogue-types";
 import type { KidCard } from "@/lib/kid-cards";
-import { YOTO_VOICES } from "@/lib/yoto-icons";
+import { PICKER_VOICES } from "@/lib/piper-voice";
 import {
   selectionPlaylist,
   selectionSpeciesLimit,
@@ -574,7 +574,7 @@ export function Catalogue({
                 disabled={building}
                 onChange={(event) => onVoiceId(event.target.value)}
               >
-                {YOTO_VOICES.map((voice) => (
+                {PICKER_VOICES.map((voice) => (
                   <option key={voice.id} value={voice.id}>
                     {voice.name} — {voice.note}
                   </option>

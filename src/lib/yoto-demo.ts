@@ -2,11 +2,12 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { audioContainer, mergeCryFirst } from "@/lib/cry-audio";
+import { audioContainer, inputContainer, mergeCryFirst } from "@/lib/cry-audio";
+import { synthesizePiper, type PiperSynthOptions } from "@/lib/piper";
+import { chosenVoice, isPiperVoice } from "@/lib/piper-voice";
 import { ensureCry, readCachedMergedMp3 } from "@/lib/yoto-fact-audio";
 import { reconnectMessage, yotoErrorText } from "@/lib/yoto-error";
 import { spokenForDemo } from "@/lib/voice-choice";
-import { voiceOrLily } from "@/lib/yoto-icons";
 
 export type DemoAudio = {
   audio: Buffer;
@@ -30,6 +31,7 @@ type DemoOptions = {
   polls?: number;
   /** Folder of merged MP3s. Hear plays one of these instead of calling Lily. */
   rendered?: string;
+  piper?: PiperSynthOptions;
 };
 
 const DEMO_ROOT = path.join(process.cwd(), "data", "demo");
@@ -148,7 +150,7 @@ export async function prepareDemoAudio(
   const text = spokenForDemo(request.text ?? "");
   if (!text || text.length > 3000) throw new Error("That line is empty or longer than Yoto allows.");
   const title = (request.title?.trim() || "Line").slice(0, 80);
-  const voiceId = voiceOrLily(request.voiceId);
+  const voiceId = chosenVoice(request.voiceId);
   const dexId = request.dexId;
   if (dexId != null && (!Number.isInteger(dexId) || dexId < 1 || dexId > 1025)) {
     throw new Error(`That cry is not in the national Pokédex (${String(dexId)}).`);
@@ -158,6 +160,8 @@ export async function prepareDemoAudio(
     const cached = await readCachedMergedMp3(text, voiceId, dexId, options.rendered);
     if (cached) return { audio: cached, cryFirst: true };
   }
+
+  if (isPiperVoice(voiceId)) return piperDemo(text, dexId, fetchImpl, options);
 
   const speech = await recordVoice(token, text, title, voiceId, fetchImpl, options);
   if (!dexId) return { audio: speech, cryFirst: false };
@@ -182,6 +186,46 @@ export async function prepareDemoAudio(
     return { audio, cryFirst: audio !== speech };
   } catch {
     return { audio: speech, cryFirst: false };
+  } finally {
+    if (timer) clearTimeout(timer);
+    void mix.catch(() => undefined);
+  }
+}
+
+/**
+ * Piper is local. A cry is mixed in front when this entry has one.
+ * If that mix fails, Hear still plays the Piper line. Send does not use this fallback.
+ */
+async function piperDemo(
+  text: string,
+  dexId: number | undefined,
+  fetchImpl: typeof fetch,
+  options: DemoOptions,
+): Promise<DemoAudio> {
+  const wav = await synthesizePiper(text, options.piper);
+  if (inputContainer(wav) !== "wav" || wav.length < 44) throw new Error("Piper did not write a recording.");
+  if (!dexId) return { audio: wav, cryFirst: false };
+
+  const timeoutMs = options.cryTimeoutMs ?? 12_000;
+  const merge = options.merge ?? mergeCryFirst;
+  const loadCry = options.loadCry ?? ((id: number) => ensureCry(id, fetchImpl));
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const mix = (async () => {
+    const cry = await loadCry(dexId);
+    const merged = await merge(cry, wav);
+    if (inputContainer(merged) !== "mp3" || merged.length < 128) {
+      throw new Error("The cry mix was not playable audio.");
+    }
+    return merged;
+  })();
+  const timed = new Promise<Buffer>((resolve) => {
+    timer = setTimeout(() => resolve(wav), timeoutMs);
+  });
+  try {
+    const audio = await Promise.race([mix, timed]);
+    return { audio, cryFirst: audio !== wav };
+  } catch {
+    return { audio: wav, cryFirst: false };
   } finally {
     if (timer) clearTimeout(timer);
     void mix.catch(() => undefined);

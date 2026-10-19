@@ -21,6 +21,14 @@ export function audioContainer(bytes: Buffer): "ogg" | "mp3" | null {
   return null;
 }
 
+/** Ogg, MP3, or a Piper WAV. Cries stay on audioContainer so a WAV is not treated as a cry. */
+export function inputContainer(bytes: Buffer): "ogg" | "mp3" | "wav" | null {
+  if (bytes.length >= 12 && bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WAVE") {
+    return "wav";
+  }
+  return audioContainer(bytes);
+}
+
 /** Cry gain and the silence after it. The rendered-file cache key includes both. */
 export const CRY_MIX_VOLUME = 4;
 export const CRY_MIX_PAD_SECONDS = 0.35;
@@ -92,7 +100,7 @@ function run(command: string, args: string[]): Promise<void> {
 
 /** Tell ffmpeg the real container. A `.ogg` path makes Windows open MP3 cries as Ogg. */
 function formatArgs(bytes: Buffer): string[] {
-  const container = audioContainer(bytes);
+  const container = inputContainer(bytes);
   return container ? ["-f", container] : [];
 }
 
@@ -193,10 +201,35 @@ function assertYotoMp3(bytes: Buffer, info: ClipInfo): void {
   }
 }
 
+/** One clip, already the plain 128 kb/s MP3 Yoto accepts. Used when a line has no cry. */
+export async function encodeYotoMp3(speech: Buffer): Promise<Buffer> {
+  const kind = inputContainer(speech);
+  if (!kind) throw new Error("The recording was not playable audio.");
+  const dir = await mkdtemp(path.join(tmpdir(), "champdex-speech-"));
+  const inPath = path.join(dir, `speech.${kind}`);
+  const outPath = path.join(dir, "speech.mp3");
+  try {
+    await writeFile(inPath, speech);
+    await run(ffmpegCommand(), [
+      "-y",
+      "-loglevel",
+      "error",
+      ...inputArgs(speech, inPath),
+      ...YOTO_MP3_ARGS,
+      outPath,
+    ]);
+    const mp3 = await readFile(outPath);
+    assertYotoMp3(mp3, await describeClip(mp3, "speech.mp3"));
+    return mp3;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 export async function mergeCryFirst(cry: Buffer, speech: Buffer): Promise<Buffer> {
   const cryKind = audioContainer(cry);
   if (!cryKind) throw new Error("The cry was not an Ogg or MP3 file.");
-  const speechKind = audioContainer(speech);
+  const speechKind = inputContainer(speech);
   assertCryDecodable(await describeClip(cry, `cry.${cryKind}`));
   const dir = await mkdtemp(path.join(tmpdir(), "champdex-cry-"));
   const cryPath = path.join(dir, `cry.${cryKind}`);
