@@ -1,92 +1,192 @@
 # Pokefacts
 
-Pokefacts runs on your computer and sends Pokémon cards to your own Yoto library. It covers all 1,025 national species. You can browse the catalogue, send the Pokefacts playlists, and send a Guess Who game. The pictures, the catalogue, and the app stay on this machine. A public tunnel is optional. Uploads go from this computer to Yoto.
+Pokefacts makes Pokémon cards for your own Yoto player. It has a short fact for all 1,025 Pokémon, and a Guess Who game. The cards go into your Yoto library. You then link each one to a blank Make Your Own card.
 
-The app is free. The source is [github.com/kreeyateee/pokefacts](https://github.com/kreeyateee/pokefacts). [Donate](https://buymeacoffee.com/kreeyate) if you want to support it.
+It is free. If you want to say thanks, you can [buy me a coffee](https://buymeacoffee.com/kreeyate).
 
-The catalogue is game data from [PokéAPI](https://pokeapi.co/): an English Pokédex line, the types, the height, the weight, the abilities, the base stats, and the evolution. Nine species also have a short Pokefacts note. The species page also shows that Pokémon’s Biology section from [Bulbapedia](https://bulbapedia.bulbagarden.net/), under CC BY-NC-SA 2.5. Pokefacts fetches the section when you open the Pokémon and caches it on this computer. It is not copied into the catalogue file, and it is not read aloud on the Yoto cards.
+This is a fan project. It is not made by Nintendo, Game Freak, Creatures, or Yoto.
 
-## Install
+The first time takes a while. You install two free programs, leave a window open on your computer, and connect your own Yoto account. After that, starting it again is one line.
 
-You need two programs:
+## What you need
 
-- **Node.js 22.14 or newer.** This project is built with Node.js 22.14. The catalogue is a SQLite file, and that reader is included in Node. Install the 22 line from [nodejs.org](https://nodejs.org/), then open a new terminal.
-- **ffmpeg on your PATH.** Each track is a cry, then Lily’s voice. Pokefacts joins those two files with ffmpeg.
+- A computer. A laptop is fine. It has to stay on while the cards are made.
+- The Yoto app on your phone, and a Yoto player.
+- Blank Make Your Own cards. The full set of facts uses 11 cards. Guess Who uses one more.
+- About an hour the first time. Later visits are much shorter.
 
-ffmpeg:
+## 1. Download Pokefacts
 
-```bash
-# macOS
-brew install ffmpeg
+On this page, click the green **Code** button, then **Download ZIP**.
 
-# Ubuntu or Debian
-sudo apt-get update && sudo apt-get install -y ffmpeg
+Find the downloaded file and unzip it. On Windows, right-click the file and choose **Extract All**. On a Mac, double-click the file. You get a folder called `pokefacts-main`. Put that folder somewhere you can find again, such as your Desktop.
 
-# Windows, then open a new terminal
+## 2. Install Node.js
+
+Node.js is the free program that runs Pokefacts.
+
+1. Go to [nodejs.org](https://nodejs.org/).
+2. Download the installer for version **22** or newer.
+3. Open the downloaded installer and click through it. The normal choices are fine.
+4. When it finishes, close any old instruction windows you had open. A new window is required so the computer can see Node.js.
+
+## 3. Install ffmpeg
+
+ffmpeg is the free program that joins the Pokémon cry to the spoken fact.
+
+**On Windows**
+
+1. Click the Start button and type `Command Prompt`.
+2. Open **Command Prompt**. A window with text appears. This window is how you give the computer a written instruction.
+3. Copy this line, paste it into the window, and press Enter:
+
+```
 winget install Gyan.FFmpeg
 ```
 
-Then, in this folder:
+4. If Windows asks whether you trust the source, agree.
+5. Wait until the typing line comes back. Then close the window.
 
-```bash
+**On a Mac**
+
+ffmpeg is installed with a helper called Homebrew.
+
+1. Open **Terminal**. You can find it with Spotlight: press Command and the space bar, type `Terminal`, and press Return.
+2. If you have never installed Homebrew, go to [brew.sh](https://brew.sh/) and follow the one install line at the top of that page. Paste it into Terminal and press Return.
+3. Then paste this line and press Return:
+
+```
+brew install ffmpeg
+```
+
+Wait until the typing line comes back.
+
+## 4. Open the instruction window inside the Pokefacts folder
+
+You need the window to be looking at the `pokefacts-main` folder. Otherwise the later commands cannot find Pokefacts.
+
+**On Windows**
+
+1. Open the `pokefacts-main` folder.
+2. Click the address bar at the top, where the folder location is written.
+3. Type `cmd` and press Enter.
+
+A window opens, already in the right folder.
+
+**On a Mac**
+
+1. Open Terminal.
+2. Type `cd` and then a space. Do not press Return yet.
+3. Drag the `pokefacts-main` folder onto the Terminal window. The folder location appears after `cd`.
+4. Press Return.
+
+## 5. Set up Pokefacts
+
+In that same window, type this and press Enter:
+
+```
 npm install
 ```
 
-`npm install` and `npm start` are the same on Windows, macOS, and Linux.
+A lot of text will scroll by. That is normal. Wait until the typing line comes back and the window sits still.
 
-## Start
+## 6. Start Pokefacts
 
-```bash
+Type this and press Enter:
+
+```
 npm start
 ```
 
-`npm run local` does the same thing. The command checks the catalogue and the pictures, builds the app, then serves it. Leave the terminal open.
+Leave this window open the whole time you are using Pokefacts. Closing it, or pressing the X, turns Pokefacts off.
 
-Open [http://127.0.0.1:3847](http://127.0.0.1:3847).
+When the window settles, open the web browser you normally use. Chrome, Edge, and Safari all work. Click the address bar and type:
 
-That address is this computer. A public tunnel is optional.
+```
+http://127.0.0.1:3847
+```
 
-## Catalogue, sprites, and pixels
+Press Enter. Pokefacts opens.
 
-A normal copy of this repository already contains:
+That address is your own computer. It is not a public website, and other people cannot open it. The page only works while the instruction window is still running.
 
-- `data/champdex.sqlite` — all 1,025 species
-- `public/sprites` — one picture per species
-- `public/pixels` — the 16×16 icon and the dark shadow for each species
+## 7. Connect your Yoto account
 
-`npm start` checks those files before it serves the app. If the database file is missing and the PokéAPI CSV tables are in `/tmp/poke-csv`, the start command builds the database with the catalogue script. You can also run `npm run catalogue` yourself. Those tables include `pokemon_species_flavor_text.csv`. Pokefacts does not copy Bulbapedia prose into the catalogue file. If the pictures are missing, restore `public/sprites` and `public/pixels` from git.
+You do this once. It lets Pokefacts put playlists into your library.
 
-## Connect Yoto
+1. In Pokefacts, click **Put this on a Yoto card**.
+2. Open [dashboard.yoto.dev](https://dashboard.yoto.dev/) in another tab and sign in with the same account you use for the Yoto app.
+3. Create a new app and choose **public**. Public means there is no secret password to copy. If the page offers public or confidential, choose public.
+4. Copy the **client ID**. It is a long code for that app. Paste it into the Client ID box in Pokefacts.
+5. On the Yoto dashboard page for that app, add this callback address. It has to match exactly, including the `http://` and the number `3847`:
 
-Pokefacts uses Yoto’s public login (PKCE). Do not paste a client secret into the app or into `.env`.
+```
+http://127.0.0.1:3847/callback
+```
 
-1. In the [Yoto developer dashboard](https://dashboard.yoto.dev/), create a **public** client and copy the client ID.
-2. Allow this redirect URI exactly: `http://127.0.0.1:3847/callback`
-3. In Pokefacts, choose **Connect Yoto**, paste the client ID, and continue. Open the app at `http://127.0.0.1:3847` first. `localhost` is sent to that same address so the login can finish.
-4. Approve the login. It asks for `user:content:manage`, `user:content:view`, `family:library:view`, `offline_access`, and `profile`.
+Pokefacts also shows this address with a **Copy** button.
 
-`NEXT_PUBLIC_YOTO_CLIENT_ID` in `.env.example` is optional. You can paste the client ID in the connect dialog instead.
+6. Click **Continue to Yoto**. Sign in if Yoto asks. Then approve the permissions.
 
-## Send Pokefacts
+Those permissions let Pokefacts create playlists in your library, see that library, stay signed in, and read your name. They do not give Pokefacts your password.
 
-Open **Facts** and choose **Send all 11 Pokefacts playlists**.
+7. The browser comes back to Pokefacts. The top of the page shows your Yoto name when the connection worked.
 
-Pokefacts records one short request per track. The audio is the latest cry, then Lily (`pFZP5JQG7iQjIQuC4Bku`). Yoto titles the playlists exactly Pokefacts 1 through Pokefacts 11. On the page they are labeled like Pokefacts 1 (1-99). Each playlist is created new, with no saved card id on the full send. Each card stays at 100 tracks or fewer: a short intro plus up to 99 Pokémon. Pokefacts 11 is the last card (numbers 991–1025). Together they cover all 1,025 species.
+## 8. Send the fact cards
 
-Leave this terminal open until the page says the playlists are ready. In the Yoto app, open **Make Your Own**, find each playlist, and choose **Link to a card**. Put a blank Make Your Own card in the player when it asks.
+1. Open the **Facts** tab.
+2. Click **Send all 11 Pokefacts playlists**.
 
-A smaller Facts option is still there: **100 Pokémon drawn at random**, titled Pokefacts random. Shuffle draws a new hundred. Send uses the hundred on the page.
+Leave the computer alone while this runs. Each Pokémon is recorded on its own, so the full set takes a long time. The page tells you how far along it is. The instruction window has to stay open until the page says the playlists are ready.
 
-## Send Guess Who
+A smaller choice is also there: **100 Pokémon drawn at random**. Shuffle picks a new hundred. Send uses the hundred on the page.
 
-Open **Guess Who**. You get 50 riddles drawn at random, which is 100 tracks on one card. Shuffle draws a new fifty. Send uses the fifty on the page.
+## 9. Put a playlist onto a real card
 
-Each riddle is two tracks. The clue plays the cry, then the riddle, and does not say the name. Its picture is the shadow pixel. The answer plays the cry, then “It is {Name}.” Its picture is the real pixel. On the page, the shadow stays up until the answer is revealed.
+On your phone, open the Yoto app.
 
-## Stop
+1. Go to **Make Your Own**.
+2. Find **Pokefacts 1**.
+3. Choose **Link to a card**.
+4. Put a blank Make Your Own card in the player when the app asks.
 
-Press Ctrl+C in the terminal. Start again later with `npm start`.
+Do the same for Pokefacts 2 through Pokefacts 11. Each playlist needs its own blank card. Together they cover every Pokémon.
 
-## What this is not
+## Guess Who
 
-Unofficial fan cards for your own Yoto library. Not made by Nintendo, Game Freak, Creatures, or Yoto.
+Open the **Guess Who** tab. You get 50 riddles, which is one card. Shuffle draws a new fifty.
+
+Each riddle is two tracks. The clue plays the cry and does not say the name. Its picture is a shadow. The answer plays the cry and says the name. Its picture is the real one.
+
+Send it the same way as the fact cards, then link it to one blank card in the Yoto app.
+
+## When you want to stop
+
+Click the instruction window so it is the active window.
+
+- On Windows, press Ctrl and C together.
+- On a Mac, press Control and C together.
+
+The next time you want Pokefacts, open the instruction window in the `pokefacts-main` folder again and type:
+
+```
+npm start
+```
+
+Then open `http://127.0.0.1:3847` in your browser. You do not need to install Node.js or ffmpeg again.
+
+## If it does not work
+
+**The window says npm is not recognized.** Node.js is missing, or the window was already open before you installed it. Close the window, open a new one in the Pokefacts folder, and try again.
+
+**The browser page will not open.** Check that the instruction window is still on `npm start`, and that the address is `http://127.0.0.1:3847`.
+
+**The window says ffmpeg is missing.** Do the ffmpeg step again, close the window, open a new one in the folder, and type `npm start`.
+
+**Yoto sends you back to an error.** The callback address on the Yoto dashboard has to be exactly `http://127.0.0.1:3847/callback`. Fix it there, then click **Continue to Yoto** again.
+
+## Where the words and pictures come from
+
+The names, the Pokédex lines, the types, the size, and the pictures come from the Pokémon games by way of [PokéAPI](https://pokeapi.co/). A few Pokémon also have a short note written for Pokefacts.
+
+The species page can show a Biology section from [Bulbapedia](https://bulbapedia.bulbagarden.net/). That text is used under [CC BY-NC-SA 2.5](https://creativecommons.org/licenses/by-nc-sa/2.5/). It stays on the page. It is not read aloud on the cards.
