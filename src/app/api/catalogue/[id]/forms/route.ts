@@ -1,6 +1,6 @@
 import { listSpecialForms, getCatalogueEntry } from "@/lib/catalogue-db";
 import { bulbapediaArticleUrl } from "@/lib/bulbapedia";
-import { loadFormProse } from "@/lib/form-prose";
+import { loadFormSpeech } from "@/lib/form-prose";
 import { spokenWiki } from "@/lib/spoken-wiki";
 import type { BiologyView } from "@/lib/catalogue-types";
 
@@ -26,11 +26,11 @@ export async function GET(
   }> = [];
   for (const form of forms) {
     try {
-      const article = await loadFormProse(form);
+      const { speech, article } = await loadFormSpeech(form);
       articles.push({
         formId: form.formId,
         name: form.formName,
-        speech: spokenWiki(form.formName, article.blocks),
+        speech,
         article,
       });
     } catch {

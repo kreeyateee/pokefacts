@@ -230,6 +230,17 @@ async function formReading(formId: number): Promise<FormReading> {
   }
 }
 
+function formSpokenText(chapter: { title: string; tracks: Array<{ text?: string }> }): string {
+  return chapter.tracks[0]?.text?.replace(/\s+/g, " ").trim() ?? "";
+}
+
+/** A name, or "it can Mega Evolve", is not the description Lily should read. */
+function formSpeechIsNameOnly(title: string, text: string): boolean {
+  const clean = text.replace(/\s+/g, " ").trim();
+  if (!clean || clean === title || clean === `${title}.`) return true;
+  return /^(?:it )?can mega evolve\b/i.test(clean) || /^(?:it )?can gigantamax\b/i.test(clean);
+}
+
 function withFormReading(card: KidCard, formId: number, reading: FormReading): KidCard {
   return {
     ...card,
@@ -1253,14 +1264,14 @@ export function Studio({
                       <p className="text-sm text-[#5c5348]">Opening the description…</p>
                     )
                   ) : formMode ? (
-                    chapter.articleStatus === "ready" ? (
-                      <p>{chapter.tracks[0]?.text}</p>
-                    ) : chapter.articleStatus ? (
+                    !chapter.articleStatus ? (
+                      <p className="text-sm text-[#5c5348]">Opening the form description…</p>
+                    ) : formSpeechIsNameOnly(chapter.title, formSpokenText(chapter)) ? (
                       <p className="text-sm text-[#5c5348]">
                         No separate description was found. Lily says the name.
                       </p>
                     ) : (
-                      <p className="text-sm text-[#5c5348]">Opening the form description…</p>
+                      <p>{formSpokenText(chapter)}</p>
                     )
                   ) : (
                     visibleTracks?.map((track) =>
@@ -1280,8 +1291,11 @@ export function Studio({
                   )}
                 </div>
                 {kind === "meet" && factReading?.url ? <WikiCredit url={factReading.url} /> : null}
-                {formMode && chapter.articleStatus === "ready" ? (
-                  <WikiCredit url={chapter.articleUrl ?? ""} />
+                {formMode &&
+                chapter.articleUrl &&
+                chapter.articleStatus &&
+                !formSpeechIsNameOnly(chapter.title, formSpokenText(chapter)) ? (
+                  <WikiCredit url={chapter.articleUrl} />
                 ) : null}
                 {source && guessing ? (
                   <p className="mt-4 text-xs text-[#8d8272]">Pokédex, {source}</p>
@@ -1366,11 +1380,11 @@ export function Studio({
                 <p className="mt-3 text-sm leading-6 text-[#5c5348]">
                   {card.childDoes}{" "}
                   {randomGuess
-                    ? "Send uploads a shadow of each 16×16 pixel for the clue, then the real pixel for the answer. Yoto records Lily, then Champdex puts the cry in front of the clue and again in front of the answer."
+                    ? "Send uploads a shadow of each 16×16 pixel for the clue, then the real pixel for the answer. Lily is recorded locally, the cry is mixed in front of the clue and again in front of the answer, and that file is what gets uploaded."
                     : formMode
-                      ? "Send records Lily, then puts that Pokémon’s cry in front of her voice. The picture is the species 16×16 pixel. The credit stays on this page."
+                      ? "Send records Lily locally, mixes that Pokémon’s cry in front, then uploads that one file. The picture is the species 16×16 pixel. The credit stays on this page."
                       : randomFacts
-                        ? "Send records Lily, then puts that Pokémon’s cry in front of her voice and uploads the merged MP3. The how-to is in the playlist description and at the start of the first track."
+                        ? "Send records Lily locally, mixes that Pokémon’s cry in front, then uploads the merged MP3. The how-to is in the playlist description and at the start of the first track."
                         : `This send is only ${card.rangeLabel}. Each fact is the cry, then Lily. The button above sends every Pokefacts playlist, one after another.`}
                 </p>
                 <p className="mt-3 text-sm leading-6">

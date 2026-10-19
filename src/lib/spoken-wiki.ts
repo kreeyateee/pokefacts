@@ -74,3 +74,36 @@ export function spokenWiki(name: string, blocks: BiologyBlock[]): string {
   if (!prose) return `${title}.`;
   return `${title}. ${prose}`.replace(/\s+/g, " ").trim();
 }
+
+/**
+ * A one-line "it can Mega Evolve" note is not a description.
+ * Real form prose is a paragraph about the form itself.
+ */
+function isFormStub(text: string): boolean {
+  const clean = text.replace(/\s+/g, " ").trim().replace(/[.!]+$/, "");
+  if (!clean) return true;
+  if (clean.length > 160) return false;
+  return /can mega evolve|can gigantamax/i.test(clean) && clean.split(/[.!?]/).filter((part) => part.trim()).length <= 1;
+}
+
+/** Form paragraphs worth saying. A missing page or a Mega Evolve stub is empty. */
+export function formProse(blocks: BiologyBlock[]): string {
+  const prose = capProse(leadParagraphs(blocks));
+  if (!prose || isFormStub(prose)) return "";
+  return prose;
+}
+
+/**
+ * Form text when Bulbapedia has it.
+ * Otherwise the species Biology Pokefacts already speaks: name, then the first two paragraphs.
+ */
+export function spokenForm(
+  formName: string,
+  formBlocks: BiologyBlock[],
+  speciesName: string,
+  speciesBlocks: BiologyBlock[],
+): string {
+  if (formProse(formBlocks)) return spokenWiki(formName, formBlocks);
+  if (capProse(leadParagraphs(speciesBlocks))) return spokenWiki(speciesName, speciesBlocks);
+  return spokenWiki(formName, []);
+}

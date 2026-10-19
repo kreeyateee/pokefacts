@@ -3,6 +3,8 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { ffmpegCommand, ffprobeCommand } from "@/lib/ffmpeg-bin";
+
 /** Latest PokéAPI cry. The fact track plays this before Lily speaks. */
 export function cryUrl(id: number): string {
   return `https://raw.githubusercontent.com/PokeAPI/cries/main/cries/pokemon/latest/${id}.ogg`;
@@ -80,7 +82,7 @@ export async function mergeCryFirst(cry: Buffer, speech: Buffer): Promise<Buffer
   try {
     await writeFile(cryPath, cry);
     await writeFile(speechPath, speech);
-    await run("ffmpeg", [
+    await run(ffmpegCommand(), [
       "-y",
       "-loglevel",
       "error",
@@ -109,7 +111,7 @@ export async function audioDurationSeconds(bytes: Buffer, name = "clip.mp3"): Pr
     await writeFile(file, bytes);
     const stdout = await new Promise<string>((resolve, reject) => {
       execFile(
-        "ffprobe",
+        ffprobeCommand(),
         ["-v", "error", ...formatArgs(bytes), "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", file],
         { timeout: 20_000, windowsHide: true },
         (error, text, stderr) => {
@@ -138,7 +140,7 @@ async function pcm(bytes: Buffer, name: string, filter?: string): Promise<Int16A
     const args = ["-y", "-v", "error", ...inputArgs(bytes, file)];
     if (filter) args.push("-af", filter);
     args.push("-f", "s16le", "-ac", "1", "-ar", "44100", rawPath);
-    await run("ffmpeg", args);
+    await run(ffmpegCommand(), args);
     const raw = await readFile(rawPath);
     const samples = new Int16Array(Math.floor(raw.byteLength / 2));
     for (let index = 0; index < samples.length; index += 1) samples[index] = raw.readInt16LE(index * 2);
@@ -148,20 +150,53 @@ async function pcm(bytes: Buffer, name: string, filter?: string): Promise<Int16A
   }
 }
 
-/** The merged file starts with the amplified cry, not the spoken fact. */
+function meanGap(left: Int16Array, right: Int16Array, offset: number, count: number): number {
+  let gap = 0;
+  for (let index = 0; index < count; index += 1) {
+    gap += Math.abs((left[index] ?? 0) - (right[offset + index] ?? 0));
+  }
+  return gap / count;
+}
+
+/**
+ * The merged file starts with the amplified cry, not the spoken fact.
+ * MP3 cries (Pikachu, Meltan, Melmetal) are re-encoded, so the match is
+ * looser than a sample-perfect copy and may sit a few dozen milliseconds late.
+ */
 export async function cryLeads(cry: Buffer, speech: Buffer, merged: Buffer): Promise<boolean> {
+  const cryName = `cry.${audioContainer(cry) ?? "bin"}`;
+  const speechName = `speech.${audioContainer(speech) ?? "bin"}`;
   const [loud, spoken, mix] = await Promise.all([
-    pcm(cry, "cry.ogg", "volume=4,aformat=sample_fmts=s16:sample_rates=44100:channel_layouts=mono"),
-    pcm(speech, "speech.mp3"),
+    pcm(cry, cryName, "volume=4,aformat=sample_fmts=s16:sample_rates=44100:channel_layouts=mono"),
+    pcm(speech, speechName),
     pcm(merged, "merged.mp3"),
   ]);
-  const count = Math.min(loud.length, spoken.length, mix.length, 8_000);
-  if (count < 1000) return false;
-  let cryGap = 0;
-  let speechGap = 0;
-  for (let index = 0; index < count; index += 1) {
-    cryGap += Math.abs((loud[index] ?? 0) - (mix[index] ?? 0));
-    speechGap += Math.abs((spoken[index] ?? 0) - (mix[index] ?? 0));
+  const window = Math.min(loud.length, spoken.length, mix.length, 8_000);
+  if (window < 1000) return false;
+  let bestCry = Number.POSITIVE_INFINITY;
+  const shiftLimit = Math.min(2_400, Math.max(0, mix.length - window));
+  for (let offset = 0; offset <= shiftLimit; offset += 80) {
+    const score = meanGap(loud, mix, offset, window);
+    if (score < bestCry) bestCry = score;
   }
-  return cryGap * 4 < speechGap;
+  const speechScore = meanGap(spoken, mix, 0, window);
+  return bestCry * 2 < speechScore;
+}
+
+/** Reject a file that is only Lily. The cry has to add audible time at the front. */
+export async function assertCryFirst(cry: Buffer, speech: Buffer, merged: Buffer): Promise<void> {
+  if (!(await cryLeads(cry, speech, merged))) {
+    throw new Error("The merged audio did not start with the cry.");
+  }
+  const cryKind = audioContainer(cry) ?? "bin";
+  const speechKind = audioContainer(speech) ?? "bin";
+  const [crySeconds, speechSeconds, mergedSeconds] = await Promise.all([
+    audioDurationSeconds(cry, `cry.${cryKind}`),
+    audioDurationSeconds(speech, `speech.${speechKind}`),
+    audioDurationSeconds(merged, "merged.mp3"),
+  ]);
+  const minimum = Math.min(Math.max(crySeconds * 0.5, 0.2), 1);
+  if (mergedSeconds + 0.1 < speechSeconds + minimum) {
+    throw new Error("The merged audio was not longer than Lily's voice.");
+  }
 }

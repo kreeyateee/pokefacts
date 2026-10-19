@@ -5,6 +5,7 @@ import {
   biologyBlocks,
   bulbapediaParse,
   findBiologySection,
+  loadBiology,
   wikiFailureCode,
   wikiPageTitle,
   wikiSectionHtml,
@@ -12,6 +13,7 @@ import {
   type WikiSection,
 } from "@/lib/bulbapedia";
 import type { BiologyBlock, BiologyView, CatalogueFormRef } from "@/lib/catalogue-types";
+import { formProse, spokenForm, spokenWiki } from "@/lib/spoken-wiki";
 
 /**
  * Form descriptions, separate from species Biology.
@@ -37,6 +39,7 @@ type CacheRow = {
 type LoadOptions = {
   fetchImpl?: typeof fetch;
   cacheFile?: string;
+  biologyCacheFile?: string;
   sleep?: (ms: number) => Promise<void>;
 };
 
@@ -282,4 +285,39 @@ async function remember(
   };
   await storeRow(file, form.formId, row).catch(() => undefined);
   return row;
+}
+
+/**
+ * What Lily says for a Mega Evolution or Gigantamax form.
+ * Form prose wins. A missing page uses the species Biology, and does not fail the track.
+ */
+export async function loadFormSpeech(
+  form: CatalogueFormRef,
+  options: LoadOptions = {},
+): Promise<{ speech: string; article: BiologyView }> {
+  let article: BiologyView;
+  try {
+    article = await loadFormProse(form, options);
+  } catch {
+    article = { status: "unavailable", url: "", blocks: [] };
+  }
+  if (formProse(article.blocks)) {
+    return { speech: spokenWiki(form.formName, article.blocks), article };
+  }
+  try {
+    const biology = await loadBiology(form.speciesName, form.speciesId, {
+      fetchImpl: options.fetchImpl,
+      cacheFile: options.biologyCacheFile,
+      sleep: options.sleep,
+    });
+    return {
+      speech: spokenForm(form.formName, article.blocks, form.speciesName, biology.blocks),
+      article: {
+        ...article,
+        url: biology.status === "ready" && biology.url ? biology.url : article.url,
+      },
+    };
+  } catch {
+    return { speech: spokenWiki(form.formName, []), article };
+  }
 }

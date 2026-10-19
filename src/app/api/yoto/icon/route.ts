@@ -2,13 +2,14 @@ import { execFile } from "node:child_process";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { ffmpegCommand } from "@/lib/ffmpeg-bin";
 import { safeHttpStatus, yotoUpstreamFailure } from "@/lib/yoto-error";
 import { bearerToken, jsonError } from "@/lib/yoto-proxy";
 
 function scalePixel(sprite: string, pixel: string): Promise<void> {
   return new Promise((resolve, reject) => {
     execFile(
-      "ffmpeg",
+      ffmpegCommand(),
       ["-y", "-loglevel", "error", "-i", sprite, "-vf", "scale=16:16:flags=neighbor,format=rgba", pixel],
       { timeout: 20_000 },
       (error) => (error ? reject(error) : resolve()),
@@ -28,7 +29,7 @@ async function ensurePixel(file: string, id: string): Promise<void> {
 function paintShadow(pixel: string, shadow: string): Promise<void> {
   return new Promise((resolve, reject) => {
     execFile(
-      "ffmpeg",
+      ffmpegCommand(),
       [
         "-y",
         "-loglevel",

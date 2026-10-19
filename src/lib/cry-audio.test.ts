@@ -8,7 +8,8 @@ import { describe, it } from "node:test";
 
 import { POST as postJob } from "../app/api/yoto/job/route";
 import { POST as postTrack } from "../app/api/yoto/track/route";
-import { audioContainer, audioDurationSeconds, cryLeads, cryUrl, mergeCryFirst } from "./cry-audio";
+import { assertCryFirst, audioContainer, audioDurationSeconds, cryLeads, cryUrl, mergeCryFirst } from "./cry-audio";
+import { ffmpegCommand } from "./ffmpeg-bin";
 import { guessUpload, LILY_VOICE_ID, type KidCard } from "./kid-cards";
 import { applyFinishedAudio, factsBulkUpload, renderJobs } from "./yoto-send";
 import { attachCry, prepareFactTrack } from "./yoto-fact-audio";
@@ -16,8 +17,20 @@ import { attachCry, prepareFactTrack } from "./yoto-fact-audio";
 function sine(file: string, frequency = 440): Promise<void> {
   return new Promise((resolve, reject) => {
     execFile(
-      "ffmpeg",
+      ffmpegCommand(),
       ["-y", "-loglevel", "error", "-f", "lavfi", "-i", `sine=frequency=${frequency}:duration=1`, "-c:a", "libmp3lame", "-q:a", "5", file],
+      { timeout: 20_000 },
+      (error) => (error ? reject(error) : resolve()),
+    );
+  });
+}
+
+/** Lily's Yoto download is Ogg Opus, even when the file name says mp3. */
+function opusReading(file: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      ffmpegCommand(),
+      ["-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=220:duration=2", "-c:a", "libopus", "-f", "ogg", file],
       { timeout: 20_000 },
       (error) => (error ? reject(error) : resolve()),
     );
@@ -39,6 +52,31 @@ describe("fact audio", () => {
       const mergedLength = await audioDurationSeconds(merged, "merged.mp3");
       assert.ok(mergedLength > cryLength);
       assert.equal(await cryLeads(cry, speech, merged), true);
+      await assertCryFirst(cry, speech, merged);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps Meltan's MP3 cry in front of an Opus reading and rejects Lily alone", async () => {
+    const response = await fetch(cryUrl(808));
+    assert.equal(response.status, 200);
+    const cry = Buffer.from(await response.arrayBuffer());
+    assert.equal(audioContainer(cry), "mp3");
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-meltan-"));
+    try {
+      const speechPath = path.join(dir, "speech.ogg");
+      await opusReading(speechPath);
+      const speech = await readFile(speechPath);
+      assert.equal(audioContainer(speech), "ogg");
+      const merged = await mergeCryFirst(cry, speech);
+      const cryLength = await audioDurationSeconds(cry, "cry.mp3");
+      const speechLength = await audioDurationSeconds(speech, "speech.ogg");
+      const mergedLength = await audioDurationSeconds(merged, "merged.mp3");
+      assert.ok(mergedLength > speechLength);
+      assert.ok(mergedLength > cryLength);
+      await assertCryFirst(cry, speech, merged);
+      await assert.rejects(() => assertCryFirst(cry, speech, speech), /did not start with the cry|not longer than Lily/);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -851,6 +889,52 @@ describe("fact audio", () => {
           return true;
         },
       );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not return a yoto hash until the cry is merged, and a missing cry is not a voice-only track", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-before-upload-"));
+    const text = "Local Lily must not upload before the cry is mixed.";
+    const speechHash = createHash("sha256").update(Buffer.from(`${LILY_VOICE_ID}\n${text}`)).digest("hex");
+    const speechRoot = path.join(dir, "speech");
+    const sample = path.join(dir, "sample.mp3");
+    await mkdir(speechRoot, { recursive: true });
+    await sine(sample);
+    await writeFile(path.join(speechRoot, `${speechHash}.mp3`), await readFile(sample));
+    let uploads = 0;
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = String(input);
+      if (url === cryUrl(25)) return new Response("missing", { status: 404 });
+      if (url.includes("/uploadUrl") || url.includes("labs.api.yotoplay.com") || url.includes("upload.example")) {
+        uploads += 1;
+        return new Response("voice-only", { status: 500 });
+      }
+      throw new Error(`Unexpected ${url}`);
+    };
+    try {
+      await assert.rejects(
+        () =>
+          prepareFactTrack(
+            "x".repeat(24),
+            { text, title: "Pikachu", name: "Pikachu", dexId: 25 },
+            fetchImpl,
+            {
+              speech: speechRoot,
+              rendered: path.join(dir, "rendered"),
+              cries: path.join(dir, "cries"),
+            },
+          ),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.match(error.message, /Pikachu cry could not be added\./);
+          assert.match(error.message, /HTTP 404/);
+          assert.equal(error.message.includes("yoto:#"), false);
+          return true;
+        },
+      );
+      assert.equal(uploads, 0);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

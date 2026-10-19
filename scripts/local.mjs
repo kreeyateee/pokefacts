@@ -3,6 +3,7 @@
  * Yoto login uses the loopback redirect. A public tunnel is not required.
  */
 import { execFile, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { access, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -47,9 +48,38 @@ function ffmpegHint() {
   return "Install ffmpeg:\n  sudo apt-get update && sudo apt-get install -y ffmpeg";
 }
 
+const WINGET_FFMPEG_902 =
+  "C:\\Users\\mjlan\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.2-full_build\\bin";
+
+/** Use the installed ffmpeg even when PATH still names the deleted 8.1.2 folder. */
+function ffmpegLaunch() {
+  const exe = process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
+  const preferred = path.join(WINGET_FFMPEG_902, exe);
+  if (existsSync(preferred)) return preferred;
+  return "ffmpeg";
+}
+
+function useFfmpeg() {
+  const command = ffmpegLaunch();
+  if (command !== "ffmpeg") {
+    const dir = path.dirname(command);
+    const current = process.env.PATH ?? "";
+    const listed = current
+      .split(path.delimiter)
+      .some((entry) => entry.length > 0 && path.resolve(entry).toLowerCase() === path.resolve(dir).toLowerCase());
+    if (!listed) {
+      const next = `${dir}${path.delimiter}${current}`;
+      process.env.PATH = next;
+      if (process.platform === "win32") process.env.Path = next;
+    }
+  }
+  return command;
+}
+
 function ffmpegOnPath() {
+  const command = useFfmpeg();
   return new Promise((resolve) => {
-    execFile("ffmpeg", ["-version"], { windowsHide: true }, (error) => {
+    execFile(command, ["-version"], { windowsHide: true }, (error) => {
       resolve(!error);
     });
   });

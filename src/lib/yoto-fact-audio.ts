@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { audioContainer, cryLeads, cryUrl, mergeCryFirst } from "@/lib/cry-audio";
+import { assertCryFirst, audioContainer, cryUrl, mergeCryFirst } from "@/lib/cry-audio";
 import { LILY_VOICE_ID } from "@/lib/kid-cards";
 import { RECONNECT_YOTO, reconnectMessage } from "@/lib/yoto-error";
 
@@ -217,6 +217,7 @@ export async function attachCry(
       if (!speechResponse.ok) throw new Error(`Lily's recording for number ${dexId} could not be downloaded.`);
       const speech = Buffer.from(await speechResponse.arrayBuffer());
       const merged = await mergeCryFirst(cry, speech);
+      await assertCryFirst(cry, speech, merged);
       const uploaded = await uploadMerged(token, dexId, merged, fetchImpl);
       const { voiceId: _voice, ...rest } = track;
       return {
@@ -499,8 +500,10 @@ function underlyingReason(error: unknown): string {
 }
 
 /**
- * One short step of a single track: start Lily, merge the cry, or collect the yoto:# hash.
- * The browser calls this once per track, then creates the playlist.
+ * One short step of a single track.
+ * Lily's scratch recording stays on disk. The cry is mixed in front of it.
+ * Only that merged MP3 is uploaded. A missing cry never becomes a voice-only yoto:# hash.
+ * The playlist POST is a later call, after every track in the card is a merged hash.
  */
 export async function prepareFactTrack(
   token: string,
@@ -579,24 +582,35 @@ export async function prepareFactTrack(
 
   if (request.uploadId) return readyFrom(request.uploadId, 4);
 
-  const mix = async (speech: Buffer): Promise<Buffer> => {
-    if (!dexId) return speech;
+  const fromSpeechFile = async (): Promise<TrackPrepareResult> => {
+    let speech: Buffer;
     try {
-      const cry = await ensureCry(dexId, fetchImpl, roots.cries ?? CRY_CACHE);
-      const merged = await mergeCryFirst(cry, speech);
-      if (!(await cryLeads(cry, speech, merged))) {
-        throw new Error("The merged audio did not start with the cry.");
-      }
-      return merged;
+      speech = await readFile(speechFile);
     } catch (error) {
+      if (!dexId) throw error;
       throw cryFailure(error);
     }
-  };
+    if (!audioContainer(speech) || speech.length < 128) {
+      await rm(speechFile, { force: true });
+      const bad = new Error("Lily's recording was not an Ogg or MP3 file.");
+      if (!dexId) throw bad;
+      throw cryFailure(bad);
+    }
 
-  const fromSpeechFile = async (): Promise<TrackPrepareResult> => {
+    let audio = speech;
+    if (dexId) {
+      try {
+        const cry = await ensureCry(dexId, fetchImpl, roots.cries ?? CRY_CACHE);
+        const merged = await mergeCryFirst(cry, speech);
+        await assertCryFirst(cry, speech, merged);
+        if (merged === speech) throw new Error("The cry was not mixed in front of Lily.");
+        audio = merged;
+      } catch (error) {
+        throw cryFailure(error);
+      }
+    }
+
     try {
-      const speech = await readFile(speechFile);
-      const audio = await mix(speech);
       const uploadId = await openUpload(token, label, audio, fetchImpl);
       if (dexId) await writeCryMark(uploadMarkPath(roots.rendered, uploadId));
       return await readyFrom(uploadId, 4);

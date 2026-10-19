@@ -1,6 +1,6 @@
 import { getSpecialForm } from "@/lib/catalogue-db";
 import { bulbapediaArticleUrl } from "@/lib/bulbapedia";
-import { loadFormProse } from "@/lib/form-prose";
+import { loadFormSpeech } from "@/lib/form-prose";
 import { spokenWiki } from "@/lib/spoken-wiki";
 
 export async function GET(
@@ -17,12 +17,12 @@ export async function GET(
     return Response.json({ error: "That form is not a Mega Evolution or Gigantamax form." }, { status: 404 });
   }
   try {
-    const article = await loadFormProse(form);
+    const { speech, article } = await loadFormSpeech(form);
     return Response.json({
       formId: form.formId,
       speciesId: form.speciesId,
       name: form.formName,
-      speech: spokenWiki(form.formName, article.blocks),
+      speech,
       article,
     });
   } catch {

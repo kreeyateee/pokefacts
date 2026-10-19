@@ -15,8 +15,8 @@ import {
   loadBiology,
   wikiPageTitle,
 } from "./bulbapedia";
-import { formWikiTitle, loadFormProse, pickFormSection } from "./form-prose";
-import { leadParagraphs, spokenWiki } from "./spoken-wiki";
+import { formWikiTitle, loadFormProse, loadFormSpeech, pickFormSection } from "./form-prose";
+import { leadParagraphs, spokenForm, spokenWiki } from "./spoken-wiki";
 import type { BiologyBlock } from "./catalogue-types";
 
 const HTML = `
@@ -427,6 +427,167 @@ describe("Bulbapedia biology", () => {
         { fetchImpl, cacheFile, sleep: async () => undefined },
       );
       assert.equal(calls.length, after);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("uses the species biology when a Mega form has no prose, and the form text when it does", () => {
+    const species: BiologyBlock[] = [
+      { kind: "paragraph", text: "One. The first biology paragraph is about the crest." },
+      {
+        kind: "paragraph",
+        text: "Two. The second biology paragraph is about the wind. This line is from Bulbapedia and must not be read.",
+      },
+      { kind: "paragraph", text: "Three. The third biology paragraph is about the forest." },
+    ];
+    const missing = spokenForm(
+      "Mega Pidgeot",
+      [{ kind: "paragraph", text: "It can Mega Evolve." }],
+      "Pidgeot",
+      species,
+    );
+    assert.equal(missing, spokenWiki("Pidgeot", species));
+    assert.match(missing, /first biology paragraph is about the crest/);
+    assert.match(missing, /second biology paragraph is about the wind/);
+    assert.doesNotMatch(missing, /third biology paragraph|Bulbapedia|It can Mega Evolve/i);
+    assert.ok(missing.length <= 1200);
+
+    const formText = spokenForm(
+      "Mega Venusaur",
+      [
+        { kind: "heading", level: 4, text: "Mega Venusaur" },
+        {
+          kind: "paragraph",
+          text: "Mega Venusaur's flower grows more prominent, and two smaller pink flowers bloom.",
+        },
+        {
+          kind: "paragraph",
+          text: "Mega Venusaur's legs and back have become sturdier to support the extra weight of the flower.",
+        },
+      ],
+      "Venusaur",
+      [
+        {
+          kind: "paragraph",
+          text: "Venusaur is a squat, quadrupedal amphibian Pokémon. This species Biology sentence must stay unspoken.",
+        },
+      ],
+    );
+    assert.match(formText, /flower grows more prominent/);
+    assert.match(formText, /sturdier to support the extra weight/);
+    assert.doesNotMatch(formText, /squat, quadrupedal|Bulbapedia/);
+
+    const gmax = spokenForm("Gigantamax Butterfree", [], "Butterfree", [
+      { kind: "paragraph", text: "Butterfree is a butterfly Pokémon with violet wings." },
+      { kind: "paragraph", text: "It collects honey from flowers." },
+      { kind: "paragraph", text: "A third paragraph stays unspoken." },
+    ]);
+    assert.equal(gmax.startsWith("Butterfree."), true);
+    assert.match(gmax, /violet wings/);
+    assert.match(gmax, /collects honey/);
+    assert.doesNotMatch(gmax, /third paragraph|Bulbapedia|Gigantamax/);
+  });
+
+  it("loads species biology when the Mega page is missing and keeps form prose when the section exists", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-form-speech-"));
+    const missingFetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      const page = url.searchParams.get("page");
+      const prop = url.searchParams.get("prop");
+      const section = url.searchParams.get("section") ?? "";
+      if (page === "Mega_Pidgeot") {
+        return jsonResponse({ error: { code: "missingtitle", info: "The page you specified doesn't exist." } }, 404);
+      }
+      if (prop === "sections") {
+        return jsonResponse({
+          parse: {
+            title: "Pidgeot (Pokémon)",
+            sections: [{ toclevel: 1, line: "Biology", index: "1", anchor: "Biology" }],
+          },
+        });
+      }
+      if (prop === "text" && section === "1") {
+        return jsonResponse({
+          parse: {
+            text: `<div class="mw-parser-output">
+              <div id="toc" class="toc"><h2 id="mw-toc-heading">Contents</h2></div>
+              <figure><figcaption>Pidgeot in flight</figcaption></figure>
+              <p>One. The first biology paragraph is about the crest.</p>
+              <p>Two. The second biology paragraph is about the wind. This line is from Bulbapedia and must not be read.</p>
+              <h3><span class="mw-headline" id="Forms">Forms</span></h3>
+              <p>It can Mega Evolve.</p>
+              <p>Three. The third biology paragraph is about the forest.</p>
+            </div>`,
+          },
+        });
+      }
+      throw new Error(`Unexpected ${page} ${prop} ${section}`);
+    }) as typeof fetch;
+
+    let readBiology = false;
+    const formFetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      const page = url.searchParams.get("page");
+      const prop = url.searchParams.get("prop");
+      const section = url.searchParams.get("section") ?? "";
+      if (page === "Mega_Venusaur" && prop === "sections") {
+        return jsonResponse({
+          parse: {
+            title: "Venusaur (Pokémon)",
+            redirects: [{ from: "Mega Venusaur", to: "Venusaur (Pokémon)" }],
+            sections: [
+              { toclevel: 1, line: "Biology", index: "1", anchor: "Biology" },
+              { toclevel: 3, line: "Mega Venusaur", index: "3", anchor: "Mega_Venusaur" },
+            ],
+          },
+        });
+      }
+      if (prop === "text" && section === "1") {
+        readBiology = true;
+        return jsonResponse({
+          parse: { text: "<p>Venusaur is a squat, quadrupedal amphibian Pokémon.</p>" },
+        });
+      }
+      if (prop === "text" && section === "3") {
+        return jsonResponse({
+          parse: {
+            text: `<p>Mega Venusaur's flower grows more prominent, and two smaller pink flowers bloom.</p>
+              <p>Mega Venusaur's legs and back have become sturdier to support the extra weight of the flower.</p>`,
+          },
+        });
+      }
+      throw new Error(`Unexpected ${page} ${prop} ${section}`);
+    }) as typeof fetch;
+
+    try {
+      const missing = await loadFormSpeech(
+        { formId: 10073, speciesId: 18, speciesName: "Pidgeot", formName: "Mega Pidgeot" },
+        {
+          fetchImpl: missingFetch,
+          cacheFile: path.join(dir, "missing-forms.json"),
+          biologyCacheFile: path.join(dir, "missing-biology.json"),
+          sleep: async () => undefined,
+        },
+      );
+      assert.match(missing.speech, /first biology paragraph is about the crest/);
+      assert.match(missing.speech, /second biology paragraph is about the wind/);
+      assert.doesNotMatch(missing.speech, /third biology paragraph|Bulbapedia|in flight|It can Mega Evolve|Contents/i);
+      assert.equal(missing.speech.startsWith("Pidgeot."), true);
+
+      const present = await loadFormSpeech(
+        { formId: 10033, speciesId: 3, speciesName: "Venusaur", formName: "Mega Venusaur" },
+        {
+          fetchImpl: formFetch,
+          cacheFile: path.join(dir, "form-forms.json"),
+          biologyCacheFile: path.join(dir, "form-biology.json"),
+          sleep: async () => undefined,
+        },
+      );
+      assert.equal(readBiology, false);
+      assert.match(present.speech, /flower grows more prominent/);
+      assert.match(present.speech, /sturdier to support the extra weight/);
+      assert.doesNotMatch(present.speech, /squat, quadrupedal|Bulbapedia/);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
