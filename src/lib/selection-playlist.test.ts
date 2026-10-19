@@ -7,6 +7,7 @@ import {
   advancedSpeech,
   factsSpeech,
   selectionPlaylist,
+  selectionStickerCards,
   selectionUpload,
   type SelectionSpecies,
 } from "./selection-playlist";
@@ -136,6 +137,41 @@ describe("catalogue selection playlists", () => {
     assert.equal(built.card.chapters.flatMap((chapter) => chapter.tracks).length, 100);
     assert.deepEqual(built.refused, [51]);
     assert.equal(built.title, "Who's That Pokémon");
+  });
+
+  it("splits a catalogue pick into different sticker cards", () => {
+    const picked = Array.from({ length: 101 }, (_, index) => ({ id: index + 1, name: `Mon ${index + 1}` }));
+    const cards = selectionStickerCards(picked, "facts", "Garden");
+    assert.equal(cards.length, 2);
+    assert.equal(cards[0]?.libraryTitle, "Garden 1");
+    assert.equal(cards[1]?.libraryTitle, "Garden 2");
+    assert.notEqual(cards[0]?.id, cards[1]?.id);
+    assert.match(cards[0]?.rangeLabel ?? "", /Mon 1 to Mon 100/);
+    assert.match(cards[1]?.rangeLabel ?? "", /Mon 101/);
+    assert.equal(cards[0]?.chapters.length, 100);
+    assert.equal(cards[1]?.chapters.length, 1);
+    assert.equal(cards[0]?.chapters[0]?.dexId, 1);
+    assert.equal(cards[1]?.chapters[0]?.dexId, 101);
+    assert.equal(cards[1]?.kind, "meet");
+
+    const one = selectionStickerCards([{ id: 25, name: "Pikachu" }, { id: 1, name: "Bulbasaur" }], "facts");
+    assert.equal(one.length, 1);
+    assert.equal(one[0]?.libraryTitle, "Facts");
+    assert.deepEqual(
+      one[0]?.chapters.map((chapter) => chapter.dexId),
+      [25, 1],
+    );
+
+    const riddles = selectionStickerCards(
+      Array.from({ length: 51 }, (_, index) => ({ id: index + 1, name: `Secret ${index + 1}` })),
+      "whos-that",
+    );
+    assert.equal(riddles.length, 2);
+    assert.equal(riddles[0]?.kind, "guess");
+    assert.equal(riddles[0]?.chapters.length, 50);
+    assert.equal(riddles[1]?.chapters.length, 1);
+    assert.equal(riddles[0]?.rangeLabel.includes("Secret"), false);
+    assert.equal(selectionStickerCards([], "facts").length, 0);
   });
 
   it("reads advanced facts in pounds and feet when imperial is selected", () => {

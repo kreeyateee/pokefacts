@@ -1,4 +1,4 @@
-import { catalogueMatchIds, searchCatalogue } from "@/lib/catalogue-db";
+import { catalogueMatchIds, cataloguePick, searchCatalogue } from "@/lib/catalogue-db";
 
 export function GET(request: Request) {
   const url = new URL(request.url);
@@ -11,6 +11,11 @@ export function GET(request: Request) {
     page: Number.isInteger(page) ? page : 1,
   };
   try {
+    const pick = url.searchParams.get("pick");
+    if (pick) {
+      const ids = pick.split(",").map((part) => Number(part));
+      return Response.json({ items: cataloguePick(ids) });
+    }
     if (url.searchParams.get("ids") === "1") {
       const ids = catalogueMatchIds(query);
       return Response.json({ ids, total: ids.length });

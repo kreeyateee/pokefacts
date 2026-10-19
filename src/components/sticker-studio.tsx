@@ -35,7 +35,7 @@ import {
   type PlacedSticker,
 } from "@/lib/sticker-layout";
 import { paintCard, paintSheet, type CardPaint } from "@/lib/sticker-paint";
-import { jpegPagePdf } from "@/lib/sticker-pdf";
+import { jpegPagesPdf } from "@/lib/sticker-pdf";
 
 type StickerMon = {
   key: string;
@@ -94,6 +94,47 @@ function kickerFor(card: KidCard): string {
   if (card.kind === "guess") return "Guess Who";
   if (card.kind === "meet") return APP_NAME;
   return card.title;
+}
+
+function suggestedCover(item: KidCard): CoverDraft {
+  const itemMons = monsFor(item);
+  return freshCover({
+    libraryTitle: item.libraryTitle,
+    rangeLabel: item.rangeLabel,
+    blurb: item.blurb,
+    childDoes: item.childDoes,
+    detail: detailFor(item, itemMons.length),
+    keys: itemMons.map((mon) => mon.key),
+  });
+}
+
+function savedCover(item: KidCard): CoverDraft {
+  const fresh = suggestedCover(item);
+  return loadDraft(item.id, fresh, new Set(monsFor(item).map((mon) => mon.key)));
+}
+
+function paintFor(
+  item: KidCard,
+  cover: CoverDraft,
+  images: Map<string, CanvasImageSource | null>,
+  fonts: { display: string; body: string },
+  selectedId: string | null,
+): CardPaint {
+  const itemMons = monsFor(item);
+  const lines = linesFor(item);
+  return {
+    title: cover.title,
+    kicker: kickerFor(item),
+    description: cover.description,
+    backText: cover.backText,
+    countLabel: countLabel(itemMons.length, nounFor(item.kind)),
+    lines,
+    showNames: coverListsNames(lines, cover.backMode, item.kind === "guess"),
+    stickers: cover.stickers,
+    images,
+    fonts,
+    selectedId,
+  };
 }
 
 function loadDraft(cardId: string, fresh: CoverDraft, keys: ReadonlySet<string>): CoverDraft {
@@ -168,29 +209,47 @@ function downloadBytes(bytes: Uint8Array, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-export function StickerStudio({ card, onClose }: { card: KidCard; onClose: () => void }) {
-  const mons = useMemo(() => monsFor(card), [card]);
-  const lines = useMemo(() => linesFor(card), [card]);
-  const noun = nounFor(card.kind);
-  const hideNames = card.kind === "guess";
-  const fresh = useMemo(
-    () =>
-      freshCover({
-        libraryTitle: card.libraryTitle,
-        rangeLabel: card.rangeLabel,
-        blurb: card.blurb,
-        childDoes: card.childDoes,
-        detail: detailFor(card, mons.length),
-        keys: mons.map((mon) => mon.key),
-      }),
-    [card, mons],
-  );
-  const [draft, setDraft] = useState<CoverDraft>(() => loadDraft(card.id, fresh, new Set(mons.map((mon) => mon.key))));
+export function StickerStudio({
+  card,
+  cards = [],
+  onClose,
+}: {
+  card: KidCard;
+  cards?: KidCard[];
+  onClose: () => void;
+}) {
+  const [focusId, setFocusId] = useState(card.id);
   const [selected, setSelected] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(0);
   const [ghost, setGhost] = useState<{ src: string; x: number; y: number } | null>(null);
+  const [sheetPage, setSheetPage] = useState(0);
+  const rosterIds = (cards.length > 0 ? cards : [card]).map((item) => item.id).join("|");
+  const cardsRef = useRef(cards);
+  cardsRef.current = cards;
+  const roster = useMemo(() => {
+    const list = cardsRef.current.length > 0 ? cardsRef.current : [card];
+    return list.some((item) => item.id === card.id) ? list : [card, ...list];
+  }, [rosterIds, card]);
+  const focus = roster.find((item) => item.id === focusId) ?? roster[0] ?? card;
+  const mons = useMemo(() => monsFor(focus), [focus]);
+  const lines = useMemo(() => linesFor(focus), [focus]);
+  const noun = nounFor(focus.kind);
+  const hideNames = focus.kind === "guess";
+  const fresh = useMemo(
+    () =>
+      freshCover({
+        libraryTitle: focus.libraryTitle,
+        rangeLabel: focus.rangeLabel,
+        blurb: focus.blurb,
+        childDoes: focus.childDoes,
+        detail: detailFor(focus, mons.length),
+        keys: mons.map((mon) => mon.key),
+      }),
+    [focus, mons],
+  );
+  const [draft, setDraft] = useState<CoverDraft>(() => loadDraft(focus.id, fresh, new Set(mons.map((mon) => mon.key))));
   const frontRef = useRef<HTMLCanvasElement>(null);
   const backRef = useRef<HTMLCanvasElement>(null);
   const sheetRef = useRef<HTMLCanvasElement>(null);
@@ -198,6 +257,7 @@ export function StickerStudio({ card, onClose }: { card: KidCard; onClose: () =>
   const images = useRef(new Map<string, CanvasImageSource | null>());
   const closeRef = useRef<() => void>(() => {});
   const draftRef = useRef(draft);
+  const draftCard = useRef(focus.id);
   const dragCleanup = useRef<(() => void) | null>(null);
   const suppressClick = useRef(false);
   const fontsReady = useRef(false);
@@ -207,15 +267,32 @@ export function StickerStudio({ card, onClose }: { card: KidCard; onClose: () =>
   const plan = nameListPlan(lines);
   const showNames = coverListsNames(lines, draft.backMode, hideNames);
   const layout = sheetSlots(draft.paper);
+  const capacity = Math.max(1, layout.slots.filter((slot) => slot.face === "front").length);
+  const pageCount = Math.max(1, Math.ceil(roster.length / capacity));
+  const page = Math.min(sheetPage, pageCount - 1);
+  const pageCards = roster.slice(page * capacity, page * capacity + capacity);
+  const pageKey = `${page}:${pageCards.map((item) => item.id).join("|")}`;
+  const stickerCount = pageCards.length * 2;
+  const libraryMons = useMemo(() => {
+    const byKey = new Map<string, StickerMon>();
+    for (const item of roster) {
+      for (const mon of monsFor(item)) byKey.set(mon.key, mon);
+    }
+    return [...byKey.values()];
+  }, [roster]);
   const visible = mons.filter((mon) => mon.name.toLowerCase().includes(query.trim().toLowerCase()));
-  const needed = useMemo(
-    () => [...new Set(draft.stickers.map((sticker) => sticker.key))].sort().join("|"),
-    [draft.stickers],
-  );
+  const needed = useMemo(() => {
+    const keys = new Set<string>();
+    for (const item of roster) {
+      const cover = item.id === focus.id ? draft : savedCover(item);
+      for (const sticker of cover.stickers) keys.add(sticker.key);
+    }
+    return [...keys].sort().join("|");
+  }, [roster, draft, focus.id]);
 
   function remember(next: CoverDraft = draft) {
     try {
-      localStorage.setItem(stickerStorageKey(card.id), JSON.stringify(next));
+      localStorage.setItem(stickerStorageKey(focus.id), JSON.stringify(next));
     } catch {
       // The cover still prints if the browser cannot store it.
     }
@@ -234,20 +311,33 @@ export function StickerStudio({ card, onClose }: { card: KidCard; onClose: () =>
     };
   }
 
+  function chooseCard(id: string) {
+    if (id === focus.id) return;
+    remember();
+    setSelected(null);
+    setQuery("");
+    setFocusId(id);
+  }
+
   function specFor(selectedId: string | null): CardPaint {
-    return {
-      title: draft.title,
-      kicker: kickerFor(card),
-      description: draft.description,
-      backText: draft.backText,
-      countLabel: countLabel(mons.length, noun),
-      lines,
-      showNames,
-      stickers: draft.stickers,
-      images: images.current,
-      fonts: fonts(),
-      selectedId,
-    };
+    return paintFor(focus, draft, images.current, fonts(), selectedId);
+  }
+
+  function renderFaces(items: readonly KidCard[], dpi: number, selectedId: string | null) {
+    const size = cardPixelSize(dpi);
+    const drawn = fonts();
+    return items.flatMap((item) => {
+      const cover = item.id === focus.id ? draft : savedCover(item);
+      const spec = paintFor(item, cover, images.current, drawn, item.id === focus.id ? selectedId : null);
+      return (["front", "back"] as const).map((which) => {
+        const canvas = document.createElement("canvas");
+        canvas.width = size.width;
+        canvas.height = size.height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) paintCard(ctx, which, { ...spec, selectedId: which === "front" ? (spec.selectedId ?? null) : null });
+        return canvas;
+      });
+    });
   }
 
   useEffect(() => {
@@ -261,18 +351,31 @@ export function StickerStudio({ card, onClose }: { card: KidCard; onClose: () =>
   }, []);
 
   useEffect(() => {
-    const id = card.id;
+    if (draftCard.current === focusId) return;
+    const next = roster.find((item) => item.id === focusId);
+    if (!next) return;
+    draftCard.current = next.id;
+    const nextMons = monsFor(next);
+    setDraft(loadDraft(next.id, suggestedCover(next), new Set(nextMons.map((mon) => mon.key))));
+  }, [focusId, roster]);
+
+  useEffect(() => {
+    const index = Math.max(0, roster.findIndex((item) => item.id === focus.id));
+    setSheetPage(Math.floor(index / capacity));
+  }, [focus.id, draft.paper, capacity, roster]);
+
+  useEffect(() => {
     return () => {
       try {
-        localStorage.setItem(stickerStorageKey(id), JSON.stringify(draftRef.current));
+        localStorage.setItem(stickerStorageKey(draftCard.current), JSON.stringify(draftRef.current));
       } catch {
         // The cover still prints if the browser cannot store it.
       }
     };
-  }, [card.id]);
+  }, []);
 
   useEffect(() => {
-    const id = card.id;
+    const id = focus.id;
     const snapshot = draft;
     const timer = window.setTimeout(() => {
       try {
@@ -282,12 +385,12 @@ export function StickerStudio({ card, onClose }: { card: KidCard; onClose: () =>
       }
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [draft, card.id]);
+  }, [draft, focus.id]);
 
   useEffect(() => {
     let cancelled = false;
     const keys = new Set(needed.split("|").filter(Boolean));
-    for (const mon of mons) {
+    for (const mon of libraryMons) {
       if (!keys.has(mon.key) || images.current.has(mon.key)) continue;
       const image = new Image();
       image.onload = () => {
@@ -303,7 +406,7 @@ export function StickerStudio({ card, onClose }: { card: KidCard; onClose: () =>
     return () => {
       cancelled = true;
     };
-  }, [needed, mons]);
+  }, [needed, libraryMons]);
 
   useEffect(() => {
     let cancelled = false;
@@ -320,21 +423,10 @@ export function StickerStudio({ card, onClose }: { card: KidCard; onClose: () =>
         const size = pagePixelSize(draft.paper, SHEET_PREVIEW_DPI);
         if (sheet.width !== size.width) sheet.width = size.width;
         if (sheet.height !== size.height) sheet.height = size.height;
-        const face = (which: "front" | "back") => {
-          const cardSize = cardPixelSize(SHEET_PREVIEW_DPI);
-          const canvas = document.createElement("canvas");
-          canvas.width = cardSize.width;
-          canvas.height = cardSize.height;
-          const ctx = canvas.getContext("2d");
-          if (!ctx) return canvas;
-          paintCard(ctx, which, { ...specFor(null), fonts: fonts() });
-          return canvas;
-        };
         paintSheet(sheetCtx, {
           paper: draft.paper,
           dpi: SHEET_PREVIEW_DPI,
-          front: face("front"),
-          back: face("back"),
+          images: renderFaces(pageCards, SHEET_PREVIEW_DPI, null),
           fonts: fonts(),
           brand: APP_NAME,
         });
@@ -350,7 +442,7 @@ export function StickerStudio({ card, onClose }: { card: KidCard; onClose: () =>
     return () => {
       cancelled = true;
     };
-  }, [draft, loaded, selected, showNames, card]);
+  }, [draft, loaded, selected, showNames, focus, pageKey, roster]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -483,41 +575,38 @@ export function StickerStudio({ card, onClose }: { card: KidCard; onClose: () =>
       await document.fonts.ready;
       remember();
       const drawn = fonts();
-      const face = (which: "front" | "back") => {
-        const size = cardPixelSize(PRINT_DPI);
-        const canvas = document.createElement("canvas");
-        canvas.width = size.width;
-        canvas.height = size.height;
-        const ctx = canvas.getContext("2d");
+      const pixelPage = pagePixelSize(draft.paper, PRINT_DPI);
+      const sheets = [];
+      for (let index = 0; index < roster.length; index += capacity) {
+        const group = roster.slice(index, index + capacity);
+        const sheet = document.createElement("canvas");
+        sheet.width = pixelPage.width;
+        sheet.height = pixelPage.height;
+        const ctx = sheet.getContext("2d");
         if (!ctx) throw new Error("canvas");
-        paintCard(ctx, which, { ...specFor(null), fonts: drawn });
-        return canvas;
-      };
-      const page = pagePixelSize(draft.paper, PRINT_DPI);
-      const sheet = document.createElement("canvas");
-      sheet.width = page.width;
-      sheet.height = page.height;
-      const ctx = sheet.getContext("2d");
-      if (!ctx) throw new Error("canvas");
-      paintSheet(ctx, {
-        paper: draft.paper,
-        dpi: PRINT_DPI,
-        front: face("front"),
-        back: face("back"),
-        fonts: drawn,
-        brand: APP_NAME,
-      });
-      const blob = await new Promise<Blob | null>((resolve) => sheet.toBlob(resolve, "image/jpeg", 0.93));
-      if (!blob) throw new Error("jpeg");
-      const pdf = jpegPagePdf(
-        new Uint8Array(await blob.arrayBuffer()),
-        sheet.width,
-        sheet.height,
-        layout.width,
-        layout.height,
+        paintSheet(ctx, {
+          paper: draft.paper,
+          dpi: PRINT_DPI,
+          images: renderFaces(group, PRINT_DPI, null),
+          fonts: drawn,
+          brand: APP_NAME,
+        });
+        const blob = await new Promise<Blob | null>((resolve) => sheet.toBlob(resolve, "image/jpeg", 0.93));
+        if (!blob) throw new Error("jpeg");
+        sheets.push({
+          jpeg: new Uint8Array(await blob.arrayBuffer()),
+          pixelWidth: sheet.width,
+          pixelHeight: sheet.height,
+        });
+      }
+      const pdf = jpegPagesPdf(sheets, layout.width, layout.height);
+      const fileTitle = roster.length > 1 ? `${APP_NAME} cards` : draft.title;
+      downloadBytes(pdf, stickerFilename(fileTitle, draft.paper));
+      toast.success(
+        sheets.length > 1
+          ? `PDF saved with ${sheets.length} sheets. Print it at 100% size, not Fit to page.`
+          : "PDF saved on this computer. Print it at 100% size, not Fit to page.",
       );
-      downloadBytes(pdf, stickerFilename(draft.title, draft.paper));
-      toast.success("PDF saved on this computer. Print it at 100% size, not Fit to page.");
     } catch {
       toast.error("The PDF could not be saved.");
     } finally {
@@ -538,8 +627,25 @@ export function StickerStudio({ card, onClose }: { card: KidCard; onClose: () =>
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 id="sticker-heading" className="font-display text-3xl leading-tight">
-              Stickers for {card.rangeLabel}
+              Stickers for {focus.rangeLabel}
             </h2>
+            {roster.length > 1 ? (
+              <label className="mt-2 grid max-w-sm gap-1 text-sm" htmlFor="sticker-card">
+                Card to design
+                <select
+                  id="sticker-card"
+                  className="pk-field"
+                  value={focus.id}
+                  onChange={(event) => chooseCard(event.target.value)}
+                >
+                  {roster.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.rangeLabel}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
               The front is the cover. Drag a {hideNames ? "riddle" : "Pokémon"} onto it, or click one to add it, then
               move it around the picture. The back is the playlist. Save a PDF and print it at 100%
@@ -768,13 +874,37 @@ export function StickerStudio({ card, onClose }: { card: KidCard; onClose: () =>
             <div className="mt-4">
               <p className="pk-kicker">Print layout</p>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                {layout.label} page, {layout.slots.length} stickers, marked 1 of {layout.slots.length}{" "}
-                through {layout.slots.length} of {layout.slots.length}. Each row is a front and a back.
-                Print this page at 100% size and cut on the corner marks.
+                Sheet {page + 1} of {pageCount}
+                {pageCount > 1 ? ` on ${layout.label}` : `, ${layout.label}`}.{" "}
+                {pageCards.map((item) => item.rangeLabel).join(", ")}. Each row is a different card, front
+                on the left and back on the right. {stickerCount} stickers, marked 1 of {stickerCount} through{" "}
+                {stickerCount} of {stickerCount}.
               </p>
+              {pageCount > 1 ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 px-4"
+                    disabled={page <= 0}
+                    onClick={() => setSheetPage(page - 1)}
+                  >
+                    Previous sheet
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 px-4"
+                    disabled={page >= pageCount - 1}
+                    onClick={() => setSheetPage(page + 1)}
+                  >
+                    Next sheet
+                  </Button>
+                </div>
+              ) : null}
               <canvas
                 ref={sheetRef}
-                aria-label={`${layout.label} print layout, ${layout.slots.length} stickers`}
+                aria-label={`${layout.label} print layout, sheet ${page + 1} of ${pageCount}, ${pageCards.map((item) => item.rangeLabel).join(", ")}`}
                 className="mt-2 h-auto w-full max-w-[420px] bg-white shadow-[4px_4px_0_#16324f]"
               />
             </div>

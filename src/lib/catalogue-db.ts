@@ -142,6 +142,26 @@ export function catalogueMatchIds(input: SearchInput = {}): number[] {
   return rows.map((row) => row.id);
 }
 
+/** Names for a catalogue pick, in the order the ids were given. Unknown ids are skipped. */
+export function cataloguePick(ids: readonly number[]): Array<{ id: number; name: string }> {
+  const wanted = ids.filter((id) => Number.isInteger(id) && id > 0).slice(0, 1025);
+  if (wanted.length === 0) return [];
+  const found = new Map<number, string>();
+  const unique = [...new Set(wanted)];
+  for (let index = 0; index < unique.length; index += 200) {
+    const chunk = unique.slice(index, index + 200);
+    const marks = chunk.map(() => "?").join(", ");
+    const rows = db()
+      .prepare(`SELECT id, name FROM species WHERE id IN (${marks})`)
+      .all(...chunk) as Array<{ id: number; name: string }>;
+    for (const row of rows) found.set(row.id, row.name);
+  }
+  return wanted.flatMap((id) => {
+    const name = found.get(id);
+    return name ? [{ id, name }] : [];
+  });
+}
+
 export function getCatalogueEntry(id: number): CatalogueEntry | null {
   const row = db()
     .prepare("SELECT * FROM species WHERE id = ?")

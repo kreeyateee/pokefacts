@@ -86,7 +86,7 @@ function fits(count: number, item: number, gap: number, available: number): bool
   return count * item + (count - 1) * gap <= available + 0.05;
 }
 
-export function sheetSlots(paper: PaperId): SheetLayout {
+export function sheetSlots(paper: PaperId, pairLimit?: number): SheetLayout {
   const page = PAPERS[paper];
   const availableW = page.width - MIN_MARGIN_MM * 2;
   const availableH = page.height - MIN_MARGIN_MM * 2;
@@ -105,6 +105,7 @@ export function sheetSlots(paper: PaperId): SheetLayout {
     }
   }
   if (columns >= 2) columns -= columns % 2;
+  if (pairLimit && pairLimit > 0) rows = Math.min(rows, pairLimit);
   const contentW = columns * CARD_MM.width + (columns - 1) * GAP_MM;
   const contentH = rows * CARD_MM.height + (rows - 1) * GAP_MM;
   const originX = (page.width - contentW) / 2;
@@ -123,7 +124,7 @@ export function sheetSlots(paper: PaperId): SheetLayout {
 }
 
 export function sheetCaption(): string {
-  return "Print at 100% or Actual size. Do not choose Fit to page. Left stickers are the front. Right stickers are the back. Cut on the corner marks.";
+  return "Print at 100% or Actual size. Do not choose Fit to page. Each row is a different card. Left is the front. Right is the back. Cut on the corner marks.";
 }
 
 export function stickerFilename(title: string, paper: PaperId): string {

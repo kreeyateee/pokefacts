@@ -1736,7 +1736,7 @@ export function Studio({
       </footer>
 
       {stickersOpen && card ? (
-        <StickerStudio key={card.id} card={card} onClose={() => setStickersOpen(false)} />
+        <StickerStudio key={card.id} card={card} cards={rangeCards} onClose={() => setStickersOpen(false)} />
       ) : null}
       <ConnectDialog open={connectOpen} onOpenChange={setConnectOpen} />
     </div>

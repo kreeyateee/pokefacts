@@ -367,13 +367,13 @@ export function paintSheet(
   options: {
     paper: PaperId;
     dpi: number;
-    front: CanvasImageSource;
-    back: CanvasImageSource;
+    images: readonly CanvasImageSource[];
     fonts: { display: string; body: string };
     brand: string;
   },
 ) {
-  const layout = sheetSlots(options.paper);
+  const pairs = Math.max(1, Math.ceil(options.images.length / 2));
+  const layout = sheetSlots(options.paper, pairs);
   const width = ctx.canvas.width;
   const height = ctx.canvas.height;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -381,21 +381,26 @@ export function paintSheet(
   ctx.fillRect(0, 0, width, height);
   const cardW = mmToPx(CARD_MM.width, options.dpi);
   const cardH = mmToPx(CARD_MM.height, options.dpi);
-  for (const slot of layout.slots) {
-    const image = slot.face === "front" ? options.front : options.back;
+  const filled = Math.min(layout.slots.length, options.images.length);
+  for (let index = 0; index < filled; index += 1) {
+    const slot = layout.slots[index];
+    const image = options.images[index];
+    if (!slot || !image) continue;
     ctx.drawImage(image, mmToPx(slot.x, options.dpi), mmToPx(slot.y, options.dpi), cardW, cardH);
   }
-  for (const slot of layout.slots) {
+  for (let index = 0; index < filled; index += 1) {
+    const slot = layout.slots[index];
+    if (!slot) continue;
     cropMarks(ctx, mmToPx(slot.x, options.dpi), mmToPx(slot.y, options.dpi), cardW, cardH, options.dpi);
   }
 
   const caption = sheetCaption();
   const fontPx = (7.5 * options.dpi) / 72;
   const indexPx = (11 * options.dpi) / 72;
-  const total = layout.slots.length;
+  const total = filled;
   ctx.fillStyle = "#16324f";
   ctx.textBaseline = "top";
-  layout.slots.forEach((slot, index) => {
+  layout.slots.slice(0, filled).forEach((slot, index) => {
     const x = mmToPx(slot.x, options.dpi);
     const y = mmToPx(slot.y, options.dpi);
     const labelX = slot.face === "front" ? x - mmToPx(3, options.dpi) : x + cardW + mmToPx(3, options.dpi);

@@ -254,6 +254,67 @@ export function selectionPlaylist(
   return { card, refused, title };
 }
 
+function namedSpecies(item: { id: number; name: string }): SelectionSpecies {
+  return {
+    id: item.id,
+    name: item.name,
+    types: [],
+    genus: "",
+    habitat: null,
+    heightLabel: "",
+    weightLabel: "",
+    abilities: [],
+    evolvesFrom: null,
+    evolutions: [],
+    info: "",
+    biology: [],
+  };
+}
+
+function pickStamp(ids: readonly number[]): string {
+  let hash = 2166136261;
+  for (const id of ids) {
+    hash ^= id;
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+/**
+ * One Yoto card per full playlist in the catalogue pick.
+ * A pick longer than one card is split in pick order, so each printed row is a different card.
+ * Who's That cards leave the names off the label.
+ */
+export function selectionStickerCards(
+  species: readonly { id: number; name: string }[],
+  kind: SelectionKind,
+  customTitle?: string,
+  units: MeasureUnits = "metric",
+): KidCard[] {
+  const picked = species.filter((item) => Number.isInteger(item.id) && item.id > 0 && item.name.trim());
+  if (picked.length === 0) return [];
+  const limit = selectionSpeciesLimit(kind);
+  const title = selectionTitle(kind, customTitle);
+  const chunks: Array<typeof picked> = [];
+  for (let index = 0; index < picked.length; index += limit) chunks.push(picked.slice(index, index + limit));
+  return chunks.map((chunk, index) => {
+    const label = chunks.length === 1 ? title : `${title} ${index + 1}`;
+    const range =
+      chunks.length === 1 || kind === "whos-that"
+        ? label
+        : `${label} (${chunk[0]?.name} to ${chunk[chunk.length - 1]?.name})`;
+    const built = selectionPlaylist(chunk.map(namedSpecies), kind, label, units);
+    const ids = chunk.map((item) => item.id);
+    return {
+      ...built.card,
+      id: `selection-${kind}-${index + 1}-${pickStamp(ids)}`,
+      title: label,
+      rangeLabel: range,
+      libraryTitle: label,
+    };
+  });
+}
+
 /**
  * Create body for a picked playlist.
  * The title is the content title Yoto accepts. metadata.title is left off.

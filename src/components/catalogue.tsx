@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 
 import { StatusBar } from "@/components/status-bar";
+import { StickerStudio } from "@/components/sticker-studio";
+import { Button } from "@/components/ui/button";
 import type { BiologyBlock, BiologyView, CatalogueEntry, CataloguePage } from "@/lib/catalogue-types";
 import { heightForUnits, weightForUnits, type MeasureUnits } from "@/lib/format";
 import type { KidCard } from "@/lib/kid-cards";
@@ -10,6 +12,7 @@ import { PICKER_VOICES } from "@/lib/piper-voice";
 import {
   selectionPlaylist,
   selectionSpeciesLimit,
+  selectionStickerCards,
   type SelectionKind,
   type SelectionSpecies,
 } from "@/lib/selection-playlist";
@@ -188,6 +191,8 @@ export function Catalogue({
   const [buildProgress, setBuildProgress] = useState<{ done: number; total: number } | null>(null);
   const [buildFailed, setBuildFailed] = useState(false);
   const [building, setBuilding] = useState(false);
+  const [stickerBusy, setStickerBusy] = useState(false);
+  const [stickerCards, setStickerCards] = useState<KidCard[] | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -341,6 +346,30 @@ export function Catalogue({
       return next;
     });
     setBuildMessage("");
+  }
+
+  async function printStickers() {
+    if (picked.length === 0 || stickerBusy || building) return;
+    setStickerBusy(true);
+    setBuildFailed(false);
+    setBuildMessage("Preparing the stickers…");
+    setBuildProgress(null);
+    try {
+      const response = await fetch(`/api/catalogue?pick=${picked.join(",")}`);
+      const payload = (await response.json()) as { items?: Array<{ id: number; name: string }>; error?: string };
+      if (!response.ok || !payload.items) {
+        throw new Error(payload.error || "Those Pokémon could not be opened.");
+      }
+      const cards = selectionStickerCards(payload.items, playlistKind, playlistTitle, units);
+      if (cards.length === 0) throw new Error("Pick at least one Pokémon.");
+      setStickerCards(cards);
+      setBuildMessage("");
+    } catch (error: unknown) {
+      setBuildFailed(true);
+      setBuildMessage(error instanceof Error ? error.message : "The stickers could not be prepared.");
+    } finally {
+      setStickerBusy(false);
+    }
   }
 
   async function buildPlaylist() {
@@ -610,6 +639,22 @@ export function Catalogue({
               ? "Build adds these tracks onto that playlist. Tracks already on it stay."
               : "New playlist creates a card and does not replace one you already have."}
           </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-3 h-11 w-full"
+            disabled={picked.length === 0 || stickerBusy || building}
+            onClick={() => void printStickers()}
+          >
+            {stickerBusy ? "Preparing stickers…" : "Print stickers"}
+          </Button>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            {picked.length === 0
+              ? "Pick Pokémon, then print a card for them."
+              : Math.ceil(picked.length / speciesLimit) === 1
+                ? "Prints one card for this pick, at Yoto card size."
+                : `Prints ${Math.ceil(picked.length / speciesLimit)} cards. Each row on the sheet is a different card.`}
+          </p>
           <button
             type="button"
             className="mt-3 h-11 w-full rounded-full border-[3px] border-ink bg-poke-red px-3 font-heading text-sm font-bold text-white shadow-[3px_3px_0_var(--ink)] disabled:opacity-40"
@@ -619,10 +664,8 @@ export function Catalogue({
             {building ? "Building playlist…" : "Build playlist from selection"}
           </button>
           {picked.length > speciesLimit ? (
-            <p className="mt-2 text-xs leading-5 pk-danger" role="alert">
-              {playlistKind === "whos-that"
-                ? `Who's That Pokémon uses two tracks each, so 50 is the limit. ${picked.length} are picked.`
-                : `A playlist holds 100 tracks. ${picked.length} are picked.`}
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">
+              {`Build playlist sends one card of ${speciesLimit}. Print stickers splits this pick into ${Math.ceil(picked.length / speciesLimit)} cards.`}
             </p>
           ) : null}
           {statusLabel ? (
@@ -880,6 +923,14 @@ export function Catalogue({
           </>
         ) : null}
       </article>
+      {stickerCards?.[0] ? (
+        <StickerStudio
+          key={stickerCards.map((item) => item.id).join("|")}
+          card={stickerCards[0]}
+          cards={stickerCards}
+          onClose={() => setStickerCards(null)}
+        />
+      ) : null}
     </div>
   );
 }

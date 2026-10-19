@@ -1,20 +1,32 @@
 # Pokefacts
 
-Pokefacts makes Pokémon cards for your own Yoto player. It has a short fact for all 1,025 Pokémon, and a Guess Who game. The cards go into your Yoto library. You then link each one to a blank Make Your Own card.
+Pokefacts makes Pokémon cards for a Yoto player. The cards go into your Yoto library. You then link each one to a blank Make Your Own card.
+
+Open it here: https://pokefacts.duckdns.org/
+
+You can also run it on your own computer. That path is below. The first time on your own computer takes a while. You install two free programs, leave a window open, and connect your own Yoto account. After that, starting it again is one line.
 
 It is free. If you want to say thanks, you can [buy me a coffee](https://buymeacoffee.com/kreeyate).
-https://pokefacts.duckdns.org/
 
 This is a fan project. It is not made by Nintendo, Game Freak, Creatures, or Yoto.
 
-The first time takes a while. You install two free programs, leave a window open on your computer, and connect your own Yoto account. After that, starting it again is one line.
+## What it can do
+
+- **Facts.** A short reading for all 1,025 Pokémon. The full set is 11 playlists, Pokefacts 1 through Pokefacts 11. There is also a random card of 100. Shuffle draws a new hundred. Send uses the hundred on the page.
+- **Guess Who.** Fifty riddles on one card. The clue plays the cry and does not say the name. Its picture is a shadow. The next track plays the cry and says the name. Its picture is the real one.
+- **Catalogue.** Look up any Pokémon from Kanto to Paldea. Tick the ones you want, in the order you want them, and build your own playlist. Facts reads the name and the first two biology paragraphs. Advanced facts also reads the size, the type, the ability, and how it evolves. Who's That Pokémon uses two tracks for each Pokémon, so 50 fit on a card.
+- **Mega Evolutions and Gigantamax.** One track for each form. The picture is that species' 16×16 pixel.
+- **Voices.** Lily, George, Brian, and Adam are Yoto voices. Piper — Pokédex sounds like a device reading a Pokédex entry. The first time you pick Piper, Pokefacts downloads that voice. Hear plays on the page before you send anything. Send uses the voice you picked.
+- **Stickers.** Print a front and a back at real Yoto card size, on A4 or US Letter. The front is a cover you arrange by dragging the Pokémon around. The back is the playlist, or a short note when the names will not fit. Cut on the corner marks and stick the pieces on a blank card. Print at 100% or Actual size. Do not choose Fit to page. A long catalogue pick becomes more than one card, and each row on the page is a different card. Save PDF keeps the file on your computer.
 
 ## What you need
 
 - A computer. A laptop is fine. It has to stay on while the cards are made.
 - The Yoto app on your phone, and a Yoto player.
 - Blank Make Your Own cards. The full set of facts uses 11 cards. Guess Who uses one more.
-- About an hour the first time. Later visits are much shorter.
+- About an hour the first time, if you run it on your own computer. Later visits are much shorter.
+
+If you use the website, skip the install steps and start at **Connect your Yoto account**.
 
 ## 1. Download Pokefacts
 
@@ -127,13 +139,19 @@ You do this once. It lets Pokefacts put playlists into your library.
 2. Open [dashboard.yoto.dev](https://dashboard.yoto.dev/) in another tab and sign in with the same account you use for the Yoto app.
 3. Create a new app and choose **public**. Public means there is no secret password to copy. If the page offers public or confidential, choose public.
 4. Copy the **client ID**. It is a long code for that app. Paste it into the Client ID box in Pokefacts.
-5. On the Yoto dashboard page for that app, add this callback address. It has to match exactly, including the `http://` and the number `3847`:
+5. On the Yoto dashboard page for that app, add the callback address Pokefacts shows. It has to match exactly. On your own computer it is:
 
 ```
 http://127.0.0.1:3847/callback
 ```
 
-Pokefacts also shows this address with a **Copy** button.
+On the website it is:
+
+```
+https://pokefacts.duckdns.org/callback
+```
+
+The page has a **Copy** button for the address that matches the site you have open.
 
 6. Click **Continue to Yoto**. Sign in if Yoto asks. Then approve the permissions.
 
@@ -160,6 +178,24 @@ On your phone, open the Yoto app.
 4. Put a blank Make Your Own card in the player when the app asks.
 
 Do the same for Pokefacts 2 through Pokefacts 11. Each playlist needs its own blank card. Together they cover every Pokémon.
+
+## Catalogue
+
+Open the **Catalogue** tab to look up one Pokémon, or to build a playlist from a pick.
+
+Tick the species in the order you want them played. Choose Facts, Advanced facts, or Who's That Pokémon. Type a title if you want one. **Build playlist from selection** sends that card to your Yoto library.
+
+A Yoto playlist holds 100 tracks. Who's That Pokémon uses two tracks each, so 50 species fit. A longer pick is not sent as one playlist.
+
+## Stickers
+
+**Print stickers** is on the Facts, Guess Who, Mega Evolutions, and Gigantamax cards, and on a Catalogue pick.
+
+The front is the cover. Drag a Pokémon onto it, or click one to add it, then move it around the picture. The back is the playlist. When the names will not fit at a readable size, the back is a note instead. Guess Who leaves the names off the back.
+
+Choose A4 or US Letter. Save PDF stores the file on your computer. Print it at 100% or Actual size. Do not choose Fit to page. Cut on the corner marks. The left sticker is the front. The right sticker is the back.
+
+A catalogue pick that needs more than one card prints one row per card. Previous sheet and Next sheet move through the pages. The saved PDF has every page.
 
 ## Guess Who
 
@@ -192,10 +228,10 @@ Then open `http://127.0.0.1:3847` in your browser. You do not need to install No
 
 **The window says ffmpeg is missing.** Do the ffmpeg step again, close the window, open a new one in the folder, and type `npm start`.
 
-**Yoto sends you back to an error.** The callback address on the Yoto dashboard has to be exactly `http://127.0.0.1:3847/callback`. Fix it there, then click **Continue to Yoto** again.
+**Yoto sends you back to an error.** The callback address on the Yoto dashboard has to match the site you are using. On your own computer that is `http://127.0.0.1:3847/callback`. On the website that is `https://pokefacts.duckdns.org/callback`. Fix it there, then click **Continue to Yoto** again.
 
 ## Where the words and pictures come from
 
 The names, the Pokédex lines, the types, the size, and the pictures come from the Pokémon games by way of [PokéAPI](https://pokeapi.co/). A few Pokémon also have a short note written for Pokefacts.
 
-The species page can show a Biology section from [Bulbapedia](https://bulbapedia.bulbagarden.net/). That text is used under [CC BY-NC-SA 2.5](https://creativecommons.org/licenses/by-nc-sa/2.5/). It stays on the page. It is not read aloud on the cards.
+The species page can show a Biology section from [Bulbapedia](https://bulbapedia.bulbagarden.net/). That text is used under [CC BY-NC-SA 2.5](https://creativecommons.org/licenses/by-nc-sa/2.5/). A catalogue Facts or Advanced facts playlist reads the opening of that section aloud. The built-in Pokefacts cards read a short description from the games instead.
