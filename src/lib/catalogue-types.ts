@@ -24,6 +24,13 @@ export type CatalogueMatch = {
   multiplier: number;
 };
 
+export type CatalogueFormRef = {
+  formId: number;
+  speciesId: number;
+  speciesName: string;
+  formName: string;
+};
+
 export type CatalogueForm = {
   id: number;
   name: string;
@@ -86,7 +93,7 @@ export type CatalogueEntry = {
   moves: string[];
 };
 
-/** Readable Bulbapedia Biology section. This is on-screen text, not a spoken script. */
+/** Readable Bulbapedia section. The catalogue shows every block. Spoken facts use the first two lead paragraphs. */
 export type BiologyBlock =
   | { kind: "heading"; level: 3 | 4; text: string }
   | { kind: "paragraph"; text: string }

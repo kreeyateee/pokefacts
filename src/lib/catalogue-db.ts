@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import type {
   CatalogueEntry,
   CatalogueForm,
+  CatalogueFormRef,
   CatalogueListItem,
   CataloguePage,
 } from "@/lib/catalogue-types";
@@ -363,4 +364,49 @@ export function listMonSheets(): MonSheet[] {
       entries: row.info ? [{ text: row.info, version: row.info_version }] : [],
     };
   });
+}
+
+type FormRefRow = {
+  id: number;
+  species_id: number;
+  species_name: string;
+  form_name: string;
+};
+
+function mapFormRef(row: FormRefRow): CatalogueFormRef {
+  return {
+    formId: row.id,
+    speciesId: row.species_id,
+    speciesName: row.species_name,
+    formName: row.form_name,
+  };
+}
+
+function queryFormRefs(where: string, param?: number): CatalogueFormRef[] {
+  const sql = `SELECT f.id, f.species_id, s.name AS species_name, f.name AS form_name
+    FROM forms f JOIN species s ON s.id = f.species_id
+    WHERE ${where}
+    ORDER BY f.species_id, f.id`;
+  const rows = (
+    param == null ? db().prepare(sql).all() : db().prepare(sql).all(param)
+  ) as FormRefRow[];
+  return rows.map(mapFormRef);
+}
+
+/** One row per Mega Evolution form. Charizard and Mewtwo each contribute two. */
+export function listMegaForms(): CatalogueFormRef[] {
+  return queryFormRefs("f.is_mega = 1");
+}
+
+/** One row per Gigantamax form, including Amped and Low Key when both exist. */
+export function listGigantamaxForms(): CatalogueFormRef[] {
+  return queryFormRefs("f.name LIKE 'Gigantamax %'");
+}
+
+export function listSpecialForms(speciesId: number): CatalogueFormRef[] {
+  return queryFormRefs("(f.is_mega = 1 OR f.name LIKE 'Gigantamax %') AND f.species_id = ?", speciesId);
+}
+
+export function getSpecialForm(formId: number): CatalogueFormRef | null {
+  return queryFormRefs("(f.is_mega = 1 OR f.name LIKE 'Gigantamax %') AND f.id = ?", formId)[0] ?? null;
 }

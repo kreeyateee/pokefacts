@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
-import { listMonSheets } from "./catalogue-db";
+import { listGigantamaxForms, listMegaForms, listMonSheets } from "./catalogue-db";
 import { dexBlurb, pickDexEntry, threeClues, type FlavorSource, type MonSheet } from "./dex-facts";
 import {
+  applySpeciesSpeech,
   buildKidCard,
   bulkProgressLabel,
   chaptersForCries,
@@ -12,6 +13,8 @@ import {
   factPoolFromCards,
   factsBulkPlaylists,
   factsPlaylistUpload,
+  formPlaylist,
+  formPlaylistUpload,
   guessPlayOrder,
   guessPoolFromCards,
   guessUpload,
@@ -19,11 +22,14 @@ import {
   LILY_VOICE_ID,
   mulberry32,
   pokedexUpload,
+  POKEDEX_HOWTO,
   randomGuessCard,
   randomPokedexCard,
   shadowPixelPath,
   YOTO_TRACK_LIMIT,
 } from "./kid-cards";
+import { spokenWiki } from "./spoken-wiki";
+import type { BiologyBlock } from "./catalogue-types";
 import { pronounce } from "./pronounce";
 import {
   afterRejectedPlaylist,
@@ -949,5 +955,124 @@ describe("Yoto playlist limit", () => {
     } finally {
       globalThis.fetch = original;
     }
+  });
+});
+
+const MEGA_VENUSAUR: BiologyBlock[] = [
+  { kind: "heading", level: 4, text: "Mega Venusaur" },
+  {
+    kind: "paragraph",
+    text: "Mega Venusaur's flower grows more prominent, and two smaller pink flowers bloom, one on its forehead and one on its rear.",
+  },
+  {
+    kind: "paragraph",
+    text: "Mega Venusaur's legs and back have become sturdier to support the extra weight of the flower.",
+  },
+  { kind: "paragraph", text: "A third Mega Venusaur paragraph about brambles should stay unspoken." },
+];
+
+const GMAX_CHARIZARD: BiologyBlock[] = [
+  { kind: "heading", level: 4, text: "Gigantamax Charizard" },
+  { kind: "paragraph", text: "Gigantamax Charizard's belly is now white instead of its normal cream coloration." },
+  { kind: "paragraph", text: "Its wings burn hotter while it is this size." },
+  { kind: "heading", level: 3, text: "Physiology" },
+  { kind: "paragraph", text: "Charizard is a draconic, bipedal Pokémon. This species Biology sentence must stay unspoken." },
+];
+
+describe("biology speech and form playlists", () => {
+  it("uses the first two biology paragraphs for a fact and leaves the dex blurb off", () => {
+    const cards = kidCardsFromDex(fixtureSheets());
+    const facts = cards[0];
+    assert.ok(facts);
+    const speech = spokenWiki("Bulbasaur", [
+      { kind: "paragraph", text: "One. The first biology paragraph is about the bulb." },
+      { kind: "paragraph", text: "Two. The second biology paragraph is about the sun." },
+      { kind: "paragraph", text: "Three. The third biology paragraph is about the soil." },
+    ]);
+    const next = applySpeciesSpeech(facts, { 1: speech });
+    const text = next.chapters.find((chapter) => chapter.dexId === 1)?.tracks[0]?.text ?? "";
+    assert.match(text, /first biology paragraph is about the bulb/);
+    assert.match(text, /second biology paragraph is about the sun/);
+    assert.doesNotMatch(text, /third biology paragraph|Bulbapedia|kilograms|Creative Commons/i);
+    const untouched = next.chapters.find((chapter) => chapter.dexId === 4)?.tracks[0]?.text ?? "";
+    assert.match(untouched, /kilograms/);
+    const guess = cards.find((card) => card.kind === "guess");
+    assert.ok(guess);
+    assert.equal(applySpeciesSpeech(guess, { 1: speech }), guess);
+
+    const random = randomPokedexCard(factPoolFromCards(cards), mulberry32(3));
+    const firstId = random.chapters[0]?.dexId ?? 0;
+    const applied = applySpeciesSpeech(random, { [firstId]: "Pikachu. It stores electricity in its cheeks." });
+    assert.match(applied.chapters[0]?.tracks[0]?.text ?? "", new RegExp(`^${POKEDEX_HOWTO.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+    assert.match(applied.chapters[0]?.tracks[0]?.text ?? "", /stores electricity/);
+    assert.doesNotMatch(applied.chapters[0]?.tracks[0]?.text ?? "", /kilograms/);
+  });
+
+  it("sends Mega Evolutions with Charizard, no card id, and the form's own prose", () => {
+    const forms = listMegaForms();
+    const live = formPlaylist("mega", forms);
+    assert.equal(live.libraryTitle, "Mega Evolutions");
+    assert.ok(live.chapters.some((chapter) => chapter.title === "Mega Charizard X"));
+    assert.ok(live.chapters.some((chapter) => chapter.title === "Mega Charizard Y"));
+    assert.ok(live.chapters.length <= YOTO_TRACK_LIMIT);
+    assert.equal(chaptersForCries(live).length, live.chapters.length);
+    const sentLive = formPlaylistUpload(live, { 6: "char-pixel" }, "deleted-card");
+    assert.equal(sentLive.content.title, "Mega Evolutions");
+    assert.equal(sentLive.content.metadata?.title, "Mega Evolutions");
+    assert.equal(sentLive.content.cardId, undefined);
+    assert.equal(Object.hasOwn(sentLive.content, "cardId"), false);
+    const charizard = sentLive.content.content.chapters.find((chapter) => chapter.title === "Mega Charizard X");
+    assert.equal(charizard?.tracks[0]?.display.icon16x16, "yoto:#char-pixel");
+    assert.equal(charizard?.tracks[0]?.voiceId, LILY_VOICE_ID);
+    assert.equal(live.chapters.find((chapter) => chapter.title === "Mega Charizard X")?.tracks[0]?.lead, "cry");
+
+    const card = formPlaylist("mega", [
+      {
+        formId: 10033,
+        speciesId: 3,
+        speciesName: "Venusaur",
+        formName: "Mega Venusaur",
+        blocks: MEGA_VENUSAUR,
+      },
+    ]);
+    const spoken = card.chapters[0]?.tracks[0]?.text ?? "";
+    assert.match(spoken, /flower grows more prominent/);
+    assert.match(spoken, /sturdier to support the extra weight/);
+    assert.doesNotMatch(spoken, /squat, quadrupedal|brambles should stay|Bulbapedia|Creative Commons/i);
+  });
+
+  it("sends Gigantamax with Charizard and that form's prose, not the species Biology", () => {
+    const forms = listGigantamaxForms();
+    const live = formPlaylist("gmax", forms);
+    assert.equal(live.libraryTitle, "Gigantamax");
+    assert.ok(
+      live.chapters.some((chapter) =>
+        ["Gigantamax Charizard", "Gigantamax Pikachu", "Gigantamax Butterfree"].includes(chapter.title),
+      ),
+    );
+    assert.ok(live.chapters.length <= YOTO_TRACK_LIMIT);
+    assert.equal(chaptersForCries(live).length, live.chapters.length);
+    const sent = formPlaylistUpload(live, { 6: "char-pixel" });
+    assert.equal(sent.content.title, "Gigantamax");
+    assert.equal(sent.content.metadata?.title, "Gigantamax");
+    assert.equal(Object.hasOwn(sent.content, "cardId"), false);
+    assert.equal(sent.voiceId, LILY_VOICE_ID);
+    const chapter = live.chapters.find((item) => item.title === "Gigantamax Charizard");
+    assert.equal(chapter?.tracks[0]?.lead, "cry");
+    assert.equal(chapter?.dexId, 6);
+
+    const card = formPlaylist("gmax", [
+      {
+        formId: 10196,
+        speciesId: 6,
+        speciesName: "Charizard",
+        formName: "Gigantamax Charizard",
+        blocks: GMAX_CHARIZARD,
+      },
+    ]);
+    const spoken = card.chapters[0]?.tracks[0]?.spoken ?? "";
+    assert.match(spoken, /belly is now white/);
+    assert.match(spoken, /wings burn hotter/);
+    assert.doesNotMatch(spoken, /draconic, bipedal|Bulbapedia|Creative Commons/i);
   });
 });

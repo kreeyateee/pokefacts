@@ -1,5 +1,6 @@
 import { bulbapediaArticleUrl, loadBiology } from "@/lib/bulbapedia";
 import { getCatalogueEntry } from "@/lib/catalogue-db";
+import { spokenWiki } from "@/lib/spoken-wiki";
 
 export async function GET(
   _request: Request,
@@ -18,7 +19,7 @@ export async function GET(
     }
     name = entry.name;
     const biology = await loadBiology(entry.name, entry.id);
-    return Response.json({ biology });
+    return Response.json({ biology, speech: spokenWiki(entry.name, biology.blocks) });
   } catch {
     return Response.json({
       biology: {
@@ -26,6 +27,7 @@ export async function GET(
         url: name ? bulbapediaArticleUrl(name) : "",
         blocks: [],
       },
+      speech: name ? spokenWiki(name, []) : "",
     });
   }
 }

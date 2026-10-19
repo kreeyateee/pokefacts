@@ -6,10 +6,9 @@ import type { BiologyBlock, BiologyView } from "@/lib/catalogue-types";
 export type { BiologyBlock, BiologyView };
 
 /**
- * On-screen Biology text from Bulbapedia. Spoken Yoto scripts do not use this.
- *
- * Cache file data/bulbapedia/biology.json, keyed by national dex id:
- * { name, page, url, status: "ready" | "missing", blocks, fetchedAt }
+ * Biology text from Bulbapedia, cached in data/bulbapedia/biology.json.
+ * The catalogue shows every block. Spoken facts use spokenWiki on these blocks,
+ * which keeps the name and the first two lead paragraphs.
  */
 export const BULBAPEDIA_API = "https://bulbapedia.bulbagarden.net/w/api.php";
 
@@ -30,7 +29,7 @@ type CacheRow = {
   revision: number;
 };
 
-type WikiSection = {
+export type WikiSection = {
   toclevel?: number;
   line?: string;
   anchor?: string;
@@ -349,6 +348,31 @@ function sectionsOf(payload: unknown): WikiSection[] {
 }
 
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+export async function bulbapediaParse(
+  params: Record<string, string>,
+  options: { fetchImpl?: typeof fetch; sleep?: (ms: number) => Promise<void> } = {},
+): Promise<unknown> {
+  return wikiRequest(params, options.fetchImpl ?? fetch, options.sleep ?? defaultSleep);
+}
+
+export function wikiSections(payload: unknown): WikiSection[] {
+  return sectionsOf(payload);
+}
+
+export function wikiSectionHtml(payload: unknown): string {
+  return sectionText(payload);
+}
+
+export function findBiologySection(sections: WikiSection[]): WikiSection | undefined {
+  return biologySection(sections);
+}
+
+export function wikiFailureCode(error: unknown): string {
+  if (!error || typeof error !== "object" || !("code" in error)) return "";
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : "";
+}
 
 /**
  * Biology for one species. A cache hit does not call Bulbapedia.

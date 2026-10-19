@@ -1,5 +1,7 @@
+import type { BiologyBlock } from "@/lib/catalogue-types";
 import { dexBlurb, pickDexEntry, threeClues, type MonSheet } from "@/lib/dex-facts";
 import { pronounce } from "@/lib/pronounce";
+import { spokenWiki } from "@/lib/spoken-wiki";
 import type { YotoContent } from "@/lib/yoto-card";
 import { iconForType, YOTO_ICONS } from "@/lib/yoto-icons";
 
@@ -44,8 +46,14 @@ export type KidChapter = {
   /** Parent preview, not shown on the player. */
   mark: string;
   icon: string;
-  /** National dex number, when this chapter is one Pokémon. */
+  /** National dex number, when this chapter is one Pokémon. The cry uses this id. */
   dexId?: number;
+  /** PokéAPI form id, for a Mega Evolution or Gigantamax track. */
+  formId?: number;
+  /** Bulbapedia article for the on-page credit. Not spoken. */
+  articleUrl?: string;
+  /** Set once that form's article has been read. */
+  articleStatus?: "ready" | "missing" | "unavailable";
   /** Sprite shown on the page. */
   sprite?: string;
   /** Merged cry and reading, when that file has been recorded. */
@@ -53,7 +61,7 @@ export type KidChapter = {
   tracks: KidTrack[];
 };
 
-export type KidCardKind = "meet" | "guess";
+export type KidCardKind = "meet" | "guess" | "mega" | "gmax";
 
 export type KidCard = {
   /** `meet-1` … `meet-11`, or `guess-1` … `guess-21`. */
@@ -160,6 +168,8 @@ export function bulkProgressLabel(index: number, total: number): string {
 
 /** On-page label. ASCII parentheses; the Yoto title is `pokefactsTitle`. */
 export function rangeLabel(kind: KidCardKind, first: number, last: number, index = 1): string {
+  if (kind === "mega") return "Mega Evolutions";
+  if (kind === "gmax") return "Gigantamax";
   const span = first === last ? String(first) : `${first}-${last}`;
   if (kind === "meet") return `${pokefactsTitle(index)} (${span})`;
   return `Guess Who ${span}`;
@@ -246,7 +256,7 @@ function intro(kind: KidCardKind, index: number, first: number, last: number, fi
   const span = first === last ? String(first) : `${first}-${last}`;
   const text =
     kind === "meet"
-      ? `This card is Pokefacts ${index}, numbers ${span}. Turn the wheel, or press the arrows, until you see a picture. Then press play. You will hear the cry, then the name, then the Pokédex line, then how much it weighs and how tall it is. The star is this track. Number ${first} is ${firstName}. Each playlist links to its own card.`
+      ? `This card is Pokefacts ${index}, numbers ${span}. Turn the wheel, or press the arrows, until you see a picture. Then press play. You will hear the cry, then the name, then a short description. The star is this track. Number ${first} is ${firstName}. Each playlist links to its own card.`
       : `Guess Who. Numbers ${span}. Turn the wheel, or press the arrows, until you see a number. Then press play. Three clues. Call the name before the count of three ends. The answer plays next, and the picture changes to that Pokémon. Start at number ${first}. Each playlist links to its own card.`;
   return picture("start", "Start here", "Go", "a star", "★", I.star, [
     talk("how", kind === "meet" ? "How to play" : "How to play Guess Who", text, I.star, "Go"),
@@ -274,11 +284,11 @@ function buildGroup(sheets: MonSheet[], kind: KidCardKind, size: number): KidCar
       recommended: kind === "meet" && index === 0,
       blurb:
         kind === "meet"
-          ? "The name, then the Pokédex line, then the weight and the height."
+          ? "The cry, then the name, then a short description."
           : "Three clues. Call the name before the count ends.",
       childDoes:
         kind === "meet"
-          ? "Turn to a picture and press play. You hear the name, then the Pokédex line, then how much it weighs and how tall it is."
+          ? "Turn to a picture and press play. You hear the cry, then the name, then a short description."
           : "Pick a number and press play. Three clues, then a count of three. The answer plays next and the picture changes.",
       chapters,
     };
@@ -355,8 +365,8 @@ export function factPoolFromCards(cards: KidCard[]): KidChapter[] {
     .flatMap((card) => card.chapters.filter((chapter) => chapter.dexId));
 }
 
-const POKEDEX_HOWTO =
-  "One hundred Pokémon, drawn at random. Turn the wheel, or press the arrows, until you see a picture. Then press play. ";
+export const POKEDEX_HOWTO =
+  "One hundred Pokémon, drawn at random. Turn the wheel, or press the arrows, until you see a picture. Then press play. You hear the cry, then the name, then a short description. ";
 
 /**
  * One playlist of 100 Pokémon. The how-to sits on the first track so the
@@ -396,7 +406,7 @@ export function randomPokedexCard(
     recommended: true,
     blurb: "One hundred Pokémon drawn at random. Lily reads each one.",
     childDoes:
-      "Turn to a picture and press play. You hear the name, then the Pokédex line, then how much it weighs and how tall it is.",
+      "Turn to a picture and press play. You hear the cry, then the name, then a short description.",
     chapters,
   };
 }
@@ -431,7 +441,7 @@ export function pokedexUpload(card: KidCard, mediaById: Record<number, string>, 
   const content = buildKidCard(applyUploadedPixels(card, mediaById), cardId);
   if (card.id === RANDOM_POKEDEX_ID) {
     content.metadata.description =
-      "Pokefacts random. One hundred Pokemon drawn at random. Turn the wheel until you see a picture, then press play. You hear its cry, then Lily reads the name, the dex line, the weight, and the height. Written for ages 8 to 12. Link this playlist to its own card.";
+      "Pokefacts random. One hundred Pokemon drawn at random. Turn the wheel until you see a picture, then press play. You hear its cry, then Lily reads the name and a short description. Written for ages 8 to 12. Link this playlist to its own card.";
   }
   return { voiceId: LILY_VOICE_ID, content };
 }
@@ -462,7 +472,7 @@ export function factsPlaylistUpload(card: KidCard, mediaById: Record<number, str
   const content = buildKidCard(applyUploadedPixels(withLily(card), mediaById), usable);
   content.metadata.title = title;
   content.title = title;
-  content.metadata.description = `${title}. You hear the cry, then Lily reads the name, the dex line, the weight, and the height. Written for ages 8 to 12. Link this playlist to its own card.`;
+  content.metadata.description = `${title}. You hear the cry, then Lily reads the name and a short description. Written for ages 8 to 12. Link this playlist to its own card.`;
   return { voiceId: LILY_VOICE_ID, content };
 }
 
@@ -569,6 +579,107 @@ export function chaptersForCries(card: KidCard): Array<{ key: string; dexId: num
     if (!chapter.tracks.some((track) => track.lead === "cry")) return [];
     return [{ key: chapter.key, dexId: chapter.dexId }];
   });
+}
+
+/**
+ * Replace a Facts track with the species Biology speech.
+ * Guess Who is left as it is. The random how-to stays on the first track.
+ */
+export function applySpeciesSpeech(card: KidCard, speechByDexId: Record<number, string>): KidCard {
+  if (card.kind !== "meet") return card;
+  return {
+    ...card,
+    chapters: card.chapters.map((chapter) => {
+      if (!chapter.dexId) return chapter;
+      const speech = speechByDexId[chapter.dexId]?.replace(/\s+/g, " ").trim();
+      if (!speech) return chapter;
+      return {
+        ...chapter,
+        tracks: chapter.tracks.map((track) => {
+          const prefix = track.text.startsWith(POKEDEX_HOWTO) ? POKEDEX_HOWTO : "";
+          const text = `${prefix}${speech}`.replace(/\s+/g, " ").trim();
+          return { ...track, text, spoken: pronounce(text), source: undefined };
+        }),
+      };
+    }),
+  };
+}
+
+export type FormPlaylistEntry = {
+  formId: number;
+  speciesId: number;
+  speciesName: string;
+  formName: string;
+  blocks?: BiologyBlock[];
+  url?: string;
+};
+
+/** Every species first, then extra forms, stopping at the 100-track card. */
+export function fitFormTracks<T extends { speciesId: number }>(forms: readonly T[], limit = YOTO_TRACK_LIMIT): T[] {
+  if (forms.length <= limit) return forms.slice();
+  const seen = new Set<number>();
+  const primary: T[] = [];
+  const extra: T[] = [];
+  for (const form of forms) {
+    if (seen.has(form.speciesId)) extra.push(form);
+    else {
+      seen.add(form.speciesId);
+      primary.push(form);
+    }
+  }
+  return [...primary, ...extra].slice(0, limit);
+}
+
+export const MEGA_PLAYLIST_ID = "mega-evolutions";
+export const GMAX_PLAYLIST_ID = "gigantamax";
+
+/** One cry-first track per form. The icon is the species pixel. */
+export function formPlaylist(kind: "mega" | "gmax", forms: readonly FormPlaylistEntry[]): KidCard {
+  const title = kind === "mega" ? "Mega Evolutions" : "Gigantamax";
+  const used = new Set<string>();
+  const chapters = fitFormTracks(forms).map((form) => {
+    const text = spokenWiki(form.formName, form.blocks ?? []);
+    const icon = `/pixels/${form.speciesId}.png`;
+    let overlay = String(form.speciesId);
+    while (used.has(overlay)) overlay = `${overlay}b`;
+    used.add(overlay);
+    const chapter = picture(
+      `form-${form.formId}`,
+      form.formName,
+      overlay,
+      "this Pokémon",
+      overlay,
+      icon,
+      [talk("entry", form.formName, text, icon, overlay, undefined, "cry")],
+      { sprite: icon, dexId: form.speciesId },
+    );
+    chapter.formId = form.formId;
+    if (form.url) chapter.articleUrl = form.url;
+    return chapter;
+  });
+  return {
+    id: kind === "mega" ? MEGA_PLAYLIST_ID : GMAX_PLAYLIST_ID,
+    kind,
+    title,
+    rangeLabel: title,
+    libraryTitle: title,
+    blurb: "The cry, then Lily reads the form.",
+    childDoes:
+      "Turn to a picture and press play. You hear the cry, then the name, then the description.",
+    chapters,
+  };
+}
+
+/** Same upload shape as Pokefacts. The Yoto title is the playlist name, with no stale card id. */
+export function formPlaylistUpload(card: KidCard, mediaById: Record<number, string>, cardId?: string) {
+  const title = card.kind === "gmax" ? "Gigantamax" : "Mega Evolutions";
+  const usable = cardId && /^[A-Za-z0-9]{5}$/.test(cardId) ? cardId : undefined;
+  const content = buildKidCard(applyUploadedPixels(withLily(card), mediaById), usable);
+  content.title = title;
+  content.metadata.title = title;
+  content.metadata.description = `${title}. You hear the cry, then Lily reads the form. Written for ages 8 to 12. Link this playlist to its own card.`;
+  if (!usable) delete content.cardId;
+  return { voiceId: LILY_VOICE_ID, content };
 }
 
 /** Clue and answer playback. Both start with the cry. The clue script omits the name. */

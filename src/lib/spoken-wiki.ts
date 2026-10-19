@@ -1,0 +1,76 @@
+import type { BiologyBlock } from "@/lib/catalogue-types";
+
+/** Spoken wiki prose stays near a minute. The name is added after this cap. */
+export const SPOKEN_WIKI_LIMIT = 1200;
+
+const CREDIT = /bulbapedia|creative commons|\bcc\s*by-nc-sa\b|licensed under/i;
+
+/**
+ * Lead prose only. A heading after the first paragraph starts a later
+ * subsection (Physiology, Forms, and the rest), so those paragraphs stay out.
+ */
+export function leadParagraphs(blocks: BiologyBlock[]): string[] {
+  const paragraphs: string[] = [];
+  let seenProse = false;
+  for (const block of blocks) {
+    if (block.kind === "heading" || block.kind === "list") {
+      if (seenProse) break;
+      continue;
+    }
+    const text = block.text.replace(/\s+/g, " ").trim();
+    if (!text) continue;
+    paragraphs.push(text);
+    seenProse = true;
+    if (paragraphs.length === 2) break;
+  }
+  return paragraphs;
+}
+
+function sentences(text: string): string[] {
+  return (text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [text])
+    .map((sentence) => sentence.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+
+function withoutCredits(text: string): string {
+  return sentences(text)
+    .filter((sentence) => !CREDIT.test(sentence))
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function clipAt(text: string, limit: number): string {
+  if (text.length <= limit) return text;
+  const slice = text.slice(0, limit);
+  const sentence = slice.match(/^[\s\S]*[.!?](?=\s|$)/);
+  if (sentence && sentence[0].trim().length >= 240) return sentence[0].trim();
+  const word = slice.replace(/\s+\S*$/, "").trim();
+  return (word.length >= 80 ? word : slice.trim()).replace(/\s+/g, " ").trim();
+}
+
+export function capProse(paragraphs: string[], limit = SPOKEN_WIKI_LIMIT): string {
+  let text = "";
+  for (const paragraph of paragraphs.slice(0, 2)) {
+    const clean = withoutCredits(paragraph);
+    if (!clean) continue;
+    const next = text ? `${text} ${clean}` : clean;
+    if (next.length <= limit) {
+      text = next;
+      continue;
+    }
+    const room = limit - (text ? text.length + 1 : 0);
+    if (room >= 80) text = text ? `${text} ${clipAt(clean, room)}` : clipAt(clean, limit);
+    break;
+  }
+  return withoutCredits(text);
+}
+
+/** Name, then the first two lead paragraphs. License lines are left on the page. */
+export function spokenWiki(name: string, blocks: BiologyBlock[]): string {
+  const title = name.replace(/\s+/g, " ").trim();
+  const prose = capProse(leadParagraphs(blocks));
+  if (!title) return prose;
+  if (!prose) return `${title}.`;
+  return `${title}. ${prose}`.replace(/\s+/g, " ").trim();
+}

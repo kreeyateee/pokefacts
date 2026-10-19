@@ -7,14 +7,18 @@ import { Catalogue } from "@/components/catalogue";
 import { ConnectDialog } from "@/components/connect-dialog";
 import { Button } from "@/components/ui/button";
 import {
+  applySpeciesSpeech,
   bulkProgressLabel,
   factPoolFromCards,
   factsBulkPlaylists,
   factsPlaylistUpload,
+  formPlaylist,
+  formPlaylistUpload,
   guessPoolFromCards,
   guessUpload,
   mulberry32,
   pokedexUpload,
+  POKEDEX_HOWTO,
   RANDOM_GUESS_ID,
   RANDOM_POKEDEX_ID,
   randomGuessCard,
@@ -23,6 +27,7 @@ import {
   type KidCard,
   type KidCardKind,
 } from "@/lib/kid-cards";
+import { pronounce } from "@/lib/pronounce";
 import { speakTexts, stopSpeaking } from "@/lib/speak";
 import {
   asSendFailure,
@@ -151,7 +156,12 @@ async function uploadPixels(
   card: KidCard,
   onProgress?: (done: number, total: number) => void,
 ): Promise<Record<number, string>> {
-  const species = card.chapters.filter((chapter) => chapter.dexId);
+  const seen = new Set<number>();
+  const species = card.chapters.filter((chapter) => {
+    if (!chapter.dexId || seen.has(chapter.dexId)) return false;
+    seen.add(chapter.dexId);
+    return true;
+  });
   const media: Record<number, string> = {};
   for (let index = 0; index < species.length; index += 1) {
     const id = species[index]?.dexId;
@@ -160,6 +170,97 @@ async function uploadPixels(
     media[id] = await uploadIcon(id);
   }
   return media;
+}
+
+async function speciesSpeech(id: number, name: string): Promise<string> {
+  try {
+    const response = await fetch(`/api/catalogue/${id}/biology`);
+    const payload = (await response.json()) as { speech?: string };
+    const speech = payload.speech?.replace(/\s+/g, " ").trim();
+    if (speech) return speech;
+  } catch {
+    // The name is still safe to say. Weight and height stay off the track.
+  }
+  return `${name}.`;
+}
+
+async function speechesFor(
+  card: KidCard,
+  onProgress?: (done: number, total: number) => void,
+): Promise<Record<number, string>> {
+  const ids: number[] = [];
+  const names = new Map<number, string>();
+  for (const chapter of card.chapters) {
+    if (!chapter.dexId || names.has(chapter.dexId)) continue;
+    names.set(chapter.dexId, chapter.title);
+    ids.push(chapter.dexId);
+  }
+  const map: Record<number, string> = {};
+  for (let index = 0; index < ids.length; index += 1) {
+    const id = ids[index];
+    if (!id) continue;
+    onProgress?.(index + 1, ids.length);
+    map[id] = await speciesSpeech(id, names.get(id) ?? "This Pokémon");
+  }
+  return map;
+}
+
+type FormReading = {
+  speech: string;
+  url: string;
+  status: "ready" | "missing" | "unavailable";
+};
+
+async function formReading(formId: number): Promise<FormReading> {
+  try {
+    const response = await fetch(`/api/forms/${formId}`);
+    const payload = (await response.json()) as {
+      speech?: string;
+      article?: { url?: string; status?: string };
+    };
+    const status = payload.article?.status;
+    const safe = status === "ready" || status === "missing" || status === "unavailable" ? status : "unavailable";
+    return {
+      speech: payload.speech?.replace(/\s+/g, " ").trim() ?? "",
+      url: payload.article?.url ?? "",
+      status: safe,
+    };
+  } catch {
+    return { speech: "", url: "", status: "unavailable" };
+  }
+}
+
+function withFormReading(card: KidCard, formId: number, reading: FormReading): KidCard {
+  return {
+    ...card,
+    chapters: card.chapters.map((chapter) => {
+      if (chapter.formId !== formId) return chapter;
+      const text = reading.speech || chapter.tracks[0]?.text || chapter.title;
+      return {
+        ...chapter,
+        articleUrl: reading.url || chapter.articleUrl,
+        articleStatus: reading.status,
+        tracks: chapter.tracks.map((track) => ({
+          ...track,
+          text,
+          spoken: pronounce(text),
+        })),
+      };
+    }),
+  };
+}
+
+function WikiCredit({ url }: { url: string }) {
+  if (!url) return null;
+  return (
+    <p className="mt-4 text-xs leading-5 text-[#8d8272]">
+      From{" "}
+      <a className="underline" href={url} rel="noreferrer">
+        Bulbapedia
+      </a>
+      . This description is used under CC BY-NC-SA 2.5.
+    </p>
+  );
 }
 
 async function uploadGuessIcons(card: KidCard): Promise<{
@@ -196,13 +297,27 @@ function firstCard(cards: KidCard[], kind: KidCardKind): KidCard | undefined {
   return cards.find((card) => card.kind === kind);
 }
 
-export function Studio({ cards }: { cards: KidCard[] }) {
+export function Studio({
+  cards,
+  mega = formPlaylist("mega", []),
+  gmax = formPlaylist("gmax", []),
+}: {
+  cards: KidCard[];
+  mega?: KidCard;
+  gmax?: KidCard;
+}) {
   const factsCards = cards.filter((card) => card.kind === "meet");
   const factPool = factPoolFromCards(cards);
   const guessPool = guessPoolFromCards(cards);
   const factsPlaylists = factsBulkPlaylists(cards);
   const [randomCard, setRandomCard] = useState(() => randomPokedexCard(factPool, mulberry32(20261018)));
   const [guessCard, setGuessCard] = useState(() => randomGuessCard(guessPool, mulberry32(20261018)));
+  const [megaCard, setMegaCard] = useState(mega);
+  const [gmaxCard, setGmaxCard] = useState(gmax);
+  const megaRef = useRef(mega);
+  const gmaxRef = useRef(gmax);
+  const formLoad = useRef<Partial<Record<"mega" | "gmax", Promise<void>>>>({});
+  const [factSpeech, setFactSpeech] = useState<{ id: number; speech: string; url: string } | null>(null);
   const [view, setView] = useState<"cards" | "catalogue">("cards");
   const [kind, setKind] = useState<KidCardKind>("meet");
   const [factsId, setFactsId] = useState(RANDOM_POKEDEX_ID);
@@ -223,17 +338,22 @@ export function Studio({ cards }: { cards: KidCard[] }) {
 
   const cardId = kind === "meet" ? factsId : guessId;
   const card =
-    cardId === RANDOM_POKEDEX_ID
-      ? randomCard
-      : cardId === RANDOM_GUESS_ID
-        ? guessCard
-        : (cards.find((item) => item.id === cardId) ?? cards.find((item) => item.kind === kind));
+    kind === "mega"
+      ? megaCard
+      : kind === "gmax"
+        ? gmaxCard
+        : cardId === RANDOM_POKEDEX_ID
+          ? randomCard
+          : cardId === RANDOM_GUESS_ID
+            ? guessCard
+            : (cards.find((item) => item.id === cardId) ?? cards.find((item) => item.kind === kind));
   const randomFacts = card?.id === RANDOM_POKEDEX_ID;
   const randomGuess = card?.id === RANDOM_GUESS_ID;
   const chapter =
     card?.chapters.find((item) => item.key === chapterKey) ??
     (card ? playableChapters(card)[0] : undefined);
-  const rangeCards = kind === "meet" ? [randomCard, ...factsCards] : [guessCard];
+  const rangeCards =
+    kind === "mega" ? [megaCard] : kind === "gmax" ? [gmaxCard] : kind === "meet" ? [randomCard, ...factsCards] : [guessCard];
   const listed = (card ? playableChapters(card) : []).filter((item) => {
     const needle = query.trim().toLowerCase();
     if (!needle) return true;
@@ -260,6 +380,28 @@ export function Studio({ cards }: { cards: KidCard[] }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (kind !== "meet" || !chapter?.dexId) return;
+    const id = chapter.dexId;
+    const name = chapter.title;
+    const controller = new AbortController();
+    void fetch(`/api/catalogue/${id}/biology`, { signal: controller.signal })
+      .then(async (response) => {
+        const payload = (await response.json()) as { speech?: string; biology?: { url?: string } };
+        if (controller.signal.aborted) return;
+        setFactSpeech({
+          id,
+          speech: payload.speech?.replace(/\s+/g, " ").trim() || `${name}.`,
+          url: payload.biology?.url ?? "",
+        });
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setFactSpeech({ id, speech: `${name}.`, url: "" });
+      });
+    return () => controller.abort();
+  }, [kind, chapter?.dexId, chapter?.title]);
+
   function stopClip() {
     clipRef.current?.pause();
     clipRef.current = null;
@@ -273,9 +415,42 @@ export function Studio({ cards }: { cards: KidCard[] }) {
     setQuery("");
     setKind(next.kind);
     if (next.kind === "meet") setFactsId(next.id);
-    else setGuessId(next.id);
+    else if (next.kind === "guess") setGuessId(next.id);
     setChapterKey(playableChapters(next)[0]?.key ?? "start");
     setJob(null);
+  }
+
+  function rememberForm(nextKind: "mega" | "gmax", next: KidCard) {
+    if (nextKind === "mega") {
+      megaRef.current = next;
+      setMegaCard(next);
+    } else {
+      gmaxRef.current = next;
+      setGmaxCard(next);
+    }
+  }
+
+  function ensureFormProse(
+    nextKind: "mega" | "gmax",
+    onProgress?: (detail: string) => void,
+  ): Promise<void> {
+    const existing = formLoad.current[nextKind];
+    if (existing) return existing;
+    const job = (async () => {
+      const source = nextKind === "mega" ? megaRef.current : gmaxRef.current;
+      let current = source;
+      const pending = current.chapters.filter((chapter) => chapter.formId && !chapter.articleStatus);
+      for (let index = 0; index < pending.length; index += 1) {
+        const chapter = pending[index];
+        if (!chapter?.formId) continue;
+        onProgress?.(`${current.libraryTitle}, description ${index + 1} of ${pending.length}`);
+        const reading = await formReading(chapter.formId);
+        current = withFormReading(current, chapter.formId, reading);
+        rememberForm(nextKind, current);
+      }
+    })();
+    formLoad.current[nextKind] = job;
+    return job;
   }
 
   function showKind(nextKind: KidCardKind) {
@@ -285,6 +460,13 @@ export function Studio({ cards }: { cards: KidCard[] }) {
     setRevealed(false);
     setView("cards");
     setKind(nextKind);
+    if (nextKind === "mega" || nextKind === "gmax") {
+      const next = nextKind === "mega" ? megaRef.current : gmaxRef.current;
+      setChapterKey(playableChapters(next)[0]?.key ?? "start");
+      setJob(null);
+      void ensureFormProse(nextKind);
+      return;
+    }
     const id = nextKind === "meet" ? factsId : guessId;
     const next =
       id === RANDOM_POKEDEX_ID
@@ -640,14 +822,33 @@ export function Studio({ cards }: { cards: KidCard[] }) {
     setJob({ status: "sending", detail: `Sending ${card.rangeLabel} to Yoto…` });
     try {
       const savedId = savedPlaylistId(card.id, replace);
+      const formKind = card.kind === "mega" || card.kind === "gmax";
+      const spokenCard = formKind
+        ? card
+        : card.kind === "guess"
+          ? card
+          : applySpeciesSpeech(
+              card,
+              await speechesFor(card, (done, total) => {
+                setJob({ status: "sending", detail: `${card.libraryTitle}, description ${done} of ${total}` });
+              }),
+            );
+      if (card.kind === "mega" || card.kind === "gmax") {
+        await ensureFormProse(card.kind, (detail) => {
+          setJob({ status: "sending", detail });
+        });
+      }
+      const readyForm = card.kind === "mega" ? megaRef.current : card.kind === "gmax" ? gmaxRef.current : spokenCard;
       const base = randomGuess
         ? await (async () => {
             const icons = await uploadGuessIcons(card);
             return guessUpload(card, icons.real, icons.shadow, savedId);
           })()
-        : randomFacts
-          ? pokedexUpload(card, await uploadPixels(card), savedId)
-          : factsPlaylistUpload(card, await uploadPixels(card), savedId);
+        : formKind
+          ? formPlaylistUpload(readyForm, await uploadPixels(readyForm), savedId)
+          : randomFacts
+            ? pokedexUpload(spokenCard, await uploadPixels(spokenCard), savedId)
+            : factsPlaylistUpload(spokenCard, await uploadPixels(spokenCard), savedId);
       const upload: PlaylistUpload = { ...base, create: savedId ? undefined : true };
       if (upload.create) delete upload.content.cardId;
       await sendPrepared(card, upload, card.libraryTitle);
@@ -680,13 +881,22 @@ export function Studio({ cards }: { cards: KidCard[] }) {
         const headline = bulkProgressLabel(index + 1, playlists.length);
         setJob({ status: "sending", detail: headline });
         try {
-          const pixels = await uploadPixels(playlist, (done, total) => {
+          const spoken = applySpeciesSpeech(
+            playlist,
+            await speechesFor(playlist, (done, total) => {
+              setJob({
+                status: "sending",
+                detail: `${playlist.libraryTitle}, description ${done} of ${total}`,
+              });
+            }),
+          );
+          const pixels = await uploadPixels(spoken, (done, total) => {
             setJob({
               status: "sending",
               detail: `${playlist.libraryTitle}, picture ${done} of ${total}`,
             });
           });
-          const upload = factsBulkUpload(playlist, pixels);
+          const upload = factsBulkUpload(spoken, pixels);
           delete upload.content.cardId;
           await sendPrepared(playlist, upload, headline);
           createdTitles.push(playlist.libraryTitle);
@@ -727,6 +937,9 @@ export function Studio({ cards }: { cards: KidCard[] }) {
 
   const previousId = card ? linked[card.id] : undefined;
   const guessing = card?.kind === "guess";
+  const formMode = card?.kind === "mega" || card?.kind === "gmax";
+  const factReading =
+    kind === "meet" && chapter?.dexId && factSpeech?.id === chapter.dexId ? factSpeech : null;
   const visibleTracks =
     guessing && !revealed ? chapter?.tracks.slice(0, 1) : chapter?.tracks;
   const source = visibleTracks?.find((track) => track.source)?.source;
@@ -752,16 +965,20 @@ export function Studio({ cards }: { cards: KidCard[] }) {
                 ? "Reference catalogue"
                 : guessing
                   ? "Guess Who"
-                  : "Pokémon facts"}
+                  : formMode
+                    ? card?.libraryTitle
+                    : "Pokémon facts"}
             </h1>
             <p className="mt-1 max-w-xl text-sm leading-6 text-[#5c5348]">
               {view === "catalogue"
                 ? "Every species from Kanto to Paldea. The Pokédex line is from the games, with the type, size, abilities, evolution, and stats."
                 : guessing
                   ? "Fifty riddles, drawn at random. You hear the cry, then the clues. The picture stays a shadow until the answer."
-                  : randomFacts
-                    ? "One hundred Pokémon, drawn at random. Lily reads each track."
-                    : "The name, then the Pokédex line, then the weight and the height."}
+                  : formMode
+                    ? "The cry, then Lily reads that form."
+                    : randomFacts
+                      ? "One hundred Pokémon, drawn at random. You hear the cry, then Lily reads the name and a short description."
+                      : "The cry, then the name, then a short description."}
             </p>
           </div>
           {session ? (
@@ -782,7 +999,7 @@ export function Studio({ cards }: { cards: KidCard[] }) {
             </button>
           )}
         </div>
-        <div className="mt-4 flex gap-2" role="tablist" aria-label="Play mode">
+        <div className="mt-4 flex flex-wrap gap-2" role="tablist" aria-label="Play mode">
           <button
             type="button"
             role="tab"
@@ -825,6 +1042,32 @@ export function Studio({ cards }: { cards: KidCard[] }) {
           >
             Guess Who
           </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "cards" && kind === "mega"}
+            onClick={() => showKind("mega")}
+            className={`h-10 rounded-full px-4 text-sm font-medium ${
+              view === "cards" && kind === "mega"
+                ? "bg-[#1c1916] text-[#f4efe6]"
+                : "bg-white text-[#1c1916]"
+            }`}
+          >
+            Mega Evolutions
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "cards" && kind === "gmax"}
+            onClick={() => showKind("gmax")}
+            className={`h-10 rounded-full px-4 text-sm font-medium ${
+              view === "cards" && kind === "gmax"
+                ? "bg-[#1c1916] text-[#f4efe6]"
+                : "bg-white text-[#1c1916]"
+            }`}
+          >
+            Gigantamax
+          </button>
         </div>
       </header>
 
@@ -848,6 +1091,12 @@ export function Studio({ cards }: { cards: KidCard[] }) {
                       This smaller playlist is the{" "}
                       <span className="font-medium text-[#1c1916]">100 Pokémon on this page</span>.
                       Shuffle draws a new hundred. Send uses this list, not a new draw.
+                    </>
+                  ) : formMode ? (
+                    <>
+                      This playlist is{" "}
+                      <span className="font-medium text-[#1c1916]">{card.libraryTitle}</span>. One
+                      track for each form. The picture is that species&apos; 16×16 pixel.
                     </>
                   ) : (
                     <>
@@ -935,16 +1184,14 @@ export function Studio({ cards }: { cards: KidCard[] }) {
               <select
                 aria-label={guessing ? "Choose a riddle" : "Choose a Pokémon"}
                 className="h-11 rounded-lg border border-[#1c1916]/15 bg-white px-2 md:hidden"
-                value={String(chapter.dexId ?? chapter.key)}
+                value={chapter.key}
                 onChange={(event) => {
-                  const next = playableChapters(card).find(
-                    (item) => String(item.dexId ?? item.key) === event.target.value,
-                  );
+                  const next = playableChapters(card).find((item) => item.key === event.target.value);
                   if (next) chooseChapter(next.key);
                 }}
               >
                 {playableChapters(card).map((item) => (
-                  <option key={item.key} value={String(item.dexId ?? item.key)}>
+                  <option key={item.key} value={item.key}>
                     {guessing ? `Riddle ${item.overlay}` : `${item.overlay}. ${item.title}`}
                   </option>
                 ))}
@@ -999,22 +1246,44 @@ export function Studio({ cards }: { cards: KidCard[] }) {
                   </h2>
                 </div>
                 <div className="mt-6 max-w-prose space-y-3 text-base leading-7 text-[#2a241c]">
-                  {visibleTracks?.map((track) =>
-                    entryLines(track.text, chapter.title).map((line) =>
-                      isMeasure(line) ? (
-                        <p
-                          key={`${track.key}-${line}`}
-                          className="rounded-xl bg-[#f4efe6] px-4 py-3 font-medium"
-                        >
-                          {line}
-                        </p>
-                      ) : (
-                        <p key={`${track.key}-${line}`}>{line}</p>
+                  {kind === "meet" && chapter.dexId ? (
+                    factReading ? (
+                      <p>{factReading.speech}</p>
+                    ) : (
+                      <p className="text-sm text-[#5c5348]">Opening the description…</p>
+                    )
+                  ) : formMode ? (
+                    chapter.articleStatus === "ready" ? (
+                      <p>{chapter.tracks[0]?.text}</p>
+                    ) : chapter.articleStatus ? (
+                      <p className="text-sm text-[#5c5348]">
+                        No separate description was found. Lily says the name.
+                      </p>
+                    ) : (
+                      <p className="text-sm text-[#5c5348]">Opening the form description…</p>
+                    )
+                  ) : (
+                    visibleTracks?.map((track) =>
+                      entryLines(track.text, chapter.title).map((line) =>
+                        isMeasure(line) ? (
+                          <p
+                            key={`${track.key}-${line}`}
+                            className="rounded-xl bg-[#f4efe6] px-4 py-3 font-medium"
+                          >
+                            {line}
+                          </p>
+                        ) : (
+                          <p key={`${track.key}-${line}`}>{line}</p>
+                        ),
                       ),
-                    ),
+                    )
                   )}
                 </div>
-                {source ? (
+                {kind === "meet" && factReading?.url ? <WikiCredit url={factReading.url} /> : null}
+                {formMode && chapter.articleStatus === "ready" ? (
+                  <WikiCredit url={chapter.articleUrl ?? ""} />
+                ) : null}
+                {source && guessing ? (
                   <p className="mt-4 text-xs text-[#8d8272]">Pokédex, {source}</p>
                 ) : null}
                 {chapter.dexId ? (
@@ -1053,16 +1322,35 @@ export function Studio({ cards }: { cards: KidCard[] }) {
                       type="button"
                       className="h-11 px-5"
                       onClick={() => {
-                        const texts = chapter.tracks.map((track) => trackSpeech(track));
-                        if (speaking) {
-                          stopSpeaking();
-                          stopClip();
-                          setSpeaking(false);
-                          return;
-                        }
-                        if (chapter.clip) hearFact(chapter.clip, texts, chapter.dexId);
-                        else if (chapter.dexId) hearCryThenSpeech(chapter.dexId, texts);
-                        else hear(texts);
+                        void (async () => {
+                          if (speaking) {
+                            stopSpeaking();
+                            stopClip();
+                            setSpeaking(false);
+                            return;
+                          }
+                          let line = "";
+                          if (formMode && chapter.formId) {
+                            if (!chapter.articleStatus) {
+                              await ensureFormProse(card.kind === "gmax" ? "gmax" : "mega");
+                            }
+                            const fresh = (card.kind === "gmax" ? gmaxRef : megaRef).current.chapters.find(
+                              (item) => item.key === chapter.key,
+                            );
+                            line = fresh?.tracks[0] ? trackSpeech(fresh.tracks[0]) : "";
+                          } else if (chapter.dexId && kind === "meet") {
+                            const prefix = chapter.tracks[0]?.text.startsWith(POKEDEX_HOWTO) ? POKEDEX_HOWTO : "";
+                            const speech =
+                              factReading?.speech ?? (await speciesSpeech(chapter.dexId, chapter.title));
+                            line = pronounce(`${prefix}${speech}`.replace(/\s+/g, " ").trim());
+                          } else {
+                            line = chapter.tracks.map((track) => trackSpeech(track)).join(" ");
+                          }
+                          if (!line) return;
+                          if (chapter.clip) hearFact(chapter.clip, [line], chapter.dexId);
+                          else if (chapter.dexId) hearCryThenSpeech(chapter.dexId, [line]);
+                          else hear([line]);
+                        })();
                       }}
                     >
                       {speaking ? "Stop" : "Hear the entry"}
@@ -1079,9 +1367,11 @@ export function Studio({ cards }: { cards: KidCard[] }) {
                   {card.childDoes}{" "}
                   {randomGuess
                     ? "Send uploads a shadow of each 16×16 pixel for the clue, then the real pixel for the answer. Yoto records Lily, then Champdex puts the cry in front of the clue and again in front of the answer."
-                    : randomFacts
-                      ? "Send records Lily, then puts that Pokémon’s cry in front of her voice and uploads the merged MP3. The how-to is in the playlist description and at the start of the first track."
-                      : `This send is only ${card.rangeLabel}. Each fact is the cry, then Lily. The button above sends every Pokefacts playlist, one after another.`}
+                    : formMode
+                      ? "Send records Lily, then puts that Pokémon’s cry in front of her voice. The picture is the species 16×16 pixel. The credit stays on this page."
+                      : randomFacts
+                        ? "Send records Lily, then puts that Pokémon’s cry in front of her voice and uploads the merged MP3. The how-to is in the playlist description and at the start of the first track."
+                        : `This send is only ${card.rangeLabel}. Each fact is the cry, then Lily. The button above sends every Pokefacts playlist, one after another.`}
                 </p>
                 <p className="mt-3 text-sm leading-6">
                   Voice: <span className="font-medium">Lily</span>
@@ -1136,9 +1426,11 @@ export function Studio({ cards }: { cards: KidCard[] }) {
                   <p className="mt-3 text-xs leading-5 text-[#5c5348]">
                     {randomGuess
                       ? "These 50 riddles go on one card. Each track is the cry, then Lily. The clue never says the name. The answer does. The clue icon is the shadow. The answer icon is the real 16×16 pixel."
-                      : randomFacts
-                        ? "These 100 Pokémon go on one card, in Lily’s voice, each with its 16×16 picture. Send all Pokefacts playlists when you want every species."
-                        : `${card.rangeLabel} links to its own card. Send all Pokefacts playlists to cover every species, one card at a time.`}
+                      : formMode
+                        ? `${card.libraryTitle} goes on one card. Each track is the cry, then Lily, with the species 16×16 pixel.`
+                        : randomFacts
+                          ? "These 100 Pokémon go on one card, in Lily’s voice, each with its 16×16 picture. Send all Pokefacts playlists when you want every species."
+                          : `${card.rangeLabel} links to its own card. Send all Pokefacts playlists to cover every species, one card at a time.`}
                   </p>
                 )}
               </details>

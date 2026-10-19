@@ -15,6 +15,9 @@ import {
   loadBiology,
   wikiPageTitle,
 } from "./bulbapedia";
+import { formWikiTitle, loadFormProse, pickFormSection } from "./form-prose";
+import { leadParagraphs, spokenWiki } from "./spoken-wiki";
+import type { BiologyBlock } from "./catalogue-types";
 
 const HTML = `
 <div class="mw-parser-output">
@@ -275,5 +278,157 @@ describe("Bulbapedia biology", () => {
       params: Promise.resolve({ id: "999999" }),
     });
     assert.equal(response.status, 404);
+  });
+
+  it("speaks only the first two biology paragraphs and leaves Bulbapedia off the track", () => {
+    const blocks: BiologyBlock[] = [
+      { kind: "paragraph", text: "One. The first biology paragraph is about the bulb." },
+      {
+        kind: "paragraph",
+        text: "Two. The second biology paragraph is about the sun. This line is from Bulbapedia and must not be read.",
+      },
+      { kind: "paragraph", text: "Three. The third biology paragraph is about the soil." },
+      { kind: "heading", level: 3, text: "Physiology" },
+      { kind: "paragraph", text: "Four. Later physiology must stay unspoken." },
+    ];
+    const spoken = spokenWiki("Bulbasaur", blocks);
+    assert.match(spoken, /^Bulbasaur\./);
+    assert.match(spoken, /first biology paragraph is about the bulb/);
+    assert.match(spoken, /second biology paragraph is about the sun/);
+    assert.doesNotMatch(spoken, /third biology paragraph|Later physiology|Bulbapedia|Creative Commons/i);
+    assert.equal(leadParagraphs(blocks).length, 2);
+
+    const venusaur = spokenWiki("Venusaur", biologyBlocks(`
+      <div class="mw-parser-output">
+        <div id="toc" class="toc"><h2 id="mw-toc-heading">Contents</h2></div>
+        <h2><span class="mw-headline" id="Biology">Biology</span></h2>
+        <figure><figcaption>Venusaur with its leaves closed</figcaption></figure>
+        <p>Venusaur is a squat, quadrupedal amphibian Pokémon with bumpy, blue-green skin. It has small, circular red eyes and a short, blunt snout.</p>
+        <h3><span class="mw-headline" id="Forms">Forms</span></h3>
+        <p>Venusaur has two forms: Mega Venusaur and Gigantamax Venusaur.</p>
+      </div>
+    `));
+    assert.match(venusaur, /squat, quadrupedal amphibian Pokémon/);
+    assert.match(venusaur, /short, blunt snout/);
+    assert.doesNotMatch(venusaur, /leaves closed|Mega Venusaur and Gigantamax|Bulbapedia|Creative Commons/i);
+  });
+
+  it("picks the form section instead of species Biology", () => {
+    const sections = [
+      { index: "1", line: "Biology", anchor: "Biology" },
+      { index: "3", line: "Mega Charizard X", anchor: "Mega_Charizard_X" },
+      { index: "27", line: "Mega Charizard X", anchor: "Mega_Charizard_X_2" },
+      { index: "5", line: "Gigantamax Charizard", anchor: "Gigantamax_Charizard" },
+      { index: "39", line: "Mega Evolution", anchor: "Mega_Evolution" },
+    ];
+    assert.equal(pickFormSection(sections, "Mega Charizard X")?.index, "3");
+    assert.equal(pickFormSection(sections, "Gigantamax Charizard")?.index, "5");
+    assert.equal(pickFormSection(sections, "Gigantamax Amped Toxtricity")?.line, undefined);
+    assert.equal(
+      pickFormSection(
+        [{ index: "8", line: "Gigantamax Toxtricity", anchor: "Gigantamax_Toxtricity" }],
+        "Gigantamax Amped Toxtricity",
+      )?.index,
+      "8",
+    );
+    assert.equal(formWikiTitle("Mega Charizard X"), "Mega_Charizard_X");
+  });
+
+  it("reads Mega Venusaur from its section and Gigantamax Charizard from its section", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-form-"));
+    const cacheFile = path.join(dir, "forms.json");
+    const calls: string[] = [];
+    const megaHtml = `
+      <h4><span class="mw-headline" id="Mega_Venusaur">Mega Venusaur</span><span class="mw-editsection"><a href="/edit">edit</a></span></h4>
+      <figure class="mw-halign-left"><figcaption>Mega Venusaur with its flower open</figcaption></figure>
+      <p>Mega Venusaur's flower grows more prominent, and two smaller pink flowers bloom, one on its forehead and one on its rear.</p>
+      <p>Mega Venusaur's legs and back have become sturdier to support the extra weight of the flower.<sup class="reference"><a href="#cite_note-1"><span class="cite-bracket">[</span>1<span class="cite-bracket">]</span></a></sup></p>
+      <p>A third paragraph about the brambles should stay unspoken.</p>
+    `;
+    const speciesHtml = `<p>Venusaur is a squat, quadrupedal amphibian Pokémon with bumpy, blue-green skin.</p>`;
+    const gmaxHtml = `
+      <h4><span id="Gigantamax_Charizard">Gigantamax Charizard</span></h4>
+      <figure><figcaption>Gigantamax Charizard's wingless body</figcaption></figure>
+      <p>Gigantamax Charizard's belly is now white instead of its normal cream coloration.</p>
+      <p>Its wings burn hotter while it is this size.</p>
+      <p>Charizard is a draconic, bipedal Pokémon. This species Biology sentence must stay unspoken.</p>
+    `;
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      calls.push(`${url.searchParams.get("page")}|${url.searchParams.get("prop")}|${url.searchParams.get("section") ?? ""}`);
+      const page = url.searchParams.get("page");
+      const prop = url.searchParams.get("prop");
+      if (page === "Mega_Venusaur" && prop === "sections") {
+        return jsonResponse({
+          parse: {
+            title: "Venusaur (Pokémon)",
+            redirects: [{ from: "Mega Venusaur", to: "Venusaur (Pokémon)" }],
+            sections: [
+              { toclevel: 1, line: "Biology", index: "1", anchor: "Biology" },
+              { toclevel: 3, line: "Mega Venusaur", index: "3", anchor: "Mega_Venusaur" },
+            ],
+          },
+        });
+      }
+      if (page === "Gigantamax_Charizard") {
+        return jsonResponse({ error: { code: "missingtitle", info: "The page you specified doesn't exist." } }, 404);
+      }
+      if (page === "Charizard_(Pokémon)" && prop === "sections") {
+        return jsonResponse({
+          parse: {
+            title: "Charizard (Pokémon)",
+            sections: [
+              { toclevel: 1, line: "Biology", index: "1", anchor: "Biology" },
+              { toclevel: 3, line: "Gigantamax Charizard", index: "5", anchor: "Gigantamax_Charizard" },
+            ],
+          },
+        });
+      }
+      if (prop === "text") {
+        assert.notEqual(url.searchParams.get("section"), "1");
+        if (page === "Venusaur_(Pokémon)") {
+          assert.equal(url.searchParams.get("section"), "3");
+          return jsonResponse({ parse: { text: megaHtml } });
+        }
+        assert.equal(page, "Charizard_(Pokémon)");
+        assert.equal(url.searchParams.get("section"), "5");
+        return jsonResponse({ parse: { text: gmaxHtml } });
+      }
+      return jsonResponse({ parse: { text: speciesHtml } });
+    }) as typeof fetch;
+
+    try {
+      const mega = await loadFormProse(
+        { formId: 10033, speciesId: 3, speciesName: "Venusaur", formName: "Mega Venusaur" },
+        { fetchImpl, cacheFile, sleep: async () => undefined },
+      );
+      const again = await loadFormProse(
+        { formId: 10033, speciesId: 3, speciesName: "Venusaur", formName: "Mega Venusaur" },
+        { fetchImpl, cacheFile, sleep: async () => undefined },
+      );
+      const spoken = spokenWiki("Mega Venusaur", mega.blocks);
+      assert.equal(again.status, mega.status);
+      assert.match(spoken, /flower grows more prominent/);
+      assert.match(spoken, /sturdier to support the extra weight/);
+      assert.doesNotMatch(spoken, /squat, quadrupedal|brambles should stay|flower open|\[1\]|Bulbapedia/i);
+      assert.match(mega.url, /Venusaur_\(Pok%C3%A9mon\)#Mega_Venusaur/);
+
+      const gmax = await loadFormProse(
+        { formId: 10196, speciesId: 6, speciesName: "Charizard", formName: "Gigantamax Charizard" },
+        { fetchImpl, cacheFile, sleep: async () => undefined },
+      );
+      const gmaxSpoken = spokenWiki("Gigantamax Charizard", gmax.blocks);
+      assert.match(gmaxSpoken, /belly is now white/);
+      assert.match(gmaxSpoken, /wings burn hotter/);
+      assert.doesNotMatch(gmaxSpoken, /draconic, bipedal|wingless body|Bulbapedia/i);
+      const after = calls.length;
+      await loadFormProse(
+        { formId: 10033, speciesId: 3, speciesName: "Venusaur", formName: "Mega Venusaur" },
+        { fetchImpl, cacheFile, sleep: async () => undefined },
+      );
+      assert.equal(calls.length, after);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

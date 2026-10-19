@@ -120,6 +120,9 @@ export function Catalogue() {
   const [entryError, setEntryError] = useState("");
   const [biology, setBiology] = useState<BiologyView | null>(null);
   const [biologyFor, setBiologyFor] = useState(0);
+  const [formNotes, setFormNotes] = useState<
+    Array<{ formId: number; name: string; article: BiologyView }>
+  >([]);
   const [showList, setShowList] = useState(true);
 
   useEffect(() => {
@@ -193,6 +196,24 @@ export function Catalogue() {
         if (error instanceof DOMException && error.name === "AbortError") return;
         setBiology({ status: "unavailable", url: "", blocks: [] });
         setBiologyFor(selected);
+      });
+    return () => controller.abort();
+  }, [selected]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setFormNotes([]);
+    void fetch(`/api/catalogue/${selected}/forms`, { signal: controller.signal })
+      .then(async (response) => {
+        const payload = (await response.json()) as {
+          forms?: Array<{ formId: number; name: string; article: BiologyView }>;
+        };
+        if (controller.signal.aborted) return;
+        setFormNotes(payload.forms ?? []);
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setFormNotes([]);
       });
     return () => controller.abort();
   }, [selected]);
@@ -468,6 +489,26 @@ export function Catalogue() {
                       <p className="mt-1 text-[#5c5348]">
                         {form.heightLabel} · {form.weightLabel}
                       </p>
+                      {formNotes
+                        .filter((note) => note.formId === form.id && note.article.status === "ready")
+                        .map((note) => (
+                          <div key={note.formId} className="mt-2 text-[#2a241c]">
+                            {note.article.blocks.map((block, index) =>
+                              block.kind === "paragraph" ? (
+                                <p key={index} className="mt-1 leading-6">
+                                  {block.text}
+                                </p>
+                              ) : null,
+                            )}
+                            <p className="mt-2 text-xs leading-5 text-[#8d8272]">
+                              From{" "}
+                              <a className="underline" href={note.article.url} rel="noreferrer">
+                                Bulbapedia
+                              </a>
+                              . This description is used under CC BY-NC-SA 2.5.
+                            </p>
+                          </div>
+                        ))}
                     </li>
                   ))}
                 </ul>
