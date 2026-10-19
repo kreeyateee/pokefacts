@@ -1,4 +1,5 @@
 import type { BiologyBlock } from "@/lib/catalogue-types";
+import { heightForUnits, weightForUnits, type MeasureUnits } from "@/lib/format";
 import { guessSpoken, type MonSheet } from "@/lib/dex-facts";
 import {
   factsPlaylistUpload,
@@ -105,12 +106,14 @@ export function factsSpeech(species: SelectionSpecies): string {
 }
 
 /** Biology, then height, weight, type, ability, and evolution. Capped so it is not a wiki dump. */
-export function advancedSpeech(species: SelectionSpecies): string {
+export function advancedSpeech(species: SelectionSpecies, units: MeasureUnits = "metric"): string {
   const name = species.name.replace(/\s+/g, " ").trim();
   const biology = spokenWiki(name, species.biology);
+  const weight = weightForUnits(species.weightLabel, units);
+  const height = heightForUnits(species.heightLabel, units);
   const extra = [
-    species.weightLabel ? `It weighs ${species.weightLabel}.` : "",
-    species.heightLabel ? `It is ${species.heightLabel} tall.` : "",
+    weight ? `It weighs ${weight}.` : "",
+    height ? `It is ${height} tall.` : "",
     typeSpeech(species.types),
     abilitySpeech(species),
     evolutionSpeech(species),
@@ -220,13 +223,14 @@ export function selectionPlaylist(
   species: readonly SelectionSpecies[],
   kind: SelectionKind,
   customTitle?: string,
+  units: MeasureUnits = "metric",
 ): SelectionBuild {
   const limit = selectionSpeciesLimit(kind);
   const accepted = species.slice(0, limit);
   const refused = species.slice(limit).map((item) => item.id);
   const title = selectionTitle(kind, customTitle);
   const chapters = accepted.map((item) =>
-    kind === "whos-that" ? riddleChapter(item) : factChapter(item, kind === "advanced" ? advancedSpeech(item) : factsSpeech(item)),
+    kind === "whos-that" ? riddleChapter(item) : factChapter(item, kind === "advanced" ? advancedSpeech(item, units) : factsSpeech(item)),
   );
   const blurb =
     kind === "whos-that"

@@ -107,6 +107,23 @@ export function kilogramsSpeech(hectograms: number): string {
   return `${stripTrailingZero(kilograms.toFixed(1))} kilograms`;
 }
 
+export function poundsSpeech(hectograms: number): string {
+  const kilograms = hectograms / 10;
+  const pounds = Math.max(1, Math.round(kilograms * 2.20462));
+  return `${pounds} ${pounds === 1 ? "pound" : "pounds"}`;
+}
+
+/** Feet and inches from PokéAPI decimetres. A whole foot leaves the inches off. */
+export function feetInchesSpeech(decimetres: number): string {
+  const meters = decimetres / 10;
+  const totalInches = Math.round(meters * 39.3701);
+  const feet = Math.floor(totalInches / 12);
+  const inches = totalInches % 12;
+  const feetLabel = `${feet} ${feet === 1 ? "foot" : "feet"}`;
+  if (inches === 0) return feetLabel;
+  return `${feetLabel} ${inches} ${inches === 1 ? "inch" : "inches"}`;
+}
+
 export function heightSpeech(decimeters: number): string {
   const meters = decimeters / 10;
   const totalInches = Math.round(meters * 39.3701);
@@ -121,10 +138,26 @@ export function heightSpeech(decimeters: number): string {
 }
 
 export function weightSpeech(hectograms: number): string {
-  const kilograms = hectograms / 10;
-  const pounds = Math.max(1, Math.round(kilograms * 2.20462));
-  const metric = `${stripTrailingZero(kilograms.toFixed(1))} kilograms`;
-  return `${metric}, about ${pounds} ${pounds === 1 ? "pound" : "pounds"}`;
+  const metric = kilogramsSpeech(hectograms);
+  return `${metric}, about ${poundsSpeech(hectograms)}`;
+}
+
+export type MeasureUnits = "metric" | "imperial";
+
+/** Catalogue labels are kilograms. Imperial speech and the page use pounds only. */
+export function weightForUnits(label: string, units: MeasureUnits = "metric"): string {
+  if (units !== "imperial") return label;
+  const kilograms = Number(label.match(/[\d.]+/)?.[0]);
+  if (!Number.isFinite(kilograms) || kilograms <= 0) return label;
+  return poundsSpeech(Math.round(kilograms * 10));
+}
+
+/** Catalogue labels are centimetres. Imperial speech and the page use feet and inches. */
+export function heightForUnits(label: string, units: MeasureUnits = "metric"): string {
+  if (units !== "imperial") return label;
+  const centimetres = Number(label.match(/[\d.]+/)?.[0]);
+  if (!Number.isFinite(centimetres) || centimetres <= 0) return label;
+  return feetInchesSpeech(centimetres / 10);
 }
 
 export function growthSpeech(slug: string): string {

@@ -1,4 +1,5 @@
 import { chosenVoice } from "@/lib/piper-voice";
+import type { MixSettings } from "@/lib/playback-settings";
 
 export const VOICE_STORAGE_KEY = "champdex.voiceId";
 
@@ -23,18 +24,40 @@ export function spokenForDemo(text: string): string {
 }
 
 /** Body for the Hear request. A Yoto Labs voice is sent to Labs. Piper is spoken on this computer. */
-export function demoHearBody(input: { text: string; voiceId?: string; dexId?: number; title?: string }): {
+export function demoHearBody(input: {
+  text: string;
+  voiceId?: string;
+  dexId?: number;
+  title?: string;
+  mix?: Partial<MixSettings>;
+}): {
   text: string;
   voiceId: string;
   title?: string;
   dexId?: number;
+  cryVolume?: number;
+  voiceVolume?: number;
+  pauseSeconds?: number;
 } {
-  const body: { text: string; voiceId: string; title?: string; dexId?: number } = {
+  const body: {
+    text: string;
+    voiceId: string;
+    title?: string;
+    dexId?: number;
+    cryVolume?: number;
+    voiceVolume?: number;
+    pauseSeconds?: number;
+  } = {
     text: spokenForDemo(input.text),
     voiceId: chosenVoice(input.voiceId),
   };
   if (input.title?.trim()) body.title = input.title.trim().slice(0, 80);
   if (input.dexId) body.dexId = input.dexId;
+  if (input.mix) {
+    body.cryVolume = input.mix.cryVolume;
+    body.voiceVolume = input.mix.voiceVolume;
+    body.pauseSeconds = input.mix.pauseSeconds;
+  }
   return body;
 }
 
@@ -48,6 +71,7 @@ export function factTrackBody(input: {
   speechJobId?: string;
   speechCardId?: string;
   uploadId?: string;
+  mix?: Partial<MixSettings>;
 }): {
   text: string;
   title: string;
@@ -57,6 +81,9 @@ export function factTrackBody(input: {
   speechJobId?: string;
   speechCardId?: string;
   uploadId?: string;
+  cryVolume?: number;
+  voiceVolume?: number;
+  pauseSeconds?: number;
 } {
   return {
     text: input.text,
@@ -67,5 +94,12 @@ export function factTrackBody(input: {
     ...(input.speechJobId ? { speechJobId: input.speechJobId } : {}),
     ...(input.speechCardId ? { speechCardId: input.speechCardId } : {}),
     ...(input.uploadId ? { uploadId: input.uploadId } : {}),
+    ...(input.mix
+      ? {
+          cryVolume: input.mix.cryVolume,
+          voiceVolume: input.mix.voiceVolume,
+          pauseSeconds: input.mix.pauseSeconds,
+        }
+      : {}),
   };
 }

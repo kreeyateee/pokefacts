@@ -15,6 +15,10 @@ export async function POST(request: Request) {
     speechCardId?: string;
     uploadId?: string;
     discardCardId?: string;
+    voiceId?: string;
+    cryVolume?: number;
+    voiceVolume?: number;
+    pauseSeconds?: number;
   };
   try {
     body = (await request.json()) as typeof body;

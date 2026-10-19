@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { StatusBar } from "@/components/status-bar";
 import type { BiologyBlock, BiologyView, CatalogueEntry, CataloguePage } from "@/lib/catalogue-types";
+import { heightForUnits, weightForUnits, type MeasureUnits } from "@/lib/format";
 import type { KidCard } from "@/lib/kid-cards";
 import { PICKER_VOICES } from "@/lib/piper-voice";
 import {
@@ -151,6 +152,7 @@ export function Catalogue({
   onPlaylistTarget,
   voiceId = "",
   onVoiceId,
+  units = "metric",
   job = null,
 }: {
   onSendSelection?: (card: KidCard) => Promise<void>;
@@ -160,6 +162,7 @@ export function Catalogue({
   onPlaylistTarget?: (cardId: string) => void;
   voiceId?: string;
   onVoiceId?: (voiceId: string) => void;
+  units?: MeasureUnits;
   job?: { status: string; detail: string; done?: number; total?: number } | null;
 } = {}) {
   const [query, setQuery] = useState("");
@@ -391,7 +394,7 @@ export function Catalogue({
           biology: biologyPayload.biology?.blocks ?? [],
         });
       }
-      const built = selectionPlaylist(rows, playlistKind, playlistTitle);
+      const built = selectionPlaylist(rows, playlistKind, playlistTitle, units);
       if (built.refused.length > 0) {
         setBuildFailed(true);
         setBuildMessage(
@@ -764,8 +767,8 @@ export function Catalogue({
             ) : null}
             <BiologyPanel biology={biologyFor === entry.id ? biology : null} />
             <div className="mt-5 grid gap-2 sm:grid-cols-2">
-              <p className="pk-soft px-4 py-3">It weighs {entry.weightLabel}.</p>
-              <p className="pk-soft px-4 py-3">It is {entry.heightLabel} tall.</p>
+              <p className="pk-soft px-4 py-3">It weighs {weightForUnits(entry.weightLabel, units)}.</p>
+              <p className="pk-soft px-4 py-3">It is {heightForUnits(entry.heightLabel, units)} tall.</p>
             </div>
             <div className="mt-4">
               <Fact label="Ability">{abilityText}</Fact>
@@ -823,7 +826,7 @@ export function Catalogue({
                         <TypeChips types={form.types} />
                       </div>
                       <p className="mt-1 text-muted-foreground">
-                        {form.heightLabel} · {form.weightLabel}
+                        {heightForUnits(form.heightLabel, units)} · {weightForUnits(form.weightLabel, units)}
                       </p>
                       {formNotes
                         .filter((note) => note.formId === form.id && note.article.status === "ready")

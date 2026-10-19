@@ -1107,6 +1107,10 @@ describe("fact audio", () => {
     const voiceId = LILY_VOICE_ID;
     const dexId = 43;
     const key = renderedCacheKey(text, dexId, voiceId);
+    assert.notEqual(renderedCacheKey(text, dexId, voiceId, { cryVolume: 2 }), key);
+    assert.notEqual(renderedCacheKey(text, dexId, voiceId, { voiceVolume: 0.5 }), key);
+    assert.notEqual(renderedCacheKey(text, dexId, voiceId, { pauseSeconds: 1 }), key);
+    assert.equal(renderedCacheKey(text, dexId, voiceId, { cryVolume: 4, voiceVolume: 1, pauseSeconds: 0.35 }), key);
     const legacy = createHash("sha256").update(Buffer.from(`${voiceId}\n${dexId}\n${text}`)).digest("hex");
     assert.notEqual(key, legacy);
     const rendered = path.join(dir, "rendered");

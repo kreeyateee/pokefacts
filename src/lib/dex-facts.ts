@@ -416,21 +416,83 @@ function distillSentence(sentence: string, names: string[]): string {
   return "";
 }
 
-function bodyHint(genus: string, names: string[]): string {
-  const cleaned = genus.replace(/POK[eé]MON/gi, "Pokémon").replace(/\s+/g, " ").trim();
-  if (!cleaned) return "";
-  const line = asSentence(`It is the ${cleaned}`);
-  return names.some((name) => mentionsName(name, line)) ? "" : line;
+function heightPhrase(centimetres: number): string {
+  if (centimetres <= 20) return "much shorter than a house cat";
+  if (centimetres <= 45) return "about as tall as a house cat";
+  if (centimetres <= 80) return "about as tall as a small child";
+  if (centimetres <= 120) return "about as tall as a child";
+  if (centimetres <= 180) return "about as tall as a grown person";
+  if (centimetres <= 300) return "taller than a grown person";
+  return "much taller than a person";
 }
 
-function sizeComparison(decimetres: number): string {
+function weightPhrase(kilograms: number): string {
+  if (kilograms <= 0.2) return "lighter than an apple";
+  if (kilograms <= 1) return "about as heavy as a bag of sugar";
+  if (kilograms <= 5) return "about as heavy as a house cat";
+  if (kilograms <= 10) return "about as heavy as a bowling ball";
+  if (kilograms <= 20) return "about as heavy as a toddler";
+  if (kilograms <= 45) return "about as heavy as a child";
+  if (kilograms <= 100) return "about as heavy as a grown person";
+  if (kilograms <= 500) return "heavier than a grown person";
+  return "heavier than a small car";
+}
+
+/** One comparison from the real height and weight. It never quotes the Pokédex numbers. */
+function sizeComparison(decimetres: number, hectograms = 0): string {
   const centimetres = decimetres * 10;
-  if (centimetres <= 30) return "It is much smaller than a house cat.";
-  if (centimetres <= 60) return "It is about as tall as a house cat.";
-  if (centimetres <= 100) return "It is about as tall as a child.";
-  if (centimetres <= 160) return "It is about as tall as a grown person.";
-  if (centimetres <= 300) return "It is taller than a grown person.";
-  return "It is huge, much taller than a person.";
+  const kilograms = hectograms / 10;
+  if (centimetres > 0 && kilograms > 0) {
+    return `It is ${heightPhrase(centimetres)} and ${weightPhrase(kilograms)}.`;
+  }
+  if (centimetres > 0) return `It is ${heightPhrase(centimetres)}.`;
+  if (kilograms > 0) return `It is ${weightPhrase(kilograms)}.`;
+  return "Its size is hard to picture.";
+}
+
+function traitLines(sheet: MonSheet): string[] {
+  const names = familyNames(sheet);
+  const traits: string[] = [];
+  for (const entry of sheet.entries) {
+    const sentences = entry.text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [];
+    for (const sentence of sentences) {
+      const line = distillSentence(sentence, names);
+      if (!line || traits.includes(line)) continue;
+      traits.push(line);
+    }
+  }
+  return traits;
+}
+
+function bodyScore(line: string): number {
+  if (/fang|horn|spike|flame|seed|claw|tongue|beak|shell|wing|tail/i.test(line)) return 2;
+  if (BODY_NOUN.test(line)) return 1;
+  return 0;
+}
+
+function genusBody(genus: string, names: string[]): string {
+  const words = genus
+    .replace(/POK[eé]MON/gi, " ")
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter((word) => word && !/^(new|the|a|an|species)$/i.test(word));
+  const noun = words.at(-1)?.toLowerCase() ?? "";
+  if (noun.length < 3) return "It has a body part that stands out.";
+  const article = /^[aeiou]/i.test(noun) ? "an" : "a";
+  const line = asSentence(`It has the body of ${article} ${noun}`);
+  if (names.some((name) => mentionsName(name, line))) return "It has a body part that stands out.";
+  return line;
+}
+
+function fallbackHabit(sheet: MonSheet, names: string[]): string {
+  const home = homeFact(sheet.habitat);
+  if (home && !names.some((name) => mentionsName(name, home))) return home;
+  const options = [
+    "It keeps a quiet habit when nobody is watching.",
+    "It repeats one strange habit all day.",
+    "It waits, then moves in a way you would remember.",
+  ];
+  return options[Math.abs(sheet.id) % options.length] ?? options[0] ?? "It keeps a quiet habit.";
 }
 
 function intoNames(sheet: MonSheet): string[] {
@@ -475,44 +537,37 @@ function repeatsClue(extra: string, clues: string[]): boolean {
 }
 
 /**
- * Exactly three short clue sentences. They never say the species name
- * or an evolution name. A dex line can inspire one of them, cut to a
- * single spoken sentence. The rest come from type, body, home, or size.
+ * Exactly three short clue sentences: a habit, a weird body part, and a
+ * size comparison from the real height and weight. They never say the
+ * species name, an evolution name, or the elemental type.
  */
 export function shortClues(sheet: MonSheet): string[] {
   const names = familyNames(sheet);
-  const traits: string[] = [];
-  for (const entry of sheet.entries) {
-    const sentences = entry.text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [];
-    for (const sentence of sentences) {
-      const line = distillSentence(sentence, names);
-      if (!line || traits.includes(line)) continue;
-      traits.push(line);
-      if (traits.length === 2) break;
-    }
-    if (traits.length === 2) break;
-  }
-
+  const traits = traitLines(sheet);
+  const body =
+    [...traits].sort((left, right) => bodyScore(right) - bodyScore(left)).find((line) => bodyScore(line) > 0) ??
+    genusBody(sheet.genus, names);
+  const habit = traits.find((line) => line !== body && STRONG_VERB.test(line) && bodyScore(line) === 0) ?? fallbackHabit(sheet, names);
+  const size =
+    sheet.heightDecimetres > 0 || sheet.weightHectograms > 0
+      ? sizeComparison(sheet.heightDecimetres, sheet.weightHectograms)
+      : "Its size is hard to picture.";
   const clues: string[] = [];
   const push = (line: string) => {
     const clean = asSentence(line);
-    if (!clean || clues.includes(clean) || clean.length > 120) return;
-    if (names.some((name) => mentionsName(name, clean))) return;
+    if (!clean || clues.includes(clean) || clean.length > 140) return false;
+    if (names.some((name) => mentionsName(name, clean))) return false;
+    if (/\btype\b/i.test(clean)) return false;
     clues.push(clean);
+    return true;
   };
-  for (const trait of traits.slice(0, 2)) push(trait);
-  const home = homeFact(sheet.habitat);
-  const body = bodyHint(sheet.genus, names);
-  if (clues.length < 2) push(home);
-  if (clues.length < 2) push(body);
-  push(typeSentence(sheet.types));
-  if (clues.length < 3) push(home);
-  if (clues.length < 3) push(body);
-  if (clues.length < 3 && sheet.heightDecimetres > 0) push(sizeComparison(sheet.heightDecimetres));
+  if (!push(habit)) push(fallbackHabit(sheet, names));
+  if (!push(body)) push(genusBody(sheet.genus, names));
+  if (!push(size)) push("Its size is hard to picture.");
   for (const filler of [
-    "It has a look you can picture.",
-    "Its home is part of the riddle.",
-    "Its type is part of the riddle.",
+    "It keeps a quiet habit when nobody is watching.",
+    "It has a body part that stands out.",
+    "Its size is hard to picture.",
   ]) {
     if (clues.length >= 3) break;
     push(filler);

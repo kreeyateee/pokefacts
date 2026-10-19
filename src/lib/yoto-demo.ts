@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { audioContainer, inputContainer, mergeCryFirst } from "@/lib/cry-audio";
+import { clampMix, type MixSettings } from "@/lib/playback-settings";
 import { synthesizePiper, type PiperSynthOptions } from "@/lib/piper";
 import { chosenVoice, isPiperVoice } from "@/lib/piper-voice";
 import { ensureCry, readCachedMergedMp3 } from "@/lib/yoto-fact-audio";
@@ -20,6 +21,9 @@ type DemoRequest = {
   title?: string;
   voiceId?: string;
   dexId?: number;
+  cryVolume?: number;
+  voiceVolume?: number;
+  pauseSeconds?: number;
 };
 
 type DemoOptions = {
@@ -152,25 +156,26 @@ export async function prepareDemoAudio(
   const title = (request.title?.trim() || "Line").slice(0, 80);
   const voiceId = chosenVoice(request.voiceId);
   const dexId = request.dexId;
+  const mix = clampMix(request);
   if (dexId != null && (!Number.isInteger(dexId) || dexId < 1 || dexId > 1025)) {
     throw new Error(`That cry is not in the national Pokédex (${String(dexId)}).`);
   }
 
   if (dexId) {
-    const cached = await readCachedMergedMp3(text, voiceId, dexId, options.rendered);
+    const cached = await readCachedMergedMp3(text, voiceId, dexId, options.rendered, mix);
     if (cached) return { audio: cached, cryFirst: true };
   }
 
-  if (isPiperVoice(voiceId)) return piperDemo(text, dexId, fetchImpl, options);
+  if (isPiperVoice(voiceId)) return piperDemo(text, dexId, fetchImpl, options, mix);
 
   const speech = await recordVoice(token, text, title, voiceId, fetchImpl, options);
   if (!dexId) return { audio: speech, cryFirst: false };
 
   const timeoutMs = options.cryTimeoutMs ?? 12_000;
-  const merge = options.merge ?? mergeCryFirst;
+  const merge = options.merge ?? ((cry: Buffer, speech: Buffer) => mergeCryFirst(cry, speech, mix));
   const loadCry = options.loadCry ?? ((id: number) => ensureCry(id, fetchImpl));
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const mix = (async () => {
+  const mixing = (async () => {
     const cry = await loadCry(dexId);
     const merged = await merge(cry, speech);
     if (!audioContainer(merged) || merged.length < 128) {
@@ -182,13 +187,13 @@ export async function prepareDemoAudio(
     timer = setTimeout(() => resolve(speech), timeoutMs);
   });
   try {
-    const audio = await Promise.race([mix, timed]);
+    const audio = await Promise.race([mixing, timed]);
     return { audio, cryFirst: audio !== speech };
   } catch {
     return { audio: speech, cryFirst: false };
   } finally {
     if (timer) clearTimeout(timer);
-    void mix.catch(() => undefined);
+    void mixing.catch(() => undefined);
   }
 }
 
@@ -201,16 +206,17 @@ async function piperDemo(
   dexId: number | undefined,
   fetchImpl: typeof fetch,
   options: DemoOptions,
+  mix: MixSettings,
 ): Promise<DemoAudio> {
   const wav = await synthesizePiper(text, options.piper);
   if (inputContainer(wav) !== "wav" || wav.length < 44) throw new Error("Piper did not write a recording.");
   if (!dexId) return { audio: wav, cryFirst: false };
 
   const timeoutMs = options.cryTimeoutMs ?? 12_000;
-  const merge = options.merge ?? mergeCryFirst;
+  const merge = options.merge ?? ((cry: Buffer, speech: Buffer) => mergeCryFirst(cry, speech, mix));
   const loadCry = options.loadCry ?? ((id: number) => ensureCry(id, fetchImpl));
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const mix = (async () => {
+  const mixing = (async () => {
     const cry = await loadCry(dexId);
     const merged = await merge(cry, wav);
     if (inputContainer(merged) !== "mp3" || merged.length < 128) {
@@ -222,13 +228,13 @@ async function piperDemo(
     timer = setTimeout(() => resolve(wav), timeoutMs);
   });
   try {
-    const audio = await Promise.race([mix, timed]);
+    const audio = await Promise.race([mixing, timed]);
     return { audio, cryFirst: audio !== wav };
   } catch {
     return { audio: wav, cryFirst: false };
   } finally {
     if (timer) clearTimeout(timer);
-    void mix.catch(() => undefined);
+    void mixing.catch(() => undefined);
   }
 }
 

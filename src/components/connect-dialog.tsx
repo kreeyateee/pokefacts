@@ -13,7 +13,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { LOCAL_APP_ORIGIN } from "@/lib/local-origin";
-import { beginYotoLogin, CLIENT_KEY, redirectUri, YOTO_REDIRECT_URI } from "@/lib/yoto-session";
+import {
+  beginYotoLogin,
+  callbackForOrigin,
+  CLIENT_KEY,
+  redirectUri,
+  YOTO_REDIRECT_URI,
+} from "@/lib/yoto-session";
 
 export function ConnectDialog({
   open,
@@ -24,7 +30,7 @@ export function ConnectDialog({
 }) {
   const [draft, setDraft] = useState<string | null>(null);
   const [callback, setCallback] = useState(YOTO_REDIRECT_URI);
-  const [onHomeMachine, setOnHomeMachine] = useState(false);
+  const [canConnect, setCanConnect] = useState(false);
   const [pending, setPending] = useState(false);
   const [wasOpen, setWasOpen] = useState(false);
 
@@ -33,7 +39,8 @@ export function ConnectDialog({
     if (typeof window !== "undefined") {
       setDraft(localStorage.getItem(CLIENT_KEY) ?? "");
       setCallback(redirectUri());
-      setOnHomeMachine(window.location.origin === LOCAL_APP_ORIGIN);
+      const origin = window.location.origin;
+      setCanConnect(origin === LOCAL_APP_ORIGIN || callbackForOrigin(origin) !== YOTO_REDIRECT_URI);
     }
   } else if (!open && wasOpen) {
     setWasOpen(false);
@@ -126,12 +133,12 @@ export function ConnectDialog({
               onChange={(event) => setDraft(event.target.value)}
             />
           </label>
-          {onHomeMachine ? null : (
+          {canConnect ? null : (
             <p className="text-sm leading-6 text-foreground">
               Open {LOCAL_APP_ORIGIN} in this browser, then connect. Yoto returns to {YOTO_REDIRECT_URI}.
             </p>
           )}
-          <Button type="submit" className="h-10" disabled={pending || !onHomeMachine}>
+          <Button type="submit" className="h-10" disabled={pending || !canConnect}>
             {pending ? "Opening Yoto…" : "Continue to Yoto"}
           </Button>
         </form>

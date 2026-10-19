@@ -8,6 +8,7 @@ import { prepareFactTrack } from "./yoto-fact-audio";
 import { bulkFailureText } from "./yoto-send";
 import {
   authorizeSearchParams,
+  callbackForOrigin,
   clearSavedLoginForScopeGap,
   redirectUri,
   SESSION_KEY,
@@ -68,6 +69,13 @@ describe("Yoto errors", () => {
       redirectUri: redirectUri(),
     });
     assert.equal(params.get("redirect_uri"), "http://127.0.0.1:3847/callback");
+    assert.equal(
+      callbackForOrigin("https://pokefacts.duckdns.org"),
+      "https://pokefacts.duckdns.org/callback",
+    );
+    assert.equal(callbackForOrigin("http://pokefacts.duckdns.org"), YOTO_REDIRECT_URI);
+    assert.equal(callbackForOrigin("https://evil.example"), YOTO_REDIRECT_URI);
+    assert.equal(callbackForOrigin("http://127.0.0.1:3847"), YOTO_REDIRECT_URI);
     assert.equal(params.get("code_challenge_method"), "S256");
     assert.equal(params.get("response_type"), "code");
     assert.equal(params.get("scope"), YOTO_SCOPES);

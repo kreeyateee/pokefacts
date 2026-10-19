@@ -5,14 +5,13 @@ import path from "node:path";
 import {
   assertCryFirst,
   audioContainer,
-  CRY_MIX_PAD_SECONDS,
-  CRY_MIX_VOLUME,
   cryUrl,
   describeClip,
   encodeYotoMp3,
   inputContainer,
   mergeCryFirst,
 } from "@/lib/cry-audio";
+import { clampMix, isDefaultMix, mixCacheToken, type MixSettings } from "@/lib/playback-settings";
 import { synthesizePiper, type PiperSynthOptions } from "@/lib/piper";
 import { chosenVoice, isPiperVoice } from "@/lib/piper-voice";
 import { RECONNECT_YOTO, reconnectMessage, yotoErrorText } from "@/lib/yoto-error";
@@ -21,6 +20,9 @@ export type FactCryRequest = {
   cardId: string;
   chapterKey: string;
   dexId: number;
+  cryVolume?: number;
+  voiceVolume?: number;
+  pauseSeconds?: number;
 };
 
 type Track = {
@@ -272,8 +274,9 @@ export async function attachCry(
       const speechResponse = await fetchImpl(source, { signal: AbortSignal.timeout(60_000) });
       if (!speechResponse.ok) throw new Error(`Lily's recording for number ${dexId} could not be downloaded.`);
       const speech = Buffer.from(await speechResponse.arrayBuffer());
-      const merged = await mergeCryFirst(cry, speech);
-      await assertCryFirst(cry, speech, merged);
+      const mix = clampMix(request);
+      const merged = await mergeCryFirst(cry, speech, mix);
+      await assertCryFirst(cry, speech, merged, mix.cryVolume);
       const uploaded = await uploadMerged(token, dexId, merged, fetchImpl);
       const { voiceId: _voice, ...rest } = track;
       return {
@@ -322,6 +325,9 @@ export type TrackPrepareRequest = {
   discardCardId?: string;
   /** ElevenLabs voice. Lily when this is omitted. */
   voiceId?: string;
+  cryVolume?: number;
+  voiceVolume?: number;
+  pauseSeconds?: number;
 };
 
 export type TrackPrepareResult = {
@@ -339,14 +345,15 @@ export type TrackPrepareResult = {
 const SPEECH_ROOT = path.join(process.cwd(), "data", "speech");
 const RENDER_ROOT = path.join(process.cwd(), "data", "rendered");
 
-function mixToken(): string {
-  return `volume=${CRY_MIX_VOLUME}\npad=${CRY_MIX_PAD_SECONDS}`;
-}
-
-/** Cache identity for a finished mix: voice, cry volume, pad, dex number, and the script. */
-export function renderedCacheKey(text: string, dexId: number | undefined, voiceId: string): string {
+/** Cache identity for a finished mix: voice, cry gain, voice gain, pause, dex number, and the script. */
+export function renderedCacheKey(
+  text: string,
+  dexId: number | undefined,
+  voiceId: string,
+  mix?: Partial<MixSettings> | null,
+): string {
   const line = text.replace(/\s+/g, " ").trim();
-  return sha256(Buffer.from(`${chosenVoice(voiceId)}\n${mixToken()}\n${dexId ?? 0}\n${line}`));
+  return sha256(Buffer.from(`${chosenVoice(voiceId)}\n${mixCacheToken(mix)}\n${dexId ?? 0}\n${line}`));
 }
 
 function legacyRenderedKey(text: string, dexId: number | undefined, voiceId: string): string {
@@ -397,8 +404,9 @@ export async function readCachedMergedMp3(
   voiceId: string,
   dexId: number | undefined,
   renderedRoot: string = RENDER_ROOT,
+  mix?: Partial<MixSettings> | null,
 ): Promise<Buffer | undefined> {
-  return readMp3File(path.join(renderedRoot, `${renderedCacheKey(text, dexId, voiceId)}.mp3`));
+  return readMp3File(path.join(renderedRoot, `${renderedCacheKey(text, dexId, voiceId, mix)}.mp3`));
 }
 
 function readyPayload(cached: StoredAudio): TrackPrepareResult {
@@ -662,6 +670,7 @@ export async function prepareFactTrack(
   const title = (request.title?.trim() || "Line").slice(0, 80);
   const voiceId = chosenVoice(request.voiceId);
   const dexId = request.dexId;
+  const mix = clampMix(request);
   const species = (request.name?.replace(/\s+/g, " ").trim() || title || (typeof dexId === "number" ? `Number ${dexId}` : "")).slice(0, 40);
   const cryFailure = (error?: unknown) => {
     if (error instanceof Error && error.message === RECONNECT_YOTO) return error;
@@ -685,20 +694,22 @@ export async function prepareFactTrack(
 
   // Dex number, not the slot on the card. A Pokefacts playlist never has 142 tracks.
   const label = dexId ? String(dexId) : "intro";
-  const renderedFile = path.join(roots.rendered, `${renderedCacheKey(text, dexId, voiceId)}.json`);
-  const mergedFile = path.join(roots.rendered, `${renderedCacheKey(text, dexId, voiceId)}.mp3`);
+  const renderedFile = path.join(roots.rendered, `${renderedCacheKey(text, dexId, voiceId, mix)}.json`);
+  const mergedFile = path.join(roots.rendered, `${renderedCacheKey(text, dexId, voiceId, mix)}.mp3`);
   const speechFile = path.join(
     roots.speech,
     `${speechKey(text, voiceId)}.${isPiperVoice(voiceId) ? "wav" : "mp3"}`,
   );
   const fresh = await readReady(renderedFile, dexId, dexId ? mergedFile : undefined);
   if (fresh) return fresh;
-  // Hashes written before the volume was part of the key. Those mixes used volume 4 and a 0.35s pad.
-  const legacy = await readReady(
-    path.join(roots.rendered, `${legacyRenderedKey(text, dexId, voiceId)}.json`),
-    dexId,
-  );
-  if (legacy) return legacy;
+  // Hashes written before the volume was part of the key. Those mixes used volume 4, voice 1, and a 0.35s pad.
+  if (isDefaultMix(mix)) {
+    const legacy = await readReady(
+      path.join(roots.rendered, `${legacyRenderedKey(text, dexId, voiceId)}.json`),
+      dexId,
+    );
+    if (legacy) return legacy;
+  }
 
   const readyFrom = async (uploadId: string, polls: number): Promise<TrackPrepareResult> => {
     if (dexId && !(await readCryMark(uploadMarkPath(roots.rendered, uploadId)))) {
@@ -761,9 +772,8 @@ export async function prepareFactTrack(
     if (dexId) {
       try {
         const cry = await ensureCry(dexId, fetchImpl, roots.cries ?? CRY_CACHE);
-        const mix = roots.merge ?? mergeCryFirst;
-        const merged = await mix(cry, speech);
-        await assertCryFirst(cry, speech, merged);
+        const merged = roots.merge ? await roots.merge(cry, speech) : await mergeCryFirst(cry, speech, mix);
+        await assertCryFirst(cry, speech, merged, mix.cryVolume);
         if (merged === speech) throw new Error("The cry was not mixed in front of the reading.");
         await writeBytesAtomic(mergedFile, merged);
         audio = merged;

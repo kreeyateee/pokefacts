@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Catalogue } from "@/components/catalogue";
+import { PlaybackPanel } from "@/components/playback-panel";
+import { SetupGuide } from "@/components/setup-guide";
 import { StatusBar } from "@/components/status-bar";
 import { ConnectDialog } from "@/components/connect-dialog";
 import { Button } from "@/components/ui/button";
@@ -34,6 +36,7 @@ import {
 import { pronounce } from "@/lib/pronounce";
 import { selectionUpload } from "@/lib/selection-playlist";
 import { APP_NAME, DONATE_URL, SOURCE_URL } from "@/lib/site";
+import { defaultPlayback, readPlayback, type PlaybackSettings } from "@/lib/playback-settings";
 import { demoHearBody, factTrackBody, readVoiceId, writeVoiceId } from "@/lib/voice-choice";
 import {
   asSendFailure,
@@ -358,7 +361,8 @@ export function Studio({
   const gmaxRef = useRef(gmax);
   const formLoad = useRef<Partial<Record<"mega" | "gmax", Promise<void>>>>({});
   const [factSpeech, setFactSpeech] = useState<{ id: number; speech: string; url: string } | null>(null);
-  const [view, setView] = useState<"cards" | "catalogue">("cards");
+  const [view, setView] = useState<"cards" | "catalogue" | "setup">("cards");
+  const [playback, setPlayback] = useState<PlaybackSettings>(defaultPlayback);
   const [kind, setKind] = useState<KidCardKind>("meet");
   const [factsId, setFactsId] = useState(RANDOM_POKEDEX_ID);
   const [guessId, setGuessId] = useState(RANDOM_GUESS_ID);
@@ -410,6 +414,7 @@ export function Studio({
   useEffect(() => {
     let cancelled = false;
     setVoiceId(readVoiceId(localStorage));
+    setPlayback(readPlayback(localStorage));
     void ensureSession().then((next) => {
       if (cancelled) return;
       setSession(next);
@@ -590,7 +595,7 @@ export function Studio({
         method: "POST",
         signal: controller.signal,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(demoHearBody({ text: script, voiceId, dexId, title })),
+        body: JSON.stringify(demoHearBody({ text: script, voiceId, dexId, title, mix: playback })),
       });
       if (controller.signal.aborted) return;
       const type = response.headers.get("content-type") ?? "";
@@ -877,6 +882,7 @@ export function Studio({
                 speechJobId,
                 speechCardId,
                 uploadId,
+                mix: playback,
               }),
             ),
           });
@@ -1208,7 +1214,9 @@ export function Studio({
             </div>
           </div>
           <h1 className="mt-4 text-3xl font-bold tracking-tight text-white sm:text-4xl">
-            {view === "catalogue"
+            {view === "setup"
+              ? "Set up Pokefacts"
+              : view === "catalogue"
               ? "Reference catalogue"
               : guessing
                 ? "Guess Who"
@@ -1217,7 +1225,9 @@ export function Studio({
                   : "Pokémon facts"}
           </h1>
           <p className="mt-1 max-w-xl text-sm leading-6 text-white/90">
-            {view === "catalogue"
+            {view === "setup"
+              ? "Node, ffmpeg, and a public Yoto app. Then the playlists appear under Make Your Own."
+              : view === "catalogue"
               ? "Every species from Kanto to Paldea. The Pokédex line is from the games, with the type, size, abilities, evolution, and stats."
               : guessing
                 ? "Fifty riddles, drawn at random. You hear the cry, then the clues. The picture stays a shadow until the answer."
@@ -1277,11 +1287,26 @@ export function Studio({
           >
             Gigantamax
           </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "setup"}
+            onClick={() => {
+              stopDemo();
+              setView("setup");
+            }}
+            className="pk-tab"
+          >
+            Setup
+          </button>
         </div>
+        <PlaybackPanel settings={playback} onChange={setPlayback} />
       </header>
 
       <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6">
-        {view === "catalogue" ? (
+        {view === "setup" ? (
+          <SetupGuide onConnect={() => setConnectOpen(true)} />
+        ) : view === "catalogue" ? (
           <Catalogue
             onSendSelection={sendSelection}
             onBuildStart={() => setJob(null)}
@@ -1290,6 +1315,7 @@ export function Studio({
             onPlaylistTarget={setTargetPlaylist}
             voiceId={voiceId}
             onVoiceId={(id) => setVoiceId(writeVoiceId(localStorage, id))}
+            units={playback.units}
             job={job}
           />
         ) : card && chapter ? (

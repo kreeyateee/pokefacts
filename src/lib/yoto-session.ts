@@ -46,9 +46,30 @@ export async function createPkce(): Promise<{
   return { verifier, challenge: base64Url(new Uint8Array(digest)) };
 }
 
+/** The hosted site. Home computers keep the loopback callback in local-origin.json. */
+export const PUBLIC_APP_HOST = "pokefacts.duckdns.org";
+
+/**
+ * Yoto must return to the site that started the login.
+ * The home address stays the loopback callback. Only the public HTTPS host uses its own.
+ */
+export function callbackForOrigin(origin: string): string {
+  let url: URL;
+  try {
+    url = new URL(origin);
+  } catch {
+    return YOTO_REDIRECT_URI;
+  }
+  if (url.protocol === "https:" && url.hostname === PUBLIC_APP_HOST && url.port === "") {
+    return `${url.origin}/callback`;
+  }
+  return YOTO_REDIRECT_URI;
+}
+
 /** PKCE returns here. A public tunnel host is not used. */
 export function redirectUri(): string {
-  return YOTO_REDIRECT_URI;
+  if (typeof window === "undefined") return YOTO_REDIRECT_URI;
+  return callbackForOrigin(window.location.origin);
 }
 
 export function readSession(): YotoSession | null {

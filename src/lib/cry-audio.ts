@@ -4,6 +4,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { ffmpegCommand, ffprobeCommand } from "@/lib/ffmpeg-bin";
+import {
+  clampMix,
+  DEFAULT_CRY_VOLUME,
+  DEFAULT_PAUSE_SECONDS,
+  type MixSettings,
+} from "@/lib/playback-settings";
 
 /** Latest PokéAPI cry. The fact track plays this before Lily speaks. */
 export function cryUrl(id: number): string {
@@ -29,18 +35,19 @@ export function inputContainer(bytes: Buffer): "ogg" | "mp3" | "wav" | null {
   return audioContainer(bytes);
 }
 
-/** Cry gain and the silence after it. The rendered-file cache key includes both. */
-export const CRY_MIX_VOLUME = 4;
-export const CRY_MIX_PAD_SECONDS = 0.35;
+/** Cry gain and the silence after it. The rendered-file cache key includes both, plus voice gain. */
+export const CRY_MIX_VOLUME = DEFAULT_CRY_VOLUME;
+export const CRY_MIX_PAD_SECONDS = DEFAULT_PAUSE_SECONDS;
 
-/**
- * Cry at the front, then speech.
- * Volume 4 and a short pad match the mix already used for these cards.
- */
-const MERGE_FILTER =
-  `[0:a]volume=${CRY_MIX_VOLUME},apad=pad_dur=${CRY_MIX_PAD_SECONDS},aformat=sample_fmts=s16:sample_rates=44100:channel_layouts=mono[a0];` +
-  "[1:a]aformat=sample_fmts=s16:sample_rates=44100:channel_layouts=mono[a1];" +
-  "[a0][a1]concat=n=2:v=0:a=1[out]";
+/** Cry at the front, then speech. Voice gain is omitted at 1 so the default mix stays the old filter. */
+export function mergeFilter(mix: MixSettings = clampMix(null)): string {
+  const voice = mix.voiceVolume === 1 ? "" : `volume=${mix.voiceVolume},`;
+  return (
+    `[0:a]volume=${mix.cryVolume},apad=pad_dur=${mix.pauseSeconds},aformat=sample_fmts=s16:sample_rates=44100:channel_layouts=mono[a0];` +
+    `[1:a]${voice}aformat=sample_fmts=s16:sample_rates=44100:channel_layouts=mono[a1];` +
+    "[a0][a1]concat=n=2:v=0:a=1[out]"
+  );
+}
 
 /**
  * Plain CBR MP3. Yoto's transcoder rejects the VBR file `-q:a` writes
@@ -226,7 +233,11 @@ export async function encodeYotoMp3(speech: Buffer): Promise<Buffer> {
   }
 }
 
-export async function mergeCryFirst(cry: Buffer, speech: Buffer): Promise<Buffer> {
+export async function mergeCryFirst(
+  cry: Buffer,
+  speech: Buffer,
+  mix: MixSettings = clampMix(null),
+): Promise<Buffer> {
   const cryKind = audioContainer(cry);
   if (!cryKind) throw new Error("The cry was not an Ogg or MP3 file.");
   const speechKind = inputContainer(speech);
@@ -245,7 +256,7 @@ export async function mergeCryFirst(cry: Buffer, speech: Buffer): Promise<Buffer
       ...inputArgs(cry, cryPath),
       ...inputArgs(speech, speechPath),
       "-filter_complex",
-      MERGE_FILTER,
+      mergeFilter(mix),
       "-map",
       "[out]",
       ...YOTO_MP3_ARGS,
@@ -318,11 +329,16 @@ function meanGap(left: Int16Array, right: Int16Array, offset: number, count: num
  * MP3 cries (Pikachu, Meltan, Melmetal) are re-encoded, so the match is
  * looser than a sample-perfect copy and may sit a few dozen milliseconds late.
  */
-export async function cryLeads(cry: Buffer, speech: Buffer, merged: Buffer): Promise<boolean> {
+export async function cryLeads(
+  cry: Buffer,
+  speech: Buffer,
+  merged: Buffer,
+  cryVolume: number = CRY_MIX_VOLUME,
+): Promise<boolean> {
   const cryName = `cry.${audioContainer(cry) ?? "bin"}`;
   const speechName = `speech.${audioContainer(speech) ?? "bin"}`;
   const [loud, spoken, mix] = await Promise.all([
-    pcm(cry, cryName, `volume=${CRY_MIX_VOLUME},aformat=sample_fmts=s16:sample_rates=44100:channel_layouts=mono`),
+    pcm(cry, cryName, `volume=${cryVolume},aformat=sample_fmts=s16:sample_rates=44100:channel_layouts=mono`),
     pcm(speech, speechName),
     pcm(merged, "merged.mp3"),
   ]);
@@ -339,8 +355,13 @@ export async function cryLeads(cry: Buffer, speech: Buffer, merged: Buffer): Pro
 }
 
 /** Reject a file that is only Lily. The cry has to add audible time at the front. */
-export async function assertCryFirst(cry: Buffer, speech: Buffer, merged: Buffer): Promise<void> {
-  if (!(await cryLeads(cry, speech, merged))) {
+export async function assertCryFirst(
+  cry: Buffer,
+  speech: Buffer,
+  merged: Buffer,
+  cryVolume: number = CRY_MIX_VOLUME,
+): Promise<void> {
+  if (!(await cryLeads(cry, speech, merged, cryVolume))) {
     throw new Error("The merged audio did not start with the cry.");
   }
   const cryKind = audioContainer(cry) ?? "bin";

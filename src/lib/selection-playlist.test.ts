@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { heightForUnits, weightForUnits } from "./format";
 import { chaptersForCries, YOTO_TRACK_LIMIT } from "./kid-cards";
 import {
   advancedSpeech,
@@ -135,5 +136,21 @@ describe("catalogue selection playlists", () => {
     assert.equal(built.card.chapters.flatMap((chapter) => chapter.tracks).length, 100);
     assert.deepEqual(built.refused, [51]);
     assert.equal(built.title, "Who's That Pokémon");
+  });
+
+  it("reads advanced facts in pounds and feet when imperial is selected", () => {
+    const pikachu = species(25, "Pikachu");
+    assert.equal(weightForUnits(pikachu.weightLabel, "imperial"), "13 pounds");
+    assert.equal(heightForUnits(pikachu.heightLabel, "imperial"), "1 foot 4 inches");
+    const text = advancedSpeech(
+      { ...pikachu, weightLabel: "6 kilograms", heightLabel: "40 centimetres" },
+      "imperial",
+    );
+    assert.match(text, /It weighs 13 pounds/);
+    assert.match(text, /1 foot 4 inches tall/);
+    assert.doesNotMatch(text, /kilograms|centimetres/);
+    const metric = advancedSpeech(pikachu, "metric");
+    assert.match(metric, /6 kilograms/);
+    assert.match(metric, /40 centimetres/);
   });
 });

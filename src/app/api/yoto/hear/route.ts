@@ -6,7 +6,15 @@ import { bearerToken, jsonError } from "@/lib/yoto-proxy";
 import { spokenForDemo } from "@/lib/voice-choice";
 
 export async function POST(request: Request) {
-  let body: { text?: string; title?: string; voiceId?: string; dexId?: number };
+  let body: {
+    text?: string;
+    title?: string;
+    voiceId?: string;
+    dexId?: number;
+    cryVolume?: number;
+    voiceVolume?: number;
+    pauseSeconds?: number;
+  };
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -22,6 +30,9 @@ export async function POST(request: Request) {
       title: body.title,
       voiceId: body.voiceId,
       dexId: body.dexId,
+      cryVolume: body.cryVolume,
+      voiceVolume: body.voiceVolume,
+      pauseSeconds: body.pauseSeconds,
     });
     const kind = inputContainer(result.audio);
     const contentType = kind === "ogg" ? "audio/ogg" : kind === "wav" ? "audio/wav" : "audio/mpeg";

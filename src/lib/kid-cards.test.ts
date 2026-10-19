@@ -443,6 +443,8 @@ describe("every national species", () => {
         if (!chapter.dexId) continue;
         const clue = chapter.tracks[0]?.text ?? "";
         assert.doesNotMatch(clue, new RegExp(escapeRegExp(chapter.title), "i"));
+        assert.doesNotMatch(clue, /\btype\b/i);
+        assert.match(clue, /tall as|shorter than|taller than|heavy as|heavier than|lighter than|size is hard to picture/);
         assert.match(chapter.tracks[1]?.text ?? "", /^It is /);
         assert.equal(chapter.tracks[0]?.lead, "cry");
         assert.equal(chapter.tracks[1]?.lead, "cry");
@@ -460,8 +462,9 @@ describe("every national species", () => {
     const flavor = croconaw.entries.map((entry) => entry.text).join(" ");
     assert.equal(
       clue,
-      "Number 159. Its jaws lock shut and do not let go. The fangs hook backward like fishhooks. It is a Water type. Shout your guess. One. Two. Three.",
+      "Number 159. It lives at the water's edge. The fangs hook backward like fishhooks. It is about as tall as a child and about as heavy as a child. Shout your guess. One. Two. Three.",
     );
+    assert.doesNotMatch(clue, /type\b/i);
     assert.equal(answer, "It is Croconaw. It grows from Totodile and becomes Feraligatr.");
     assert.doesNotMatch(clue, /Croconaw|Totodile|Feraligatr/i);
     assert.match(answer, /^It is Croconaw\./);
