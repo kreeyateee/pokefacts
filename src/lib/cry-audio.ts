@@ -30,6 +30,31 @@ const MERGE_FILTER =
   "[1:a]aformat=sample_fmts=s16:sample_rates=44100:channel_layouts=mono[a1];" +
   "[a0][a1]concat=n=2:v=0:a=1[out]";
 
+/**
+ * Plain CBR MP3. Yoto's transcoder rejects the VBR file `-q:a` writes
+ * (Xing header, ID3 encoder tag, about 48 kb/s). No cover art and no video stream.
+ */
+export const YOTO_MP3_ARGS: readonly string[] = [
+  "-vn",
+  "-map_metadata",
+  "-1",
+  "-c:a",
+  "libmp3lame",
+  "-b:a",
+  "128k",
+  "-ar",
+  "44100",
+  "-ac",
+  "1",
+  "-id3v2_version",
+  "0",
+  "-write_id3v1",
+  "0",
+];
+
+const MIN_MERGED_SECONDS = 1;
+const MIN_CRY_SECONDS = 0.05;
+
 function commandFailure(command: string, error: Error, stderr: string): Error {
   const lines = stderr
     .split(/\r?\n/)
@@ -71,10 +96,104 @@ function inputArgs(bytes: Buffer, file: string): string[] {
   return [...formatArgs(bytes), "-i", file];
 }
 
+type ClipInfo = {
+  codec: string;
+  sampleRate: number;
+  channels: number;
+  duration: number;
+  bitRate: number;
+  audioStreams: number;
+  otherStreams: number;
+};
+
+function clipSummary(info: ClipInfo): string {
+  const seconds = Number.isFinite(info.duration) ? `${info.duration.toFixed(2)}s` : "unknown length";
+  const rate = info.sampleRate ? `${info.sampleRate} Hz` : "unknown rate";
+  const kbps = info.bitRate ? `${Math.round(info.bitRate / 1000)} kb/s` : "unknown bitrate";
+  return `${info.codec || "unknown codec"}, ${rate}, ${info.channels || 0} ch, ${kbps}, ${seconds}`;
+}
+
+/** ffprobe the bytes. A failure uses ffprobe's own last line, not a generic mix error. */
+export async function describeClip(bytes: Buffer, name = "clip.mp3"): Promise<ClipInfo> {
+  const dir = await mkdtemp(path.join(tmpdir(), "champdex-probe-"));
+  const file = path.join(dir, name);
+  try {
+    await writeFile(file, bytes);
+    const stdout = await new Promise<string>((resolve, reject) => {
+      execFile(
+        ffprobeCommand(),
+        ["-v", "error", "-print_format", "json", ...formatArgs(bytes), "-show_streams", "-show_format", file],
+        { timeout: 20_000, windowsHide: true, maxBuffer: 1_000_000 },
+        (error, text, stderr) => {
+          if (error) {
+            reject(commandFailure("ffprobe", error, stderr ?? ""));
+            return;
+          }
+          resolve(text);
+        },
+      );
+    });
+    let parsed: {
+      streams?: Array<{ codec_name?: string; codec_type?: string; sample_rate?: string; channels?: number; bit_rate?: string; duration?: string }>;
+      format?: { duration?: string; bit_rate?: string };
+    };
+    try {
+      parsed = JSON.parse(stdout) as typeof parsed;
+    } catch {
+      throw new Error("ffprobe did not describe the audio.");
+    }
+    const streams = parsed.streams ?? [];
+    const audio = streams.find((stream) => stream.codec_type === "audio");
+    const duration = Number(audio?.duration ?? parsed.format?.duration);
+    const bitRate = Number(audio?.bit_rate || parsed.format?.bit_rate || 0);
+    return {
+      codec: audio?.codec_name ?? "",
+      sampleRate: Number(audio?.sample_rate ?? 0),
+      channels: Number(audio?.channels ?? 0),
+      duration: Number.isFinite(duration) ? duration : Number.NaN,
+      bitRate: Number.isFinite(bitRate) ? bitRate : 0,
+      audioStreams: streams.filter((stream) => stream.codec_type === "audio").length,
+      otherStreams: streams.filter((stream) => stream.codec_type && stream.codec_type !== "audio").length,
+    };
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+function assertCryDecodable(info: ClipInfo): void {
+  if (info.audioStreams < 1 || !info.codec) {
+    throw new Error(`ffprobe found no audio in the cry (${clipSummary(info)}).`);
+  }
+  if (!Number.isFinite(info.duration) || info.duration < MIN_CRY_SECONDS) {
+    throw new Error(`ffprobe: the cry is too short to mix (${clipSummary(info)}).`);
+  }
+}
+
+function assertYotoMp3(bytes: Buffer, info: ClipInfo): void {
+  const summary = clipSummary(info);
+  if (bytes.length >= 3 && bytes.subarray(0, 3).toString("ascii") === "ID3") {
+    throw new Error(`ffprobe: the merged file still has an ID3 tag (${summary}).`);
+  }
+  if (info.otherStreams > 0 || info.audioStreams !== 1) {
+    throw new Error(`ffprobe: the merged file is not a single audio stream (${summary}).`);
+  }
+  const plain =
+    info.codec === "mp3" &&
+    info.sampleRate === 44100 &&
+    info.channels === 1 &&
+    info.bitRate >= 120_000 &&
+    info.bitRate <= 140_000 &&
+    info.duration >= MIN_MERGED_SECONDS;
+  if (!plain) {
+    throw new Error(`ffprobe: the merged file is not a plain 44.1 kHz mono 128 kb/s MP3 (${summary}).`);
+  }
+}
+
 export async function mergeCryFirst(cry: Buffer, speech: Buffer): Promise<Buffer> {
   const cryKind = audioContainer(cry);
   if (!cryKind) throw new Error("The cry was not an Ogg or MP3 file.");
   const speechKind = audioContainer(speech);
+  assertCryDecodable(await describeClip(cry, `cry.${cryKind}`));
   const dir = await mkdtemp(path.join(tmpdir(), "champdex-cry-"));
   const cryPath = path.join(dir, `cry.${cryKind}`);
   const speechPath = path.join(dir, `speech.${speechKind ?? "mp3"}`);
@@ -92,13 +211,12 @@ export async function mergeCryFirst(cry: Buffer, speech: Buffer): Promise<Buffer
       MERGE_FILTER,
       "-map",
       "[out]",
-      "-c:a",
-      "libmp3lame",
-      "-q:a",
-      "5",
+      ...YOTO_MP3_ARGS,
       outPath,
     ]);
-    return await readFile(outPath);
+    const merged = await readFile(outPath);
+    assertYotoMp3(merged, await describeClip(merged, "merged.mp3"));
+    return merged;
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

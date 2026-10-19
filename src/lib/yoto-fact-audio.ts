@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { assertCryFirst, audioContainer, cryUrl, mergeCryFirst } from "@/lib/cry-audio";
+import { assertCryFirst, audioContainer, cryUrl, describeClip, mergeCryFirst } from "@/lib/cry-audio";
 import { LILY_VOICE_ID } from "@/lib/kid-cards";
-import { RECONNECT_YOTO, reconnectMessage } from "@/lib/yoto-error";
+import { RECONNECT_YOTO, reconnectMessage, yotoErrorText } from "@/lib/yoto-error";
 
 export type FactCryRequest = {
   cardId: string;
@@ -57,17 +57,24 @@ function cardOf(payload: unknown): CardPayload | null {
 }
 
 function messageOf(payload: unknown, fallback: string): string {
-  if (!payload || typeof payload !== "object") return fallback;
-  const row = payload as { message?: string; error?: string | { message?: string } };
-  const text =
-    typeof row.message === "string"
-      ? row.message
-      : typeof row.error === "string"
-        ? row.error
-        : row.error && typeof row.error.message === "string"
-          ? row.error.message
-          : fallback;
+  const text = yotoErrorText(payload, fallback);
   return reconnectMessage(text) ?? text;
+}
+
+/** Yoto accepted the upload, then refused to transcode it. Keep their reason when they sent one. */
+function transcodeFailure(body: unknown, label: string, kind: "track" | "cry"): string {
+  const lead =
+    kind === "cry"
+      ? `Yoto could not transcode the cry for number ${label}.`
+      : `Yoto could not transcode track ${label}.`;
+  const progress = (body as { transcode?: { progress?: { error?: unknown; message?: unknown } } } | null)?.transcode
+    ?.progress;
+  const extra = [progress?.error, progress?.message]
+    .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    .map((item) => item.replace(/\s+/g, " ").trim())
+    .join(" ");
+  if (!extra) return lead;
+  return `${lead} ${extra.length > 140 ? `${extra.slice(0, 137)}...` : extra}`;
 }
 
 async function yoto(
@@ -95,14 +102,31 @@ export async function ensureCry(
   const file = path.join(cacheDir, `${id}.ogg`);
   try {
     const cached = await readFile(file);
-    if (audioContainer(cached)) return cached;
+    if (audioContainer(cached)) {
+      const info = await describeClip(cached, `cry.${audioContainer(cached)}`);
+      if (info.audioStreams >= 1 && Number.isFinite(info.duration) && info.duration >= 0.05) return cached;
+    }
   } catch {
     // Missing cache is downloaded below. A saved error page is replaced.
   }
+  await rm(file, { force: true });
   const response = await fetchImpl(cryUrl(id), { signal: AbortSignal.timeout(30_000) });
   if (!response.ok) throw new Error(`The cry for number ${id} could not be downloaded (HTTP ${response.status}).`);
   const bytes = Buffer.from(await response.arrayBuffer());
   if (!audioContainer(bytes)) throw new Error(`The cry for number ${id} was not an Ogg or MP3 file.`);
+  let info;
+  try {
+    info = await describeClip(bytes, `cry.${audioContainer(bytes)}`);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "ffprobe could not read the cry.";
+    throw new Error(reason);
+  }
+  if (info.audioStreams < 1 || !Number.isFinite(info.duration) || info.duration < 0.05) {
+    const seconds = Number.isFinite(info.duration) ? `${info.duration.toFixed(2)}s` : "unknown length";
+    throw new Error(
+      `ffprobe: the cry is ${info.codec || "unreadable"}, ${info.sampleRate || 0} Hz, ${seconds}.`,
+    );
+  }
   await writeFile(file, bytes);
   return bytes;
 }
@@ -179,7 +203,7 @@ async function uploadMerged(
       };
     }
     if (phase && phase !== "queued" && phase !== "processing" && phase !== "transcoding") {
-      throw new Error(`Yoto could not transcode the cry for number ${dexId}.`);
+      throw new Error(transcodeFailure(body, String(dexId), "cry"));
     }
   }
   throw new Error(`Yoto is still transcoding the cry for number ${dexId}.`);
@@ -461,7 +485,7 @@ async function pollUpload(
       };
     }
     if (phase && phase !== "queued" && phase !== "processing" && phase !== "transcoding") {
-      throw new Error(`Yoto could not transcode track ${label}.`);
+      throw new Error(transcodeFailure(body, label, "track"));
     }
   }
   return undefined;
@@ -541,6 +565,7 @@ export async function prepareFactTrack(
     throw new Error("That upload id does not look right.");
   }
 
+  // Dex number, not the slot on the card. A Pokefacts playlist never has 142 tracks.
   const label = dexId ? String(dexId) : "intro";
   const renderedFile = path.join(roots.rendered, `${cacheKey(text, dexId)}.json`);
   const speechFile = path.join(roots.speech, `${speechKey(text)}.mp3`);

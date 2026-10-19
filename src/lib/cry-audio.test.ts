@@ -8,8 +8,8 @@ import { describe, it } from "node:test";
 
 import { POST as postJob } from "../app/api/yoto/job/route";
 import { POST as postTrack } from "../app/api/yoto/track/route";
-import { assertCryFirst, audioContainer, audioDurationSeconds, cryLeads, cryUrl, mergeCryFirst } from "./cry-audio";
-import { ffmpegCommand } from "./ffmpeg-bin";
+import { assertCryFirst, audioContainer, audioDurationSeconds, cryLeads, cryUrl, mergeCryFirst, YOTO_MP3_ARGS } from "./cry-audio";
+import { ffmpegCommand, ffprobeCommand } from "./ffmpeg-bin";
 import { guessUpload, LILY_VOICE_ID, type KidCard } from "./kid-cards";
 import { applyFinishedAudio, factsBulkUpload, renderJobs } from "./yoto-send";
 import { attachCry, prepareFactTrack } from "./yoto-fact-audio";
@@ -22,6 +22,53 @@ function sine(file: string, frequency = 440): Promise<void> {
       { timeout: 20_000 },
       (error) => (error ? reject(error) : resolve()),
     );
+  });
+}
+
+function probeMerged(bytes: Buffer): Promise<{
+  codec: string;
+  sampleRate: number;
+  channels: number;
+  bitRate: number;
+  duration: number;
+  streams: number;
+  video: number;
+}> {
+  return new Promise((resolve, reject) => {
+    const dir = path.join(tmpdir(), `champdex-probe-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+    mkdir(dir, { recursive: true })
+      .then(() => writeFile(path.join(dir, "merged.mp3"), bytes))
+      .then(
+        () =>
+          new Promise<string>((done, fail) => {
+            execFile(
+              ffprobeCommand(),
+              ["-v", "error", "-print_format", "json", "-show_streams", "-show_format", path.join(dir, "merged.mp3")],
+              { timeout: 20_000 },
+              (error, stdout, stderr) => (error ? fail(new Error(stderr || error.message)) : done(stdout)),
+            );
+          }),
+      )
+      .then((stdout) => {
+        const parsed = JSON.parse(stdout) as {
+          streams?: Array<{ codec_name?: string; codec_type?: string; sample_rate?: string; channels?: number; bit_rate?: string; duration?: string }>;
+          format?: { duration?: string; bit_rate?: string; nb_streams?: number };
+        };
+        const audio = parsed.streams?.find((stream) => stream.codec_type === "audio");
+        resolve({
+          codec: audio?.codec_name ?? "",
+          sampleRate: Number(audio?.sample_rate ?? 0),
+          channels: Number(audio?.channels ?? 0),
+          bitRate: Number(audio?.bit_rate || parsed.format?.bit_rate || 0),
+          duration: Number(audio?.duration ?? parsed.format?.duration ?? 0),
+          streams: parsed.format?.nb_streams ?? parsed.streams?.length ?? 0,
+          video: parsed.streams?.filter((stream) => stream.codec_type === "video").length ?? 0,
+        });
+      })
+      .finally(() => {
+        rm(dir, { recursive: true, force: true }).catch(() => undefined);
+      })
+      .catch(reject);
   });
 }
 
@@ -935,6 +982,92 @@ describe("fact audio", () => {
         },
       );
       assert.equal(uploads, 0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("encodes a plain 128k MP3 and names the Pokémon when Yoto cannot transcode", async () => {
+    assert.deepEqual(
+      [...YOTO_MP3_ARGS],
+      [
+        "-vn",
+        "-map_metadata",
+        "-1",
+        "-c:a",
+        "libmp3lame",
+        "-b:a",
+        "128k",
+        "-ar",
+        "44100",
+        "-ac",
+        "1",
+        "-id3v2_version",
+        "0",
+        "-write_id3v1",
+        "0",
+      ],
+    );
+    assert.equal(YOTO_MP3_ARGS.includes("-q:a"), false);
+
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-yoto-mp3-"));
+    try {
+      const cryPath = path.join(dir, "cry.mp3");
+      const speechPath = path.join(dir, "speech.mp3");
+      await sine(cryPath, 880);
+      await sine(speechPath, 440);
+      const cry = await readFile(cryPath);
+      const speech = await readFile(speechPath);
+      const merged = await mergeCryFirst(cry, speech);
+      assert.equal(merged[0], 0xff);
+      assert.equal((merged[1] & 0xe0) === 0xe0, true);
+      assert.equal(merged.subarray(0, 3).toString("ascii") === "ID3", false);
+      assert.equal(merged.subarray(0, 64).includes(Buffer.from("Xing")), false);
+      const probed = await probeMerged(merged);
+      assert.equal(probed.codec, "mp3");
+      assert.equal(probed.sampleRate, 44100);
+      assert.equal(probed.channels, 1);
+      assert.equal(probed.streams, 1);
+      assert.equal(probed.video, 0);
+      assert.ok(probed.bitRate >= 120_000 && probed.bitRate <= 140_000);
+      assert.ok(probed.duration >= 1);
+
+      const text = "Aerodactyl waits on the cliff. Its wings are wide.";
+      const speechRoot = path.join(dir, "speech-cache");
+      const cries = path.join(dir, "cries");
+      await mkdir(speechRoot, { recursive: true });
+      await mkdir(cries, { recursive: true });
+      const speechHash = createHash("sha256").update(Buffer.from(`${LILY_VOICE_ID}\n${text}`)).digest("hex");
+      await writeFile(path.join(speechRoot, `${speechHash}.mp3`), speech);
+      await writeFile(path.join(cries, "142.ogg"), cry);
+      const fetchImpl: typeof fetch = async (input, init) => {
+        const url = String(input);
+        if (url.includes("/media/transcode/audio/uploadUrl")) {
+          return Response.json({ upload: { uploadId: "up-aero", uploadUrl: "https://upload.example/aero" } });
+        }
+        if (url === "https://upload.example/aero" && init?.method === "PUT") return new Response("ok");
+        if (url.includes("/transcoded")) {
+          return Response.json({ transcode: { progress: { phase: "error" } } });
+        }
+        throw new Error(`Unexpected ${init?.method ?? "GET"} ${url}`);
+      };
+      await assert.rejects(
+        () =>
+          prepareFactTrack(
+            "x".repeat(24),
+            { text, title: "Aerodactyl", name: "Aerodactyl", dexId: 142 },
+            fetchImpl,
+            { speech: speechRoot, rendered: path.join(dir, "rendered"), cries },
+          ),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.match(error.message, /Aerodactyl/);
+          assert.match(error.message, /could not transcode/);
+          assert.match(error.message, /track 142/);
+          assert.equal(error.message.includes("yoto:#"), false);
+          return true;
+        },
+      );
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
