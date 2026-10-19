@@ -57,7 +57,7 @@ export async function mergeCryFirst(cry: Buffer, speech: Buffer): Promise<Buffer
 
 export async function audioDurationSeconds(bytes: Buffer, name = "clip.mp3"): Promise<number> {
   const dir = await mkdtemp(path.join(tmpdir(), "champdex-audio-"));
-  const file = path.join(dir, name);
+  const file = path.join(/* turbopackIgnore: true */ dir, name);
   try {
     await writeFile(file, bytes);
     const stdout = await new Promise<string>((resolve, reject) => {

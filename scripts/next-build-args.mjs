@@ -5,6 +5,13 @@
  * desktop Linux, macOS, and Windows. Android does not: Termux is
  * `android/arm64` (32-bit phones report `arm`) and only the WASM bindings
  * load, so that build has to opt into Webpack.
+ *
+ * `env` is any string environment, not `NodeJS.ProcessEnv`. Next makes
+ * `NODE_ENV` required on that type, and this choice only reads Termux markers.
+ *
+ * @param {NodeJS.Platform} [platform]
+ * @param {string} [arch]
+ * @param {{ [key: string]: string | undefined }} [env]
  */
 export function productionBuildArgs(
   platform = process.platform,
