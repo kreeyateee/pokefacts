@@ -1,5 +1,5 @@
 import type { BiologyBlock } from "@/lib/catalogue-types";
-import { dexBlurb, pickDexEntry, threeClues, type MonSheet } from "@/lib/dex-facts";
+import { dexBlurb, guessSpoken, pickDexEntry, type MonSheet } from "@/lib/dex-facts";
 import { pronounce } from "@/lib/pronounce";
 import { spokenWiki } from "@/lib/spoken-wiki";
 import type { YotoContent } from "@/lib/yoto-card";
@@ -217,10 +217,8 @@ function factChapter(sheet: MonSheet): KidChapter {
 
 function riddleChapter(sheet: MonSheet): KidChapter {
   const number = String(sheet.id);
-  const entry = pickDexEntry(sheet.entries);
-  const clues = threeClues(sheet.name, sheet.entries, sheet);
+  const script = guessSpoken(sheet);
   const answerIcon = typeIcon(sheet.types);
-  const dexLine = entry.text ? ` ${entry.text}` : "";
   return picture(
     sheet.slug,
     sheet.name,
@@ -229,24 +227,8 @@ function riddleChapter(sheet: MonSheet): KidChapter {
     "?",
     I.detective,
     [
-      talk(
-        "clues",
-        "Three clues",
-        `Number ${number}. Three clues. ${clues.join(" ")} Shout your guess. One. Two. Three.`,
-        I.detective,
-        "?",
-        undefined,
-        "cry",
-      ),
-      talk(
-        "answer",
-        "The answer",
-        `It is ${sheet.name}.${dexLine} The picture changes to this Pokémon now. Turn to another number for a new riddle.`,
-        answerIcon,
-        "Yes",
-        entry.version || undefined,
-        "cry",
-      ),
+      talk("clues", "Clues", script.clue, I.detective, "?", undefined, "cry"),
+      talk("answer", "The answer", script.answer, answerIcon, "Yes", undefined, "cry"),
     ],
     { sprite: `/sprites/${sheet.id}.png`, dexId: sheet.id },
   );
@@ -257,7 +239,7 @@ function intro(kind: KidCardKind, index: number, first: number, last: number, fi
   const text =
     kind === "meet"
       ? `This card is Pokefacts ${index}, numbers ${span}. Turn the wheel, or press the arrows, until you see a picture. Then press play. You will hear the cry, then the name, then a short description. The star is this track. Number ${first} is ${firstName}. Each playlist links to its own card.`
-      : `Guess Who. Numbers ${span}. Turn the wheel, or press the arrows, until you see a number. Then press play. Three clues. Call the name before the count of three ends. The answer plays next, and the picture changes to that Pokémon. Start at number ${first}. Each playlist links to its own card.`;
+      : `Guess Who. Numbers ${span}. Turn the wheel until you see a dark picture. Then press play. You hear three short clues. Shout the name before the count ends. The next track tells you the answer. Start at number ${first}. Each playlist links to its own card.`;
   return picture("start", "Start here", "Go", "a star", "★", I.star, [
     talk("how", kind === "meet" ? "How to play" : "How to play Guess Who", text, I.star, "Go"),
   ]);
@@ -285,11 +267,11 @@ function buildGroup(sheets: MonSheet[], kind: KidCardKind, size: number): KidCar
       blurb:
         kind === "meet"
           ? "The cry, then the name, then a short description."
-          : "Three clues. Call the name before the count ends.",
+          : "Three short clues. Call the name before the count ends.",
       childDoes:
         kind === "meet"
           ? "Turn to a picture and press play. You hear the cry, then the name, then a short description."
-          : "Pick a number and press play. Three clues, then a count of three. The answer plays next and the picture changes.",
+          : "Pick a number and press play. Three short clues, then a count of three. The next track tells you the name.",
       chapters,
     };
   });
@@ -486,12 +468,9 @@ export function shadowPixelPath(id: number): string {
   return `/pixels/${id}-shadow.png`;
 }
 
-const GUESS_HOWTO =
-  "Guess Who. Fifty riddles, drawn at random. You hear the cry, then three clues. Turn the wheel until you see a dark picture. Press play. Shout your guess before the count ends. The next track plays the cry again, then tells you the answer, and the picture changes to the real Pokémon. ";
-
 /**
  * One playlist of 50 riddles. Two tracks each fills the 100-track card.
- * The how-to is in the description and at the start of the first clue.
+ * Each clue is the number, three short sentences, and the count.
  */
 export function randomGuessCard(pool: KidChapter[], random: () => number = Math.random): KidCard {
   const drawn = drawSample(
@@ -499,17 +478,14 @@ export function randomGuessCard(pool: KidChapter[], random: () => number = Math.
     GUESS_RIDDLE_COUNT,
     random,
   );
-  const chapters = drawn.map((chapter, index) => {
+  const chapters = drawn.map((chapter) => {
     const dexId = chapter.dexId as number;
     const shadow = shadowPixelPath(dexId);
     const real = `/pixels/${dexId}.png`;
     const tracks = chapter.tracks.map((track, trackIndex) => {
       const clue = track.key === "clues" || trackIndex === 0;
-      const text = index === 0 && clue ? `${GUESS_HOWTO}${track.text}` : track.text;
       return {
         ...track,
-        text,
-        spoken: pronounce(text),
         voiceId: LILY_VOICE_ID,
         icon: clue ? shadow : real,
       };
@@ -530,7 +506,7 @@ export function randomGuessCard(pool: KidChapter[], random: () => number = Math.
     libraryTitle: "Guess Who",
     blurb: "Fifty riddles drawn at random. The cry, then the clue. The cry again, then the answer.",
     childDoes:
-      "Pick a dark picture and press play. You hear the cry, then three clues, then a count of three. The answer plays the cry again, then the name, and the picture changes.",
+      "Pick a dark picture and press play. You hear the cry, then three short clues, then a count of three. The answer plays the cry again, then the name.",
     chapters,
   };
 }

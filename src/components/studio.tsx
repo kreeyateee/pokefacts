@@ -1239,7 +1239,7 @@ export function Studio({
                   {guessing
                     ? revealed
                       ? "Answer"
-                      : "Three clues"
+                      : "Clues"
                     : `Number ${chapter.overlay}`}
                 </p>
                 <div className="mt-3 flex items-end gap-4">

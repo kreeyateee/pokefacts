@@ -315,6 +315,7 @@ describe("cards for ages 8 to 12", () => {
       assert.notEqual(riddle.tracks[1]?.icon, riddle.tracks[0]?.icon);
       assert.match(riddle.tracks[1]?.text ?? "", /^It is /);
     }
+    assertGuessScriptsStayShort(guess.chapters);
   });
 
   it("sends the spoken spelling to Yoto", () => {
@@ -336,6 +337,32 @@ describe("cards for ages 8 to 12", () => {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+const GUESS_LECTURE = /picture changes|Turn to another number/i;
+
+function assertGuessScriptsStayShort(
+  chapters: Array<{ dexId?: number; tracks: Array<{ text: string; spoken: string }> }>,
+) {
+  for (const chapter of chapters) {
+    for (const track of chapter.tracks) {
+      assert.doesNotMatch(track.text, GUESS_LECTURE);
+      assert.doesNotMatch(track.spoken, GUESS_LECTURE);
+    }
+    if (!chapter.dexId) continue;
+    const clue = chapter.tracks[0]?.text ?? "";
+    const answer = chapter.tracks[1]?.text ?? "";
+    assert.match(clue, new RegExp(`^Number ${chapter.dexId}\\.`));
+    assert.match(clue, /Shout your guess\. One\. Two\. Three\.$/);
+    const middle = clue
+      .replace(/^Number \d+\. /, "")
+      .replace(/ Shout your guess\. One\. Two\. Three\.$/, "");
+    const sentences = middle.match(/[^.!?]+[.!?]+/g) ?? [];
+    assert.equal(sentences.length, 3);
+    for (const sentence of sentences) {
+      assert.equal(answer.includes(sentence.trim()), false);
+    }
+  }
 }
 
 function spokenTracks(card: { chapters: Array<{ tracks: unknown[] }> }): number {
@@ -402,12 +429,43 @@ describe("every national species", () => {
     assert.match(riddle.tracks[1]?.text ?? "", /^It is Bulbasaur\./);
     assert.notEqual(riddle.tracks[1]?.icon, riddle.tracks[0]?.icon);
     for (const card of guess) {
+      assertGuessScriptsStayShort(card.chapters);
       for (const chapter of card.chapters) {
         if (!chapter.dexId) continue;
         const clue = chapter.tracks[0]?.text ?? "";
         assert.doesNotMatch(clue, new RegExp(escapeRegExp(chapter.title), "i"));
         assert.match(chapter.tracks[1]?.text ?? "", /^It is /);
       }
+    }
+  });
+
+  it("speaks a short Croconaw riddle and does not repeat the dex line", () => {
+    const croconaw = sheets.find((sheet) => sheet.id === 159);
+    assert.ok(croconaw);
+    const riddle = guess.flatMap((card) => card.chapters).find((chapter) => chapter.dexId === 159);
+    assert.ok(riddle);
+    const clue = riddle.tracks[0]?.text ?? "";
+    const answer = riddle.tracks[1]?.text ?? "";
+    const flavor = croconaw.entries.map((entry) => entry.text).join(" ");
+    assert.equal(
+      clue,
+      "Number 159. Its jaws lock shut and do not let go. The fangs hook backward like fishhooks. It is a Water type. Shout your guess. One. Two. Three.",
+    );
+    assert.equal(answer, "It is Croconaw. It grows from Totodile and becomes Feraligatr.");
+    assert.doesNotMatch(clue, /Croconaw|Totodile|Feraligatr/i);
+    assert.match(answer, /^It is Croconaw\./);
+    assert.equal(clue.includes(flavor), false);
+    assert.equal(answer.includes(flavor), false);
+    assert.doesNotMatch(`${clue} ${answer}`, GUESS_LECTURE);
+    assert.equal(riddle.tracks[0]?.lead, "cry");
+    assert.equal(riddle.tracks[1]?.lead, "cry");
+    const clueSentences =
+      clue
+        .replace(/^Number 159\. /, "")
+        .replace(/ Shout your guess\. One\. Two\. Three\.$/, "")
+        .match(/[^.!?]+[.!?]+/g) ?? [];
+    for (const sentence of clueSentences) {
+      assert.equal(answer.includes(sentence.trim()), false);
     }
   });
 });
@@ -839,6 +897,16 @@ describe("random Guess Who", () => {
       assert.match(clue.text, /One\. Two\. Three\./);
       assert.doesNotMatch(clue.text, new RegExp(escapeRegExp(name), "i"));
       assert.match(answer.text, new RegExp(`^It is ${escapeRegExp(name)}\\.`));
+      assert.doesNotMatch(`${clue.text} ${answer.text} ${clue.spoken} ${answer.spoken}`, GUESS_LECTURE);
+      const clueSentences =
+        clue.text
+          .replace(/^Number \d+\. /, "")
+          .replace(/ Shout your guess\. One\. Two\. Three\.$/, "")
+          .match(/[^.!?]+[.!?]+/g) ?? [];
+      assert.equal(clueSentences.length, 3);
+      for (const sentence of clueSentences) {
+        assert.equal(answer.text.includes(sentence.trim()), false);
+      }
       assert.equal(chapter.icon, shadowPixelPath(id as number));
       assert.equal(clue.icon, `/pixels/${id}-shadow.png`);
       assert.equal(answer.icon, `/pixels/${id}.png`);

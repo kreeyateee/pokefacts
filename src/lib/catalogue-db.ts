@@ -285,7 +285,7 @@ export function getCatalogueEntry(id: number): CatalogueEntry | null {
 export function listMonSheets(): MonSheet[] {
   const species = db()
     .prepare(
-      `SELECT id, slug, name, genus, habitat, height_dm, weight_hg, info, info_version
+      `SELECT id, slug, name, genus, habitat, height_dm, weight_hg, info, info_version, evolves_from_id
        FROM species
        ORDER BY id`,
     )
@@ -299,6 +299,7 @@ export function listMonSheets(): MonSheet[] {
     weight_hg: number;
     info: string;
     info_version: string;
+    evolves_from_id: number | null;
   }>;
   const typeRows = db()
     .prepare("SELECT species_id, type_name FROM species_types ORDER BY species_id, slot")
@@ -342,12 +343,15 @@ export function listMonSheets(): MonSheet[] {
     list.push({ name: row.name, method: row.method });
     evolutions.set(row.from_id, list);
   }
+  const nameById = new Map(species.map((row) => [row.id, row.name]));
 
   return species.map((row) => {
     const ability = abilities.get(row.id);
-    const evolution = (evolutions.get(row.id) ?? [])
+    const steps = evolutions.get(row.id) ?? [];
+    const evolution = steps
       .map((step) => `${row.name} becomes ${step.name} ${step.method}.`.replace(/\s+/g, " ").trim())
       .join(" ");
+    const evolvesInto = [...new Set(steps.map((step) => step.name))];
     return {
       id: row.id,
       slug: row.slug,
@@ -360,6 +364,8 @@ export function listMonSheets(): MonSheet[] {
       abilityName: ability?.name ?? null,
       abilityEffect: ability?.info || null,
       evolution,
+      evolvesFrom: row.evolves_from_id ? (nameById.get(row.evolves_from_id) ?? null) : null,
+      evolvesInto,
       habitat: row.habitat ? habitatSpeech(row.habitat) : null,
       entries: row.info ? [{ text: row.info, version: row.info_version }] : [],
     };
