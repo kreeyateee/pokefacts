@@ -3,6 +3,7 @@
 Pokefacts makes Pokémon cards for your own Yoto player. It has a short fact for all 1,025 Pokémon, and a Guess Who game. The cards go into your Yoto library. You then link each one to a blank Make Your Own card.
 
 It is free. If you want to say thanks, you can [buy me a coffee](https://buymeacoffee.com/kreeyate).
+https://pokefacts.duckdns.org/
 
 This is a fan project. It is not made by Nintendo, Game Freak, Creatures, or Yoto.
 
