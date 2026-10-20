@@ -11,7 +11,7 @@
     "start": "node scripts/local.mjs",
     "local": "node scripts/local.mjs",
     "lint": "eslint",
-    "test": "tsx --test src/lib/champ-script.test.ts src/lib/kid-cards.test.ts src/lib/catalogue-db.test.ts src/lib/cry-audio.test.ts src/lib/yoto-error.test.ts src/lib/local-start.test.ts src/lib/bulbapedia.test.ts src/lib/selection-playlist.test.ts src/lib/piper.test.ts src/lib/artwork.test.ts",
+    "test": "tsx --test src/lib/champ-script.test.ts src/lib/kid-cards.test.ts src/lib/catalogue-db.test.ts src/lib/cry-audio.test.ts src/lib/yoto-error.test.ts src/lib/local-start.test.ts src/lib/bulbapedia.test.ts src/lib/selection-playlist.test.ts src/lib/piper.test.ts src/lib/artwork.test.ts src/lib/sticker-layout.test.ts",
     "catalogue": "tsx scripts/build-catalogue.ts"
   },
   "dependencies": {

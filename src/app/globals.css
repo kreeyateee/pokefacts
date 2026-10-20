@@ -337,6 +337,21 @@
   box-shadow: 2px 2px 0 var(--ink);
 }
 
+.pk-swatch {
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  box-shadow: 2px 2px 0 var(--ink);
+  cursor: pointer;
+}
+
+.pk-swatch[aria-pressed="true"] {
+  outline: 3px solid var(--poke-yellow);
+  outline-offset: 2px;
+}
+
 .pk-page input[type="checkbox"],
 .pk-page input[type="radio"] {
   width: 1rem;
