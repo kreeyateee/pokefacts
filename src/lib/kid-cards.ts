@@ -1,4 +1,5 @@
 import type { BiologyBlock } from "@/lib/catalogue-types";
+import { artworkSrc } from "@/lib/artwork-path";
 import { dexBlurb, guessSpoken, pickDexEntry, type MonSheet } from "@/lib/dex-facts";
 import { pronounce } from "@/lib/pronounce";
 import { spokenWiki } from "@/lib/spoken-wiki";
@@ -625,13 +626,14 @@ export function fitFormTracks<T extends { speciesId: number }>(forms: readonly T
 export const MEGA_PLAYLIST_ID = "mega-evolutions";
 export const GMAX_PLAYLIST_ID = "gigantamax";
 
-/** One cry-first track per form. The icon is the species pixel. */
+/** One cry-first track per form. The screen shows that form's artwork. The Yoto icon stays the species pixel. */
 export function formPlaylist(kind: "mega" | "gmax", forms: readonly FormPlaylistEntry[]): KidCard {
   const title = kind === "mega" ? "Mega Evolutions" : "Gigantamax";
   const used = new Set<string>();
   const chapters = fitFormTracks(forms).map((form) => {
     const text = spokenWiki(form.formName, form.blocks ?? []);
     const icon = `/pixels/${form.speciesId}.png`;
+    const artwork = artworkSrc("form", form.formId);
     let overlay = String(form.speciesId);
     while (used.has(overlay)) overlay = `${overlay}b`;
     used.add(overlay);
@@ -643,7 +645,7 @@ export function formPlaylist(kind: "mega" | "gmax", forms: readonly FormPlaylist
       overlay,
       icon,
       [talk("entry", form.formName, text, icon, overlay, undefined, "cry")],
-      { sprite: icon, dexId: form.speciesId },
+      { sprite: artwork, dexId: form.speciesId },
     );
     chapter.formId = form.formId;
     if (form.url) chapter.articleUrl = form.url;

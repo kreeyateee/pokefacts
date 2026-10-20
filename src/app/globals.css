@@ -369,6 +369,24 @@
   image-rendering: pixelated;
 }
 
+.pk-artwork {
+  height: 9rem;
+  width: 9rem;
+  flex: none;
+  border: 3px solid var(--ink);
+  border-radius: 1rem;
+  object-fit: contain;
+  background: radial-gradient(circle at 50% 45%, #fff 0 42%, #c5e8ff 72%);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.pk-artwork-thumb {
+  height: 2.75rem;
+  width: 2.75rem;
+  flex: none;
+  object-fit: contain;
+}
+
 .pk-soft,
 .pk-measure {
   border: 3px solid var(--ink);

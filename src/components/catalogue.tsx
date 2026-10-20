@@ -92,7 +92,7 @@ function multiplierLabel(multiplier: number): string {
 }
 
 function spriteSrc(id: number): string {
-  return `/sprites/${id}.png`;
+  return `/api/artwork/species/${id}`;
 }
 
 function statFill(name: string): string {
@@ -720,7 +720,7 @@ export function Catalogue({
                     alt=""
                     width={40}
                     height={40}
-                    className="h-10 w-10 shrink-0 object-contain [image-rendering:pixelated]"
+                    className="pk-artwork-thumb"
                   />
                   <span className="min-w-0">
                     <span className="block">
@@ -784,9 +784,9 @@ export function Catalogue({
               <img
                 src={spriteSrc(entry.id)}
                 alt=""
-                width={96}
-                height={96}
-                className="pk-sprite"
+                width={144}
+                height={144}
+                className="pk-artwork"
               />
               <div>
                 <h2 className="font-display text-4xl leading-tight sm:text-5xl">{entry.name}</h2>

@@ -1354,7 +1354,8 @@ export function Studio({
                     <>
                       This playlist is{" "}
                       <span className="font-bold text-ink">{card.libraryTitle}</span>. One
-                      track for each form. The picture is that species&apos; 16×16 pixel.
+                      track for each form. The picture is that form&apos;s full artwork.
+                      The Yoto card still uses the species&apos; 16×16 pixel.
                     </>
                   ) : (
                     <>
@@ -1463,9 +1464,12 @@ export function Studio({
                       type="button"
                       onClick={() => chooseChapter(item.key)}
                       aria-current={selected ? "true" : undefined}
-                      className="pk-choice px-2.5 py-2.5 text-sm"
+                      className="pk-choice flex items-center gap-2 px-2.5 py-2 text-left text-sm"
                     >
-                      {label}
+                      {formMode && item.sprite ? (
+                        <img src={item.sprite} alt="" width={44} height={44} className="pk-artwork-thumb" />
+                      ) : null}
+                      <span className="min-w-0">{label}</span>
                     </button>
                   );
                 })}
@@ -1486,9 +1490,9 @@ export function Studio({
                     <img
                       src={portrait}
                       alt={guessing && !revealed ? "" : chapter.title}
-                      width={96}
-                      height={96}
-                      className="pk-sprite"
+                      width={formMode ? 144 : 96}
+                      height={formMode ? 144 : 96}
+                      className={formMode ? "pk-artwork" : "pk-sprite"}
                     />
                   ) : null}
                   <h2 className="font-display text-4xl leading-tight sm:text-5xl">
