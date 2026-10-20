@@ -6,7 +6,13 @@ import { audioContainer, inputContainer, mergeCryFirst } from "@/lib/cry-audio";
 import { clampMix, type MixSettings } from "@/lib/playback-settings";
 import { synthesizePiper, type PiperSynthOptions } from "@/lib/piper";
 import { chosenVoice, isPiperVoice } from "@/lib/piper-voice";
-import { ensureCry, readCachedMergedMp3 } from "@/lib/yoto-fact-audio";
+import {
+  discardTitledCards,
+  discardYotoCard,
+  ensureCry,
+  readCachedMergedMp3,
+  recordingCardId,
+} from "@/lib/yoto-fact-audio";
 import { reconnectMessage, yotoErrorText } from "@/lib/yoto-error";
 import { spokenForDemo } from "@/lib/voice-choice";
 
@@ -112,7 +118,7 @@ function jobFields(payload: unknown): { jobId?: string; status?: string; cardId?
   };
   const job = row.job ?? row;
   const error = typeof job.error === "string" ? job.error : undefined;
-  return { jobId: job.jobId, status: job.status, cardId: job.result?.cardId, error };
+  return { jobId: job.jobId, status: job.status, cardId: recordingCardId(job.result) ?? recordingCardId(job), error };
 }
 
 function httpsAudio(payload: unknown): string {
@@ -123,21 +129,6 @@ function httpsAudio(payload: unknown): string {
     }
   }
   return "";
-}
-
-async function discardCard(token: string, cardId: string, fetchImpl: typeof fetch): Promise<void> {
-  if (!/^[\w-]{4,80}$/.test(cardId)) return;
-  try {
-    await yoto(
-      token,
-      `https://api.yotoplay.com/content/${encodeURIComponent(cardId)}`,
-      { method: "DELETE" },
-      fetchImpl,
-      15_000,
-    );
-  } catch {
-    // The demo card is only a scratch recording.
-  }
 }
 
 /**
@@ -311,6 +302,7 @@ async function recordVoice(
   if (!audioContainer(audio) || audio.length < 128) throw new Error("This voice recording was not playable audio.");
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, audio);
-  await discardCard(token, fields.cardId, fetchImpl);
+  await discardYotoCard(token, fields.cardId, fetchImpl);
+  await discardTitledCards(token, new Set(["Pokefacts demo"]), fetchImpl);
   return audio;
 }

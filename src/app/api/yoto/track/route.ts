@@ -15,6 +15,8 @@ export async function POST(request: Request) {
     speechCardId?: string;
     uploadId?: string;
     discardCardId?: string;
+    discardCardIds?: string[];
+    sweepScratch?: boolean;
     voiceId?: string;
     cryVolume?: number;
     voiceVolume?: number;

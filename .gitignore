@@ -45,6 +45,7 @@ next-env.d.ts
 /data/cries
 /data/speech
 /data/rendered
+/data/demo
 
 # Piper binary and British voice model. Tens of megabytes. Downloaded once.
 /data/piper

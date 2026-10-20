@@ -1159,6 +1159,179 @@ describe("fact audio", () => {
   });
 });
 
+describe("Pokefacts scratch", () => {
+  it("deletes the scratch card when the line is already cached", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-scratch-cache-"));
+    const text = "A short introduction.";
+    const rendered = path.join(dir, "rendered");
+    await mkdir(rendered, { recursive: true });
+    const key = renderedCacheKey(text, undefined, LILY_VOICE_ID);
+    await writeFile(
+      path.join(rendered, `${key}.json`),
+      JSON.stringify({ trackUrl: "yoto:#introhash", duration: 1, fileSize: 20, format: "mp3", channels: "mono" }),
+    );
+    const deleted: string[] = [];
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = String(input);
+      if (init?.method === "DELETE" && url.endsWith("/scr01")) {
+        deleted.push(url);
+        if (deleted.length === 1) return new Response("busy", { status: 500 });
+        return Response.json({ status: "ok" });
+      }
+      throw new Error(`Unexpected ${init?.method ?? "GET"} ${url}`);
+    };
+    try {
+      const ready = await prepareFactTrack(
+        "x".repeat(24),
+        { text, title: "Introduction", voiceId: LILY_VOICE_ID, speechCardId: "scr01" },
+        fetchImpl,
+        { speech: path.join(dir, "speech"), rendered },
+      );
+      assert.equal(ready.phase, "ready");
+      assert.equal(ready.trackUrl, "yoto:#introhash");
+      assert.equal(deleted.length, 2);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("deletes the scratch card when Lily's file is already on disk", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-scratch-file-"));
+    const text = "Jigglypuff sings a short note.";
+    const speech = Buffer.concat([Buffer.from([0xff, 0xfb, 0x90, 0x00]), Buffer.alloc(180, 1)]);
+    const speechDir = path.join(dir, "speech");
+    await mkdir(speechDir, { recursive: true });
+    const key = createHash("sha256").update(Buffer.from(`${LILY_VOICE_ID}\n${text}`)).digest("hex");
+    await writeFile(path.join(speechDir, `${key}.mp3`), speech);
+    const deleted: string[] = [];
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = String(input);
+      if (init?.method === "DELETE") {
+        deleted.push(url);
+        return Response.json({ status: "ok" });
+      }
+      if (url.includes("/media/transcode/audio/uploadUrl")) {
+        return Response.json({ upload: { uploadId: "up-jiggly", uploadUrl: "https://upload.example/jiggly" } });
+      }
+      if (url === "https://upload.example/jiggly") return new Response("ok");
+      if (url.includes("/transcoded")) {
+        return Response.json({
+          transcode: {
+            transcodedSha256: "jigglyhash",
+            transcodedInfo: { duration: 1, fileSize: speech.length, format: "mp3", channels: "mono" },
+          },
+        });
+      }
+      throw new Error(`Unexpected ${init?.method ?? "GET"} ${url}`);
+    };
+    try {
+      const ready = await prepareFactTrack(
+        "x".repeat(24),
+        { text, title: "Jigglypuff", voiceId: LILY_VOICE_ID, speechCardId: "jig01" },
+        fetchImpl,
+        { speech: speechDir, rendered: path.join(dir, "rendered") },
+      );
+      assert.equal(ready.phase, "ready");
+      assert.equal(ready.trackUrl, "yoto:#jigglyhash");
+      assert.equal(deleted.some((url) => url.endsWith("/jig01")), true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("deletes the card id Yoto returns, not only the id on the job", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-scratch-real-"));
+    const speech = Buffer.concat([Buffer.from([0xff, 0xfb, 0x90, 0x00]), Buffer.alloc(180, 3)]);
+    const deleted: string[] = [];
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = String(input);
+      if (url.includes("/content/job/job-real")) {
+        return Response.json({ job: { jobId: "job-real", status: "completed", result: { card: { cardId: "temp1" } } } });
+      }
+      if (url.includes("/content/temp1") && url.includes("playable=true")) {
+        return Response.json({
+          card: {
+            cardId: "real1",
+            content: { chapters: [{ tracks: [{ trackUrl: "https://cdn.example/real1.mp3" }] }] },
+          },
+        });
+      }
+      if (url === "https://cdn.example/real1.mp3") return new Response(new Uint8Array(speech));
+      if (init?.method === "DELETE") {
+        deleted.push(url);
+        return Response.json({ status: "ok" });
+      }
+      if (url.includes("/media/transcode/audio/uploadUrl")) {
+        return Response.json({ upload: { uploadId: "up-real", uploadUrl: "https://upload.example/real" } });
+      }
+      if (url === "https://upload.example/real") return new Response("ok");
+      if (url.includes("/transcoded")) {
+        return Response.json({
+          transcode: {
+            transcodedSha256: "realhash",
+            transcodedInfo: { duration: 1, fileSize: speech.length, format: "mp3", channels: "mono" },
+          },
+        });
+      }
+      throw new Error(`Unexpected ${init?.method ?? "GET"} ${url}`);
+    };
+    try {
+      const ready = await prepareFactTrack(
+        "x".repeat(24),
+        { text: "A saved line.", title: "Line", voiceId: LILY_VOICE_ID, speechJobId: "job-real" },
+        fetchImpl,
+        { speech: path.join(dir, "speech"), rendered: path.join(dir, "rendered") },
+      );
+      assert.equal(ready.phase, "ready");
+      assert.equal(deleted.some((url) => url.endsWith("/temp1")), true);
+      assert.equal(deleted.some((url) => url.endsWith("/real1")), true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("sweeps Pokefacts scratch out of the library and leaves the playlist", async () => {
+    const deleted: string[] = [];
+    const original = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      const url = String(input);
+      if (url.includes("/content/mine")) {
+        return Response.json({
+          cards: [
+            { cardId: "scr01", title: "Pokefacts scratch" },
+            { cardId: "demo1", metadata: { title: "Pokefacts demo" } },
+            { cardId: "old01", title: "Champdex scratch" },
+            { cardId: "keep1", title: "Pokefacts 1" },
+          ],
+        });
+      }
+      if (init?.method === "DELETE") {
+        deleted.push(url.split("/").pop() ?? "");
+        return Response.json({ status: "ok" });
+      }
+      throw new Error(`Unexpected ${init?.method ?? "GET"} ${url}`);
+    };
+    try {
+      const response = await postTrack(
+        new Request("http://localhost/api/yoto/track", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${"t".repeat(24)}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ sweepScratch: true, discardCardIds: ["miss9"] }),
+        }),
+      );
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as { phase?: string };
+      assert.equal(body.phase, "discarded");
+      assert.deepEqual([...deleted].sort(), ["demo1", "miss9", "old01", "scr01"]);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+});
+
 describe("hear the entry", () => {
   const george = YOTO_VOICES.find((voice) => voice.name === "George")?.id ?? "";
 
@@ -1168,6 +1341,7 @@ describe("hear the entry", () => {
     const speech = Buffer.concat([Buffer.from("ID3"), Buffer.alloc(180, 7)]);
     let labsUrl = "";
     let posted = "";
+    const deleted: string[] = [];
     const fetchImpl: typeof fetch = async (input, init) => {
       const url = String(input);
       if (url.includes("labs.api.yotoplay.com/content/job?") && init?.method === "POST") {
@@ -1181,7 +1355,18 @@ describe("hear the entry", () => {
         });
       }
       if (url === "https://cdn.example/hear.mp3") return new Response(new Uint8Array(speech));
-      if (init?.method === "DELETE") return new Response(null, { status: 200 });
+      if (url.includes("/content/mine")) {
+        return Response.json({
+          cards: [
+            { cardId: "abc12", title: "Pokefacts demo" },
+            { cardId: "keep1", title: "Pokefacts 1" },
+          ],
+        });
+      }
+      if (init?.method === "DELETE") {
+        deleted.push(url);
+        return Response.json({ status: "ok" });
+      }
       throw new Error(`Unexpected ${init?.method ?? "GET"} ${url}`);
     };
     const request = demoHearBody({
@@ -1210,6 +1395,8 @@ describe("hear the entry", () => {
       assert.equal(audio.cryFirst, false);
       assert.equal(audio.audio.subarray(0, 3).toString("ascii"), "ID3");
       assert.equal(audio.audio.includes(Buffer.from("Bulbasaur")), false);
+      assert.equal(deleted.some((url) => url.endsWith("/abc12")), true);
+      assert.equal(deleted.some((url) => url.endsWith("/keep1")), false);
 
       const original = globalThis.fetch;
       globalThis.fetch = fetchImpl;

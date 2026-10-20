@@ -323,6 +323,10 @@ export type TrackPrepareRequest = {
   speechCardId?: string;
   uploadId?: string;
   discardCardId?: string;
+  /** Scratch cards collected by the browser. Deleted with the library sweep. */
+  discardCardIds?: string[];
+  /** Delete every temporary Pokefacts scratch card still in the library. */
+  sweepScratch?: boolean;
   /** ElevenLabs voice. Lily when this is omitted. */
   voiceId?: string;
   cryVolume?: number;
@@ -459,18 +463,47 @@ function scratchContent(text: string, title: string, voiceId: string) {
   };
 }
 
+function textField(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const text = value.trim();
+  return text || undefined;
+}
+
+/** Job results have put the new card id on result, on the job, or under result.card. */
+export function recordingCardId(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== "object") return undefined;
+  const row = payload as {
+    cardId?: unknown;
+    contentId?: unknown;
+    card?: { cardId?: unknown };
+  };
+  return textField(row.cardId) ?? textField(row.contentId) ?? textField(row.card?.cardId);
+}
+
 function jobFields(payload: unknown): { jobId?: string; status?: string; cardId?: string; error?: string } {
   if (!payload || typeof payload !== "object") return {};
   const row = payload as {
     jobId?: string;
     status?: string;
     error?: unknown;
-    result?: { cardId?: string };
-    job?: { jobId?: string; status?: string; error?: unknown; result?: { cardId?: string } };
+    result?: unknown;
+    cardId?: unknown;
+    job?: {
+      jobId?: string;
+      status?: string;
+      error?: unknown;
+      result?: unknown;
+      cardId?: unknown;
+    };
   };
   const job = row.job ?? row;
   const error = typeof job.error === "string" ? job.error : undefined;
-  return { jobId: job.jobId, status: job.status, cardId: job.result?.cardId, error };
+  return {
+    jobId: job.jobId,
+    status: job.status,
+    cardId: recordingCardId(job.result) ?? recordingCardId(job),
+    error,
+  };
 }
 
 function httpsAudio(card: CardPayload): string {
@@ -526,19 +559,67 @@ async function fileExists(file: string): Promise<boolean> {
   }
 }
 
-async function discardCard(token: string, cardId: string, fetchImpl: typeof fetch): Promise<void> {
-  if (!/^[\w-]{4,80}$/.test(cardId)) return;
-  try {
-    await yoto(
-      token,
-      `https://api.yotoplay.com/content/${encodeURIComponent(cardId)}`,
-      { method: "DELETE" },
-      fetchImpl,
-      15_000,
-    );
-  } catch {
-    // The scratch card is only a Lily recording. The playlist does not need it.
+const SCRATCH_TITLES = new Set(["Pokefacts scratch", "Pokefacts demo", "Champdex scratch"]);
+
+function listedCards(payload: unknown): Array<{ cardId: string; title: string }> {
+  const row = payload && typeof payload === "object" ? (payload as { cards?: unknown }) : {};
+  if (!Array.isArray(row.cards)) return [];
+  const found: Array<{ cardId: string; title: string }> = [];
+  for (const item of row.cards) {
+    if (!item || typeof item !== "object") continue;
+    const card = item as { cardId?: unknown; title?: unknown; metadata?: { title?: unknown } };
+    const cardId = textField(card.cardId);
+    if (!cardId || !/^[\w-]{4,80}$/.test(cardId)) continue;
+    const title = (textField(card.title) ?? textField(card.metadata?.title) ?? "").replace(/\s+/g, " ").trim();
+    found.push({ cardId, title });
   }
+  return found;
+}
+
+/** DELETE one MYO card. A 404 means it is already gone. Other failures are retried. */
+export async function discardYotoCard(token: string, cardId: string, fetchImpl: typeof fetch = fetch): Promise<boolean> {
+  if (!/^[\w-]{4,80}$/.test(cardId)) return false;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await yoto(
+        token,
+        `https://api.yotoplay.com/content/${encodeURIComponent(cardId)}`,
+        { method: "DELETE" },
+        fetchImpl,
+        15_000,
+      );
+      await response.arrayBuffer().catch(() => undefined);
+      if (response.ok || response.status === 404) return true;
+    } catch {
+      // The next attempt asks Yoto again. A scratch card is not the playlist.
+    }
+    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+  return false;
+}
+
+/** Remove temporary recordings by title, including a card whose id the job response hid. */
+export async function discardTitledCards(
+  token: string,
+  titles: ReadonlySet<string>,
+  fetchImpl: typeof fetch = fetch,
+): Promise<void> {
+  let response: Response;
+  try {
+    response = await yoto(token, "https://api.yotoplay.com/content/mine", undefined, fetchImpl, 20_000);
+  } catch {
+    return;
+  }
+  const payload = await readJson(response);
+  if (!response.ok) return;
+  for (const card of listedCards(payload)) {
+    if (!titles.has(card.title)) continue;
+    await discardYotoCard(token, card.cardId, fetchImpl);
+  }
+}
+
+async function discardCard(token: string, cardId: string, fetchImpl: typeof fetch): Promise<void> {
+  await discardYotoCard(token, cardId, fetchImpl);
 }
 
 async function openUpload(
@@ -660,8 +741,12 @@ export async function prepareFactTrack(
     piper?: PiperSynthOptions;
   } = { speech: SPEECH_ROOT, rendered: RENDER_ROOT },
 ): Promise<TrackPrepareResult> {
-  if (request.discardCardId && !request.text?.trim()) {
-    await discardCard(token, request.discardCardId, fetchImpl);
+  const discardIds = [request.discardCardId, ...(request.discardCardIds ?? [])].filter(
+    (id): id is string => typeof id === "string" && id.trim().length > 0,
+  );
+  if (!request.text?.trim() && (discardIds.length > 0 || request.sweepScratch)) {
+    for (const cardId of discardIds) await discardCard(token, cardId, fetchImpl);
+    await discardTitledCards(token, SCRATCH_TITLES, fetchImpl);
     return { phase: "discarded" };
   }
 
@@ -700,18 +785,33 @@ export async function prepareFactTrack(
     roots.speech,
     `${speechKey(text, voiceId)}.${isPiperVoice(voiceId) ? "wav" : "mp3"}`,
   );
+  let scratchHeld = Boolean(request.speechCardId);
+  const releaseScratch = async () => {
+    const cardId = request.speechCardId;
+    if (!scratchHeld || !cardId) return;
+    scratchHeld = false;
+    await discardCard(token, cardId, fetchImpl);
+  };
+
   const fresh = await readReady(renderedFile, dexId, dexId ? mergedFile : undefined);
-  if (fresh) return fresh;
+  if (fresh) {
+    await releaseScratch();
+    return fresh;
+  }
   // Hashes written before the volume was part of the key. Those mixes used volume 4, voice 1, and a 0.35s pad.
   if (isDefaultMix(mix)) {
     const legacy = await readReady(
       path.join(roots.rendered, `${legacyRenderedKey(text, dexId, voiceId)}.json`),
       dexId,
     );
-    if (legacy) return legacy;
+    if (legacy) {
+      await releaseScratch();
+      return legacy;
+    }
   }
 
   const readyFrom = async (uploadId: string, polls: number): Promise<TrackPrepareResult> => {
+    await releaseScratch();
     if (dexId && !(await readCryMark(uploadMarkPath(roots.rendered, uploadId)))) {
       throw cryFailure(new Error("The saved upload is not a cry-first mix."));
     }
@@ -739,6 +839,7 @@ export async function prepareFactTrack(
   if (dexId) {
     const cachedMix = await readMp3File(mergedFile);
     if (cachedMix) {
+      await releaseScratch();
       try {
         const uploadId = await openUpload(token, label, cachedMix, fetchImpl);
         await writeCryMark(uploadMarkPath(roots.rendered, uploadId));
@@ -767,6 +868,7 @@ export async function prepareFactTrack(
       if (!dexId) throw bad;
       throw cryFailure(bad);
     }
+    await releaseScratch();
 
     let audio = speech;
     if (dexId) {
@@ -815,7 +917,10 @@ export async function prepareFactTrack(
       if (speech.length < 128) throw new Error("Lily's recording was empty.");
       await mkdir(path.dirname(speechFile), { recursive: true });
       await writeFile(speechFile, speech);
-      await discardCard(token, cardId, fetchImpl);
+      const ids = new Set<string>([cardId]);
+      if (playable.cardId) ids.add(playable.cardId);
+      for (const id of ids) await discardCard(token, id, fetchImpl);
+      if (request.speechCardId && ids.has(request.speechCardId)) scratchHeld = false;
       return await fromSpeechFile();
     } catch (error) {
       if (!dexId) throw error;

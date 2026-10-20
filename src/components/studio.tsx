@@ -132,7 +132,8 @@ function jobOf(data: unknown): {
   status?: string;
   progress?: unknown;
   error?: string;
-  result?: { cardId?: string; title?: string };
+  cardId?: string;
+  result?: { cardId?: string; contentId?: string; title?: string; card?: { cardId?: string } };
 } | null {
   if (!data || typeof data !== "object") return null;
   const row = data as { job?: { jobId?: string; status?: string } };
@@ -846,12 +847,20 @@ export function Studio({
     }
   }
 
-  async function discardScratch(cardId: string) {
+  function scratchCardId(job: {
+    cardId?: string;
+    result?: { cardId?: string; contentId?: string; card?: { cardId?: string } };
+  }): string | undefined {
+    const id = job.result?.cardId || job.result?.contentId || job.result?.card?.cardId || job.cardId;
+    return id && /^[\w-]{4,80}$/.test(id) ? id : undefined;
+  }
+
+  async function discardScratch(cardIds: string[]) {
     try {
       await yotoFetch("/api/yoto/track", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ discardCardId: cardId }),
+        body: JSON.stringify({ discardCardIds: cardIds, sweepScratch: true }),
       });
     } catch {
       // A leftover scratch card is not the playlist.
@@ -915,7 +924,7 @@ export function Studio({
           if (payload.phase === "speech" && payload.speechJobId) {
             speechJobId = payload.speechJobId;
             const finished = await pollJob(payload.speechJobId, job.progress, mark);
-            const cardId = finished.result?.cardId;
+            const cardId = scratchCardId(finished);
             if (!cardId) throw new SendFailure("The voice did not return a recording.", false);
             speechCardId = cardId;
             scratch.add(cardId);
@@ -961,7 +970,7 @@ export function Studio({
       });
       return audio;
     } finally {
-      await mapPool([...scratch], (cardId) => discardScratch(cardId));
+      await discardScratch([...scratch]);
     }
   }
 
