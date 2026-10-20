@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Fredoka, Nunito } from "next/font/google";
 
 import { LocalOrigin } from "@/components/local-origin";
@@ -21,6 +21,13 @@ export const metadata: Metadata = {
   title: APP_NAME,
   description:
     "Hear a Pokémon fact, or play Guess Who. The same two games can go on a Yoto card.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

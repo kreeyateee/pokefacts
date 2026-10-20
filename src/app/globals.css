@@ -132,11 +132,21 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    @apply font-sans;
+  }
   body {
     @apply bg-background text-foreground;
   }
-  html {
-    @apply font-sans;
+  button,
+  a,
+  summary,
+  label,
+  .pk-choice,
+  .pk-tab,
+  .pk-pill,
+  .pk-banner-btn {
+    touch-action: manipulation;
   }
   h1,
   h2,
@@ -147,6 +157,7 @@
 
 .pk-page {
   min-height: 100dvh;
+  padding-bottom: env(safe-area-inset-bottom);
   color: var(--ink);
   background-color: #6fbf4a;
   background-image:
@@ -154,7 +165,13 @@
     radial-gradient(circle at 78% 8%, rgb(255 255 255 / 55%) 0 46px, transparent 48px),
     radial-gradient(circle at 58% 24%, rgb(255 255 255 / 40%) 0 20px, transparent 22px),
     linear-gradient(#3aa0e8 0 46%, #9ad8f8 46% 62%, #d7f3b8 62% 70%, #7dcc55 70% 100%);
-  background-attachment: fixed;
+  background-attachment: scroll;
+}
+
+@media (min-width: 768px) {
+  .pk-page {
+    background-attachment: fixed;
+  }
 }
 
 .pk-banner {
@@ -165,7 +182,13 @@
   background: linear-gradient(180deg, #d0121a 0%, #9b0c16 100%);
   color: white;
   box-shadow: 0 7px 0 var(--ink);
-  padding: 1rem 1.15rem 1.45rem;
+  padding: 0.75rem 0.85rem 1.15rem;
+}
+
+@media (min-width: 640px) {
+  .pk-banner {
+    padding: 1rem 1.15rem 1.45rem;
+  }
 }
 
 .pk-banner::after {
@@ -204,10 +227,16 @@
 .pk-wordmark-name {
   display: block;
   font-family: var(--font-fredoka), sans-serif;
-  font-size: 2rem;
+  font-size: 1.65rem;
   font-weight: 700;
   line-height: 1;
   letter-spacing: -0.03em;
+}
+
+@media (min-width: 640px) {
+  .pk-wordmark-name {
+    font-size: 2rem;
+  }
 }
 
 .pk-wordmark-coffee {
@@ -224,6 +253,9 @@
 }
 
 .pk-banner-btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
   border: 3px solid var(--ink);
   border-radius: 999px;
   background: var(--poke-yellow);
@@ -251,13 +283,36 @@
 
 .pk-tab {
   height: 2.75rem;
+  flex: none;
   padding: 0 1rem;
   font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+.pk-tabs {
+  margin-top: 0.75rem;
+}
+
+@media (max-width: 767px) {
+  .pk-tabs {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    z-index: 30;
+    padding-top: 0.45rem;
+    padding-bottom: 0.45rem;
+    background: #3aa0e8;
+  }
+
+  .pk-ball {
+    width: 2.6rem;
+    height: 2.6rem;
+  }
 }
 
 .pk-pill {
-  height: 2.5rem;
-  padding: 0 0.85rem;
+  min-height: 2.75rem;
+  height: auto;
+  padding: 0.35rem 0.85rem;
   font-size: 0.85rem;
 }
 
@@ -288,9 +343,33 @@
 
 .pk-page input[type="checkbox"],
 .pk-page input[type="radio"] {
-  width: 1rem;
-  height: 1rem;
+  width: 1.35rem;
+  height: 1.35rem;
+  min-width: 1.35rem;
   accent-color: var(--poke-red);
+}
+
+.pk-page input[type="range"] {
+  width: 100%;
+  height: 2.75rem;
+  accent-color: var(--poke-red);
+}
+
+.pk-page summary {
+  min-height: 2.75rem;
+  padding-block: 0.35rem;
+}
+
+.pk-scroll {
+  min-width: 0;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+}
+
+.pk-scroll > * {
+  scroll-snap-align: start;
 }
 
 .pk-choice {
@@ -320,6 +399,7 @@
 
 .pk-field {
   width: 100%;
+  max-width: 100%;
   height: 2.75rem;
   border: 3px solid var(--ink);
   border-radius: 0.9rem;
@@ -328,6 +408,7 @@
   padding: 0 0.75rem;
   box-shadow: 3px 3px 0 var(--ink);
   outline: none;
+  font-size: 1rem;
 }
 
 .pk-field:focus {
@@ -369,9 +450,23 @@
   image-rendering: pixelated;
 }
 
+.pk-hero {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.pk-hero h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .pk-art {
-  height: 11rem;
-  width: 11rem;
+  width: min(16rem, 100%);
+  height: 12rem;
   flex: none;
   border: 3px solid var(--ink);
   border-radius: 1.25rem;
@@ -379,6 +474,19 @@
   background: radial-gradient(circle at 50% 42%, #fff 0 46%, #d7f0ff 78%);
   box-shadow: 3px 3px 0 var(--ink);
   padding: 0.35rem;
+}
+
+@media (min-width: 30rem) {
+  .pk-hero {
+    flex-direction: row;
+    align-items: flex-end;
+    gap: 1rem;
+  }
+
+  .pk-art {
+    width: 11rem;
+    height: 11rem;
+  }
 }
 
 .pk-soft,

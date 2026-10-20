@@ -1199,7 +1199,7 @@ export function Studio({
 
   return (
     <div className="pk-page">
-      <header className="mx-auto w-full max-w-5xl px-4 pt-6 pb-2 sm:px-6">
+      <header className="mx-auto w-full min-w-0 max-w-5xl px-4 pt-6 pb-2 sm:px-6">
         <div className="pk-banner">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <a className="pk-wordmark" href={DONATE_URL} target="_blank" rel="noreferrer">
@@ -1224,7 +1224,7 @@ export function Studio({
               )}
             </div>
           </div>
-          <h1 className="mt-4 text-3xl font-bold tracking-tight text-white sm:text-4xl">
+          <h1 className="mt-3 text-2xl font-bold tracking-tight text-white sm:mt-4 sm:text-4xl">
             {view === "setup"
               ? "Set up Pokefacts"
               : view === "catalogue"
@@ -1249,7 +1249,12 @@ export function Studio({
                     : "The cry, then the name, then a short description."}
           </p>
         </div>
-        <div className="mt-5 flex flex-wrap gap-2" role="tablist" aria-label="Play mode">
+      </header>
+      <div
+        className="pk-tabs pk-scroll mx-auto flex w-full min-w-0 max-w-5xl flex-nowrap gap-2 overflow-x-auto px-4 sm:px-6 md:flex-wrap md:overflow-visible"
+        role="tablist"
+        aria-label="Play mode"
+      >
           <button
             type="button"
             role="tab"
@@ -1310,11 +1315,12 @@ export function Studio({
           >
             Setup
           </button>
-        </div>
+      </div>
+      <div className="mx-auto w-full min-w-0 max-w-5xl px-4 sm:px-6">
         <PlaybackPanel settings={playback} onChange={setPlayback} />
-      </header>
+      </div>
 
-      <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6">
+      <main className="mx-auto w-full min-w-0 max-w-5xl px-4 py-6 sm:px-6">
         {view === "setup" ? (
           <SetupGuide onConnect={() => setConnectOpen(true)} />
         ) : view === "catalogue" ? (
@@ -1330,10 +1336,10 @@ export function Studio({
             job={job}
           />
         ) : card && chapter ? (
-          <div className="grid gap-6 md:grid-cols-[17.5rem_minmax(0,1fr)]">
-            <div className="md:col-span-2">
+          <div className="grid min-w-0 gap-6 md:grid-cols-[17.5rem_minmax(0,1fr)]">
+            <div className="order-3 min-w-0 md:order-1 md:col-span-2">
               <div className="flex flex-wrap items-center gap-3">
-                <Button type="button" variant="outline" className="h-10 px-4" onClick={() => setStickersOpen(true)}>
+                <Button type="button" variant="outline" className="h-11 px-4" onClick={() => setStickersOpen(true)}>
                   Print stickers
                 </Button>
                 <p className="text-sm leading-6 text-muted-foreground">
@@ -1402,7 +1408,7 @@ export function Studio({
                 />
               ) : null}
               <div
-                className="mt-3 flex gap-2 overflow-x-auto pb-1"
+                className="pk-scroll mt-3 flex gap-2 overflow-x-auto pb-1"
                 role="listbox"
                 aria-label={guessing ? "Guess Who playlists" : "Facts playlists"}
               >
@@ -1424,7 +1430,7 @@ export function Studio({
               </div>
             </div>
 
-            <div className="grid content-start gap-2 self-start">
+            <div className="order-2 grid min-w-0 content-start gap-2 self-start md:order-2">
               <label className="grid gap-1 text-sm" htmlFor="picker">
                 {guessing ? "Riddle on this card" : "Pokémon on this card"}
                 <input
@@ -1452,7 +1458,7 @@ export function Studio({
               </select>
               <nav
                 aria-label={guessing ? "Riddles" : "Pokémon"}
-                className="grid max-h-[40dvh] content-start grid-cols-1 gap-2 overflow-y-auto md:max-h-[70dvh]"
+                className="pk-scroll flex gap-2 overflow-x-auto pb-1 md:grid md:max-h-[70dvh] md:content-start md:grid-cols-1 md:overflow-x-hidden md:overflow-y-auto"
               >
                 {listed.map((item) => {
                   const selected = item.key === chapter.key;
@@ -1463,7 +1469,7 @@ export function Studio({
                       type="button"
                       onClick={() => chooseChapter(item.key)}
                       aria-current={selected ? "true" : undefined}
-                      className="pk-choice flex items-center gap-2 px-2.5 py-2 text-sm"
+                      className="pk-choice flex w-44 shrink-0 items-center gap-2 px-2.5 py-2 text-sm md:w-auto md:shrink"
                     >
                       {!guessing && item.sprite ? (
                         <img
@@ -1481,8 +1487,8 @@ export function Studio({
               </nav>
             </div>
 
-            <div className="min-w-0">
-              <article className="pk-card pk-dex px-5 py-6 sm:px-8 sm:py-8">
+            <div className="order-1 min-w-0 md:order-3">
+              <article className="pk-card pk-dex px-4 py-6 sm:px-8 sm:py-8">
                 <p className="pk-kicker">
                   {guessing
                     ? revealed
@@ -1490,7 +1496,7 @@ export function Studio({
                       : "Clues"
                     : `Number ${chapter.overlay}`}
                 </p>
-                <div className="mt-3 flex items-end gap-4">
+                <div className="pk-hero">
                   {portrait ? (
                     <img
                       src={portrait}
