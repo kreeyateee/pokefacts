@@ -1,4 +1,4 @@
-import { artworkSrc } from "@/lib/artwork";
+import { artworkSrc } from "@/lib/page-artwork";
 import type { BiologyBlock } from "@/lib/catalogue-types";
 import { dexBlurb, guessSpoken, pickDexEntry, type MonSheet } from "@/lib/dex-facts";
 import { pronounce } from "@/lib/pronounce";
