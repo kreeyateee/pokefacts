@@ -6,7 +6,7 @@ import { PlaylistWindow } from "@/components/playlist-window";
 import { StatusBar } from "@/components/status-bar";
 import { StickerStudio } from "@/components/sticker-studio";
 import { Button } from "@/components/ui/button";
-import { artworkSrc } from "@/lib/artwork";
+import { artworkSrc } from "@/lib/page-artwork";
 import { artworkSrc as artworkApi } from "@/lib/artwork-path";
 import type {
   BiologyBlock,
