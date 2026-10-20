@@ -8,6 +8,7 @@ import { PlaybackPanel } from "@/components/playback-panel";
 import { SetupGuide } from "@/components/setup-guide";
 import { StatusBar } from "@/components/status-bar";
 import { ConnectDialog } from "@/components/connect-dialog";
+import { MusicPanel } from "@/components/music-panel";
 import { StickerStudio } from "@/components/sticker-studio";
 import { Button } from "@/components/ui/button";
 import {
@@ -395,7 +396,7 @@ export function Studio({
   const gmaxRef = useRef(gmax);
   const formLoad = useRef<Partial<Record<"mega" | "gmax", Promise<void>>>>({});
   const [factSpeech, setFactSpeech] = useState<{ id: number; speech: string; url: string } | null>(null);
-  const [view, setView] = useState<"cards" | "catalogue" | "setup">("cards");
+  const [view, setView] = useState<"cards" | "catalogue" | "setup" | "music">("cards");
   const [playback, setPlayback] = useState<PlaybackSettings>(defaultPlayback);
   const [kind, setKind] = useState<KidCardKind>("meet");
   const [factsId, setFactsId] = useState(RANDOM_POKEDEX_ID);
@@ -1277,6 +1278,8 @@ export function Studio({
               ? "Set up Pokefacts"
               : view === "catalogue"
               ? "Reference catalogue"
+              : view === "music"
+                ? "Pokémon music"
               : guessing
                 ? "Guess Who"
                 : formMode
@@ -1288,6 +1291,8 @@ export function Studio({
               ? "Node, ffmpeg, and a public Yoto app. Then the playlists appear under Make Your Own."
               : view === "catalogue"
               ? "Every species from Kanto to Paldea. The Pokédex line is from the games, with the type, size, abilities, evolution, and stats."
+              : view === "music"
+                ? "Albums and songs from Bulbapedia, with the YouTube video from each song page."
               : guessing
                 ? "Fifty riddles, drawn at random. You hear the cry, then the clues. The picture stays a shadow until the answer."
                 : formMode
@@ -1354,6 +1359,18 @@ export function Studio({
           <button
             type="button"
             role="tab"
+            aria-selected={view === "music"}
+            onClick={() => {
+              stopDemo();
+              setView("music");
+            }}
+            className="pk-tab"
+          >
+            Music
+          </button>
+          <button
+            type="button"
+            role="tab"
             aria-selected={view === "setup"}
             onClick={() => {
               stopDemo();
@@ -1383,6 +1400,8 @@ export function Studio({
             units={playback.units}
             job={job}
           />
+        ) : view === "music" ? (
+          <MusicPanel />
         ) : card && chapter ? (
           <div className="grid min-w-0 gap-6 md:grid-cols-[17.5rem_minmax(0,1fr)]">
             <div className="order-3 min-w-0 md:order-1 md:col-span-2">

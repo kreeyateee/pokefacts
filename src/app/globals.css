@@ -625,3 +625,14 @@
   color: var(--destructive);
   font-weight: 800;
 }
+
+.pk-music-frame {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border: 3px solid var(--ink);
+  border-radius: 1rem;
+  background: #172033;
+}
