@@ -234,7 +234,7 @@ export function selectionPlaylist(
   );
   const blurb =
     kind === "whos-that"
-      ? "The cry, then three clues. The cry again, then the name."
+      ? "The cry, then four clues. The cry again, then the name."
       : kind === "advanced"
         ? "The cry, then the name, a short description, and how big it is."
         : "The cry, then the name and a short description.";
@@ -247,7 +247,7 @@ export function selectionPlaylist(
     blurb,
     childDoes:
       kind === "whos-that"
-        ? "Pick a dark picture and press play. You hear the cry, then three short clues. The next track plays the cry again, then the name."
+        ? "Pick a dark picture and press play. You hear the cry, then four clues. The next track plays the cry again, then the name."
         : "Turn to a picture and press play. You hear the cry, then the reading.",
     chapters,
   };

@@ -121,7 +121,7 @@ function TypeChips({ types }: { types: string[] }) {
 function Fact({ label, children }: { label: string; children: string }) {
   if (!children) return null;
   return (
-    <div className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-2 border-b border-ink/15 py-2 text-sm">
+    <div className="grid grid-cols-[9rem_minmax(0,1fr)] gap-2 border-b border-ink/15 py-2 text-sm">
       <span className="font-bold text-poke-red">{label}</span>
       <span>{children}</span>
     </div>
@@ -132,7 +132,7 @@ const PLAYLIST_KINDS: Array<{ id: SelectionKind; label: string; detail: string }
   {
     id: "whos-that",
     label: "Who's That Pokémon",
-    detail: "Cry, three clues, then the cry again and the name. Two tracks each, so 50 Pokémon fit.",
+    detail: "Cry, four clues, then the cry again and the name. Two tracks each, so 50 Pokémon fit.",
   },
   {
     id: "facts",
@@ -818,7 +818,7 @@ export function Catalogue({
             <h3 className="mt-6 pk-kicker">Base stats</h3>
             <ul className="mt-2 grid gap-1.5">
               {entry.stats.map((stat) => (
-                <li key={stat.name} className="grid grid-cols-[7.5rem_minmax(0,1fr)_2.5rem] items-center gap-2 text-sm">
+                <li key={stat.name} className="grid grid-cols-[9rem_minmax(0,1fr)_2.5rem] items-center gap-2 text-sm">
                   <span>{stat.name}</span>
                   <span className="h-3 overflow-hidden rounded-full border-2 border-ink bg-white">
                     <span
@@ -870,7 +870,7 @@ export function Catalogue({
                 </ul>
               </>
             ) : null}
-            <div className="mt-6 flex gap-2">
+            <div className="mt-6 flex flex-wrap gap-2">
               <button
                 type="button"
                 className="pk-pill text-sm disabled:opacity-40"

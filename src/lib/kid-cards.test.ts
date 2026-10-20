@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import { listGigantamaxForms, listMegaForms, listMonSheets } from "./catalogue-db";
-import { dexBlurb, pickDexEntry, threeClues, type FlavorSource, type MonSheet } from "./dex-facts";
+import { dexBlurb, guessSpoken, pickDexEntry, riddleParts, shortClues, threeClues, type FlavorSource, type MonSheet } from "./dex-facts";
 import {
   applySpeciesSpeech,
   buildKidCard,
@@ -144,9 +144,19 @@ describe("Pokédex entries", () => {
   });
 
   it("hides the answer name inside three Pokédex clues", () => {
-    const clues = threeClues("Bulbasaur", entry("Bulbasaur"));
+    const bulbasaur = sheet(1, "Bulbasaur", entry("Bulbasaur"));
+    const clues = threeClues("Bulbasaur", bulbasaur.entries, {
+      types: bulbasaur.types,
+      genus: bulbasaur.genus,
+      heightDecimetres: bulbasaur.heightDecimetres,
+      weightHectograms: bulbasaur.weightHectograms,
+      habitat: bulbasaur.habitat,
+    });
     assert.equal(clues.length, 3);
-    for (const clue of clues) assert.doesNotMatch(clue, /Bulbasaur/);
+    for (const clue of clues) {
+      assert.doesNotMatch(clue, /Bulbasaur/);
+      assert.doesNotMatch(clue, /quiet habit|nobody is watching/i);
+    }
   });
 
   it("keeps a dex entry to name, type, description, and size", () => {
@@ -367,7 +377,9 @@ function assertGuessScriptsStayShort(
       .replace(/^Number \d+\. /, "")
       .replace(/ Shout your guess\. One\. Two\. Three\.$/, "");
     const sentences = middle.match(/[^.!?]+[.!?]+/g) ?? [];
-    assert.equal(sentences.length, 3);
+    assert.ok(sentences.length === 3 || sentences.length === 4);
+    assert.match(middle, /It is an? [A-Z][a-z-]+(?: and [A-Z][a-z-]+)? type\./);
+    assert.match(middle, /tall as|shorter than|taller than|heavy as|heavier than|lighter than/);
     for (const sentence of sentences) {
       assert.equal(answer.includes(sentence.trim()), false);
     }
@@ -443,8 +455,18 @@ describe("every national species", () => {
         if (!chapter.dexId) continue;
         const clue = chapter.tracks[0]?.text ?? "";
         assert.doesNotMatch(clue, new RegExp(escapeRegExp(chapter.title), "i"));
-        assert.doesNotMatch(clue, /\btype\b/i);
-        assert.match(clue, /tall as|shorter than|taller than|heavy as|heavier than|lighter than|size is hard to picture/);
+        const sheet = sheets.find((row) => row.id === chapter.dexId);
+        assert.ok(sheet);
+        const typeNames = sheet.types.map(
+          (type) => `${type.charAt(0).toUpperCase()}${type.slice(1).toLowerCase()}`,
+        );
+        const typeLabel = typeNames.length === 1 ? typeNames[0]! : `${typeNames[0]} and ${typeNames[1]}`;
+        const article = /^[aeiou]/i.test(typeLabel) ? "an" : "a";
+        assert.match(clue, new RegExp(`It is ${article} ${typeLabel} type\\.`));
+        assert.doesNotMatch(clue, /\bIt is an? type\b/i);
+        if (sheet.color) assert.match(clue, new RegExp(`It is ${sheet.color.toLowerCase()}\\.`));
+        assert.match(clue, /tall as|shorter than|taller than|heavy as|heavier than|lighter than/);
+        assert.doesNotMatch(clue, /size is hard to picture|quiet habit|nobody is watching|body of a placid/);
         assert.match(chapter.tracks[1]?.text ?? "", /^It is /);
         assert.equal(chapter.tracks[0]?.lead, "cry");
         assert.equal(chapter.tracks[1]?.lead, "cry");
@@ -462,9 +484,9 @@ describe("every national species", () => {
     const flavor = croconaw.entries.map((entry) => entry.text).join(" ");
     assert.equal(
       clue,
-      "Number 159. It lives at the water's edge. The fangs hook backward like fishhooks. It is about as tall as a child and about as heavy as a child. Shout your guess. One. Two. Three.",
+      "Number 159. Once it has clamped its jaws on its foe, it will absolutely not let go. It is a Water type. It is blue. It is taller than a door handle and heavier than a bicycle. Shout your guess. One. Two. Three.",
     );
-    assert.doesNotMatch(clue, /type\b/i);
+    assert.match(clue, /Water type/);
     assert.equal(answer, "It is Croconaw. It grows from Totodile and becomes Feraligatr.");
     assert.doesNotMatch(clue, /Croconaw|Totodile|Feraligatr/i);
     assert.match(answer, /^It is Croconaw\./);
@@ -480,6 +502,82 @@ describe("every national species", () => {
         .match(/[^.!?]+[.!?]+/g) ?? [];
     for (const sentence of clueSentences) {
       assert.equal(answer.includes(sentence.trim()), false);
+    }
+  });
+
+  it("gives every species a dex line, the real type, a colour, and a size", () => {
+    const drampa = sheets.find((sheet) => sheet.id === 780);
+    assert.ok(drampa);
+    assert.equal(drampa.name, "Drampa");
+    const spoken = guessSpoken(drampa);
+    assert.equal(
+      spoken.clue,
+      "Number 780. It is a kind and friendly Pokémon, up until it’s angered. It is a Normal and Dragon type. It is white. It is as tall as a basketball hoop and about as heavy as a motorbike. Shout your guess. One. Two. Three.",
+    );
+    assert.equal(spoken.answer, "It is Drampa. Its special ability is called Berserk.");
+    const parts = riddleParts(spoken.clue);
+    assert.deepEqual(parts.clues, [
+      "It is a kind and friendly Pokémon, up until it’s angered.",
+      "It is a Normal and Dragon type.",
+      "It is white.",
+      "It is as tall as a basketball hoop and about as heavy as a motorbike.",
+    ]);
+    assert.equal(parts.countdown, "Shout your guess. One. Two. Three.");
+    assert.equal(parts.clues.some((clue) => clue === "One."), false);
+    assert.match(parts.clues[1] ?? "", /Normal/);
+    assert.match(parts.clues[1] ?? "", /Dragon/);
+
+    const pikachu = guessSpoken(sheets.find((sheet) => sheet.id === 25)!);
+    assert.match(pikachu.clue, /It possesses cheek sacs in which it stores electricity\./);
+    assert.match(pikachu.clue, /It is an Electric type\./);
+    assert.match(pikachu.clue, /It is yellow\./);
+    assert.doesNotMatch(pikachu.clue, /Pikachu/i);
+
+    const snorlax = guessSpoken(sheets.find((sheet) => sheet.id === 143)!);
+    assert.match(snorlax.clue, /It appears in villages without warning and devours the entirety of their rice granaries\./);
+    assert.match(snorlax.clue, /It is a Normal type\./);
+    assert.match(snorlax.clue, /It is black\./);
+    assert.doesNotMatch(snorlax.clue, /Snorlax/i);
+
+    const placid = threeClues("Example", [], {
+      types: ["psychic"],
+      genus: "Placid Pokémon",
+      heightDecimetres: 30,
+      weightHectograms: 1850,
+      habitat: null,
+    });
+    assert.equal(placid.some((clue) => clue === "It is a Psychic type."), true);
+    assert.doesNotMatch(placid.join(" "), /body of a placid|a placid\b|nobody is watching|It is a type\./i);
+
+    for (const sheet of sheets) {
+      const clues = shortClues(sheet);
+      const text = clues.join(" ");
+      const label = `${sheet.id} ${sheet.name}`;
+      assert.equal(clues.length, 4, label);
+      assert.doesNotMatch(text, /nobody is watching/i, label);
+      assert.doesNotMatch(text, /body of an?\b/i, label);
+      assert.doesNotMatch(text, /quiet habit/i, label);
+      assert.doesNotMatch(text, /grown person and heavier than a grown person/i, label);
+      assert.doesNotMatch(text, /\bIt is an? type\b/i, label);
+      assert.doesNotMatch(text, new RegExp(`\\b${escapeRegExp(sheet.name)}\\b`, "i"), label);
+      const typeNames = sheet.types.map(
+        (type) => `${type.charAt(0).toUpperCase()}${type.slice(1).toLowerCase()}`,
+      );
+      const typeLabel = typeNames.length === 1 ? typeNames[0]! : `${typeNames[0]} and ${typeNames[1]}`;
+      const article = /^[aeiou]/i.test(typeLabel) ? "an" : "a";
+      assert.equal(clues[1], `It is ${article} ${typeLabel} type.`, label);
+      assert.equal(clues[2], `It is ${sheet.color?.toLowerCase()}.`, label);
+      assert.match(clues[3] ?? "", /tall as|shorter than|taller than|heavy as|heavier than|lighter than/, label);
+      for (const clue of clues) {
+        assert.match(clue, /^[A-Z]/, `${label}: ${clue}`);
+        assert.match(clue, /[.!?]$/, `${label}: ${clue}`);
+        assert.doesNotMatch(clue, /\bIt (?:are|live)\b/, `${label}: ${clue}`);
+        assert.doesNotMatch(
+          clue,
+          /\b(?:from|by|of|to|with|for|into|about|than|as|like|and|or|but|a|an|the)\.$/i,
+          `${label}: ${clue}`,
+        );
+      }
     }
   });
 });
@@ -1025,7 +1123,7 @@ describe("random Guess Who", () => {
           .replace(/^Number \d+\. /, "")
           .replace(/ Shout your guess\. One\. Two\. Three\.$/, "")
           .match(/[^.!?]+[.!?]+/g) ?? [];
-      assert.equal(clueSentences.length, 3);
+      assert.equal(clueSentences.length, 4);
       for (const sentence of clueSentences) {
         assert.equal(answer.text.includes(sentence.trim()), false);
       }

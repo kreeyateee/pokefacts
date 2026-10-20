@@ -9,10 +9,10 @@ export function SetupGuide({ onConnect }: { onConnect: () => void }) {
   return (
     <section className="pk-card mx-auto max-w-3xl px-5 py-6 sm:px-8">
       <h2 className="font-display text-3xl">Set up Pokefacts</h2>
-      <p className="mt-2 text-sm leading-6 text-muted-foreground">
-        Pokefacts runs on this computer. Leave the instruction window open while you use it.
+      <p className="mt-2 max-w-prose text-sm leading-6 text-muted-foreground">
+        Do these steps once. Pokefacts runs on this computer, so leave the instruction window open while you use it.
       </p>
-      <ol className="mt-5 grid gap-4 text-sm leading-6">
+      <ol className="mt-5 grid gap-5 text-sm leading-6">
         <li>
           <span className="font-bold">1. Install Node.js 22.14 or newer.</span> Pokefacts will not start on an older
           Node.
@@ -38,7 +38,7 @@ export function SetupGuide({ onConnect }: { onConnect: () => void }) {
             dashboard.yoto.dev
           </a>{" "}
           choose public. There is no client secret. Set the redirect to exactly{" "}
-          <code className="rounded bg-white px-1">{YOTO_REDIRECT_URI}</code>.
+          <code className="rounded bg-white px-1 break-all">{YOTO_REDIRECT_URI}</code>.
         </li>
         <li>
           <span className="font-bold">6. Allow these permissions.</span>{" "}

@@ -332,7 +332,7 @@ export function getCatalogueEntry(id: number): CatalogueEntry | null {
 export function listMonSheets(): MonSheet[] {
   const species = db()
     .prepare(
-      `SELECT id, slug, name, genus, habitat, height_dm, weight_hg, info, info_version, evolves_from_id
+      `SELECT id, slug, name, genus, habitat, color, shape, height_dm, weight_hg, info, info_version, evolves_from_id
        FROM species
        ORDER BY id`,
     )
@@ -342,6 +342,8 @@ export function listMonSheets(): MonSheet[] {
     name: string;
     genus: string;
     habitat: string | null;
+    color: string | null;
+    shape: string | null;
     height_dm: number;
     weight_hg: number;
     info: string;
@@ -414,6 +416,8 @@ export function listMonSheets(): MonSheet[] {
       evolvesFrom: row.evolves_from_id ? (nameById.get(row.evolves_from_id) ?? null) : null,
       evolvesInto,
       habitat: row.habitat ? habitatSpeech(row.habitat) : null,
+      color: row.color,
+      shape: row.shape,
       entries: row.info ? [{ text: row.info, version: row.info_version }] : [],
     };
   });

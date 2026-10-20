@@ -240,7 +240,7 @@ function intro(kind: KidCardKind, index: number, first: number, last: number, fi
   const text =
     kind === "meet"
       ? `This card is Pokefacts ${index}, numbers ${span}. Turn the wheel, or press the arrows, until you see a picture. Then press play. You will hear the cry, then the name, then a short description. The star is this track. Number ${first} is ${firstName}. Each playlist links to its own card.`
-      : `Guess Who. Numbers ${span}. Turn the wheel until you see a dark picture. Then press play. You hear three short clues. Shout the name before the count ends. The next track tells you the answer. Start at number ${first}. Each playlist links to its own card.`;
+      : `Guess Who. Numbers ${span}. Turn the wheel until you see a dark picture. Then press play. You hear four clues. Shout the name before the count ends. The next track tells you the answer. Start at number ${first}. Each playlist links to its own card.`;
   return picture("start", "Start here", "Go", "a star", "★", I.star, [
     talk("how", kind === "meet" ? "How to play" : "How to play Guess Who", text, I.star, "Go"),
   ]);
@@ -520,7 +520,7 @@ export function randomGuessCard(pool: KidChapter[], random: () => number = Math.
     libraryTitle: "Guess Who",
     blurb: "Fifty riddles drawn at random. The cry, then the clue. The cry again, then the answer.",
     childDoes:
-      "Pick a dark picture and press play. You hear the cry, then three short clues, then a count of three. The answer plays the cry again, then the name.",
+      "Pick a dark picture and press play. You hear the cry, then four clues, then a count of three. The answer plays the cry again, then the name.",
     chapters,
   };
 }

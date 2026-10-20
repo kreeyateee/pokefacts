@@ -35,6 +35,7 @@ import {
   type KidCardKind,
 } from "@/lib/kid-cards";
 import { CONNECT_FOR_VOICE, NATIONAL_DEX_TOTAL } from "@/lib/fact-build";
+import { riddleParts } from "@/lib/dex-facts";
 import { pronounce } from "@/lib/pronounce";
 import { selectionUpload } from "@/lib/selection-playlist";
 import { APP_NAME, DONATE_URL, SOURCE_URL } from "@/lib/site";
@@ -323,16 +324,37 @@ async function uploadGuessIcons(card: KidCard): Promise<{
   return { real, shadow };
 }
 
-function entryLines(text: string, title: string): string[] {
-  return text
+function spokenSentences(text: string): string[] {
+  const safe = text.replace(/\b(Mr|Mrs|Ms|Dr|Sr)\./g, "$1\u0000");
+  return safe
     .split(/(?<=[.!?])\s+(?=[A-Z])/)
-    .map((line) => line.trim())
-    .filter(
-      (line) =>
-        line.length > 0 &&
-        line !== `${title}.` &&
-        !/^It is number \d+\.$/.test(line),
-    );
+    .map((line) => line.replace(/\u0000/g, ".").trim())
+    .filter(Boolean);
+}
+
+function entryLines(text: string, title: string): string[] {
+  return spokenSentences(text).filter(
+    (line) => line.length > 0 && line !== `${title}.` && !/^It is number \d+\.$/.test(line),
+  );
+}
+
+function RiddleScript({ text }: { text: string }) {
+  const parts = riddleParts(text);
+  return (
+    <div className="mt-5 grid gap-3">
+      <ol className="grid gap-2" aria-label="Clues">
+        {parts.clues.map((clue, index) => (
+          <li key={clue} className="pk-clue">
+            <span className="pk-clue-num" aria-hidden="true">
+              {index + 1}
+            </span>
+            <span>{clue}</span>
+          </li>
+        ))}
+      </ol>
+      {parts.countdown ? <p className="pk-countdown">{parts.countdown}</p> : null}
+    </div>
+  );
 }
 
 function isMeasure(line: string): boolean {
@@ -1357,7 +1379,7 @@ export function Studio({
                     : "The cry, then the name, then a short description."}
           </p>
         </div>
-        <div className="mt-5 flex flex-wrap gap-2" role="tablist" aria-label="Play mode">
+        <div className="mt-5 flex gap-2 overflow-x-auto pb-2" role="tablist" aria-label="Play mode">
           <button
             type="button"
             role="tab"
@@ -1366,7 +1388,7 @@ export function Studio({
               stopDemo();
               setView("catalogue");
             }}
-            className="pk-tab"
+            className="pk-tab shrink-0"
           >
             Catalogue
           </button>
@@ -1375,7 +1397,7 @@ export function Studio({
             role="tab"
             aria-selected={view === "cards" && kind === "meet"}
             onClick={() => showKind("meet")}
-            className="pk-tab"
+            className="pk-tab shrink-0"
           >
             Facts
           </button>
@@ -1384,7 +1406,7 @@ export function Studio({
             role="tab"
             aria-selected={view === "cards" && kind === "guess"}
             onClick={() => showKind("guess")}
-            className="pk-tab"
+            className="pk-tab shrink-0"
           >
             Guess Who
           </button>
@@ -1393,7 +1415,7 @@ export function Studio({
             role="tab"
             aria-selected={view === "cards" && kind === "mega"}
             onClick={() => showKind("mega")}
-            className="pk-tab"
+            className="pk-tab shrink-0"
           >
             Mega Evolutions
           </button>
@@ -1402,7 +1424,7 @@ export function Studio({
             role="tab"
             aria-selected={view === "cards" && kind === "gmax"}
             onClick={() => showKind("gmax")}
-            className="pk-tab"
+            className="pk-tab shrink-0"
           >
             Gigantamax
           </button>
@@ -1414,7 +1436,7 @@ export function Studio({
               stopDemo();
               setView("setup");
             }}
-            className="pk-tab"
+            className="pk-tab shrink-0"
           >
             Setup
           </button>
@@ -1606,9 +1628,10 @@ export function Studio({
                       type="button"
                       onClick={() => chooseChapter(item.key)}
                       aria-current={selected ? "true" : undefined}
-                      className="pk-choice px-2.5 py-2.5 text-sm"
+                      aria-label={guessing ? `Riddle ${item.overlay}` : undefined}
+                      className={`pk-choice whitespace-nowrap px-2.5 py-2.5 text-sm ${guessing ? "text-center lg:text-left" : ""}`}
                     >
-                      {label}
+                      {guessing ? item.overlay : label}
                     </button>
                   );
                 })}
@@ -1624,20 +1647,26 @@ export function Studio({
                       : "Clues"
                     : `Number ${chapter.overlay}`}
                 </p>
-                <div className="mt-3 flex items-end gap-4">
+                <div className="mt-3 flex items-center gap-4">
                   {portrait ? (
                     <img
                       src={portrait}
-                      alt={guessing && !revealed ? "" : chapter.title}
+                      alt={guessing && !revealed ? "Shadow of the Pokémon" : chapter.title}
                       width={96}
                       height={96}
                       className="pk-sprite"
                     />
                   ) : null}
-                  <h2 className="font-display text-4xl leading-tight sm:text-5xl">
-                    {guessing && !revealed ? `Riddle ${chapter.overlay}` : chapter.title}
-                  </h2>
+                  <div className="min-w-0">
+                    <h2 className="font-display text-4xl leading-none sm:text-5xl">
+                      {guessing && !revealed ? `Riddle ${chapter.overlay}` : chapter.title}
+                    </h2>
+                    {guessing && !revealed ? (
+                      <p className="mt-2 text-sm font-bold text-muted-foreground">Number {chapter.overlay}</p>
+                    ) : null}
+                  </div>
                 </div>
+                {guessing && !revealed ? <RiddleScript text={chapter.tracks[0]?.text ?? ""} /> : (
                 <div className="mt-6 max-w-prose space-y-3 text-base leading-7">
                   {kind === "meet" && chapter.dexId ? (
                     factReading ? (
@@ -1656,7 +1685,7 @@ export function Studio({
                       <p>{formSpokenText(chapter)}</p>
                     )
                   ) : (
-                    visibleTracks?.map((track) =>
+                    (guessing && revealed ? chapter.tracks.slice(1) : visibleTracks)?.map((track) =>
                       entryLines(track.text, chapter.title).map((line) =>
                         isMeasure(line) ? (
                           <p
@@ -1672,6 +1701,7 @@ export function Studio({
                     )
                   )}
                 </div>
+                )}
                 {kind === "meet" && factReading?.url ? <WikiCredit url={factReading.url} /> : null}
                 {formMode &&
                 chapter.articleUrl &&
@@ -1682,7 +1712,16 @@ export function Studio({
                 {source && guessing ? (
                   <p className="pk-quiet mt-4 text-xs">Pokédex, {source}</p>
                 ) : null}
-                {chapter.dexId ? (
+                {guessing && !revealed ? (
+                  <section className="pk-howto mt-5" aria-labelledby="guess-howto">
+                    <h3 id="guess-howto">How to play</h3>
+                    <p className="mt-1 text-sm leading-6">
+                      Your child listens to the cry, then the four clues, and looks at the shadow. They shout a guess
+                      before the count of three. Press I guessed. The answer plays the cry again and says the name. The
+                      clues never say the name.
+                    </p>
+                  </section>
+                ) : chapter.dexId ? (
                   <p className="pk-quiet mt-4 text-xs leading-5">
                     {guessing
                       ? "Hear plays the cry, then the words. The clue never says the name. The answer does. The Yoto card plays that same order."
@@ -1694,7 +1733,7 @@ export function Studio({
                     <>
                       <Button
                         type="button"
-                        variant="outline"
+                        variant={revealed ? "outline" : "default"}
                         className="h-11 px-4"
                         onClick={() => {
                           const track = revealed ? chapter.tracks[1] : chapter.tracks[0];
@@ -1713,7 +1752,7 @@ export function Studio({
                           Another riddle
                         </Button>
                       ) : (
-                        <Button type="button" className="h-11 px-4" onClick={revealAnswer}>
+                        <Button type="button" variant="outline" className="h-11 px-4" onClick={revealAnswer}>
                           I guessed
                         </Button>
                       )}

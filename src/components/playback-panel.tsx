@@ -25,7 +25,12 @@ export function PlaybackPanel({
 
   return (
     <details className="pk-card mt-4 px-4 py-3">
-      <summary className="cursor-pointer text-sm font-bold">Settings · {voice?.name ?? "Voice"}</summary>
+      <summary className="cursor-pointer">
+        <span className="block text-base font-bold">Settings</span>
+        <span className="mt-0.5 block text-sm font-normal text-muted-foreground">
+          Voice is {voice?.name ?? "not chosen"}. Open this for the voice, how loud the cry is, and units.
+        </span>
+      </summary>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <label className="grid gap-1 text-sm lg:col-span-2" htmlFor="voice">
           Voice
@@ -114,7 +119,8 @@ export function PlaybackPanel({
       </div>
       <p className="mt-3 text-xs leading-5 text-muted-foreground">
         Hear, building facts on this PC, and playlist creation all use this voice and these volumes. A change of
-        loudness or pause makes a new mix, so an older recording is not reused.
+        loudness or pause makes a new mix, so an older recording is not reused. Node, ffmpeg, and the Yoto login are
+        on the Setup tab.
       </p>
     </details>
   );
