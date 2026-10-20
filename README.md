@@ -191,7 +191,7 @@ A Yoto playlist holds 100 tracks. Who's That Pokémon uses two tracks each, so 5
 
 **Print stickers** is on the Facts, Guess Who, Mega Evolutions, and Gigantamax cards, and on a Catalogue pick.
 
-The front is the cover. Drag a Pokémon onto it, or click one to add it, then move it around the picture. The back is the playlist. When the names will not fit at a readable size, the back is a note instead. Guess Who leaves the names off the back.
+The front is the cover. Click a Pokémon to add it. Click one that is already there to select that copy, then move or resize it. Drag from the list to drop a new copy. The back is the playlist. When the names will not fit at a readable size, the back is a note instead. Guess Who leaves the names off the back.
 
 Choose A4 or US Letter. Save PDF stores the file on your computer. Print it at 100% or Actual size. Do not choose Fit to page. Cut on the corner marks. The left sticker is the front. The right sticker is the back.
 

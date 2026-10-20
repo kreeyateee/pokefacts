@@ -231,10 +231,19 @@
   padding: 0.4rem 0.85rem;
   font-weight: 800;
   box-shadow: 3px 3px 0 var(--ink);
+  transition:
+    background-color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .pk-banner-btn:hover {
   background: white;
+}
+
+.pk-banner-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
 }
 
 .pk-tab,
@@ -247,6 +256,10 @@
   font-weight: 700;
   box-shadow: 3px 3px 0 var(--ink);
   cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .pk-tab {
@@ -302,19 +315,31 @@
   box-shadow: 3px 3px 0 var(--ink);
   font-weight: 700;
   text-align: left;
+  transition:
+    background-color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .pk-choice:hover {
   background: #fff4c2;
+  transform: translateY(-1px);
+}
+
+.pk-choice:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
 }
 
 .pk-choice[aria-current="true"],
-.pk-choice[aria-selected="true"] {
+.pk-choice[aria-selected="true"],
+.pk-choice[aria-pressed="true"] {
   background: var(--poke-yellow);
 }
 
 .pk-choice[aria-current="true"]:hover,
-.pk-choice[aria-selected="true"]:hover {
+.pk-choice[aria-selected="true"]:hover,
+.pk-choice[aria-pressed="true"]:hover {
   background: var(--poke-yellow);
 }
 
@@ -328,6 +353,7 @@
   padding: 0 0.75rem;
   box-shadow: 3px 3px 0 var(--ink);
   outline: none;
+  transition: box-shadow 160ms ease;
 }
 
 .pk-field:focus {
@@ -451,11 +477,118 @@
   }
 }
 
+.pk-view,
+.pk-swap {
+  animation: pk-rise 260ms ease;
+}
+
+.pk-studio {
+  animation: pk-fade 180ms ease;
+}
+
+.pk-studio-panel {
+  animation: pk-panel 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.pk-sticker-tile {
+  position: relative;
+}
+
+.pk-sticker-count {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.3rem;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding: 0 0.25rem;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  background: var(--poke-red);
+  color: white;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 0.95rem;
+}
+
+.pk-sticker-ghost {
+  transform: translate(-50%, -50%);
+  animation: pk-pop 140ms ease;
+}
+
+@keyframes pk-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pk-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pk-panel {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pk-pop {
+  from {
+    opacity: 0.65;
+    transform: translate(-50%, -50%) scale(0.86);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .pk-bar-indeterminate {
     animation: none;
     width: 100%;
     opacity: 0.45;
+  }
+
+  .pk-view,
+  .pk-swap,
+  .pk-studio,
+  .pk-studio-panel,
+  .pk-sticker-ghost,
+  [data-slot="dialog-overlay"],
+  [data-slot="dialog-content"] {
+    animation: none;
+  }
+
+  .pk-tab,
+  .pk-pill,
+  .pk-choice,
+  .pk-banner-btn,
+  .pk-field,
+  .pk-bar-fill {
+    transition: none;
+  }
+
+  .pk-choice:hover,
+  .pk-tab:active,
+  .pk-pill:active,
+  .pk-choice:active,
+  .pk-banner-btn:active {
+    transform: none;
   }
 }
 

@@ -221,6 +221,7 @@ export function StickerStudio({
   const [focusId, setFocusId] = useState(card.id);
   const [selected, setSelected] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [tray, setTray] = useState<"all" | "placed" | "spare">("all");
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(0);
   const [ghost, setGhost] = useState<{ src: string; x: number; y: number } | null>(null);
@@ -280,7 +281,20 @@ export function StickerStudio({
     }
     return [...byKey.values()];
   }, [roster]);
-  const visible = mons.filter((mon) => mon.name.toLowerCase().includes(query.trim().toLowerCase()));
+  const placedByKey = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const sticker of draft.stickers) counts.set(sticker.key, (counts.get(sticker.key) ?? 0) + 1);
+    return counts;
+  }, [draft.stickers]);
+  const selectedSticker = draft.stickers.find((sticker) => sticker.id === selected) ?? null;
+  const selectedMon = selectedSticker ? (mons.find((mon) => mon.key === selectedSticker.key) ?? null) : null;
+  const visible = mons.filter((mon) => {
+    if (!mon.name.toLowerCase().includes(query.trim().toLowerCase())) return false;
+    const count = placedByKey.get(mon.key) ?? 0;
+    if (tray === "placed") return count > 0;
+    if (tray === "spare") return count === 0;
+    return true;
+  });
   const needed = useMemo(() => {
     const keys = new Set<string>();
     for (const item of roster) {
@@ -316,6 +330,7 @@ export function StickerStudio({
     remember();
     setSelected(null);
     setQuery("");
+    setTray("all");
     setFocusId(id);
   }
 
@@ -499,6 +514,18 @@ export function StickerStudio({
     });
   }
 
+  function selectPlaced(key: string) {
+    const matches = draft.stickers.filter((sticker) => sticker.key === key);
+    if (matches.length === 0) {
+      place(key);
+      return;
+    }
+    const currentIndex = matches.findIndex((sticker) => sticker.id === selected);
+    const next = currentIndex === -1 ? matches[matches.length - 1] : matches[(currentIndex + 1) % matches.length];
+    setSelected(next.id);
+    setDraft((current) => ({ ...current, stickers: bringToFront(current.stickers, next.id) }));
+  }
+
   function onTrayPointerDown(event: React.PointerEvent<HTMLButtonElement>, mon: StickerMon) {
     if (event.button !== 0) return;
     const startX = event.clientX;
@@ -615,14 +642,14 @@ export function StickerStudio({
   }
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-[#16324f]/50 p-3 sm:p-6">
+    <div className="pk-studio fixed inset-0 z-50 overflow-y-auto bg-[#16324f]/50 p-3 sm:p-6">
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="sticker-heading"
         tabIndex={-1}
-        className="pk-card mx-auto w-full max-w-6xl bg-cream px-4 py-4 outline-none sm:px-6 sm:py-5"
+        className="pk-studio-panel pk-card mx-auto w-full max-w-6xl bg-cream px-4 py-4 outline-none sm:px-6 sm:py-5"
       >
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -647,9 +674,10 @@ export function StickerStudio({
               </label>
             ) : null}
             <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-              The front is the cover. Drag a {hideNames ? "riddle" : "Pokémon"} onto it, or click one to add it, then
-              move it around the picture. The back is the playlist. Save a PDF and print it at 100%
-              size. Cut on the corner marks.
+              The front is the cover. Click a {hideNames ? "riddle" : "Pokémon"} to add it. Click one that is
+              already there to select that copy, then move or resize it. Drag from the list to drop a new copy
+              where you want it. The back is the playlist. Save a PDF and print it at 100% size. Cut on the corner
+              marks.
             </p>
           </div>
           <Button type="button" variant="outline" className="h-10 shrink-0 px-4" onClick={close}>
@@ -736,33 +764,78 @@ export function StickerStudio({
                 autoComplete="off"
               />
             </label>
-            <div className="mt-2 grid max-h-[28rem] grid-cols-3 content-start gap-2 overflow-y-auto lg:max-h-[70dvh]">
-              {visible.map((mon) => (
+            <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Which stickers to show">
+              {(
+                [
+                  ["all", "All"],
+                  ["placed", "On cover"],
+                  ["spare", "Not yet"],
+                ] as const
+              ).map(([id, label]) => (
                 <button
-                  key={mon.key}
+                  key={id}
                   type="button"
-                  className="pk-choice flex flex-col items-center gap-1 px-1 py-2 text-center"
-                  onClick={() => {
-                    if (suppressClick.current) {
-                      suppressClick.current = false;
-                      return;
-                    }
-                    place(mon.key);
-                  }}
-                  onPointerDown={(event) => onTrayPointerDown(event, mon)}
+                  className="pk-pill"
+                  aria-pressed={tray === id}
+                  onClick={() => setTray(id)}
                 >
-                  <img
-                    src={mon.src}
-                    alt=""
-                    width={56}
-                    height={56}
-                    draggable={false}
-                    className="h-14 w-14 object-contain"
-                    style={{ imageRendering: "pixelated" }}
-                  />
-                  <span className="w-full truncate text-xs">{mon.name}</span>
+                  {label}
                 </button>
               ))}
+            </div>
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">
+              {placedByKey.size} of {mons.length} on the cover.
+            </p>
+            <div className="mt-2 grid max-h-[28rem] grid-cols-3 content-start gap-2 overflow-y-auto lg:max-h-[70dvh]">
+              {visible.length === 0 ? (
+                <p className="col-span-3 px-1 py-3 text-sm leading-6 text-muted-foreground">
+                  {query.trim()
+                    ? "Nothing matches that name."
+                    : tray === "placed"
+                      ? "Nothing is on the cover yet."
+                      : "Every one is already on the cover."}
+                </p>
+              ) : null}
+              {visible.map((mon) => {
+                const count = placedByKey.get(mon.key) ?? 0;
+                const pressed = selectedSticker?.key === mon.key;
+                return (
+                  <button
+                    key={mon.key}
+                    type="button"
+                    className="pk-choice pk-sticker-tile flex flex-col items-center gap-1 px-1 py-2 text-center"
+                    aria-pressed={pressed}
+                    aria-label={
+                      count === 0
+                        ? `Add ${mon.name}`
+                        : pressed
+                          ? `${mon.name}, selected, ${count} on the cover`
+                          : `Select ${mon.name}, ${count} on the cover`
+                    }
+                    onClick={() => {
+                      if (suppressClick.current) {
+                        suppressClick.current = false;
+                        return;
+                      }
+                      if (count === 0) place(mon.key);
+                      else selectPlaced(mon.key);
+                    }}
+                    onPointerDown={(event) => onTrayPointerDown(event, mon)}
+                  >
+                    {count > 0 ? <span className="pk-sticker-count">{count}</span> : null}
+                    <img
+                      src={mon.src}
+                      alt=""
+                      width={56}
+                      height={56}
+                      draggable={false}
+                      className="h-14 w-14 object-contain"
+                      style={{ imageRendering: "pixelated" }}
+                    />
+                    <span className="w-full truncate text-xs">{mon.name}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -778,7 +851,9 @@ export function StickerStudio({
               onPointerDown={onFrontPointerDown}
             />
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              {draft.stickers.length} on the cover. Drag to move. Delete removes the selected one.
+              {selectedMon
+                ? `${selectedMon.name} is selected. Drag it on the cover. Delete removes it.`
+                : `${draft.stickers.length} on the cover. Pick one in the list to select it, then drag to move.`}
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
               <Button type="button" variant="outline" className="h-10 px-4" disabled={!selected} onClick={() => resize(0.04)}>
@@ -786,6 +861,17 @@ export function StickerStudio({
               </Button>
               <Button type="button" variant="outline" className="h-10 px-4" disabled={!selected} onClick={() => resize(-0.04)}>
                 Smaller
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 px-4"
+                disabled={!selectedSticker}
+                onClick={() => {
+                  if (selectedSticker) place(selectedSticker.key);
+                }}
+              >
+                Add another
               </Button>
               <Button
                 type="button"
@@ -915,8 +1001,8 @@ export function StickerStudio({
         <img
           src={ghost.src}
           alt=""
-          className="pointer-events-none fixed z-[60] h-16 w-16 object-contain"
-          style={{ left: ghost.x, top: ghost.y, transform: "translate(-50%, -50%)", imageRendering: "pixelated" }}
+          className="pk-sticker-ghost pointer-events-none fixed z-[60] h-16 w-16 object-contain"
+          style={{ left: ghost.x, top: ghost.y, imageRendering: "pixelated" }}
         />
       ) : null}
     </div>

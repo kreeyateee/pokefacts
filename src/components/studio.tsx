@@ -1315,6 +1315,7 @@ export function Studio({
       </header>
 
       <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6">
+        <div key={view === "cards" ? `${view}-${kind}` : view} className="pk-view">
         {view === "setup" ? (
           <SetupGuide onConnect={() => setConnectOpen(true)} />
         ) : view === "catalogue" ? (
@@ -1478,6 +1479,7 @@ export function Studio({
 
             <div className="min-w-0">
               <article className="pk-card pk-dex px-5 py-6 sm:px-8 sm:py-8">
+                <div key={chapter.key} className="pk-swap">
                 <p className="pk-kicker">
                   {guessing
                     ? revealed
@@ -1550,6 +1552,7 @@ export function Studio({
                       : "Hear plays the cry, then the reading. The Yoto card plays that same order."}
                   </p>
                 ) : null}
+                </div>
                 <label className="mt-6 grid max-w-sm gap-1 text-sm" htmlFor="voice">
                   Voice
                   <select
@@ -1727,6 +1730,7 @@ export function Studio({
             </div>
           </div>
         ) : null}
+        </div>
       </main>
 
       <footer className="mx-auto w-full max-w-5xl px-4 pb-8 text-xs leading-5 font-bold text-ink sm:px-6">

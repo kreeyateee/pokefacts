@@ -776,7 +776,7 @@ export function Catalogue({
           <p className="text-sm text-muted-foreground">Opening the entry…</p>
         ) : null}
         {entry && entry.id === selected ? (
-          <>
+          <div key={entry.id} className="pk-swap">
             <p className="pk-kicker">
               {numberLabel(entry.id)} · {entry.region}
             </p>
@@ -920,7 +920,7 @@ export function Catalogue({
                 Next number
               </button>
             </div>
-          </>
+          </div>
         ) : null}
       </article>
       {stickerCards?.[0] ? (
