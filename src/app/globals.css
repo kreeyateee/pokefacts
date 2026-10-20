@@ -299,6 +299,44 @@
   box-shadow: 3px 3px 0 var(--ink);
 }
 
+.pk-chip {
+  height: 2rem;
+  padding: 0 0.7rem;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  background: white;
+  color: var(--ink);
+  font-family: var(--font-fredoka), sans-serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+  box-shadow: 2px 2px 0 var(--ink);
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.pk-chip:hover {
+  background: #fff4c2;
+}
+
+.pk-chip[aria-pressed="true"] {
+  background: var(--poke-yellow);
+}
+
+.pk-chip:active {
+  transform: translate(1px, 1px);
+  box-shadow: none;
+}
+
+.pk-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  transform: none;
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
 .pk-page input[type="checkbox"],
 .pk-page input[type="radio"] {
   width: 1rem;
@@ -576,6 +614,7 @@
 
   .pk-tab,
   .pk-pill,
+  .pk-chip,
   .pk-choice,
   .pk-banner-btn,
   .pk-field,
@@ -586,6 +625,7 @@
   .pk-choice:hover,
   .pk-tab:active,
   .pk-pill:active,
+  .pk-chip:active,
   .pk-choice:active,
   .pk-banner-btn:active {
     transform: none;
