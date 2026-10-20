@@ -132,6 +132,11 @@ describe("catalogue database", () => {
       assert.equal(existsSync(file), true);
       assert.equal(readFileSync(file).subarray(0, 4).toString("hex"), "89504e47");
     }
+    for (const id of [1, 6, 25, 1025, 10034, 10196]) {
+      const file = path.join(process.cwd(), "public", "artwork", `${id}.webp`);
+      assert.equal(existsSync(file), true);
+      assert.equal(readFileSync(file).subarray(0, 4).toString("ascii"), "RIFF");
+    }
   });
 });
 

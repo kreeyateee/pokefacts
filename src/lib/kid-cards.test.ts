@@ -293,6 +293,7 @@ describe("cards for ages 8 to 12", () => {
     }
     const bulbasaur = cards[0]?.chapters.find((chapter) => chapter.key === "bulbasaur");
     assert.equal(bulbasaur?.tracks.length, 1);
+    assert.equal(bulbasaur?.sprite, "/artwork/1.webp");
     const bulba = bulbasaur?.tracks[0]?.text ?? "";
     assert.match(bulba, /It is a Grass and Poison type\./);
     assert.match(bulba, /It is the Seed Pokémon\./);
@@ -522,6 +523,7 @@ describe("random Pokedex playlist", () => {
       second.chapters.map((chapter) => chapter.dexId),
       ids,
     );
+    assert.equal(first.chapters[0]?.sprite, `/artwork/${first.chapters[0]?.dexId}.webp`);
     assert.equal(countSpokenTracks(first.chapters), 100);
     assert.equal(first.chapters.some((chapter) => chapter.key === "start"), false);
 
@@ -1211,6 +1213,9 @@ describe("biology speech and form playlists", () => {
     assert.equal(sentLive.content.metadata?.title, "Mega Evolutions");
     assert.equal(sentLive.content.cardId, undefined);
     assert.equal(Object.hasOwn(sentLive.content, "cardId"), false);
+    const megaX = live.chapters.find((chapter) => chapter.title === "Mega Charizard X");
+    assert.equal(megaX?.sprite, "/artwork/10034.webp");
+    assert.equal(megaX?.tracks[0]?.icon, "/pixels/6.png");
     const charizard = sentLive.content.content.chapters.find((chapter) => chapter.title === "Mega Charizard X");
     assert.equal(charizard?.tracks[0]?.display.icon16x16, "yoto:#char-pixel");
     assert.equal(charizard?.tracks[0]?.voiceId, LILY_VOICE_ID);
@@ -1250,6 +1255,8 @@ describe("biology speech and form playlists", () => {
     const chapter = live.chapters.find((item) => item.title === "Gigantamax Charizard");
     assert.equal(chapter?.tracks[0]?.lead, "cry");
     assert.equal(chapter?.dexId, 6);
+    assert.equal(chapter?.sprite, "/artwork/10196.webp");
+    assert.equal(chapter?.tracks[0]?.icon, "/pixels/6.png");
 
     const card = formPlaylist("gmax", [
       {

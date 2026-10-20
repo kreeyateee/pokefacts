@@ -1330,7 +1330,7 @@ export function Studio({
             job={job}
           />
         ) : card && chapter ? (
-          <div className="grid gap-6 md:grid-cols-[220px_minmax(0,1fr)]">
+          <div className="grid gap-6 md:grid-cols-[17.5rem_minmax(0,1fr)]">
             <div className="md:col-span-2">
               <div className="flex flex-wrap items-center gap-3">
                 <Button type="button" variant="outline" className="h-10 px-4" onClick={() => setStickersOpen(true)}>
@@ -1354,7 +1354,7 @@ export function Studio({
                     <>
                       This playlist is{" "}
                       <span className="font-bold text-ink">{card.libraryTitle}</span>. One
-                      track for each form. The picture is that species&apos; 16×16 pixel.
+                      track for each form. The picture is that form&apos;s full artwork.
                     </>
                   ) : (
                     <>
@@ -1452,7 +1452,7 @@ export function Studio({
               </select>
               <nav
                 aria-label={guessing ? "Riddles" : "Pokémon"}
-                className="grid max-h-[40dvh] content-start grid-cols-3 gap-2 overflow-y-auto md:max-h-[70dvh] md:grid-cols-1"
+                className="grid max-h-[40dvh] content-start grid-cols-1 gap-2 overflow-y-auto md:max-h-[70dvh]"
               >
                 {listed.map((item) => {
                   const selected = item.key === chapter.key;
@@ -1463,9 +1463,18 @@ export function Studio({
                       type="button"
                       onClick={() => chooseChapter(item.key)}
                       aria-current={selected ? "true" : undefined}
-                      className="pk-choice px-2.5 py-2.5 text-sm"
+                      className="pk-choice flex items-center gap-2 px-2.5 py-2 text-sm"
                     >
-                      {label}
+                      {!guessing && item.sprite ? (
+                        <img
+                          src={item.sprite}
+                          alt=""
+                          width={48}
+                          height={48}
+                          className="h-12 w-12 shrink-0 object-contain"
+                        />
+                      ) : null}
+                      <span className="min-w-0 text-left">{label}</span>
                     </button>
                   );
                 })}
@@ -1486,9 +1495,9 @@ export function Studio({
                     <img
                       src={portrait}
                       alt={guessing && !revealed ? "" : chapter.title}
-                      width={96}
-                      height={96}
-                      className="pk-sprite"
+                      width={guessing ? 96 : 176}
+                      height={guessing ? 96 : 176}
+                      className={guessing ? "pk-sprite" : "pk-art"}
                     />
                   ) : null}
                   <h2 className="font-display text-4xl leading-tight sm:text-5xl">

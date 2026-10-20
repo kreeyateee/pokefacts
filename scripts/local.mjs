@@ -168,10 +168,13 @@ if (species < 1025) {
 const sprites = await countNames(path.join(root, "public", "sprites"), /^\d+\.png$/);
 const pixels = await countNames(path.join(root, "public", "pixels"), /^\d+\.png$/);
 const shadows = await countNames(path.join(root, "public", "pixels"), /^\d+-shadow\.png$/);
-if (sprites < 1025 || pixels < 1025 || shadows < 1025) {
+const artwork = await countNames(path.join(root, "public", "artwork"), /^\d+\.webp$/);
+const megaArt = await exists(path.join(root, "public", "artwork", "10034.webp"));
+const gmaxArt = await exists(path.join(root, "public", "artwork", "10196.webp"));
+if (sprites < 1025 || pixels < 1025 || shadows < 1025 || artwork < 1025 || !megaArt || !gmaxArt) {
   fail(
-    `Pictures are incomplete (sprites ${sprites}/1025, pixels ${pixels}/1025, shadows ${shadows}/1025).\n` +
-      "public/sprites and public/pixels ship with the git repository. Restore them from git.",
+    `Pictures are incomplete (sprites ${sprites}/1025, pixels ${pixels}/1025, shadows ${shadows}/1025, artwork ${artwork}/1025).\n` +
+      "public/sprites, public/pixels, and public/artwork ship with the git repository. Restore them from git.",
   );
 }
 

@@ -1,3 +1,4 @@
+import { artworkSrc } from "@/lib/artwork";
 import type { BiologyBlock } from "@/lib/catalogue-types";
 import { dexBlurb, guessSpoken, pickDexEntry, type MonSheet } from "@/lib/dex-facts";
 import { pronounce } from "@/lib/pronounce";
@@ -209,7 +210,7 @@ function factChapter(sheet: MonSheet): KidChapter {
       ),
     ],
     {
-      sprite: `/sprites/${sheet.id}.png`,
+      sprite: artworkSrc(sheet.id),
       clip: CRY_CLIPS.has(sheet.id) ? `/facts/${sheet.id}.mp3` : undefined,
       dexId: sheet.id,
     },
@@ -376,7 +377,7 @@ export function randomPokedexCard(
     });
     return {
       ...chapter,
-      sprite: `/pixels/${chapter.dexId}.png`,
+      sprite: chapter.dexId ? artworkSrc(chapter.dexId) : chapter.sprite,
       tracks,
     };
   });
@@ -625,7 +626,7 @@ export function fitFormTracks<T extends { speciesId: number }>(forms: readonly T
 export const MEGA_PLAYLIST_ID = "mega-evolutions";
 export const GMAX_PLAYLIST_ID = "gigantamax";
 
-/** One cry-first track per form. The icon is the species pixel. */
+/** One cry-first track per form. The page shows that form's artwork. The Yoto icon stays the species pixel. */
 export function formPlaylist(kind: "mega" | "gmax", forms: readonly FormPlaylistEntry[]): KidCard {
   const title = kind === "mega" ? "Mega Evolutions" : "Gigantamax";
   const used = new Set<string>();
@@ -643,7 +644,7 @@ export function formPlaylist(kind: "mega" | "gmax", forms: readonly FormPlaylist
       overlay,
       icon,
       [talk("entry", form.formName, text, icon, overlay, undefined, "cry")],
-      { sprite: icon, dexId: form.speciesId },
+      { sprite: artworkSrc(form.formId), dexId: form.speciesId },
     );
     chapter.formId = form.formId;
     if (form.url) chapter.articleUrl = form.url;

@@ -369,6 +369,18 @@
   image-rendering: pixelated;
 }
 
+.pk-art {
+  height: 11rem;
+  width: 11rem;
+  flex: none;
+  border: 3px solid var(--ink);
+  border-radius: 1.25rem;
+  object-fit: contain;
+  background: radial-gradient(circle at 50% 42%, #fff 0 46%, #d7f0ff 78%);
+  box-shadow: 3px 3px 0 var(--ink);
+  padding: 0.35rem;
+}
+
 .pk-soft,
 .pk-measure {
   border: 3px solid var(--ink);

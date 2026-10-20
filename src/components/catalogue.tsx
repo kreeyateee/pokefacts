@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { StatusBar } from "@/components/status-bar";
 import { StickerStudio } from "@/components/sticker-studio";
 import { Button } from "@/components/ui/button";
+import { artworkSrc } from "@/lib/artwork";
 import type { BiologyBlock, BiologyView, CatalogueEntry, CataloguePage } from "@/lib/catalogue-types";
 import { heightForUnits, weightForUnits, type MeasureUnits } from "@/lib/format";
 import type { KidCard } from "@/lib/kid-cards";
@@ -91,8 +92,15 @@ function multiplierLabel(multiplier: number): string {
   return `×${multiplier}`;
 }
 
-function spriteSrc(id: number): string {
-  return `/sprites/${id}.png`;
+function hideBrokenPicture(event: { currentTarget: HTMLImageElement }): void {
+  const image = event.currentTarget;
+  const fallback = image.dataset.fallback;
+  if (fallback && image.dataset.tried !== "1") {
+    image.dataset.tried = "1";
+    image.src = fallback;
+    return;
+  }
+  image.style.display = "none";
 }
 
 function statFill(name: string): string {
@@ -716,11 +724,11 @@ export function Catalogue({
                   className="pk-choice flex w-full items-center gap-2 px-3 py-2"
                 >
                   <img
-                    src={spriteSrc(item.id)}
+                    src={artworkSrc(item.id)}
                     alt=""
-                    width={40}
-                    height={40}
-                    className="h-10 w-10 shrink-0 object-contain [image-rendering:pixelated]"
+                    width={48}
+                    height={48}
+                    className="h-12 w-12 shrink-0 object-contain"
                   />
                   <span className="min-w-0">
                     <span className="block">
@@ -782,11 +790,11 @@ export function Catalogue({
             </p>
             <div className="mt-3 flex items-end gap-4">
               <img
-                src={spriteSrc(entry.id)}
+                src={artworkSrc(entry.id)}
                 alt=""
-                width={96}
-                height={96}
-                className="pk-sprite"
+                width={176}
+                height={176}
+                className="pk-art"
               />
               <div>
                 <h2 className="font-display text-4xl leading-tight sm:text-5xl">{entry.name}</h2>
@@ -864,6 +872,15 @@ export function Catalogue({
                 <ul className="mt-2 grid gap-2 sm:grid-cols-2">
                   {entry.forms.map((form) => (
                     <li key={form.id} className="pk-soft px-3 py-2 text-sm font-normal">
+                      <img
+                        src={artworkSrc(form.id)}
+                        alt=""
+                        width={112}
+                        height={112}
+                        data-fallback={artworkSrc(entry.id)}
+                        className="mb-2 h-28 w-28 object-contain"
+                        onError={hideBrokenPicture}
+                      />
                       <p className="font-medium">{form.name}</p>
                       <div className="mt-1">
                         <TypeChips types={form.types} />
