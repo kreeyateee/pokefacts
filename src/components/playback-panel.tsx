@@ -18,10 +18,10 @@ export function PlaybackPanel({
 
   return (
     <details className="pk-card mt-4 px-4 py-3">
-      <summary className="cursor-pointer text-sm font-bold">Settings</summary>
+      <summary className="cursor-pointer text-sm font-bold">Sound on the card</summary>
       <div className="mt-3 grid gap-4 sm:grid-cols-2">
         <label className="grid gap-1 text-sm" htmlFor="cry-loudness">
-          Cry loudness
+          How loud the cry is
           <input
             id="cry-loudness"
             type="range"
@@ -34,7 +34,7 @@ export function PlaybackPanel({
           <span className="text-xs text-muted-foreground">{settings.cryVolume}×</span>
         </label>
         <label className="grid gap-1 text-sm" htmlFor="voice-loudness">
-          Voice loudness
+          How loud the voice is
           <input
             id="voice-loudness"
             type="range"
@@ -82,8 +82,8 @@ export function PlaybackPanel({
         </fieldset>
       </div>
       <p className="mt-3 text-xs leading-5 text-muted-foreground">
-        Loudness and the pause are used when the cry is mixed in front of the voice. A change makes a new mix, so an
-        older recording is not reused.
+        These settings are mixed into the recording that goes on the card. Change them before you send. Hear uses the
+        same mix, so you can check it on this page first.
       </p>
     </details>
   );

@@ -267,6 +267,7 @@ describe("cards for ages 8 to 12", () => {
       const script = start?.tracks.map((track) => track.text).join(" ") ?? "";
       assert.match(script, /picture/i);
       assert.match(script, /press/i);
+      assert.doesNotMatch(script, /playlist/i);
       assert.ok(countSpokenTracks(card.chapters) <= YOTO_TRACK_LIMIT);
     }
   });

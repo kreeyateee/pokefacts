@@ -618,7 +618,7 @@ export function Catalogue({
             <p className="mt-1 text-xs leading-5 pk-quiet">This voice reads every track on the playlist.</p>
           ) : null}
           <label className="mt-3 grid gap-1 text-sm" htmlFor="catalogue-playlist">
-            Add to a Yoto playlist
+            Where it goes
             <select
               id="catalogue-playlist"
               aria-label="Yoto playlist"
@@ -626,18 +626,18 @@ export function Catalogue({
               value={playlistTarget}
               onChange={(event) => onPlaylistTarget?.(event.target.value)}
             >
-              <option value="">New playlist</option>
+              <option value="">Make a new playlist</option>
               {playlists.map((item) => (
                 <option key={item.cardId} value={item.cardId}>
-                  {item.title}
+                  Add to {item.title}
                 </option>
               ))}
             </select>
           </label>
           <p className="mt-1 text-xs leading-5 pk-quiet">
             {playlistTarget
-              ? "Build adds these tracks onto that playlist. Tracks already on it stay."
-              : "New playlist creates a card and does not replace one you already have."}
+              ? "Adds these tracks at the end. Tracks already on that playlist stay."
+              : "Makes a new playlist. Playlists you already have stay as they are."}
           </p>
           <Button
             type="button"
