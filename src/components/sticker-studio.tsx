@@ -14,6 +14,7 @@ import {
   backMode,
   bringToFront,
   cardPixelSize,
+  clampRotation,
   clampScale,
   clampSticker,
   coverListsNames,
@@ -29,11 +30,14 @@ import {
   sheetSlots,
   stickerFilename,
   stickerStorageKey,
+  stickerStyle,
   topStickerAt,
   type CoverDraft,
   type PaperId,
   type PlacedSticker,
+  type StickerShape,
 } from "@/lib/sticker-layout";
+import { decorationArt } from "@/lib/sticker-decor";
 import { paintCard, paintSheet, type CardPaint } from "@/lib/sticker-paint";
 import { jpegPagesPdf } from "@/lib/sticker-pdf";
 
@@ -42,6 +46,26 @@ type StickerMon = {
   name: string;
   src: string;
 };
+
+const BRUSHES = ["#16324f", "#e10600", "#ffcb05", "#2a75bb", "#7ac74c", "#f95587", "#9b5de5", "#ff8c42", "#fffdf6"] as const;
+const BRUSH_SIZES = [
+  { id: 10, label: "Small" },
+  { id: 18, label: "Medium" },
+  { id: 32, label: "Big" },
+] as const;
+const SHAPE_LABELS: { id: StickerShape; label: string }[] = [
+  { id: "circle", label: "Circle" },
+  { id: "round", label: "Square" },
+  { id: "hex", label: "Hex" },
+  { id: "star", label: "Star" },
+  { id: "diamond", label: "Diamond" },
+];
+
+function paintingUrl(value: unknown): string {
+  if (typeof value !== "string" || !value.startsWith("data:image/png;base64,")) return "";
+  if (value.length > 1_800_000) return "";
+  return value;
+}
 
 function nounFor(kind: KidCard["kind"]): string {
   if (kind === "guess") return "riddles";
@@ -119,6 +143,7 @@ function paintFor(
   images: Map<string, CanvasImageSource | null>,
   fonts: { display: string; body: string },
   selectedId: string | null,
+  painting: CanvasImageSource | null,
 ): CardPaint {
   const itemMons = monsFor(item);
   const lines = linesFor(item);
@@ -134,6 +159,7 @@ function paintFor(
     images,
     fonts,
     selectedId,
+    painting,
   };
 }
 
@@ -154,6 +180,7 @@ function loadDraft(cardId: string, fresh: CoverDraft, keys: ReadonlySet<string>)
       backMode: backMode(parsed.backMode),
       paper: paperId(parsed.paper),
       stickers,
+      painting: paintingUrl(parsed.painting),
     };
   } catch {
     return fresh;
@@ -221,6 +248,7 @@ export function StickerStudio({
   const [focusId, setFocusId] = useState(card.id);
   const [selected, setSelected] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [tray, setTray] = useState<"all" | "placed" | "spare">("all");
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(0);
   const [ghost, setGhost] = useState<{ src: string; x: number; y: number } | null>(null);
@@ -260,6 +288,25 @@ export function StickerStudio({
   const draftCard = useRef(focus.id);
   const dragCleanup = useRef<(() => void) | null>(null);
   const suppressClick = useRef(false);
+  const pastRef = useRef<{ draft: CoverDraft; selected: string | null }[]>([]);
+  const futureRef = useRef<{ draft: CoverDraft; selected: string | null }[]>([]);
+  const selectedRef = useRef<string | null>(null);
+  const undoRef = useRef<() => void>(() => {});
+  const redoRef = useRef<() => void>(() => {});
+  const pushRef = useRef<() => void>(() => {});
+  const removeRef = useRef<() => void>(() => {});
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+  const [tool, setTool] = useState<"move" | "draw">("move");
+  const [brush, setBrush] = useState<string>("#e10600");
+  const [brushSize, setBrushSize] = useState(18);
+  const [decor, setDecor] = useState<StickerMon[]>([]);
+  const [drawSerial, setDrawSerial] = useState(0);
+  const paintCanvas = useRef<HTMLCanvasElement | null>(null);
+  const paintReady = useRef(false);
+  const paintCache = useRef(new Map<string, CanvasImageSource>());
+  const paintLoading = useRef(new Set<string>());
+  const drawingRef = useRef(false);
   const fontsReady = useRef(false);
   draftRef.current = draft;
 
@@ -280,7 +327,24 @@ export function StickerStudio({
     }
     return [...byKey.values()];
   }, [roster]);
-  const visible = mons.filter((mon) => mon.name.toLowerCase().includes(query.trim().toLowerCase()));
+  const placedByKey = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const sticker of draft.stickers) counts.set(sticker.key, (counts.get(sticker.key) ?? 0) + 1);
+    return counts;
+  }, [draft.stickers]);
+  selectedRef.current = selected;
+  const selectedSticker = draft.stickers.find((sticker) => sticker.id === selected) ?? null;
+  const selectedMon = selectedSticker
+    ? (mons.find((mon) => mon.key === selectedSticker.key) ?? decor.find((mon) => mon.key === selectedSticker.key) ?? null)
+    : null;
+  const coverMons = mons.filter((mon) => (placedByKey.get(mon.key) ?? 0) > 0);
+  const visible = mons.filter((mon) => {
+    if (!mon.name.toLowerCase().includes(query.trim().toLowerCase())) return false;
+    const count = placedByKey.get(mon.key) ?? 0;
+    if (tray === "placed") return count > 0;
+    if (tray === "spare") return count === 0;
+    return true;
+  });
   const needed = useMemo(() => {
     const keys = new Set<string>();
     for (const item of roster) {
@@ -316,11 +380,71 @@ export function StickerStudio({
     remember();
     setSelected(null);
     setQuery("");
+    setTray("all");
+    pastRef.current = [];
+    futureRef.current = [];
+    setCanUndo(false);
+    setCanRedo(false);
     setFocusId(id);
   }
 
+  function syncHistory() {
+    setCanUndo(pastRef.current.length > 0);
+    setCanRedo(futureRef.current.length > 0);
+  }
+
+  function pushHistory() {
+    pastRef.current.push({ draft: draftRef.current, selected: selectedRef.current });
+    if (pastRef.current.length > 40) pastRef.current.shift();
+    futureRef.current = [];
+    syncHistory();
+  }
+
+  function undo() {
+    const prev = pastRef.current.pop();
+    if (!prev) return;
+    futureRef.current.push({ draft: draftRef.current, selected: selectedRef.current });
+    setDraft(prev.draft);
+    setSelected(prev.selected);
+    syncHistory();
+  }
+
+  function redo() {
+    const next = futureRef.current.pop();
+    if (!next) return;
+    pastRef.current.push({ draft: draftRef.current, selected: selectedRef.current });
+    setDraft(next.draft);
+    setSelected(next.selected);
+    syncHistory();
+  }
+  undoRef.current = undo;
+  redoRef.current = redo;
+  pushRef.current = pushHistory;
+
+  function cachePainting(url: string) {
+    if (!url || paintCache.current.has(url) || paintLoading.current.has(url)) return;
+    paintLoading.current.add(url);
+    const image = new Image();
+    image.onload = () => {
+      paintCache.current.set(url, image);
+      paintLoading.current.delete(url);
+      setLoaded((count) => count + 1);
+    };
+    image.onerror = () => {
+      paintLoading.current.delete(url);
+    };
+    image.src = url;
+  }
+
+  function activePainting(url: string): CanvasImageSource | null {
+    if (drawingRef.current && paintCanvas.current) return paintCanvas.current;
+    if (!url) return null;
+    cachePainting(url);
+    return paintCache.current.get(url) ?? null;
+  }
+
   function specFor(selectedId: string | null): CardPaint {
-    return paintFor(focus, draft, images.current, fonts(), selectedId);
+    return paintFor(focus, draft, images.current, fonts(), selectedId, activePainting(draft.painting));
   }
 
   function renderFaces(items: readonly KidCard[], dpi: number, selectedId: string | null) {
@@ -328,7 +452,15 @@ export function StickerStudio({
     const drawn = fonts();
     return items.flatMap((item) => {
       const cover = item.id === focus.id ? draft : savedCover(item);
-      const spec = paintFor(item, cover, images.current, drawn, item.id === focus.id ? selectedId : null);
+      const spec = paintFor(
+        item,
+        cover,
+        images.current,
+        drawn,
+        item.id === focus.id ? selectedId : null,
+        item.id === focus.id ? activePainting(cover.painting) : cover.painting ? (paintCache.current.get(cover.painting) ?? null) : null,
+      );
+      if (item.id !== focus.id && cover.painting) cachePainting(cover.painting);
       return (["front", "back"] as const).map((which) => {
         const canvas = document.createElement("canvas");
         canvas.width = size.width;
@@ -339,6 +471,17 @@ export function StickerStudio({
       });
     });
   }
+
+  useEffect(() => {
+    const made = decorationArt();
+    const next: StickerMon[] = [];
+    for (const item of made) {
+      images.current.set(item.key, item.canvas);
+      next.push({ key: item.key, name: item.name, src: item.canvas.toDataURL("image/png") });
+    }
+    setDecor(next);
+    setLoaded((count) => count + 1);
+  }, []);
 
   useEffect(() => {
     const previous = document.body.style.overflow;
@@ -442,7 +585,7 @@ export function StickerStudio({
     return () => {
       cancelled = true;
     };
-  }, [draft, loaded, selected, showNames, focus, pageKey, roster]);
+  }, [draft, loaded, selected, showNames, focus, pageKey, roster, drawSerial]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -454,14 +597,22 @@ export function StickerStudio({
       const typing =
         target instanceof HTMLElement &&
         (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
-      if (typing || !selected) return;
+      if (typing) return;
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        if (event.shiftKey) redoRef.current();
+        else undoRef.current();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "y") {
+        event.preventDefault();
+        redoRef.current();
+        return;
+      }
+      if (!selected) return;
       if (event.key === "Delete" || event.key === "Backspace") {
         event.preventDefault();
-        setSelected(null);
-        setDraft((current) => ({
-          ...current,
-          stickers: current.stickers.filter((sticker) => sticker.id !== selected),
-        }));
+        removeRef.current();
         return;
       }
       const nudge =
@@ -476,11 +627,12 @@ export function StickerStudio({
                 : null;
       if (!nudge) return;
       event.preventDefault();
+      pushRef.current();
       setDraft((current) => ({
         ...current,
         stickers: current.stickers.map((sticker) => {
           if (sticker.id !== selected) return sticker;
-          const next = clampSticker({ x: sticker.x + nudge.x, y: sticker.y + nudge.y }, sticker.scale);
+          const next = clampSticker({ x: sticker.x + nudge.x, y: sticker.y + nudge.y }, sticker.scale, sticker.rotation);
           return { ...sticker, ...next };
         }),
       }));
@@ -490,13 +642,30 @@ export function StickerStudio({
   }, [selected]);
 
   function place(key: string, at?: { x: number; y: number }) {
+    pushHistory();
     const id = `sticker-${crypto.randomUUID()}`;
     setSelected(id);
     setDraft((current) => {
-      const spot = clampSticker(at ?? openSpot(current.stickers), 0.3);
-      const sticker: PlacedSticker = { id, key, x: spot.x, y: spot.y, scale: 0.3 };
+      const style = stickerStyle(current.stickers.length);
+      const spot = clampSticker(at ?? openSpot(current.stickers), 0.3, style.rotation);
+      const sticker: PlacedSticker = { id, key, x: spot.x, y: spot.y, scale: 0.3, ...style };
       return { ...current, stickers: [...current.stickers, sticker] };
     });
+  }
+
+  function selectPlaced(key: string) {
+    const matches = draft.stickers.filter((sticker) => sticker.key === key);
+    if (matches.length === 0) {
+      place(key);
+      return;
+    }
+    const currentIndex = matches.findIndex((sticker) => sticker.id === selected);
+    const next = currentIndex === -1 ? matches[matches.length - 1] : matches[(currentIndex + 1) % matches.length];
+    if (!next) return;
+    if (next.id === selected && draft.stickers.at(-1)?.id === next.id) return;
+    pushHistory();
+    setSelected(next.id);
+    setDraft((current) => ({ ...current, stickers: bringToFront(current.stickers, next.id) }));
   }
 
   function onTrayPointerDown(event: React.PointerEvent<HTMLButtonElement>, mon: StickerMon) {
@@ -529,14 +698,120 @@ export function StickerStudio({
     );
   }
 
+  function ensurePaint() {
+    const size = cardPixelSize(PREVIEW_DPI);
+    if (!paintCanvas.current) {
+      const surface = document.createElement("canvas");
+      surface.width = size.width;
+      surface.height = size.height;
+      paintCanvas.current = surface;
+    }
+    const surface = paintCanvas.current;
+    if (!paintReady.current) {
+      const ctx = surface.getContext("2d");
+      const saved = draftRef.current.painting ? paintCache.current.get(draftRef.current.painting) : null;
+      if (ctx) {
+        ctx.clearRect(0, 0, surface.width, surface.height);
+        if (saved) ctx.drawImage(saved, 0, 0, surface.width, surface.height);
+      }
+      paintReady.current = true;
+    }
+    return surface;
+  }
+
+  function strokeTo(from: { x: number; y: number }, to: { x: number; y: number }) {
+    const surface = ensurePaint();
+    const ctx = surface.getContext("2d");
+    if (!ctx) return;
+    const erase = brush === "erase";
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = brushSize;
+    ctx.globalCompositeOperation = erase ? "destination-out" : "source-over";
+    ctx.strokeStyle = erase ? "rgba(0,0,0,1)" : brush;
+    ctx.fillStyle = ctx.strokeStyle;
+    ctx.beginPath();
+    ctx.moveTo(from.x * surface.width, from.y * surface.height);
+    ctx.lineTo(to.x * surface.width, to.y * surface.height);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(to.x * surface.width, to.y * surface.height, brushSize / 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function finishStroke() {
+    const surface = paintCanvas.current;
+    drawingRef.current = false;
+    if (!surface) return;
+    const copy = document.createElement("canvas");
+    copy.width = surface.width;
+    copy.height = surface.height;
+    copy.getContext("2d")?.drawImage(surface, 0, 0);
+    const url = copy.toDataURL("image/png");
+    paintCache.current.set(url, copy);
+    paintReady.current = false;
+    setDraft((current) => ({ ...current, painting: url }));
+  }
+
+  function clearPainting() {
+    if (!draftRef.current.painting) return;
+    pushHistory();
+    const surface = ensurePaint();
+    surface.getContext("2d")?.clearRect(0, 0, surface.width, surface.height);
+    paintReady.current = false;
+    setDraft((current) => ({ ...current, painting: "" }));
+  }
+
+  function restyle(patch: Partial<Pick<PlacedSticker, "shape" | "color" | "rotation">>) {
+    const id = selectedRef.current;
+    if (!id) return;
+    pushHistory();
+    setDraft((current) => ({
+      ...current,
+      stickers: current.stickers.map((sticker) => {
+        if (sticker.id !== id) return sticker;
+        const next = { ...sticker, ...patch };
+        return { ...next, ...clampSticker(next, next.scale, next.rotation) };
+      }),
+    }));
+  }
+
   function onFrontPointerDown(event: React.PointerEvent<HTMLCanvasElement>) {
     if (event.button !== 0) return;
+    if (tool === "draw") {
+      pushHistory();
+      drawingRef.current = true;
+      const start = pointOn(event.currentTarget, event);
+      strokeTo(start, start);
+      setDrawSerial((count) => count + 1);
+      let last = start;
+      dragCleanup.current?.();
+      dragCleanup.current = trackPointer(
+        event.pointerId,
+        (move) => {
+          const canvas = frontRef.current;
+          if (!canvas) return;
+          const next = pointOn(canvas, move);
+          strokeTo(last, next);
+          last = next;
+          setDrawSerial((count) => count + 1);
+        },
+        () => finishStroke(),
+      );
+      return;
+    }
     const point = pointOn(event.currentTarget, event);
     const hit = topStickerAt(draft.stickers, point.x, point.y);
     if (!hit) {
-      setSelected(null);
+      if (selectedRef.current) {
+        pushHistory();
+        setSelected(null);
+      }
       return;
     }
+    pushHistory();
     setSelected(hit.id);
     setDraft((current) => ({ ...current, stickers: bringToFront(current.stickers, hit.id) }));
     dragCleanup.current?.();
@@ -545,7 +820,7 @@ export function StickerStudio({
       (move) => {
         const canvas = frontRef.current;
         if (!canvas) return;
-        const next = clampSticker(pointOn(canvas, move), hit.scale);
+        const next = clampSticker(pointOn(canvas, move), hit.scale, hit.rotation);
         setDraft((current) => ({
           ...current,
           stickers: current.stickers.map((sticker) =>
@@ -559,12 +834,13 @@ export function StickerStudio({
 
   function resize(delta: number) {
     if (!selected) return;
+    pushHistory();
     setDraft((current) => ({
       ...current,
       stickers: current.stickers.map((sticker) => {
         if (sticker.id !== selected) return sticker;
         const scale = clampScale(sticker.scale + delta);
-        return { ...sticker, ...clampSticker(sticker, scale), scale };
+        return { ...sticker, ...clampSticker(sticker, scale, sticker.rotation), scale };
       }),
     }));
   }
@@ -614,15 +890,103 @@ export function StickerStudio({
     }
   }
 
+  function setPaper(paper: PaperId) {
+    if (draftRef.current.paper === paper) return;
+    pushHistory();
+    setDraft((current) => ({ ...current, paper }));
+  }
+
+  function setBackMode(mode: "note" | "names") {
+    if (draftRef.current.backMode === mode) return;
+    pushHistory();
+    setDraft((current) => ({ ...current, backMode: mode }));
+  }
+
+  function useSuggestedPictures() {
+    pushHistory();
+    setSelected(null);
+    setDraft((current) => ({ ...current, stickers: fresh.stickers.map((sticker) => ({ ...sticker })) }));
+  }
+
+  function startAgain() {
+    pushHistory();
+    setSelected(null);
+    setDraft((current) => ({ ...fresh, paper: current.paper }));
+  }
+
+  function clearCover() {
+    if (draftRef.current.stickers.length === 0) return;
+    pushHistory();
+    setSelected(null);
+    setDraft((current) => ({ ...current, stickers: [] }));
+  }
+
+  function removeSelected() {
+    const id = selectedRef.current;
+    if (!id) return;
+    pushHistory();
+    setSelected(null);
+    setDraft((current) => ({
+      ...current,
+      stickers: current.stickers.filter((sticker) => sticker.id !== id),
+    }));
+  }
+  removeRef.current = removeSelected;
+
+  function stickerButton(mon: StickerMon, shelf: boolean) {
+    const count = placedByKey.get(mon.key) ?? 0;
+    const pressed = selectedSticker?.key === mon.key;
+    return (
+      <button
+        key={mon.key}
+        type="button"
+        className={
+          shelf
+            ? "pk-choice pk-sticker-tile flex w-[4.5rem] shrink-0 flex-col items-center px-1 py-1"
+            : "pk-choice pk-sticker-tile flex min-h-24 flex-col items-center gap-1 px-2 py-2 text-center"
+        }
+        aria-pressed={pressed}
+        aria-label={
+          count === 0
+            ? `Add ${mon.name}`
+            : pressed
+              ? `${mon.name}, selected, ${count} on the cover`
+              : `Select ${mon.name}, ${count} on the cover`
+        }
+        onClick={() => {
+          if (suppressClick.current) {
+            suppressClick.current = false;
+            return;
+          }
+          if (count === 0) place(mon.key);
+          else selectPlaced(mon.key);
+        }}
+        onPointerDown={(event) => onTrayPointerDown(event, mon)}
+      >
+        {count > 0 ? <span className="pk-sticker-count">{count}</span> : null}
+        <img
+          src={mon.src}
+          alt=""
+          width={shelf ? 56 : 64}
+          height={shelf ? 56 : 64}
+          draggable={false}
+          className={shelf ? "h-14 w-14 object-contain" : "h-16 w-16 object-contain"}
+          style={{ imageRendering: mon.key.startsWith("deco:") ? "auto" : "pixelated" }}
+        />
+        {shelf ? null : <span className="line-clamp-2 w-full text-sm leading-4">{mon.name}</span>}
+      </button>
+    );
+  }
+
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-[#16324f]/50 p-3 sm:p-6">
+    <div className="pk-studio fixed inset-0 z-50 overflow-y-auto bg-[#16324f]/50 p-3 sm:p-6">
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="sticker-heading"
         tabIndex={-1}
-        className="pk-card mx-auto w-full max-w-6xl bg-cream px-4 py-4 outline-none sm:px-6 sm:py-5"
+        className="pk-studio-panel pk-card mx-auto w-full max-w-6xl bg-cream px-4 py-4 outline-none sm:px-6 sm:py-5"
       >
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -646,10 +1010,8 @@ export function StickerStudio({
                 </select>
               </label>
             ) : null}
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-              The front is the cover. Drag a {hideNames ? "riddle" : "Pokémon"} onto it, or click one to add it, then
-              move it around the picture. The back is the playlist. Save a PDF and print it at 100%
-              size. Cut on the corner marks.
+            <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+              Tap a picture, a Poké Ball, or a berry. Draw on the card, then move the pictures around.
             </p>
           </div>
           <Button type="button" variant="outline" className="h-10 shrink-0 px-4" onClick={close}>
@@ -657,130 +1019,211 @@ export function StickerStudio({
           </Button>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <div className="flex gap-2" role="group" aria-label="Paper size">
-            {(["a4", "letter"] as const).map((paper) => (
-              <button
-                key={paper}
-                type="button"
-                className="pk-pill"
-                aria-pressed={draft.paper === paper}
-                onClick={() => setDraft((current) => ({ ...current, paper }))}
-              >
-                {paper === "a4" ? "A4" : "US Letter"}
-              </button>
-            ))}
-          </div>
-          {hideNames ? (
-            <p className="text-sm leading-6 text-muted-foreground">
-              The back leaves the names off, so the card does not give away the answers.
-            </p>
-          ) : (
-            <div className="flex gap-2" role="group" aria-label="Back of the sticker">
-              <button
-                type="button"
-                className="pk-pill"
-                aria-pressed={!showNames}
-                onClick={() => setDraft((current) => ({ ...current, backMode: "note" }))}
-              >
-                Note
-              </button>
-              <button
-                type="button"
-                className="pk-pill"
-                aria-pressed={showNames}
-                disabled={!plan}
-                title={plan ? "Print every name" : "Too many names to fit on the sticker"}
-                onClick={() => setDraft((current) => ({ ...current, backMode: "names" }))}
-              >
-                Name list
-              </button>
+        <div className="mt-5 grid items-start gap-5 lg:grid-cols-[20rem_minmax(0,1fr)]">
+          <div className="order-2 lg:order-1">
+            <div className="grid gap-1 text-sm">
+              <label htmlFor="sticker-search">{hideNames ? "Riddles" : "Pokémon"}</label>
+              <div className="flex gap-2">
+                <input
+                  id="sticker-search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder={hideNames ? "Riddle number" : "Name"}
+                  className="pk-field"
+                  autoComplete="off"
+                />
+                {query ? (
+                  <button type="button" className="pk-chip shrink-0" onClick={() => setQuery("")}>
+                    Clear
+                  </button>
+                ) : null}
+              </div>
             </div>
-          )}
-          <Button type="button" className="h-10 px-4" disabled={busy} onClick={() => void savePdf()}>
-            {busy ? "Saving PDF…" : "Save PDF"}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-10 px-4"
-            onClick={() => {
-              setSelected(null);
-              setDraft((current) => ({ ...fresh, paper: current.paper }));
-            }}
-          >
-            Start again
-          </Button>
-        </div>
-        {!hideNames && !plan ? (
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            The names will not fit on the back of a card this size, so the note is printed there.
-          </p>
-        ) : null}
-        {!hideNames && plan && plan.fontPt < READABLE_LIST_PT && !showNames ? (
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            The names fit only in small type. The note is easier to read.
-          </p>
-        ) : null}
-
-        <div className="mt-5 grid gap-5 lg:grid-cols-[16rem_minmax(0,1fr)_minmax(0,1fr)]">
-          <div className="order-3 lg:order-1">
-            <label className="grid gap-1 text-sm" htmlFor="sticker-search">
-              {hideNames ? "Riddles" : "Pokémon"} for the cover
-              <input
-                id="sticker-search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={hideNames ? "Riddle number" : "Name"}
-                className="pk-field"
-                autoComplete="off"
-              />
-            </label>
-            <div className="mt-2 grid max-h-[28rem] grid-cols-3 content-start gap-2 overflow-y-auto lg:max-h-[70dvh]">
-              {visible.map((mon) => (
+            <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Which stickers to show">
+              {(
+                [
+                  ["all", "All"],
+                  ["placed", "On cover"],
+                  ["spare", "Not yet"],
+                ] as const
+              ).map(([id, label]) => (
                 <button
-                  key={mon.key}
+                  key={id}
                   type="button"
-                  className="pk-choice flex flex-col items-center gap-1 px-1 py-2 text-center"
-                  onClick={() => {
-                    if (suppressClick.current) {
-                      suppressClick.current = false;
-                      return;
-                    }
-                    place(mon.key);
-                  }}
-                  onPointerDown={(event) => onTrayPointerDown(event, mon)}
+                  className="pk-chip"
+                  aria-pressed={tray === id}
+                  onClick={() => setTray(id)}
                 >
-                  <img
-                    src={mon.src}
-                    alt=""
-                    width={56}
-                    height={56}
-                    draggable={false}
-                    className="h-14 w-14 object-contain"
-                    style={{ imageRendering: "pixelated" }}
-                  />
-                  <span className="w-full truncate text-xs">{mon.name}</span>
+                  {label}
                 </button>
               ))}
+            </div>
+            <div className="mt-3">
+              <p className="pk-kicker">Poké Balls and berries</p>
+              <div className="mt-1 flex gap-2 overflow-x-auto pb-1">
+                {decor.map((mon) => stickerButton(mon, true))}
+              </div>
+            </div>
+            <p className="mt-2 text-sm leading-5">
+              {coverMons.length} of {mons.length} on the cover.
+            </p>
+            {coverMons.length > 0 ? (
+              <div className="mt-3">
+                <p className="pk-kicker">On the cover</p>
+                <div className="mt-1 flex gap-2 overflow-x-auto pb-1">
+                  {coverMons.map((mon) => stickerButton(mon, true))}
+                </div>
+              </div>
+            ) : null}
+            <div className="mt-3 grid max-h-[28rem] grid-cols-3 content-start gap-2 overflow-y-auto sm:grid-cols-4 lg:max-h-[70dvh] lg:grid-cols-2">
+              {visible.length === 0 ? (
+                <p className="col-span-full px-1 py-3 text-sm leading-6 text-muted-foreground">
+                  {query.trim()
+                    ? "Nothing matches that name."
+                    : tray === "placed"
+                      ? "Nothing is on the cover yet."
+                      : "Every one is already on the cover."}
+                </p>
+              ) : (
+                visible.map((mon) => stickerButton(mon, false))
+              )}
             </div>
           </div>
 
           <div className="order-1 lg:order-2">
             <p className="pk-kicker">Front</p>
+            <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Card tools">
+              <button type="button" className="pk-chip" aria-pressed={tool === "move"} onClick={() => setTool("move")}>
+                Move
+              </button>
+              <button type="button" className="pk-chip" aria-pressed={tool === "draw"} onClick={() => setTool("draw")}>
+                Draw
+              </button>
+            </div>
+            {tool === "draw" ? (
+              <div className="mt-2 grid gap-2">
+                <div className="flex flex-wrap gap-1.5" role="group" aria-label="Paint colours">
+                  {BRUSHES.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      className="pk-swatch"
+                      style={{ background: color }}
+                      aria-label={`Paint ${color}`}
+                      aria-pressed={brush === color}
+                      onClick={() => setBrush(color)}
+                    />
+                  ))}
+                  <button
+                    type="button"
+                    className="pk-chip"
+                    aria-pressed={brush === "erase"}
+                    onClick={() => setBrush("erase")}
+                  >
+                    Eraser
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5" role="group" aria-label="Brush size">
+                  {BRUSH_SIZES.map((size) => (
+                    <button
+                      key={size.id}
+                      type="button"
+                      className="pk-chip"
+                      aria-pressed={brushSize === size.id}
+                      onClick={() => setBrushSize(size.id)}
+                    >
+                      {size.label}
+                    </button>
+                  ))}
+                  <button type="button" className="pk-chip" onClick={clearPainting} disabled={!draft.painting}>
+                    Clear drawing
+                  </button>
+                </div>
+              </div>
+            ) : null}
             <canvas
               ref={frontRef}
               width={preview.width}
               height={preview.height}
-              aria-label={`Card front. Drag a ${hideNames ? "riddle" : "Pokémon"} to move it.`}
-              className="mt-2 h-auto w-full max-w-[280px] touch-none shadow-[4px_4px_0_#16324f]"
+              aria-label={
+                tool === "draw"
+                  ? "Card front. Draw on the painting."
+                  : `Card front. Drag a ${hideNames ? "riddle" : "Pokémon"} to move it.`
+              }
+              className="mx-auto mt-2 h-auto w-full max-w-96 touch-none shadow-[4px_4px_0_#16324f]"
               style={{ borderRadius: "5.9% / 3.7%" }}
               onPointerDown={onFrontPointerDown}
             />
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              {draft.stickers.length} on the cover. Drag to move. Delete removes the selected one.
-            </p>
+            <div className="mt-3 flex items-center gap-3">
+              {selectedMon ? (
+                <img
+                  src={selectedMon.src}
+                  alt=""
+                  width={48}
+                  height={48}
+                  className="h-12 w-12 shrink-0 object-contain"
+                  style={{ imageRendering: selectedMon.key.startsWith("deco:") ? "auto" : "pixelated" }}
+                />
+              ) : null}
+              <p className="text-sm leading-6">
+                {tool === "draw"
+                  ? "Draw on the card. Move lets you drag the pictures again."
+                  : selectedMon
+                    ? `${selectedMon.name} is selected. Drag it on the card.`
+                    : "Tap a picture, then drag it on the card."}
+              </p>
+            </div>
+            {selectedSticker ? (
+              <div className="mt-3 grid gap-2">
+                <div className="flex flex-wrap gap-1.5" role="group" aria-label="Sticker shape">
+                  {SHAPE_LABELS.map((shape) => (
+                    <button
+                      key={shape.id}
+                      type="button"
+                      className="pk-chip"
+                      aria-pressed={selectedSticker.shape === shape.id}
+                      onClick={() => restyle({ shape: shape.id })}
+                    >
+                      {shape.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Sticker colour">
+                  {BRUSHES.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      className="pk-swatch"
+                      style={{ background: color }}
+                      aria-label={`Colour ${color}`}
+                      aria-pressed={selectedSticker.color === color}
+                      onClick={() => restyle({ color })}
+                    />
+                  ))}
+                  <button
+                    type="button"
+                    className="pk-chip"
+                    onClick={() => restyle({ rotation: clampRotation(selectedSticker.rotation - Math.PI / 12) })}
+                  >
+                    Turn left
+                  </button>
+                  <button
+                    type="button"
+                    className="pk-chip"
+                    onClick={() => restyle({ rotation: clampRotation(selectedSticker.rotation + Math.PI / 12) })}
+                  >
+                    Turn right
+                  </button>
+                </div>
+              </div>
+            ) : null}
             <div className="mt-2 flex flex-wrap gap-2">
+              <Button type="button" variant="outline" className="h-10 px-4" disabled={!canUndo} onClick={undo}>
+                Undo
+              </Button>
+              <Button type="button" variant="outline" className="h-10 px-4" disabled={!canRedo} onClick={redo}>
+                Redo
+              </Button>
               <Button type="button" variant="outline" className="h-10 px-4" disabled={!selected} onClick={() => resize(0.04)}>
                 Bigger
               </Button>
@@ -791,26 +1234,17 @@ export function StickerStudio({
                 type="button"
                 variant="outline"
                 className="h-10 px-4"
-                disabled={!selected}
+                disabled={!selectedSticker}
                 onClick={() => {
-                  setDraft((current) => ({
-                    ...current,
-                    stickers: current.stickers.filter((sticker) => sticker.id !== selected),
-                  }));
-                  setSelected(null);
+                  if (selectedSticker) place(selectedSticker.key);
                 }}
               >
+                Add another
+              </Button>
+              <Button type="button" variant="outline" className="h-10 px-4" disabled={!selected} onClick={removeSelected}>
                 Remove
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-10 px-4"
-                onClick={() => {
-                  setSelected(null);
-                  setDraft((current) => ({ ...current, stickers: [] }));
-                }}
-              >
+              <Button type="button" variant="outline" className="h-10 px-4" onClick={clearCover}>
                 Clear cover
               </Button>
             </div>
@@ -836,8 +1270,77 @@ export function StickerStudio({
               />
             </label>
           </div>
+        </div>
 
-          <div className="order-2 lg:order-3">
+        <section className="mt-6 border-t-4 border-ink pt-4" aria-labelledby="sticker-print-heading">
+          <h3 id="sticker-print-heading" className="font-display text-2xl leading-tight">
+            Printing
+          </h3>
+          <ol className="mt-2 grid list-decimal gap-1 pl-5 text-sm leading-6">
+            <li>Check the sheet. Each row is one card, front on the left and back on the right.</li>
+            <li>Save the PDF.</li>
+            <li>
+              Print at 100% size on {draft.paper === "a4" ? "A4" : "US Letter"}, not Fit to page. Cut on the corner
+              marks.
+            </li>
+          </ol>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <div className="flex gap-2" role="group" aria-label="Paper size">
+              {(["a4", "letter"] as const).map((paper) => (
+                <button
+                  key={paper}
+                  type="button"
+                  className="pk-chip"
+                  aria-pressed={draft.paper === paper}
+                  onClick={() => setPaper(paper)}
+                >
+                  {paper === "a4" ? "A4" : "US Letter"}
+                </button>
+              ))}
+            </div>
+            {hideNames ? (
+              <p className="text-sm leading-6 text-muted-foreground">
+                The back leaves the names off, so the card does not give away the answers.
+              </p>
+            ) : (
+              <div className="flex gap-2" role="group" aria-label="Back of the sticker">
+                <button type="button" className="pk-chip" aria-pressed={!showNames} onClick={() => setBackMode("note")}>
+                  Note
+                </button>
+                <button
+                  type="button"
+                  className="pk-chip"
+                  aria-pressed={showNames}
+                  disabled={!plan}
+                  title={plan ? "Print every name" : "Too many names to fit on the sticker"}
+                  onClick={() => setBackMode("names")}
+                >
+                  Name list
+                </button>
+              </div>
+            )}
+            <Button type="button" className="h-10 px-4" disabled={busy} onClick={() => void savePdf()}>
+              {busy ? "Saving PDF…" : "Save PDF"}
+            </Button>
+            <Button type="button" variant="outline" className="h-10 px-4" onClick={useSuggestedPictures}>
+              Suggested pictures
+            </Button>
+            <Button type="button" variant="outline" className="h-10 px-4" onClick={startAgain}>
+              Start again
+            </Button>
+          </div>
+          {!hideNames && !plan ? (
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              The names will not fit on the back of a card this size, so the note is printed there.
+            </p>
+          ) : null}
+          {!hideNames && plan && plan.fontPt < READABLE_LIST_PT && !showNames ? (
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              The names fit only in small type. The note is easier to read.
+            </p>
+          ) : null}
+          <div className="mt-4 grid items-start gap-5 lg:grid-cols-2">
+            <div>
             <p className="pk-kicker">Back</p>
             <canvas
               ref={backRef}
@@ -867,12 +1370,17 @@ export function StickerStudio({
               type="button"
               variant="outline"
               className="mt-2 h-10 px-4"
-              onClick={() => setDraft((current) => ({ ...current, backText: fresh.backText }))}
+                onClick={() => {
+                  if (draft.backText === fresh.backText) return;
+                  pushHistory();
+                  setDraft((current) => ({ ...current, backText: fresh.backText }));
+                }}
             >
               Use the suggested note
             </Button>
-            <div className="mt-4">
-              <p className="pk-kicker">Print layout</p>
+            </div>
+            <div>
+              <p className="pk-kicker">The sheet</p>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
                 Sheet {page + 1} of {pageCount}
                 {pageCount > 1 ? ` on ${layout.label}` : `, ${layout.label}`}.{" "}
@@ -909,14 +1417,14 @@ export function StickerStudio({
               />
             </div>
           </div>
-        </div>
+        </section>
       </div>
       {ghost ? (
         <img
           src={ghost.src}
           alt=""
-          className="pointer-events-none fixed z-[60] h-16 w-16 object-contain"
-          style={{ left: ghost.x, top: ghost.y, transform: "translate(-50%, -50%)", imageRendering: "pixelated" }}
+          className="pk-sticker-ghost pointer-events-none fixed z-[60] h-16 w-16 object-contain"
+          style={{ left: ghost.x, top: ghost.y, imageRendering: "pixelated" }}
         />
       ) : null}
     </div>

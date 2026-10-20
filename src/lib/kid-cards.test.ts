@@ -267,6 +267,7 @@ describe("cards for ages 8 to 12", () => {
       const script = start?.tracks.map((track) => track.text).join(" ") ?? "";
       assert.match(script, /picture/i);
       assert.match(script, /press/i);
+      assert.doesNotMatch(script, /playlist/i);
       assert.ok(countSpokenTracks(card.chapters) <= YOTO_TRACK_LIMIT);
     }
   });
@@ -1225,6 +1226,8 @@ describe("biology speech and form playlists", () => {
         blocks: MEGA_VENUSAUR,
       },
     ]);
+    assert.equal(card.chapters[0]?.sprite, "/api/artwork/form/10033");
+    assert.equal(card.chapters[0]?.icon, "/pixels/3.png");
     const spoken = card.chapters[0]?.tracks[0]?.text ?? "";
     assert.match(spoken, /flower grows more prominent/);
     assert.match(spoken, /sturdier to support the extra weight/);
@@ -1260,6 +1263,8 @@ describe("biology speech and form playlists", () => {
         blocks: GMAX_CHARIZARD,
       },
     ]);
+    assert.equal(card.chapters[0]?.sprite, "/api/artwork/form/10196");
+    assert.equal(card.chapters[0]?.tracks[0]?.icon, "/pixels/6.png");
     const spoken = card.chapters[0]?.tracks[0]?.spoken ?? "";
     assert.match(spoken, /belly is now white/);
     assert.match(spoken, /wings burn hotter/);

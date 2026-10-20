@@ -1219,7 +1219,7 @@ export function Studio({
                 </button>
               ) : (
                 <button type="button" className="pk-banner-btn" onClick={() => setConnectOpen(true)}>
-                  Put this on a Yoto card
+                  Connect Yoto
                 </button>
               )}
             </div>
@@ -1237,7 +1237,7 @@ export function Studio({
           </h1>
           <p className="mt-1 max-w-xl text-sm leading-6 text-white/90">
             {view === "setup"
-              ? "Node, ffmpeg, and a public Yoto app. Then the playlists appear under Make Your Own."
+              ? "Connect Yoto, send a playlist, then link it to a blank card in the Yoto app."
               : view === "catalogue"
               ? "Every species from Kanto to Paldea. The Pokédex line is from the games, with the type, size, abilities, evolution, and stats."
               : guessing
@@ -1315,6 +1315,7 @@ export function Studio({
       </header>
 
       <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6">
+        <div key={view === "cards" ? `${view}-${kind}` : view} className="pk-view">
         {view === "setup" ? (
           <SetupGuide onConnect={() => setConnectOpen(true)} />
         ) : view === "catalogue" ? (
@@ -1354,7 +1355,8 @@ export function Studio({
                     <>
                       This playlist is{" "}
                       <span className="font-bold text-ink">{card.libraryTitle}</span>. One
-                      track for each form. The picture is that species&apos; 16×16 pixel.
+                      track for each form. The picture is that form&apos;s full artwork.
+                      The Yoto card still uses the species&apos; 16×16 pixel.
                     </>
                   ) : (
                     <>
@@ -1463,9 +1465,12 @@ export function Studio({
                       type="button"
                       onClick={() => chooseChapter(item.key)}
                       aria-current={selected ? "true" : undefined}
-                      className="pk-choice px-2.5 py-2.5 text-sm"
+                      className="pk-choice flex items-center gap-2 px-2.5 py-2 text-left text-sm"
                     >
-                      {label}
+                      {formMode && item.sprite ? (
+                        <img src={item.sprite} alt="" width={44} height={44} className="pk-artwork-thumb" />
+                      ) : null}
+                      <span className="min-w-0">{label}</span>
                     </button>
                   );
                 })}
@@ -1474,6 +1479,7 @@ export function Studio({
 
             <div className="min-w-0">
               <article className="pk-card pk-dex px-5 py-6 sm:px-8 sm:py-8">
+                <div key={chapter.key} className="pk-swap">
                 <p className="pk-kicker">
                   {guessing
                     ? revealed
@@ -1486,9 +1492,9 @@ export function Studio({
                     <img
                       src={portrait}
                       alt={guessing && !revealed ? "" : chapter.title}
-                      width={96}
-                      height={96}
-                      className="pk-sprite"
+                      width={formMode ? 144 : 96}
+                      height={formMode ? 144 : 96}
+                      className={formMode ? "pk-artwork" : "pk-sprite"}
                     />
                   ) : null}
                   <h2 className="font-display text-4xl leading-tight sm:text-5xl">
@@ -1546,6 +1552,7 @@ export function Studio({
                       : "Hear plays the cry, then the reading. The Yoto card plays that same order."}
                   </p>
                 ) : null}
+                </div>
                 <label className="mt-6 grid max-w-sm gap-1 text-sm" htmlFor="voice">
                   Voice
                   <select
@@ -1641,27 +1648,22 @@ export function Studio({
                 <audio ref={clipRef} controls className="mt-4 w-full max-w-md" preload="none" />
               </article>
 
-              <details className="pk-card mt-4 px-5 py-4">
-                <summary className="cursor-pointer text-sm font-medium">
-                  Put {card.rangeLabel} on a Yoto card
-                </summary>
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                  {card.childDoes}{" "}
-                  {randomGuess
-                    ? "Send uploads a shadow of each 16×16 pixel for the clue, then the real pixel for the answer. The selected voice is recorded locally, the cry is mixed in front of the clue and again in front of the answer, and that file is what gets uploaded."
-                    : formMode
-                      ? "Send records the selected voice locally, mixes that Pokémon’s cry in front, then uploads that one file. The picture is the species 16×16 pixel. The credit stays on this page."
-                      : randomFacts
-                        ? "Send records the selected voice locally, mixes that Pokémon’s cry in front, then uploads the merged MP3. The how-to is in the playlist description and at the start of the first track."
-                        : `This send is only ${card.rangeLabel}. Each fact is the cry, then the selected voice. The button above sends every Pokefacts playlist, one after another.`}
+              <section className="pk-card mt-4 px-5 py-4" aria-labelledby="yoto-send-heading">
+                <h3 id="yoto-send-heading" className="font-display text-2xl">
+                  Send to Yoto
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  On the player: {card.childDoes} In the Yoto app, look for{" "}
+                  <span className="font-bold text-ink">{card.libraryTitle}</span>.
                 </p>
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
                   {isPiperVoice(voiceId)
-                    ? "Send uses Piper on this computer. The cry is mixed in front, then that MP3 is uploaded."
-                    : "Send uses the voice selected above. Yoto Labs turns the script into an MP3 in that voice."}
+                    ? "Piper reads on this computer. The cry plays first, then that recording is uploaded."
+                    : "The voice you picked reads every track. The cry plays first."}
+                  {formMode ? " The picture on the card is the species pixel." : ""}
                 </p>
                 <label className="mt-3 grid gap-1 text-sm" htmlFor="yoto-playlist">
-                  Add to a Yoto playlist
+                  Where it goes
                   <select
                     id="yoto-playlist"
                     aria-label="Yoto playlist"
@@ -1669,10 +1671,10 @@ export function Studio({
                     value={targetPlaylist}
                     onChange={(event) => setTargetPlaylist(event.target.value)}
                   >
-                    <option value="">New playlist</option>
+                    <option value="">Make a new playlist</option>
                     {library.map((item) => (
                       <option key={item.cardId} value={item.cardId}>
-                        {item.title}
+                        Add to {item.title}
                       </option>
                     ))}
                   </select>
@@ -1684,8 +1686,8 @@ export function Studio({
                 ) : (
                   <p className="mt-2 text-xs leading-5 text-muted-foreground">
                     {targetPlaylist
-                      ? "Send adds these tracks onto that playlist. Tracks already on it stay."
-                      : "New playlist creates a card and does not replace one you already have."}
+                      ? "Adds these tracks at the end. Tracks already on that playlist stay."
+                      : `Makes a new playlist named ${card.libraryTitle}. Playlists you already have stay as they are.`}
                   </p>
                 )}
                 <Button
@@ -1697,10 +1699,10 @@ export function Studio({
                   {sending && !bulkActive
                     ? "Recording…"
                     : randomGuess
-                      ? "Send these 50 riddles to Yoto"
+                      ? "Send these 50 riddles"
                       : randomFacts
-                        ? "Send these 100 to Yoto"
-                        : `Send ${card.rangeLabel} to Yoto`}
+                        ? "Send these 100"
+                        : `Send ${card.rangeLabel}`}
                 </Button>
                 {job ? (
                   <StatusBar
@@ -1710,29 +1712,25 @@ export function Studio({
                     failed={job.status === "failed"}
                   />
                 ) : null}
-                {job?.status === "completed" ? (
-                  <ol className="mt-3 grid list-decimal gap-2 pl-4 text-sm leading-6">
-                    <li>Open the Yoto app and go to Make Your Own.</li>
-                    <li>Find {card.libraryTitle}.</li>
-                    <li>Choose Link to a card.</li>
-                    <li>Put a blank Make Your Own card in the player when it asks.</li>
-                    <li>Hand that card to your child. Send the next playlist to a different blank card.</li>
-                  </ol>
-                ) : (
-                  <p className="pk-quiet mt-3 text-xs leading-5">
-                    {randomGuess
-                      ? "These 50 riddles go on one card. Each track is the cry, then the selected voice. The clue never says the name. The answer does. The clue icon is the shadow. The answer icon is the real 16×16 pixel."
-                      : formMode
-                        ? `${card.libraryTitle} goes on one card. Each track is the cry, then the selected voice, with the species 16×16 pixel.`
-                        : randomFacts
-                          ? "These 100 Pokémon go on one card, in the selected voice, each with its 16×16 picture. Send all Pokefacts playlists when you want every species."
-                          : `${card.rangeLabel} links to its own card. Send all Pokefacts playlists to cover every species, one card at a time.`}
+                <div className="mt-4">
+                  <p className="text-sm font-bold">
+                    {job?.status === "completed" ? "Ready to link" : "After it finishes"}
                   </p>
-                )}
-              </details>
+                  <ol className="mt-2 grid list-decimal gap-2 pl-4 text-sm leading-6">
+                    <li>Open the Yoto app and go to Make Your Own.</li>
+                    <li>
+                      Find <span className="font-bold">{card.libraryTitle}</span>.
+                    </li>
+                    <li>Choose Link to a card.</li>
+                    <li>Hold a blank Make Your Own card to the player.</li>
+                    <li>The next playlist needs a different blank card.</li>
+                  </ol>
+                </div>
+              </section>
             </div>
           </div>
         ) : null}
+        </div>
       </main>
 
       <footer className="mx-auto w-full max-w-5xl px-4 pb-8 text-xs leading-5 font-bold text-ink sm:px-6">

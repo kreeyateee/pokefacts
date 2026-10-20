@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { artworkSrc } from "@/lib/artwork-path";
 import {
   movePlaylistItem,
   orderPlaylist,
@@ -19,10 +20,6 @@ import {
 
 function numberLabel(id: number): string {
   return `#${String(id).padStart(4, "0")}`;
-}
-
-function spriteSrc(id: number): string {
-  return `/sprites/${id}.png`;
 }
 
 export function PlaylistWindow({
@@ -187,12 +184,12 @@ export function PlaylistWindow({
                     <div className="flex items-center gap-2">
                       <span className="w-6 text-xs font-bold tabular-nums text-poke-red">{index + 1}</span>
                       <img
-                        src={spriteSrc(mon.id)}
+                        src={artworkSrc("species", mon.id)}
                         alt=""
                         width={48}
                         height={48}
                         draggable={false}
-                        className="h-12 w-12 shrink-0 object-contain [image-rendering:pixelated]"
+                        className="h-12 w-12 shrink-0 object-contain"
                       />
                       <span className="min-w-0">
                         <span className="block text-xs tabular-nums opacity-70">{numberLabel(mon.id)}</span>

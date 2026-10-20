@@ -1,4 +1,5 @@
 import type { BiologyBlock } from "@/lib/catalogue-types";
+import { artworkSrc } from "@/lib/artwork-path";
 import { dexBlurb, guessSpoken, pickDexEntry, type MonSheet } from "@/lib/dex-facts";
 import { pronounce } from "@/lib/pronounce";
 import { spokenWiki } from "@/lib/spoken-wiki";
@@ -239,8 +240,8 @@ function intro(kind: KidCardKind, index: number, first: number, last: number, fi
   const span = first === last ? String(first) : `${first}-${last}`;
   const text =
     kind === "meet"
-      ? `This card is Pokefacts ${index}, numbers ${span}. Turn the wheel, or press the arrows, until you see a picture. Then press play. You will hear the cry, then the name, then a short description. The star is this track. Number ${first} is ${firstName}. Each playlist links to its own card.`
-      : `Guess Who. Numbers ${span}. Turn the wheel until you see a dark picture. Then press play. You hear three short clues. Shout the name before the count ends. The next track tells you the answer. Start at number ${first}. Each playlist links to its own card.`;
+      ? `Pokefacts ${index}. Turn the wheel until you see a picture, then press play. You hear the cry, then the name. Number ${first} is ${firstName}.`
+      : `Guess Who, numbers ${span}. Turn the wheel until you see a dark picture, then press play. You hear three short clues. Say the name before the count ends. The next track says the answer.`;
   return picture("start", "Start here", "Go", "a star", "★", I.star, [
     talk("how", kind === "meet" ? "How to play" : "How to play Guess Who", text, I.star, "Go"),
   ]);
@@ -271,8 +272,8 @@ function buildGroup(sheets: MonSheet[], kind: KidCardKind, size: number): KidCar
           : "Three short clues. Call the name before the count ends.",
       childDoes:
         kind === "meet"
-          ? "Turn to a picture and press play. You hear the cry, then the name, then a short description."
-          : "Pick a number and press play. Three short clues, then a count of three. The next track tells you the name.",
+          ? "Turn the wheel until you see a picture, then press play. You hear the cry, then the name."
+          : "Turn the wheel until you see a dark picture, then press play. Three short clues. The next track says the name.",
       chapters,
     };
   });
@@ -349,7 +350,7 @@ export function factPoolFromCards(cards: KidCard[]): KidChapter[] {
 }
 
 export const POKEDEX_HOWTO =
-  "One hundred Pokémon, drawn at random. Turn the wheel, or press the arrows, until you see a picture. Then press play. You hear the cry, then the name, then a short description. ";
+  "One hundred Pokémon, drawn at random. Turn the wheel until you see a picture, then press play. ";
 
 /**
  * One playlist of 100 Pokémon. The how-to sits on the first track so the
@@ -625,13 +626,14 @@ export function fitFormTracks<T extends { speciesId: number }>(forms: readonly T
 export const MEGA_PLAYLIST_ID = "mega-evolutions";
 export const GMAX_PLAYLIST_ID = "gigantamax";
 
-/** One cry-first track per form. The icon is the species pixel. */
+/** One cry-first track per form. The screen shows that form's artwork. The Yoto icon stays the species pixel. */
 export function formPlaylist(kind: "mega" | "gmax", forms: readonly FormPlaylistEntry[]): KidCard {
   const title = kind === "mega" ? "Mega Evolutions" : "Gigantamax";
   const used = new Set<string>();
   const chapters = fitFormTracks(forms).map((form) => {
     const text = spokenWiki(form.formName, form.blocks ?? []);
     const icon = `/pixels/${form.speciesId}.png`;
+    const artwork = artworkSrc("form", form.formId);
     let overlay = String(form.speciesId);
     while (used.has(overlay)) overlay = `${overlay}b`;
     used.add(overlay);
@@ -643,7 +645,7 @@ export function formPlaylist(kind: "mega" | "gmax", forms: readonly FormPlaylist
       overlay,
       icon,
       [talk("entry", form.formName, text, icon, overlay, undefined, "cry")],
-      { sprite: icon, dexId: form.speciesId },
+      { sprite: artwork, dexId: form.speciesId },
     );
     chapter.formId = form.formId;
     if (form.url) chapter.articleUrl = form.url;

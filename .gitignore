@@ -52,3 +52,6 @@ next-env.d.ts
 
 # Bulbapedia Biology text fetched while browsing the catalogue
 /data/bulbapedia
+
+# Official artwork fetched for the Pokédex, Mega Evolutions, and Gigantamax
+/data/artwork

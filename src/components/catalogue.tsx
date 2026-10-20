@@ -99,7 +99,7 @@ function multiplierLabel(multiplier: number): string {
 }
 
 function spriteSrc(id: number): string {
-  return `/sprites/${id}.png`;
+  return `/api/artwork/species/${id}`;
 }
 
 function lineDetail(member: CatalogueLineMember): string {
@@ -650,7 +650,7 @@ export function Catalogue({
             <p className="mt-1 text-xs leading-5 pk-quiet">This voice reads every track on the playlist.</p>
           ) : null}
           <label className="mt-3 grid gap-1 text-sm" htmlFor="catalogue-playlist">
-            Add to a Yoto playlist
+            Where it goes
             <select
               id="catalogue-playlist"
               aria-label="Yoto playlist"
@@ -658,18 +658,18 @@ export function Catalogue({
               value={playlistTarget}
               onChange={(event) => onPlaylistTarget?.(event.target.value)}
             >
-              <option value="">New playlist</option>
+              <option value="">Make a new playlist</option>
               {playlists.map((item) => (
                 <option key={item.cardId} value={item.cardId}>
-                  {item.title}
+                  Add to {item.title}
                 </option>
               ))}
             </select>
           </label>
           <p className="mt-1 text-xs leading-5 pk-quiet">
             {playlistTarget
-              ? "Build adds these tracks onto that playlist. Tracks already on it stay."
-              : "New playlist creates a card and does not replace one you already have."}
+              ? "Adds these tracks at the end. Tracks already on that playlist stay."
+              : "Makes a new playlist. Playlists you already have stay as they are."}
           </p>
           <Button
             type="button"
@@ -752,7 +752,7 @@ export function Catalogue({
                     alt=""
                     width={40}
                     height={40}
-                    className="h-10 w-10 shrink-0 object-contain [image-rendering:pixelated]"
+                    className="pk-artwork-thumb"
                   />
                   <span className="min-w-0">
                     <span className="block">
@@ -808,7 +808,7 @@ export function Catalogue({
           <p className="text-sm text-muted-foreground">Opening the entry…</p>
         ) : null}
         {entry && entry.id === selected ? (
-          <>
+          <div key={entry.id} className="pk-swap">
             <p className="pk-kicker">
               {numberLabel(entry.id)} · {entry.region}
             </p>
@@ -816,9 +816,9 @@ export function Catalogue({
               <img
                 src={spriteSrc(entry.id)}
                 alt=""
-                width={96}
-                height={96}
-                className="pk-sprite"
+                width={144}
+                height={144}
+                className="pk-artwork"
               />
               <div>
                 <h2 className="font-display text-4xl leading-tight sm:text-5xl">{entry.name}</h2>
@@ -997,7 +997,7 @@ export function Catalogue({
                 Next number
               </button>
             </div>
-          </>
+          </div>
         ) : null}
       </article>
       {stickerCards?.[0] ? (
@@ -1060,7 +1060,7 @@ function EvolutionPicks({
                 alt=""
                 width={48}
                 height={48}
-                className="h-12 w-12 shrink-0 object-contain [image-rendering:pixelated]"
+                className="pk-artwork-thumb"
               />
               <span className="min-w-0">
                 <span className="block">

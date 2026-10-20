@@ -12,6 +12,7 @@ import {
   sheetSlots,
   type PlacedSticker,
   type PaperId,
+  type StickerShape,
 } from "@/lib/sticker-layout";
 
 export type CardPaint = {
@@ -26,6 +27,7 @@ export type CardPaint = {
   images: ReadonlyMap<string, CanvasImageSource | null>;
   fonts: { display: string; body: string };
   selectedId?: string | null;
+  painting?: CanvasImageSource | null;
 };
 
 function pxPerMm(width: number): number {
@@ -96,20 +98,67 @@ function paintParagraph(
   }
 }
 
+function traceShape(ctx: CanvasRenderingContext2D, shape: StickerShape, cx: number, cy: number, radius: number) {
+  ctx.beginPath();
+  if (shape === "circle") {
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    return;
+  }
+  if (shape === "round") {
+    const side = radius * 1.7;
+    const curve = radius * 0.38;
+    const left = cx - side / 2;
+    const top = cy - side / 2;
+    if (typeof ctx.roundRect === "function") ctx.roundRect(left, top, side, side, curve);
+    else ctx.rect(left, top, side, side);
+    return;
+  }
+  if (shape === "diamond") {
+    ctx.moveTo(cx, cy - radius);
+    ctx.lineTo(cx + radius * 0.86, cy);
+    ctx.lineTo(cx, cy + radius);
+    ctx.lineTo(cx - radius * 0.86, cy);
+    ctx.closePath();
+    return;
+  }
+  if (shape === "hex") {
+    for (let point = 0; point < 6; point += 1) {
+      const angle = -Math.PI / 2 + (point * Math.PI) / 3;
+      const px = cx + Math.cos(angle) * radius;
+      const py = cy + Math.sin(angle) * radius;
+      if (point === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    return;
+  }
+  for (let point = 0; point < 10; point += 1) {
+    const angle = -Math.PI / 2 + (point * Math.PI) / 5;
+    const reach = point % 2 === 0 ? radius : radius * 0.46;
+    const px = cx + Math.cos(angle) * reach;
+    const py = cy + Math.sin(angle) * reach;
+    if (point === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+}
+
 function paintStickers(ctx: CanvasRenderingContext2D, spec: CardPaint, width: number, height: number) {
   for (const sticker of spec.stickers) {
     const size = sticker.scale * width;
-    const x = sticker.x * width - size / 2;
-    const y = sticker.y * height - size / 2;
     const centerX = sticker.x * width;
     const centerY = sticker.y * height;
+    const radius = size * 0.48;
+    const shape = sticker.shape ?? "circle";
     ctx.save();
+    ctx.translate(centerX, centerY);
+    ctx.rotate(sticker.rotation ?? 0);
+    ctx.translate(-centerX, -centerY);
     ctx.shadowColor = "rgba(22, 50, 79, 0.35)";
     ctx.shadowBlur = size * 0.08;
     ctx.shadowOffsetY = size * 0.05;
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, size * 0.48, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255, 253, 246, 0.94)";
+    traceShape(ctx, shape, centerX, centerY, radius);
+    ctx.fillStyle = sticker.color || "#fffdf6";
     ctx.fill();
     ctx.shadowColor = "transparent";
     ctx.lineWidth = Math.max(1, size * 0.035);
@@ -117,16 +166,20 @@ function paintStickers(ctx: CanvasRenderingContext2D, spec: CardPaint, width: nu
     ctx.stroke();
     const image = spec.images.get(sticker.key);
     if (image) {
-      const inset = size * 0.14;
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(image, x + inset, y + inset, size - inset * 2, size - inset * 2);
-      ctx.imageSmoothingEnabled = true;
+      ctx.save();
+      traceShape(ctx, shape, centerX, centerY, radius * 0.92);
+      ctx.clip();
+      const inset = size * 0.16;
+      ctx.imageSmoothingEnabled = sticker.key.startsWith("deco:");
+      ctx.drawImage(image, centerX - size / 2 + inset, centerY - size / 2 + inset, size - inset * 2, size - inset * 2);
+      ctx.restore();
     }
     if (spec.selectedId === sticker.id) {
+      traceShape(ctx, shape, centerX, centerY, radius);
       ctx.setLineDash([size * 0.08, size * 0.06]);
       ctx.strokeStyle = "#ffcb05";
-      ctx.lineWidth = Math.max(2, size * 0.04);
-      ctx.strokeRect(x, y, size, size);
+      ctx.lineWidth = Math.max(2, size * 0.045);
+      ctx.stroke();
       ctx.setLineDash([]);
     }
     ctx.restore();
@@ -135,65 +188,52 @@ function paintStickers(ctx: CanvasRenderingContext2D, spec: CardPaint, width: nu
 
 function paintFront(ctx: CanvasRenderingContext2D, spec: CardPaint, width: number, height: number) {
   const mm = pxPerMm(width);
-  const sleeve = ctx.createLinearGradient(0, 0, 0, height);
-  sleeve.addColorStop(0, "#ff3a42");
-  sleeve.addColorStop(0.42, "#d0121a");
-  sleeve.addColorStop(1, "#7a0912");
-  ctx.fillStyle = sleeve;
+  ctx.fillStyle = "#fff7dc";
   ctx.fillRect(0, 0, width, height);
+  if (spec.painting) {
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(spec.painting, 0, 0, width, height);
+  }
 
   const pad = 3.2 * mm;
-  ctx.strokeStyle = "#ffcb05";
-  ctx.lineWidth = 1.15 * mm;
-  ctx.strokeRect(pad, pad, width - pad * 2, height - pad * 2);
-
-  const discX = width / 2;
-  const discY = height * 0.5;
-  const discR = 17.5 * mm;
-  ctx.beginPath();
-  ctx.arc(discX, discY, discR, 0, Math.PI * 2);
-  ctx.fillStyle = "#fff7dc";
-  ctx.fill();
-  ctx.lineWidth = 0.7 * mm;
   ctx.strokeStyle = "#16324f";
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(discX, discY, discR * 0.72, 0, Math.PI * 2);
-  ctx.strokeStyle = "#ffcb05";
-  ctx.lineWidth = 1.15 * mm;
-  ctx.stroke();
+  ctx.lineWidth = 1.05 * mm;
+  ctx.strokeRect(pad * 0.45, pad * 0.45, width - pad * 0.9, height - pad * 0.9);
+
+  ctx.fillStyle = "rgba(22, 50, 79, 0.9)";
+  ctx.fillRect(pad, pad, width - pad * 2, 13.2 * mm);
 
   paintParagraph(ctx, spec.kicker.toUpperCase(), {
-    x: pad + 0.6 * mm,
-    y: pad + 0.4 * mm,
-    width: width - pad * 2,
-    height: 5 * mm,
+    x: pad + 1.2 * mm,
+    y: pad + 0.45 * mm,
+    width: width - pad * 2 - 2 * mm,
+    height: 4.2 * mm,
   }, {
     family: spec.fonts.display,
     weight: 700,
     color: "#ffcb05",
-    startPx: 4.2 * mm,
-    minPx: 3 * mm,
+    startPx: 3.4 * mm,
+    minPx: 2.4 * mm,
     align: "left",
   });
 
   paintParagraph(ctx, spec.title, {
-    x: pad + 0.4 * mm,
-    y: 12 * mm,
-    width: width - pad * 2,
-    height: 11.2 * mm,
+    x: pad + 1.2 * mm,
+    y: pad + 4.6 * mm,
+    width: width - pad * 2 - 2.4 * mm,
+    height: 7.4 * mm,
   }, {
     family: spec.fonts.display,
     weight: 700,
     color: "#fffdf6",
-    startPx: 8.2 * mm,
-    minPx: 4.4 * mm,
+    startPx: 5.4 * mm,
+    minPx: 3.2 * mm,
     align: "left",
-    leading: 1.05,
+    leading: 1.02,
   });
 
   ctx.fillStyle = "#ffcb05";
-  ctx.fillRect(pad, 24.2 * mm, width - pad * 2, 1.15 * mm);
+  ctx.fillRect(pad, pad + 12.2 * mm, width - pad * 2, 1 * mm);
 
   const bandTop = height - pad - 16.5 * mm;
   ctx.fillStyle = "#16324f";
