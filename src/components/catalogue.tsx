@@ -2,10 +2,17 @@
 
 import { useEffect, useState } from "react";
 
+import { PlaylistWindow } from "@/components/playlist-window";
 import { StatusBar } from "@/components/status-bar";
 import { StickerStudio } from "@/components/sticker-studio";
 import { Button } from "@/components/ui/button";
-import type { BiologyBlock, BiologyView, CatalogueEntry, CataloguePage } from "@/lib/catalogue-types";
+import type {
+  BiologyBlock,
+  BiologyView,
+  CatalogueEntry,
+  CatalogueLineMember,
+  CataloguePage,
+} from "@/lib/catalogue-types";
 import { heightForUnits, weightForUnits, type MeasureUnits } from "@/lib/format";
 import type { KidCard } from "@/lib/kid-cards";
 import { PICKER_VOICES } from "@/lib/piper-voice";
@@ -93,6 +100,15 @@ function multiplierLabel(multiplier: number): string {
 
 function spriteSrc(id: number): string {
   return `/sprites/${id}.png`;
+}
+
+function lineDetail(member: CatalogueLineMember): string {
+  const method = member.method.trim();
+  if (member.stage > 1) {
+    return method ? `From ${member.fromName}, ${method}.` : `From ${member.fromName}.`;
+  }
+  if (!method) return "";
+  return `${method.charAt(0).toUpperCase()}${method.slice(1)}.`;
 }
 
 function statFill(name: string): string {
@@ -193,6 +209,7 @@ export function Catalogue({
   const [building, setBuilding] = useState(false);
   const [stickerBusy, setStickerBusy] = useState(false);
   const [stickerCards, setStickerCards] = useState<KidCard[] | null>(null);
+  const [playlistOpen, setPlaylistOpen] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -294,16 +311,11 @@ export function Catalogue({
         return ability.info ? `${name}. ${ability.info}` : name;
       })
       .join(" ") ?? "";
-  const evolutionText = [
-    entry?.evolvesFrom ? `Grows from ${entry.evolvesFrom.name}.` : "",
-    ...(entry?.evolutions.map((evolution) =>
-      evolution.method
-        ? `Becomes ${evolution.name} ${evolution.method}.`
-        : `Becomes ${evolution.name}.`,
-    ) ?? []),
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const growsFrom = entry?.evolvesFrom ? `Grows from ${entry.evolvesFrom.name}.` : "";
+  const lineMembers = [...(entry?.line.evolutions ?? []), ...(entry?.line.subevolutions ?? [])];
+  const lineIds = lineMembers.map((member) => member.id);
+  const lineAllPicked = lineIds.length > 0 && lineIds.every((id) => picked.includes(id));
+  const evolutionText = lineMembers.length > 0 ? growsFrom : growsFrom || "It does not evolve.";
   const pages = list ? Math.max(1, Math.ceil(list.total / list.pageSize)) : 1;
   const pageIds = list?.items.map((item) => item.id) ?? [];
   const pageAll = pageIds.length > 0 && pageIds.every((id) => picked.includes(id));
@@ -311,6 +323,18 @@ export function Catalogue({
 
   function togglePick(id: number) {
     setPicked((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
+    setBuildMessage("");
+  }
+
+  function toggleLine() {
+    setPicked((current) => {
+      if (lineAllPicked) return current.filter((id) => !lineIds.includes(id));
+      const next = [...current];
+      for (const id of lineIds) {
+        if (!next.includes(id)) next.push(id);
+      }
+      return next;
+    });
     setBuildMessage("");
   }
 
@@ -523,8 +547,16 @@ export function Catalogue({
             {picked.length.toLocaleString("en-GB")} Pokémon picked
           </p>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            Playlist order is the order you tick them. Select all on this page checks only the list below.
+            Ticking adds a Pokémon at the end. Open the playlist to drag the cards into order. Select all on this page checks only the list below.
           </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-3 h-11 w-full"
+            onClick={() => setPlaylistOpen(true)}
+          >
+            Open playlist
+          </Button>
           <label className="mt-2 flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -794,8 +826,53 @@ export function Catalogue({
                 <div className="mt-2">
                   <TypeChips types={entry.types} />
                 </div>
+                <label className="mt-3 flex items-center gap-2 text-sm font-bold">
+                  <input
+                    type="checkbox"
+                    checked={picked.includes(entry.id)}
+                    onChange={() => togglePick(entry.id)}
+                  />
+                  Add {entry.name} to the playlist
+                </label>
               </div>
             </div>
+            {lineMembers.length > 0 ? (
+              <section className="mt-6" aria-label="Evolutions">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="pk-kicker">Evolutions</h3>
+                  <button
+                    type="button"
+                    className="text-sm font-bold text-poke-red underline decoration-poke-yellow decoration-2"
+                    onClick={toggleLine}
+                  >
+                    {lineAllPicked ? "Untick all evolutions" : "Tick all evolutions"}
+                  </button>
+                </div>
+                <EvolutionPicks
+                  members={entry.line.evolutions}
+                  picked={picked}
+                  onToggle={togglePick}
+                  onOpen={(id) => {
+                    setSelected(id);
+                    setShowList(false);
+                  }}
+                />
+                {entry.line.subevolutions.length > 0 ? (
+                  <>
+                    <h3 className="mt-4 pk-kicker">Subevolutions</h3>
+                    <EvolutionPicks
+                      members={entry.line.subevolutions}
+                      picked={picked}
+                      onToggle={togglePick}
+                      onOpen={(id) => {
+                        setSelected(id);
+                        setShowList(false);
+                      }}
+                    />
+                  </>
+                ) : null}
+              </section>
+            ) : null}
             <p className="mt-6 max-w-prose text-base leading-7 text-foreground">{entry.info}</p>
             {entry.infoVersion ? (
               <p className="mt-2 text-xs pk-quiet">Pokédex line from {entry.infoVersion}.</p>
@@ -815,7 +892,7 @@ export function Catalogue({
             </div>
             <div className="mt-4">
               <Fact label="Ability">{abilityText}</Fact>
-              <Fact label="Evolution">{evolutionText || "It does not evolve."}</Fact>
+              <Fact label="Evolution">{evolutionText}</Fact>
               <Fact label="Habitat">{entry.habitat ? habitatLabel(entry.habitat) : "Not recorded"}</Fact>
               <Fact label="Gender">{entry.gender.replace(/\.$/, "")}</Fact>
               <Fact label="Egg groups">{entry.eggGroups.join(", ")}</Fact>
@@ -931,7 +1008,72 @@ export function Catalogue({
           onClose={() => setStickerCards(null)}
         />
       ) : null}
+      <PlaylistWindow
+        open={playlistOpen}
+        onOpenChange={setPlaylistOpen}
+        ids={picked}
+        onChange={(next) => {
+          setPicked(next);
+          setBuildMessage("");
+        }}
+      />
     </div>
+  );
+}
+
+function EvolutionPicks({
+  members,
+  picked,
+  onToggle,
+  onOpen,
+}: {
+  members: CatalogueLineMember[];
+  picked: readonly number[];
+  onToggle: (id: number) => void;
+  onOpen: (id: number) => void;
+}) {
+  if (members.length === 0) return null;
+  return (
+    <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+      {members.map((member) => {
+        const on = picked.includes(member.id);
+        return (
+          <li
+            key={member.id}
+            className={`flex items-center gap-2 rounded-xl border-[3px] border-ink px-2 py-2 shadow-[2px_2px_0_var(--ink)] ${
+              on ? "bg-poke-yellow" : "bg-white"
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={on}
+              aria-label={`Pick ${member.name}`}
+              onChange={() => onToggle(member.id)}
+            />
+            <button
+              type="button"
+              className="flex min-w-0 flex-1 items-center gap-2 text-left"
+              onClick={() => onOpen(member.id)}
+            >
+              <img
+                src={spriteSrc(member.id)}
+                alt=""
+                width={48}
+                height={48}
+                className="h-12 w-12 shrink-0 object-contain [image-rendering:pixelated]"
+              />
+              <span className="min-w-0">
+                <span className="block">
+                  <span className="mr-2 text-xs tabular-nums opacity-70">{numberLabel(member.id)}</span>
+                  <span className="font-medium">{member.name}</span>
+                </span>
+                <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{lineDetail(member)}</span>
+              </span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

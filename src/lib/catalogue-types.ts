@@ -19,6 +19,21 @@ export type CatalogueEvolution = CatalogueLink & {
   method: string;
 };
 
+/** One species this Pokémon evolves into. Stage 1 is direct. Later stages are subevolutions. */
+export type CatalogueLineMember = {
+  id: number;
+  name: string;
+  method: string;
+  stage: number;
+  fromId: number;
+  fromName: string;
+};
+
+export type CatalogueLine = {
+  evolutions: CatalogueLineMember[];
+  subevolutions: CatalogueLineMember[];
+};
+
 export type CatalogueMatch = {
   type: string;
   multiplier: number;
@@ -78,6 +93,8 @@ export type CatalogueEntry = {
   eggGroups: string[];
   evolvesFrom: CatalogueLink | null;
   evolutions: CatalogueEvolution[];
+  /** Direct evolutions, then every further stage, each once. */
+  line: CatalogueLine;
   weak: CatalogueMatch[];
   resist: CatalogueMatch[];
   immune: CatalogueMatch[];
