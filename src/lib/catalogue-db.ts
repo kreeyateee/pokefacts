@@ -5,6 +5,8 @@ import type {
   CatalogueEntry,
   CatalogueForm,
   CatalogueFormRef,
+  CatalogueLine,
+  CatalogueLineMember,
   CatalogueListItem,
   CataloguePage,
 } from "@/lib/catalogue-types";
@@ -155,6 +157,89 @@ export function catalogueMatchIds(input: SearchInput = {}): number[] {
     .prepare(`SELECT s.id FROM species s ${where} ORDER BY s.id`)
     .all(...params) as Array<{ id: number }>;
   return rows.map((row) => row.id);
+}
+
+type EvolutionEdge = { id: number; name: string; method: string };
+
+let evolutionEdges: Map<number, EvolutionEdge[]> | null = null;
+
+function evolutionEdgesFrom(fromId: number): EvolutionEdge[] {
+  if (!evolutionEdges) {
+    const rows = db()
+      .prepare(
+        `SELECT e.from_id, e.into_id AS id, s.name, e.method
+         FROM evolutions e
+         JOIN species s ON s.id = e.into_id
+         ORDER BY e.into_id, e.method`,
+      )
+      .all() as Array<{ from_id: number; id: number; name: string; method: string }>;
+    const graph = new Map<number, EvolutionEdge[]>();
+    for (const row of rows) {
+      const list = graph.get(row.from_id) ?? [];
+      list.push({ id: row.id, name: row.name, method: row.method });
+      graph.set(row.from_id, list);
+    }
+    evolutionEdges = graph;
+  }
+  return evolutionEdges.get(fromId) ?? [];
+}
+
+function methodPhrase(methods: readonly string[]): string {
+  const unique = methods.map((method) => method.trim()).filter(Boolean);
+  if (unique.length === 0) return "";
+  if (unique.length === 1) return unique[0] ?? "";
+  if (unique.length === 2) return `${unique[0]}, or ${unique[1]}`;
+  return `${unique[0]}, or ${unique[1]}, or another way`;
+}
+
+/**
+ * Evolutions of this species, then the evolutions of those (subevolutions), and so on.
+ * A species reached by more than one method appears once. The walk does not go back to a pre-evolution.
+ */
+export function evolutionLine(speciesId: number): CatalogueLine {
+  const empty: CatalogueLine = { evolutions: [], subevolutions: [] };
+  if (!Number.isInteger(speciesId) || speciesId < 1) return empty;
+  const start = db().prepare("SELECT name FROM species WHERE id = ?").get(speciesId) as
+    | { name: string }
+    | undefined;
+  if (!start) return empty;
+
+  const queue: Array<{ id: number; name: string; stage: number }> = [
+    { id: speciesId, name: start.name, stage: 0 },
+  ];
+  const seen = new Set<number>([speciesId]);
+  const members: CatalogueLineMember[] = [];
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) break;
+    const grouped = new Map<number, { name: string; methods: string[] }>();
+    for (const edge of evolutionEdgesFrom(current.id)) {
+      const item = grouped.get(edge.id) ?? { name: edge.name, methods: [] };
+      if (edge.method && !item.methods.includes(edge.method)) item.methods.push(edge.method);
+      grouped.set(edge.id, item);
+    }
+    const next = [...grouped.entries()].sort((a, b) => a[0] - b[0]);
+    for (const [id, info] of next) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const stage = current.stage + 1;
+      members.push({
+        id,
+        name: info.name,
+        method: methodPhrase(info.methods),
+        stage,
+        fromId: current.id,
+        fromName: current.name,
+      });
+      queue.push({ id, name: info.name, stage });
+    }
+  }
+
+  return {
+    evolutions: members.filter((member) => member.stage === 1),
+    subevolutions: members.filter((member) => member.stage > 1),
+  };
 }
 
 /** Names for a catalogue pick, in the order the ids were given. Unknown ids are skipped. */
@@ -331,6 +416,7 @@ export function getCatalogueEntry(id: number): CatalogueEntry | null {
     eggGroups: eggs.map((egg) => (egg.egg_group === "Undiscovered" ? "No egg group" : egg.egg_group)),
     evolvesFrom: from ?? null,
     evolutions,
+    line: evolutionLine(id),
     weak: packed("weak"),
     resist: packed("resist"),
     immune: packed("immune"),
