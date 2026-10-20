@@ -2,7 +2,15 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
-import { listGigantamaxForms, listMegaForms, listMonSheets } from "./catalogue-db";
+import {
+  listAlolanForms,
+  listGigantamaxForms,
+  listHisuianForms,
+  listLegendarySheets,
+  listMegaForms,
+  listMonSheets,
+  listMythicalSheets,
+} from "./catalogue-db";
 import { dexBlurb, pickDexEntry, threeClues, type FlavorSource, type MonSheet } from "./dex-facts";
 import {
   applySpeciesSpeech,
@@ -14,6 +22,7 @@ import {
   factsBulkPlaylists,
   factsPlaylistUpload,
   formPlaylist,
+  formPlaylists,
   formPlaylistUpload,
   guessPlayOrder,
   guessPoolFromCards,
@@ -25,6 +34,7 @@ import {
   POKEDEX_HOWTO,
   randomGuessCard,
   randomPokedexCard,
+  speciesPlaylists,
   shadowPixelPath,
   YOTO_TRACK_LIMIT,
 } from "./kid-cards";
@@ -1274,6 +1284,121 @@ describe("biology speech and form playlists", () => {
     assert.match(spoken, /belly is now white/);
     assert.match(spoken, /wings burn hotter/);
     assert.doesNotMatch(spoken, /draconic, bipedal|Bulbapedia|Creative Commons/i);
+  });
+
+  it("sends Alolan and Hisuian forms with form artwork and the species pixel", () => {
+    const alolan = listAlolanForms();
+    const alola = formPlaylists("alola", alolan);
+    assert.equal(alola.length, 1);
+    assert.equal(alola[0]?.libraryTitle, "Alolan forms");
+    assert.equal(alola[0]?.chapters.length, 18);
+    assert.ok((alola[0] ? countSpokenTracks(alola[0].chapters) : 0) <= YOTO_TRACK_LIMIT);
+    const rattata = alola[0]?.chapters.find((chapter) => chapter.title === "Alolan Rattata");
+    assert.equal(rattata?.sprite, "/artwork/10091.webp");
+    assert.equal(rattata?.tracks[0]?.icon, "/pixels/19.png");
+    assert.equal(rattata?.tracks[0]?.lead, "cry");
+    assert.equal(rattata?.formId, 10091);
+    assert.equal(rattata?.dexId, 19);
+    const sent = formPlaylistUpload(alola[0] as NonNullable<(typeof alola)[0]>, { 19: "rattata-pixel" });
+    assert.equal(sent.content.title, "Alolan forms");
+    const uploaded = sent.content.content.chapters.find((chapter) => chapter.title === "Alolan Rattata");
+    assert.equal(uploaded?.tracks[0]?.display.icon16x16, "yoto:#rattata-pixel");
+
+    const hisui = formPlaylists("hisui", listHisuianForms());
+    assert.equal(hisui.length, 1);
+    assert.equal(hisui[0]?.chapters.length, 16);
+    const growlithe = hisui[0]?.chapters.find((chapter) => chapter.title === "Hisuian Growlithe");
+    assert.equal(growlithe?.sprite, "/artwork/10229.webp");
+    assert.equal(growlithe?.tracks[0]?.icon, "/pixels/58.png");
+    assert.equal(growlithe?.formId, 10229);
+
+    const twins = formPlaylists("alola", [
+      { formId: 1, speciesId: 6, speciesName: "Charizard", formName: "Alolan Charizard X" },
+      { formId: 2, speciesId: 6, speciesName: "Charizard", formName: "Alolan Charizard Y" },
+    ]);
+    assert.equal(twins[0]?.chapters.map((chapter) => chapter.title).join("|"), "Alolan Charizard X|Alolan Charizard Y");
+    assert.equal(twins[0]?.chapters[1]?.overlay, "6b");
+  });
+
+  it("splits a form list past 100 tracks and keeps one form per species on the first card", () => {
+    const forms = Array.from({ length: 101 }, (_, index) => ({
+      formId: 40000 + index,
+      speciesId: index + 1,
+      speciesName: `Species ${index + 1}`,
+      formName: `Alolan Species ${index + 1}`,
+    }));
+    const split = formPlaylists("alola", forms);
+    assert.equal(split.length, 2);
+    assert.equal(countSpokenTracks(split[0]?.chapters ?? []), 100);
+    assert.equal(countSpokenTracks(split[1]?.chapters ?? []), 1);
+    assert.match(split[0]?.blurb ?? "", /Yoto holds 100 tracks, so Alolan forms are split into 2 playlists/);
+    assert.equal(split[0]?.rangeLabel, "Alolan forms 1 (1-100)");
+    assert.equal(split[0]?.libraryTitle, "Alolan forms 1");
+    assert.equal(split[1]?.id, "alolan-forms-2");
+    for (const card of split) assert.ok(countSpokenTracks(card.chapters) <= YOTO_TRACK_LIMIT);
+
+    const paired = [];
+    for (let species = 1; species <= 100; species += 1) {
+      paired.push({
+        formId: species,
+        speciesId: species,
+        speciesName: `Species ${species}`,
+        formName: `Alolan Species ${species}`,
+      });
+      paired.push({
+        formId: 1000 + species,
+        speciesId: species,
+        speciesName: `Species ${species}`,
+        formName: `Alolan Species ${species} Extra`,
+      });
+    }
+    const cards = formPlaylists("hisui", paired);
+    assert.equal(cards.length, 2);
+    assert.equal(cards[0]?.chapters.length, 100);
+    assert.equal(new Set(cards[0]?.chapters.map((chapter) => chapter.dexId)).size, 100);
+    assert.equal(cards[1]?.chapters.length, 100);
+    assert.match(cards[0]?.blurb ?? "", /Hisuian forms are split into 2 playlists/);
+  });
+
+  it("builds cry-first legendary and mythical playlists from species artwork", () => {
+    const legendarySheets = listLegendarySheets();
+    const legendary = speciesPlaylists("legendary", legendarySheets);
+    assert.equal(legendary.length, 1);
+    assert.equal(legendary[0]?.libraryTitle, "Legendary Pokémon");
+    assert.equal(legendary[0]?.chapters.length, 71);
+    assert.equal(chaptersForCries(legendary[0] as NonNullable<(typeof legendary)[0]>).length, 71);
+    const articuno = legendary[0]?.chapters.find((chapter) => chapter.title === "Articuno");
+    assert.equal(articuno?.sprite, "/artwork/144.webp");
+    assert.equal(articuno?.tracks[0]?.icon, "/pixels/144.png");
+    assert.equal(articuno?.tracks[0]?.lead, "cry");
+    assert.equal(articuno?.formId, undefined);
+    const spoken = applySpeciesSpeech(legendary[0] as NonNullable<(typeof legendary)[0]>, {
+      150: "Mewtwo. It was created by science.",
+    });
+    assert.match(spoken.chapters.find((chapter) => chapter.dexId === 150)?.tracks[0]?.text ?? "", /created by science/);
+    assert.equal(
+      spoken.chapters.find((chapter) => chapter.dexId === 144)?.tracks[0]?.text,
+      articuno?.tracks[0]?.text,
+    );
+
+    const mythical = speciesPlaylists("mythical", listMythicalSheets());
+    assert.equal(mythical.length, 1);
+    assert.equal(mythical[0]?.chapters.length, 23);
+    const mew = mythical[0]?.chapters.find((chapter) => chapter.title === "Mew");
+    assert.equal(mew?.sprite, "/artwork/151.webp");
+    assert.equal(mew?.tracks[0]?.icon, "/pixels/151.png");
+    assert.equal(mew?.tracks[0]?.lead, "cry");
+    assert.equal(mythical[0]?.chapters.some((chapter) => chapter.title === "Mewtwo"), false);
+
+    const overflow = speciesPlaylists("legendary", listMonSheets().slice(0, 101));
+    assert.equal(overflow.length, 2);
+    assert.equal(countSpokenTracks(overflow[0]?.chapters ?? []), 100);
+    assert.equal(countSpokenTracks(overflow[1]?.chapters ?? []), 1);
+    assert.match(overflow[0]?.blurb ?? "", /Legendary Pokémon are split into 2 playlists/);
+    assert.equal(overflow[0]?.rangeLabel, "Legendary Pokémon 1 (1-100)");
+    assert.equal(overflow[0]?.chapters[0]?.sprite, "/artwork/1.webp");
+    assert.equal(overflow[0]?.chapters[0]?.tracks[0]?.icon, "/pixels/1.png");
+    for (const card of overflow) assert.ok(countSpokenTracks(card.chapters) <= YOTO_TRACK_LIMIT);
   });
 });
 

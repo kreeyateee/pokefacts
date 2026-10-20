@@ -471,10 +471,49 @@ export function listGigantamaxForms(): CatalogueFormRef[] {
   return queryFormRefs("f.name LIKE 'Gigantamax %'");
 }
 
+/** Non-default forms whose names start with Alolan. Totem and cap costumes stay out. */
+export function listAlolanForms(): CatalogueFormRef[] {
+  return queryFormRefs("f.is_default = 0 AND f.name LIKE 'Alolan %'");
+}
+
+/** Non-default forms whose names start with Hisuian. */
+export function listHisuianForms(): CatalogueFormRef[] {
+  return queryFormRefs("f.is_default = 0 AND f.name LIKE 'Hisuian %'");
+}
+
+function sheetsWhere(column: "is_legendary" | "is_mythical"): MonSheet[] {
+  const ids = new Set(
+    (db().prepare(`SELECT id FROM species WHERE ${column} = 1 ORDER BY id`).all() as Array<{ id: number }>).map(
+      (row) => row.id,
+    ),
+  );
+  return listMonSheets().filter((sheet) => ids.has(sheet.id));
+}
+
+/** Species flagged legendary. Mythical species are a separate list. */
+export function listLegendarySheets(): MonSheet[] {
+  return sheetsWhere("is_legendary");
+}
+
+/** Species flagged mythical. */
+export function listMythicalSheets(): MonSheet[] {
+  return sheetsWhere("is_mythical");
+}
+
 export function listSpecialForms(speciesId: number): CatalogueFormRef[] {
   return queryFormRefs("(f.is_mega = 1 OR f.name LIKE 'Gigantamax %') AND f.species_id = ?", speciesId);
 }
 
 export function getSpecialForm(formId: number): CatalogueFormRef | null {
   return queryFormRefs("(f.is_mega = 1 OR f.name LIKE 'Gigantamax %') AND f.id = ?", formId)[0] ?? null;
+}
+
+/** A Mega, Gigantamax, Alolan, or Hisuian form, for the form-reading route. */
+export function getPlaylistForm(formId: number): CatalogueFormRef | null {
+  return (
+    queryFormRefs(
+      `(f.is_mega = 1 OR f.name LIKE 'Gigantamax %' OR ((f.name LIKE 'Alolan %' OR f.name LIKE 'Hisuian %') AND f.is_default = 0)) AND f.id = ?`,
+      formId,
+    )[0] ?? null
+  );
 }

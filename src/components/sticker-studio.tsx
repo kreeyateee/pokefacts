@@ -45,7 +45,7 @@ type StickerMon = {
 
 function nounFor(kind: KidCard["kind"]): string {
   if (kind === "guess") return "riddles";
-  if (kind === "mega" || kind === "gmax") return "forms";
+  if (kind === "mega" || kind === "gmax" || kind === "alola" || kind === "hisui") return "forms";
   return "Pokémon";
 }
 
