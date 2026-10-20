@@ -34,6 +34,7 @@ import {
   type KidCard,
   type KidCardKind,
 } from "@/lib/kid-cards";
+import { CONNECT_FOR_VOICE, NATIONAL_DEX_TOTAL } from "@/lib/fact-build";
 import { pronounce } from "@/lib/pronounce";
 import { selectionUpload } from "@/lib/selection-playlist";
 import { APP_NAME, DONATE_URL, SOURCE_URL } from "@/lib/site";
@@ -47,7 +48,7 @@ import {
   statusErrorText,
   validYotoCardId,
 } from "@/lib/yoto-error";
-import { isPiperVoice, PICKER_VOICES } from "@/lib/piper-voice";
+import { isPiperVoice } from "@/lib/piper-voice";
 import {
   afterRejectedPlaylist,
   applyFinishedAudio,
@@ -58,6 +59,7 @@ import {
   libraryPlaylists,
   mapPool,
   renderJobs,
+  TRACK_POOL_SIZE,
   uploadForPlaylist,
   type FinishedAudio,
   type PlaylistUpload,
@@ -379,6 +381,11 @@ export function Studio({
   const [speaking, setSpeaking] = useState(false);
   const [hearError, setHearError] = useState("");
   const [sending, setSending] = useState(false);
+  const [localBuilding, setLocalBuilding] = useState(false);
+  const [localLabel, setLocalLabel] = useState("");
+  const [localDone, setLocalDone] = useState(0);
+  const [localFailures, setLocalFailures] = useState<Array<{ id: number; name: string; error: string }>>([]);
+  const [localFailed, setLocalFailed] = useState(false);
   const [bulkActive, setBulkActive] = useState(false);
   const [job, setJob] = useState<JobView | null>(null);
   const [stickersOpen, setStickersOpen] = useState(false);
@@ -386,6 +393,7 @@ export function Studio({
   const clipRef = useRef<HTMLAudioElement | null>(null);
   const clipUrl = useRef<string | null>(null);
   const hearAbort = useRef<AbortController | null>(null);
+  const localAbort = useRef<AbortController | null>(null);
   const speakingRef = useRef(false);
 
   const cardId = kind === "meet" ? factsId : guessId;
@@ -1163,6 +1171,115 @@ export function Studio({
     }
   }
 
+  async function buildAllLocalFacts() {
+    if (localBuilding) {
+      localAbort.current?.abort();
+      return;
+    }
+    if (!isPiperVoice(voiceId)) {
+      const live = await ensureSession();
+      if (!live) {
+        setConnectOpen(true);
+        setLocalFailed(true);
+        setLocalLabel(CONNECT_FOR_VOICE);
+        setLocalDone(0);
+        setLocalFailures([]);
+        return;
+      }
+    }
+    const names = new Map<number, string>();
+    for (const chapter of factPoolFromCards(cards)) {
+      if (chapter.dexId) names.set(chapter.dexId, chapter.title);
+    }
+    const ids = Array.from({ length: NATIONAL_DEX_TOTAL }, (_, index) => index + 1);
+    const controller = new AbortController();
+    localAbort.current = controller;
+    setLocalBuilding(true);
+    setLocalFailed(false);
+    setLocalFailures([]);
+    setLocalDone(0);
+    setLocalLabel(`0 of ${NATIONAL_DEX_TOTAL.toLocaleString("en-GB")}.`);
+    const failures: Array<{ id: number; name: string; error: string }> = [];
+    const inflight = new Map<number, string>();
+    let done = 0;
+    let stopped = false;
+    const paint = () => {
+      const current = [...inflight.values()];
+      const failureNote = failures.length > 0 ? ` ${failures.length} could not be built.` : "";
+      const building = current.length > 0 ? ` Building ${current.join(", ")}.` : "";
+      setLocalDone(done);
+      setLocalLabel(`${done.toLocaleString("en-GB")} of ${NATIONAL_DEX_TOTAL.toLocaleString("en-GB")}.${building}${failureNote}`);
+      setLocalFailures(failures.slice());
+    };
+    try {
+      await mapPool(ids, async (id) => {
+        if (controller.signal.aborted || stopped) return;
+        const name = names.get(id) ?? `Number ${id}`;
+        inflight.set(id, name);
+        paint();
+        try {
+          const headers: Record<string, string> = { "Content-Type": "application/json" };
+          if (!isPiperVoice(voiceId)) {
+            const live = await ensureSession();
+            if (!live) throw new Error(CONNECT_FOR_VOICE);
+            headers.Authorization = `Bearer ${live.accessToken}`;
+          }
+          const response = await fetch("/api/facts/local", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              dexId: id,
+              voiceId,
+              cryVolume: playback.cryVolume,
+              voiceVolume: playback.voiceVolume,
+              pauseSeconds: playback.pauseSeconds,
+            }),
+            signal: controller.signal,
+          });
+          const payload = (await response.json().catch(() => null)) as { error?: string; status?: string } | null;
+          if (response.status === 401 || payload?.error === CONNECT_FOR_VOICE) {
+            stopped = true;
+            controller.abort();
+            setLocalFailed(true);
+            setConnectOpen(true);
+            setLocalLabel(CONNECT_FOR_VOICE);
+            return;
+          }
+          if (!response.ok) throw new Error(payload?.error || "This fact was not built.");
+          done += 1;
+        } catch (error) {
+          if (controller.signal.aborted || stopped) return;
+          const message = error instanceof Error ? error.message : "This fact was not built.";
+          if (message === CONNECT_FOR_VOICE) {
+            stopped = true;
+            controller.abort();
+            setLocalFailed(true);
+            setConnectOpen(true);
+            setLocalLabel(CONNECT_FOR_VOICE);
+            return;
+          }
+          failures.push({ id, name, error: message });
+        } finally {
+          inflight.delete(id);
+          if (!stopped) paint();
+        }
+      });
+      if (controller.signal.aborted && !stopped) {
+        setLocalLabel(
+          `Stopped at ${done.toLocaleString("en-GB")} of ${NATIONAL_DEX_TOTAL.toLocaleString("en-GB")}. Finished tracks stay on this PC.`,
+        );
+      } else if (!stopped) {
+        const failureNote = failures.length > 0 ? ` ${failures.length} could not be built.` : "";
+        setLocalLabel(
+          `${done.toLocaleString("en-GB")} of ${NATIONAL_DEX_TOTAL.toLocaleString("en-GB")}.${failureNote} Start again to continue the rest.`,
+        );
+      }
+    } finally {
+      setLocalBuilding(false);
+      localAbort.current = null;
+    }
+  }
+
   function disconnect() {
     writeSession(null);
     setSession(null);
@@ -1302,7 +1419,12 @@ export function Studio({
             Setup
           </button>
         </div>
-        <PlaybackPanel settings={playback} onChange={setPlayback} />
+        <PlaybackPanel
+          settings={playback}
+          onChange={setPlayback}
+          voiceId={voiceId}
+          onVoiceId={(id) => setVoiceId(writeVoiceId(localStorage, id))}
+        />
       </header>
 
       <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6">
@@ -1315,19 +1437,29 @@ export function Studio({
             playlists={library}
             playlistTarget={targetPlaylist}
             onPlaylistTarget={setTargetPlaylist}
-            voiceId={voiceId}
-            onVoiceId={(id) => setVoiceId(writeVoiceId(localStorage, id))}
             units={playback.units}
             job={job}
           />
         ) : card && chapter ? (
-          <div className="grid gap-6 md:grid-cols-[220px_minmax(0,1fr)]">
-            <div className="md:col-span-2">
-              <div className="flex flex-wrap items-center gap-3">
-                <Button type="button" variant="outline" className="h-10 px-4" onClick={() => setStickersOpen(true)}>
-                  Print stickers
-                </Button>
-                <p className="text-sm leading-6 text-muted-foreground">
+          <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
+            <div className="lg:col-span-2">
+              <div className="pk-card px-4 py-4 sm:px-5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button type="button" variant="outline" className="h-10 px-4" onClick={() => setStickersOpen(true)}>
+                    Print stickers
+                  </Button>
+                  {randomFacts ? (
+                    <Button type="button" variant="outline" className="h-10 px-4" onClick={shufflePokedex}>
+                      Shuffle
+                    </Button>
+                  ) : null}
+                  {randomGuess ? (
+                    <Button type="button" variant="outline" className="h-10 px-4" onClick={shuffleGuess}>
+                      Shuffle
+                    </Button>
+                  ) : null}
+                </div>
+                <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
                   {randomGuess ? (
                     <>
                       This playlist is the{" "}
@@ -1355,43 +1487,63 @@ export function Studio({
                     </>
                   )}
                 </p>
-                {randomFacts ? (
-                  <Button type="button" variant="outline" className="h-10 px-4" onClick={shufflePokedex}>
-                    Shuffle
-                  </Button>
+                {kind === "meet" ? (
+                  <div className="mt-4 border-t-2 border-[#16324f]/15 pt-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-11 px-4"
+                        disabled={!ready || sending}
+                        onClick={() => void buildAllLocalFacts()}
+                      >
+                        {localBuilding ? "Stop building facts" : "Build all facts on this PC"}
+                      </Button>
+                      <Button
+                        type="button"
+                        className="h-11 px-4"
+                        disabled={sending || !ready || localBuilding}
+                        onClick={() => void sendAllFacts()}
+                      >
+                        {sending && bulkActive
+                          ? "Recording…"
+                          : `Send all ${factsPlaylists.length} Pokefacts playlists`}
+                      </Button>
+                    </div>
+                    <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+                      Build saves all 1,025 facts on this computer: the cry, then the voice and volumes in Settings.
+                      It does not create a Yoto playlist. Stop whenever you like. Start again and finished tracks are skipped.
+                      Send uses those mixes, then uploads the playlists.
+                    </p>
+                    {localLabel ? (
+                      <StatusBar
+                        label={localLabel}
+                        done={localDone}
+                        total={NATIONAL_DEX_TOTAL}
+                        failed={localFailed}
+                      />
+                    ) : null}
+                    {localFailures.length > 0 ? (
+                      <ul className="mt-2 grid gap-1 text-sm leading-6 pk-danger" role="alert">
+                        {localFailures.slice(0, 8).map((item) => (
+                          <li key={item.id}>
+                            {item.name}: {item.error}
+                          </li>
+                        ))}
+                        {localFailures.length > 8 ? <li>{localFailures.length - 8} more failed.</li> : null}
+                      </ul>
+                    ) : null}
+                  </div>
                 ) : null}
-                {randomGuess ? (
-                  <Button type="button" variant="outline" className="h-10 px-4" onClick={shuffleGuess}>
-                    Shuffle
-                  </Button>
+                {job ? (
+                  <StatusBar
+                    label={job.detail}
+                    done={job.done}
+                    total={job.total}
+                    failed={job.status === "failed"}
+                  />
                 ) : null}
               </div>
-              {kind === "meet" ? (
-                <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <Button
-                    type="button"
-                    className="h-11 px-4"
-                    disabled={sending || !ready}
-                    onClick={() => void sendAllFacts()}
-                  >
-                    {sending && bulkActive
-                      ? "Recording…"
-                      : `Send all ${factsPlaylists.length} Pokefacts playlists`}
-                  </Button>
-                  <p className="max-w-xl text-sm leading-6 text-muted-foreground">
-                    Sends every Pokefacts playlist, one after another, so all 1,025 Pokémon are covered.
-                    Each playlist stays at 100 tracks or fewer. The voice you pick reads every track.
-                  </p>
-                </div>
-              ) : null}
-              {job ? (
-                <StatusBar
-                  label={job.detail}
-                  done={job.done}
-                  total={job.total}
-                  failed={job.status === "failed"}
-                />
-              ) : null}
               <div
                 className="mt-3 flex gap-2 overflow-x-auto pb-1"
                 role="listbox"
@@ -1428,7 +1580,7 @@ export function Studio({
               </label>
               <select
                 aria-label={guessing ? "Choose a riddle" : "Choose a Pokémon"}
-                className="pk-field md:hidden"
+                className="pk-field lg:hidden"
                 value={chapter.key}
                 onChange={(event) => {
                   const next = playableChapters(card).find((item) => item.key === event.target.value);
@@ -1443,7 +1595,7 @@ export function Studio({
               </select>
               <nav
                 aria-label={guessing ? "Riddles" : "Pokémon"}
-                className="grid max-h-[40dvh] content-start grid-cols-3 gap-2 overflow-y-auto md:max-h-[70dvh] md:grid-cols-1"
+                className="pk-card grid max-h-[40dvh] content-start grid-cols-3 gap-1 overflow-y-auto p-2 md:max-h-[70dvh] lg:grid-cols-1 lg:p-2"
               >
                 {listed.map((item) => {
                   const selected = item.key === chapter.key;
@@ -1537,28 +1689,6 @@ export function Studio({
                       : "Hear plays the cry, then the reading. The Yoto card plays that same order."}
                   </p>
                 ) : null}
-                <label className="mt-6 grid max-w-sm gap-1 text-sm" htmlFor="voice">
-                  Voice
-                  <select
-                    id="voice"
-                    aria-label="Voice"
-                    className="pk-field"
-                    value={voiceId}
-                    onChange={(event) => setVoiceId(writeVoiceId(localStorage, event.target.value))}
-                  >
-                    {PICKER_VOICES.map((voice) => (
-                      <option key={voice.id} value={voice.id}>
-                        {voice.name} — {voice.note}
-                      </option>
-                    ))}
-                  </select>
-                  {isPiperVoice(voiceId) ? (
-                    <p className="mt-2 text-xs leading-5 pk-quiet">
-                      Cori, British. Piper reads on this computer, so Hear works before you connect Yoto. Send still
-                      needs a Yoto login.
-                    </p>
-                  ) : null}
-                </label>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {guessing ? (
                     <>
@@ -1648,8 +1778,8 @@ export function Studio({
                 </p>
                 <p className="mt-3 text-sm leading-6 text-muted-foreground">
                   {isPiperVoice(voiceId)
-                    ? "Send uses Piper on this computer. The cry is mixed in front, then that MP3 is uploaded."
-                    : "Send uses the voice selected above. Yoto Labs turns the script into an MP3 in that voice."}
+                    ? "Send uses the Piper voice in Settings. The cry is mixed in front, then that MP3 is uploaded."
+                    : "Send uses the voice in Settings. Yoto Labs turns the script into an MP3 in that voice."}
                 </p>
                 <label className="mt-3 grid gap-1 text-sm" htmlFor="yoto-playlist">
                   Add to a Yoto playlist

@@ -409,6 +409,28 @@ export async function readCachedMergedMp3(
   return readMp3File(path.join(renderedRoot, `${renderedCacheKey(text, dexId, voiceId, mix)}.mp3`));
 }
 
+/** Same file a later playlist send uploads instead of mixing again. */
+export async function saveCachedMergedMp3(
+  text: string,
+  voiceId: string,
+  dexId: number | undefined,
+  audio: Buffer,
+  renderedRoot: string = RENDER_ROOT,
+  mix?: Partial<MixSettings> | null,
+): Promise<void> {
+  if (audio.length < 128 || audioContainer(audio) !== "mp3" || audio.subarray(0, 3).toString("ascii") === "ID3") {
+    throw new Error("The mix was not a plain MP3.");
+  }
+  await writeBytesAtomic(path.join(renderedRoot, `${renderedCacheKey(text, dexId, voiceId, mix)}.mp3`), audio);
+}
+
+/** Speech file prepareFactTrack reads before it asks Piper or Yoto Labs to speak again. */
+export function speechCacheFile(root: string, text: string, voiceId: string): string {
+  const voice = chosenVoice(voiceId);
+  const line = text.replace(/\s+/g, " ").trim();
+  return path.join(root, `${speechKey(line, voice)}.${isPiperVoice(voice) ? "wav" : "mp3"}`);
+}
+
 function readyPayload(cached: StoredAudio): TrackPrepareResult {
   return {
     phase: "ready",

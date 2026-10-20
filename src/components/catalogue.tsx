@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import type { BiologyBlock, BiologyView, CatalogueEntry, CataloguePage } from "@/lib/catalogue-types";
 import { heightForUnits, weightForUnits, type MeasureUnits } from "@/lib/format";
 import type { KidCard } from "@/lib/kid-cards";
-import { PICKER_VOICES } from "@/lib/piper-voice";
 import {
   selectionPlaylist,
   selectionSpeciesLimit,
@@ -153,8 +152,6 @@ export function Catalogue({
   playlists = [],
   playlistTarget = "",
   onPlaylistTarget,
-  voiceId = "",
-  onVoiceId,
   units = "metric",
   job = null,
 }: {
@@ -163,8 +160,6 @@ export function Catalogue({
   playlists?: Array<{ cardId: string; title: string }>;
   playlistTarget?: string;
   onPlaylistTarget?: (cardId: string) => void;
-  voiceId?: string;
-  onVoiceId?: (voiceId: string) => void;
   units?: MeasureUnits;
   job?: { status: string; detail: string; done?: number; total?: number } | null;
 } = {}) {
@@ -456,7 +451,7 @@ export function Catalogue({
   const statusFailed = sendJob ? sendJob.status === "failed" : buildFailed;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+    <div className="grid items-start gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
       <section className={`${showList ? "block" : "hidden lg:block"} self-start`}>
         <label className="grid gap-1 text-sm" htmlFor="catalogue-search">
           Search
@@ -471,7 +466,7 @@ export function Catalogue({
             className="pk-field"
           />
         </label>
-        <div className="mt-3 flex flex-wrap gap-1.5">
+        <div className="mt-3 grid grid-cols-2 gap-1.5">
           <button
             type="button"
             onClick={() => {
@@ -595,28 +590,7 @@ export function Catalogue({
             className="pk-field"
           />
           </label>
-          {onVoiceId ? (
-            <label className="mt-3 grid gap-1 text-sm" htmlFor="catalogue-voice">
-              Voice
-              <select
-                id="catalogue-voice"
-                aria-label="Voice"
-                className="pk-field"
-                value={voiceId}
-                disabled={building}
-                onChange={(event) => onVoiceId(event.target.value)}
-              >
-                {PICKER_VOICES.map((voice) => (
-                  <option key={voice.id} value={voice.id}>
-                    {voice.name} — {voice.note}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-          {onVoiceId ? (
-            <p className="mt-1 text-xs leading-5 pk-quiet">This voice reads every track on the playlist.</p>
-          ) : null}
+          <p className="mt-3 text-xs leading-5 pk-quiet">The voice in Settings reads every track on this playlist.</p>
           <label className="mt-3 grid gap-1 text-sm" htmlFor="catalogue-playlist">
             Add to a Yoto playlist
             <select

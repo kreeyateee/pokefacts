@@ -1,3 +1,4 @@
+import https from "node:https";
 import path from "node:path";
 
 import type { BiologyBlock, BiologyView } from "@/lib/catalogue-types";
@@ -123,7 +124,12 @@ function shouldSkip(openTag: string, name: string): boolean {
     name === "div" &&
     (classes.includes("mw-references-wrap") ||
       classes.includes("navbox") ||
-      classes.includes("noprint"))
+      classes.includes("noprint") ||
+      classes.includes("thumb") ||
+      classes.includes("thumbinner") ||
+      classes.includes("thumbcaption") ||
+      classes.includes("gallery") ||
+      classes.includes("mw-file-description"))
   ) {
     return true;
   }
@@ -327,11 +333,47 @@ function sectionsOf(payload: unknown): WikiSection[] {
 
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Bulbapedia sits behind Cloudflare. Node's global fetch is challenged and comes back 403,
+ * so a fact would be left with no description. The household https client is allowed through.
+ */
+function bulbapediaFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+  const headers: Record<string, string> = {};
+  new Headers(init?.headers).forEach((value, key) => {
+    headers[key] = value;
+  });
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { headers }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (chunk: Buffer) => chunks.push(chunk));
+      res.on("end", () => {
+        const status = res.statusCode ?? 0;
+        resolve(
+          new Response(Buffer.concat(chunks), {
+            status,
+            headers: { "content-type": String(res.headers["content-type"] ?? "application/json") },
+          }),
+        );
+      });
+    });
+    req.on("error", reject);
+    const signal = init?.signal;
+    if (!signal) return;
+    const abort = () => req.destroy(signal.reason instanceof Error ? signal.reason : new Error("aborted"));
+    if (signal.aborted) {
+      abort();
+      return;
+    }
+    signal.addEventListener("abort", abort, { once: true });
+  });
+}
+
 export async function bulbapediaParse(
   params: Record<string, string>,
   options: { fetchImpl?: typeof fetch; sleep?: (ms: number) => Promise<void> } = {},
 ): Promise<unknown> {
-  return wikiRequest(params, options.fetchImpl ?? fetch, options.sleep ?? defaultSleep);
+  return wikiRequest(params, options.fetchImpl ?? bulbapediaFetch, options.sleep ?? defaultSleep);
 }
 
 export function wikiSections(payload: unknown): WikiSection[] {
@@ -359,7 +401,7 @@ export function wikiFailureCode(error: unknown): string {
  */
 export async function loadBiology(name: string, id: number, options: LoadOptions = {}): Promise<BiologyView> {
   const cacheFile = options.cacheFile ?? CACHE_FILE;
-  const fetchImpl = options.fetchImpl ?? fetch;
+  const fetchImpl = options.fetchImpl ?? bulbapediaFetch;
   const sleep = options.sleep ?? defaultSleep;
   const cached = usableRow((await readCache(cacheFile))[String(id)], name);
   if (cached) return viewFromRow(cached);

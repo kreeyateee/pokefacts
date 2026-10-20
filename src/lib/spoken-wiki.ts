@@ -5,9 +5,19 @@ export const SPOKEN_WIKI_LIMIT = 1200;
 
 const CREDIT = /bulbapedia|creative commons|\bcc\s*by-nc-sa\b|licensed under/i;
 
+/** A contents label or a short image caption is not a biology paragraph. */
+export function isWikiChrome(text: string): boolean {
+  const clean = text.replace(/\s+/g, " ").trim();
+  if (!clean) return true;
+  if (/^contents$/i.test(clean)) return true;
+  if (clean.length > 120) return false;
+  return /\b(?:artwork|illustration|sprite|concept art|official art|thumbcaption)\b/i.test(clean);
+}
+
 /**
  * Lead prose only. A heading after the first paragraph starts a later
  * subsection (Physiology, Forms, and the rest), so those paragraphs stay out.
+ * Contents labels and image captions are skipped, not spoken.
  */
 export function leadParagraphs(blocks: BiologyBlock[]): string[] {
   const paragraphs: string[] = [];
@@ -18,7 +28,7 @@ export function leadParagraphs(blocks: BiologyBlock[]): string[] {
       continue;
     }
     const text = block.text.replace(/\s+/g, " ").trim();
-    if (!text) continue;
+    if (!text || isWikiChrome(text)) continue;
     paragraphs.push(text);
     seenProse = true;
     if (paragraphs.length === 2) break;
