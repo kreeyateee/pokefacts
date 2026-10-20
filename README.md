@@ -2,7 +2,7 @@
 
 Pokefacts makes Pokémon cards for a Yoto player. The cards go into your Yoto library. You then link each one to a blank Make Your Own card.
 
-Open it here: https://pokefacts.duckdns.org/
+Demo here: https://pokefacts.duckdns.org/ - It will run better on a local PC. 
 
 You can also run it on your own computer. That path is below. The first time on your own computer takes a while. You install two free programs, leave a window open, and connect your own Yoto account. After that, starting it again is one line.
 
