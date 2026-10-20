@@ -27,12 +27,20 @@ export function audioContainer(bytes: Buffer): "ogg" | "mp3" | null {
   return null;
 }
 
-/** Ogg, MP3, or a Piper WAV. Cries stay on audioContainer so a WAV is not treated as a cry. */
-export function inputContainer(bytes: Buffer): "ogg" | "mp3" | "wav" | null {
+/** Ogg, MP3, M4A, or a Piper WAV. Cries stay on audioContainer so a WAV is not treated as a cry. */
+export function inputContainer(bytes: Buffer): "ogg" | "mp3" | "wav" | "m4a" | null {
   if (bytes.length >= 12 && bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WAVE") {
     return "wav";
   }
+  if (isM4a(bytes)) return "m4a";
   return audioContainer(bytes);
+}
+
+/** ISO BMFF audio the user already has. ffmpeg reads it as mp4 and encodeYotoMp3 writes the Yoto MP3. */
+function isM4a(bytes: Buffer): boolean {
+  if (bytes.length < 12 || bytes.toString("ascii", 4, 8) !== "ftyp") return false;
+  const brand = bytes.toString("ascii", 8, 12);
+  return brand === "M4A " || brand === "M4B " || brand === "mp41" || brand === "mp42" || brand === "isom" || brand === "dash";
 }
 
 /** Cry gain and the silence after it. The rendered-file cache key includes both, plus voice gain. */
@@ -108,7 +116,9 @@ function run(command: string, args: string[]): Promise<void> {
 /** Tell ffmpeg the real container. A `.ogg` path makes Windows open MP3 cries as Ogg. */
 function formatArgs(bytes: Buffer): string[] {
   const container = inputContainer(bytes);
-  return container ? ["-f", container] : [];
+  if (!container) return [];
+  if (container === "m4a") return ["-f", "mp4"];
+  return ["-f", container];
 }
 
 function inputArgs(bytes: Buffer, file: string): string[] {

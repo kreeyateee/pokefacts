@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { WebaooFiles } from "@/components/webaoo-files";
 import rawIndex from "@/data/music-index.json";
 import { readMusicIndex, type MusicSong } from "@/lib/music-index";
 
@@ -12,7 +13,15 @@ function songMessage(song: MusicSong, code: string | undefined): string {
   return "";
 }
 
-export function MusicPanel() {
+export function MusicPanel({
+  playlists = [],
+  libraryNote = "",
+  onConnect,
+}: {
+  playlists?: Array<{ cardId: string; title: string }>;
+  libraryNote?: string;
+  onConnect?: () => void;
+}) {
   const loaded = useMemo(() => readMusicIndex(rawIndex), []);
   const { index, error } = loaded;
   const songsByPage = useMemo(() => new Map(index.songs.map((song) => [song.page, song])), [index.songs]);
@@ -43,7 +52,8 @@ export function MusicPanel() {
   const note = song ? songMessage(song, gap) : "";
 
   return (
-    <div className="grid min-w-0 gap-4">
+    <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,26rem)] lg:items-start">
+      <div className="order-2 grid min-w-0 gap-4 lg:order-1">
       {error ? <p className="pk-card px-4 py-3 text-sm leading-6">{error}</p> : null}
       {blocked.length > 0 ? (
         <p className="text-sm leading-6 text-ink">
@@ -158,6 +168,8 @@ export function MusicPanel() {
           ) : null}
         </section>
       </div>
+      </div>
+      <WebaooFiles playlists={playlists} libraryNote={libraryNote} onConnect={onConnect} />
     </div>
   );
 }
