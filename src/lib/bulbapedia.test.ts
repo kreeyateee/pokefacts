@@ -376,6 +376,14 @@ describe("Bulbapedia biology", () => {
       "8",
     );
     assert.equal(formWikiTitle("Mega Charizard X"), "Mega_Charizard_X");
+    assert.equal(formWikiTitle("Mega Meowstic (Male)"), "Mega_Meowstic");
+    assert.equal(
+      pickFormSection(
+        [{ index: "4", line: "Mega Meowstic", anchor: "Mega_Meowstic" }],
+        "Mega Meowstic (Male)",
+      )?.index,
+      "4",
+    );
   });
 
   it("reads Mega Venusaur from its section and Gigantamax Charizard from its section", async () => {

@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { StatusBar } from "@/components/status-bar";
 import { StickerStudio } from "@/components/sticker-studio";
 import { Button } from "@/components/ui/button";
+import { artworkSrc } from "@/lib/artwork";
+import { artworkSrc as artworkApi } from "@/lib/artwork-path";
 import type { BiologyBlock, BiologyView, CatalogueEntry, CataloguePage } from "@/lib/catalogue-types";
 import { heightForUnits, weightForUnits, type MeasureUnits } from "@/lib/format";
 import type { KidCard } from "@/lib/kid-cards";
@@ -91,8 +93,15 @@ function multiplierLabel(multiplier: number): string {
   return `×${multiplier}`;
 }
 
-function spriteSrc(id: number): string {
-  return `/api/artwork/species/${id}`;
+function hideBrokenPicture(event: { currentTarget: HTMLImageElement }): void {
+  const image = event.currentTarget;
+  const fallback = image.dataset.fallback;
+  if (fallback && image.dataset.tried !== "1" && image.getAttribute("src") !== fallback) {
+    image.dataset.tried = "1";
+    image.src = fallback;
+    return;
+  }
+  image.style.display = "none";
 }
 
 function statFill(name: string): string {
@@ -457,8 +466,8 @@ export function Catalogue({
 
   return (
     <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-      <section className={`${showList ? "block" : "hidden lg:block"} self-start`}>
-        <label className="grid gap-1 text-sm" htmlFor="catalogue-search">
+      <section className={`${showList ? "flex" : "hidden lg:flex"} min-w-0 flex-col self-start`}>
+        <label className="order-1 grid gap-1 text-sm" htmlFor="catalogue-search">
           Search
           <input
             id="catalogue-search"
@@ -471,14 +480,14 @@ export function Catalogue({
             className="pk-field"
           />
         </label>
-        <div className="mt-3 flex flex-wrap gap-1.5">
+        <div className="pk-scroll order-1 mt-3 flex flex-nowrap gap-1.5 overflow-x-auto pb-1">
           <button
             type="button"
             onClick={() => {
               setType("");
               setPage(1);
             }}
-            className="pk-pill px-3 text-xs"
+            className="pk-pill shrink-0 px-3 text-xs"
             aria-pressed={type === ""}
           >
             All types
@@ -491,7 +500,7 @@ export function Catalogue({
                 setType(name);
                 setPage(1);
               }}
-              className={`rounded-full border-2 border-[#16324f] px-2.5 py-1 text-xs font-bold ${
+              className={`inline-flex min-h-11 items-center rounded-full border-2 border-[#16324f] px-3 text-xs font-bold ${
                 type === name ? "ring-2 ring-white ring-offset-2 ring-offset-[#16324f]" : ""
               } ${chipClass(name)}`}
             >
@@ -499,7 +508,7 @@ export function Catalogue({
             </button>
           ))}
         </div>
-        <label className="mt-3 grid gap-1 text-sm" htmlFor="catalogue-region">
+        <label className="order-1 mt-3 grid gap-1 text-sm" htmlFor="catalogue-region">
           Region
           <select
             id="catalogue-region"
@@ -518,7 +527,7 @@ export function Catalogue({
             ))}
           </select>
         </label>
-        <div className="pk-card mt-4 px-3 py-3">
+        <div className="pk-card order-3 mt-4 px-3 py-3 lg:order-2">
           <p className="text-sm font-medium">
             {picked.length.toLocaleString("en-GB")} Pokémon picked
           </p>
@@ -677,17 +686,17 @@ export function Catalogue({
             />
           ) : null}
         </div>
-        <p className="mt-3 text-xs pk-quiet">
+        <p className="order-2 mt-3 text-xs pk-quiet lg:order-3">
           {list
             ? `${list.total.toLocaleString("en-GB")} of ${list.species.toLocaleString("en-GB")} species`
             : "Opening the catalogue…"}
         </p>
         {listError ? (
-          <p className="mt-3 text-sm pk-danger" role="alert">
+          <p className="order-2 mt-3 text-sm pk-danger lg:order-3" role="alert">
             {listError}
           </p>
         ) : null}
-        <ul className="mt-2 grid max-h-[70vh] gap-2 overflow-auto pr-1">
+        <ul className="order-2 mt-2 grid max-h-[55dvh] gap-2 overflow-auto overscroll-y-contain pr-1 lg:order-3 lg:max-h-[70dvh]">
           {loadingList && !list ? <li className="text-sm text-muted-foreground">Loading entries…</li> : null}
           {list?.items.length === 0 ? (
             <li className="pk-card px-3 py-4 text-sm text-muted-foreground">
@@ -698,7 +707,7 @@ export function Catalogue({
             const active = item.id === selected;
             return (
               <li key={item.id} className="flex items-stretch gap-1">
-                <label className={`flex items-center rounded-xl border-[3px] border-ink px-2 shadow-[2px_2px_0_var(--ink)] ${active ? "bg-poke-yellow" : "bg-white"}`}>
+                <label className={`flex min-h-12 min-w-12 items-center justify-center rounded-xl border-[3px] border-ink px-2 shadow-[2px_2px_0_var(--ink)] ${active ? "bg-poke-yellow" : "bg-white"}`}>
                   <input
                     type="checkbox"
                     checked={picked.includes(item.id)}
@@ -716,10 +725,12 @@ export function Catalogue({
                   className="pk-choice flex w-full items-center gap-2 px-3 py-2"
                 >
                   <img
-                    src={spriteSrc(item.id)}
+                    src={artworkSrc(item.id)}
                     alt=""
-                    width={40}
-                    height={40}
+                    width={44}
+                    height={44}
+                    data-fallback={artworkApi("species", item.id)}
+                    onError={hideBrokenPicture}
                     className="pk-artwork-thumb"
                   />
                   <span className="min-w-0">
@@ -736,7 +747,7 @@ export function Catalogue({
             );
           })}
         </ul>
-        <div className="mt-3 flex items-center justify-between gap-2 text-sm">
+        <div className="order-2 mt-3 flex items-center justify-between gap-2 text-sm lg:order-3">
           <button
             type="button"
             className="pk-pill disabled:opacity-40"
@@ -759,14 +770,16 @@ export function Catalogue({
         </div>
       </section>
 
-      <article className={`pk-card pk-dex self-start px-5 py-6 sm:px-8 sm:py-8 ${showList ? "hidden lg:block" : "block"}`}>
-        <button
-          type="button"
-          className="mb-4 text-sm text-muted-foreground underline lg:hidden"
-          onClick={() => setShowList(true)}
-        >
-          Back to the list
-        </button>
+      <article className={`pk-card pk-dex min-w-0 self-start px-4 py-6 sm:px-8 sm:py-8 ${showList ? "hidden lg:block" : "block"}`}>
+        {entry && entry.id === selected ? null : (
+          <button
+            type="button"
+            className="mb-4 inline-flex min-h-11 items-center text-sm font-bold text-poke-red underline lg:hidden"
+            onClick={() => setShowList(true)}
+          >
+            Back to the list
+          </button>
+        )}
         {entryError ? (
           <p className="text-sm pk-danger" role="alert">
             {entryError}
@@ -777,20 +790,33 @@ export function Catalogue({
         ) : null}
         {entry && entry.id === selected ? (
           <div key={entry.id} className="pk-swap">
-            <p className="pk-kicker">
-              {numberLabel(entry.id)} · {entry.region}
-            </p>
-            <div className="mt-3 flex items-end gap-4">
+            <div className="pk-hero">
               <img
-                src={spriteSrc(entry.id)}
+                src={artworkSrc(entry.id)}
                 alt=""
-                width={144}
-                height={144}
-                className="pk-artwork"
+                width={176}
+                height={176}
+                className="pk-art pk-art-entry"
+                data-fallback={artworkApi("species", entry.id)}
+                onError={hideBrokenPicture}
               />
-              <div>
-                <h2 className="font-display text-4xl leading-tight sm:text-5xl">{entry.name}</h2>
-                <p className="mt-1 text-sm text-muted-foreground">The {entry.genus}</p>
+              <div className="pk-entry-name min-w-0">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="pk-kicker">
+                    {numberLabel(entry.id)} · {entry.region}
+                  </p>
+                  <button
+                    type="button"
+                    className="inline-flex min-h-11 shrink-0 items-center text-sm font-bold text-poke-red underline lg:hidden"
+                    onClick={() => setShowList(true)}
+                  >
+                    Back to the list
+                  </button>
+                </div>
+                <h2 className="font-display text-3xl leading-tight sm:text-5xl">{entry.name}</h2>
+              </div>
+              <div className="pk-entry-meta min-w-0">
+                <p className="text-sm text-muted-foreground">The {entry.genus}</p>
                 <div className="mt-2">
                   <TypeChips types={entry.types} />
                 </div>
@@ -844,7 +870,7 @@ export function Catalogue({
             <h3 className="mt-6 pk-kicker">Base stats</h3>
             <ul className="mt-2 grid gap-1.5">
               {entry.stats.map((stat) => (
-                <li key={stat.name} className="grid grid-cols-[7.5rem_minmax(0,1fr)_2.5rem] items-center gap-2 text-sm">
+                <li key={stat.name} className="grid grid-cols-[minmax(0,7.5rem)_minmax(0,1fr)_2.5rem] items-center gap-2 text-sm">
                   <span>{stat.name}</span>
                   <span className="h-3 overflow-hidden rounded-full border-2 border-ink bg-white">
                     <span
@@ -864,6 +890,15 @@ export function Catalogue({
                 <ul className="mt-2 grid gap-2 sm:grid-cols-2">
                   {entry.forms.map((form) => (
                     <li key={form.id} className="pk-soft px-3 py-2 text-sm font-normal">
+                      <img
+                        src={artworkSrc(form.id)}
+                        alt=""
+                        width={112}
+                        height={112}
+                        data-fallback={artworkApi("form", form.id)}
+                        className="mb-2 h-28 w-28 object-contain"
+                        onError={hideBrokenPicture}
+                      />
                       <p className="font-medium">{form.name}</p>
                       <div className="mt-1">
                         <TypeChips types={form.types} />

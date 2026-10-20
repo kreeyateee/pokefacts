@@ -8,6 +8,7 @@ import { PlaybackPanel } from "@/components/playback-panel";
 import { SetupGuide } from "@/components/setup-guide";
 import { StatusBar } from "@/components/status-bar";
 import { ConnectDialog } from "@/components/connect-dialog";
+import { MusicPanel } from "@/components/music-panel";
 import { StickerStudio } from "@/components/sticker-studio";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,8 +18,12 @@ import {
   factsBulkPlaylists,
   factsPlaylistUpload,
   formPlaylist,
+  formPlaylists,
   formPlaylistUpload,
   guessPoolFromCards,
+  isFormPlaylistKind,
+  isSpeciesPlaylistKind,
+  speciesPlaylists,
   guessUpload,
   mulberry32,
   countSpokenTracks,
@@ -31,9 +36,11 @@ import {
   randomPokedexCard,
   trackSpeech,
   YOTO_TRACK_LIMIT,
+  type FormPlaylistKind,
   type KidCard,
   type KidCardKind,
 } from "@/lib/kid-cards";
+import { artworkSrc } from "@/lib/artwork";
 import { pronounce } from "@/lib/pronounce";
 import { selectionUpload } from "@/lib/selection-playlist";
 import { APP_NAME, DONATE_URL, SOURCE_URL } from "@/lib/site";
@@ -342,14 +349,63 @@ function firstCard(cards: KidCard[], kind: KidCardKind): KidCard | undefined {
   return cards.find((card) => card.kind === kind);
 }
 
+/** Species number on the page. A repeated form keeps a unique Yoto overlay such as 678b. */
+function chapterNumber(item: { overlay: string; dexId?: number }): string {
+  return item.dexId ? String(item.dexId) : item.overlay;
+}
+
+function hideBrokenPicture(event: { currentTarget: HTMLImageElement }): void {
+  const image = event.currentTarget;
+  const fallback = image.dataset.fallback;
+  if (fallback && image.dataset.tried !== "1" && image.getAttribute("src") !== fallback) {
+    image.dataset.tried = "1";
+    image.src = fallback;
+    return;
+  }
+  image.style.display = "none";
+}
+
+function revealChoice(nav: HTMLElement) {
+  const selected = nav.querySelector<HTMLElement>('[aria-current="true"]');
+  if (!selected) return;
+  const navRect = nav.getBoundingClientRect();
+  const itemRect = selected.getBoundingClientRect();
+  const vertical = window.matchMedia("(min-width: 768px)").matches;
+  if (vertical) {
+    if (itemRect.top >= navRect.top && itemRect.bottom <= navRect.bottom) return;
+    nav.scrollTop += itemRect.top - navRect.top - (nav.clientHeight - selected.clientHeight) / 2;
+    return;
+  }
+  if (itemRect.left >= navRect.left && itemRect.right <= navRect.right) return;
+  nav.scrollLeft += itemRect.left - navRect.left - (nav.clientWidth - selected.clientWidth) / 2;
+}
+
+type PlaylistMap = Record<FormPlaylistKind | "legendary" | "mythical", KidCard[]>;
+
+function readsSpeciesBiology(kind: KidCardKind): boolean {
+  return kind === "meet" || kind === "legendary" || kind === "mythical";
+}
+
+function activePlaylist(lists: PlaylistMap, kind: keyof PlaylistMap, id: string): KidCard | undefined {
+  return lists[kind].find((item) => item.id === id) ?? lists[kind][0];
+}
+
 export function Studio({
   cards,
   mega = formPlaylist("mega", []),
   gmax = formPlaylist("gmax", []),
+  alola = formPlaylists("alola", []),
+  hisui = formPlaylists("hisui", []),
+  legendary = speciesPlaylists("legendary", []),
+  mythical = speciesPlaylists("mythical", []),
 }: {
   cards: KidCard[];
   mega?: KidCard;
   gmax?: KidCard;
+  alola?: KidCard[];
+  hisui?: KidCard[];
+  legendary?: KidCard[];
+  mythical?: KidCard[];
 }) {
   const factsCards = cards.filter((card) => card.kind === "meet");
   const factPool = factPoolFromCards(cards);
@@ -357,13 +413,27 @@ export function Studio({
   const factsPlaylists = factsBulkPlaylists(cards);
   const [randomCard, setRandomCard] = useState(() => randomPokedexCard(factPool, mulberry32(20261018)));
   const [guessCard, setGuessCard] = useState(() => randomGuessCard(guessPool, mulberry32(20261018)));
-  const [megaCard, setMegaCard] = useState(mega);
-  const [gmaxCard, setGmaxCard] = useState(gmax);
-  const megaRef = useRef(mega);
-  const gmaxRef = useRef(gmax);
-  const formLoad = useRef<Partial<Record<"mega" | "gmax", Promise<void>>>>({});
+  const initialPlaylists: PlaylistMap = {
+    mega: [mega],
+    gmax: [gmax],
+    alola,
+    hisui,
+    legendary,
+    mythical,
+  };
+  const [playlists, setPlaylists] = useState(initialPlaylists);
+  const playlistsRef = useRef(initialPlaylists);
+  const formLoad = useRef<Partial<Record<FormPlaylistKind, Promise<void>>>>({});
+  const [playlistId, setPlaylistId] = useState<Record<keyof PlaylistMap, string>>({
+    mega: mega.id,
+    gmax: gmax.id,
+    alola: alola[0]?.id ?? "alolan-forms",
+    hisui: hisui[0]?.id ?? "hisuian-forms",
+    legendary: legendary[0]?.id ?? "legendary",
+    mythical: mythical[0]?.id ?? "mythical",
+  });
   const [factSpeech, setFactSpeech] = useState<{ id: number; speech: string; url: string } | null>(null);
-  const [view, setView] = useState<"cards" | "catalogue" | "setup">("cards");
+  const [view, setView] = useState<"cards" | "catalogue" | "setup" | "music">("cards");
   const [playback, setPlayback] = useState<PlaybackSettings>(defaultPlayback);
   const [kind, setKind] = useState<KidCardKind>("meet");
   const [factsId, setFactsId] = useState(RANDOM_POKEDEX_ID);
@@ -384,34 +454,45 @@ export function Studio({
   const [job, setJob] = useState<JobView | null>(null);
   const [stickersOpen, setStickersOpen] = useState(false);
   const [ready, setReady] = useState(false);
+  const choiceListRef = useRef<HTMLElement | null>(null);
   const clipRef = useRef<HTMLAudioElement | null>(null);
   const clipUrl = useRef<string | null>(null);
   const hearAbort = useRef<AbortController | null>(null);
   const speakingRef = useRef(false);
 
   const cardId = kind === "meet" ? factsId : guessId;
+  const playlistCard =
+    isFormPlaylistKind(kind) || isSpeciesPlaylistKind(kind)
+      ? activePlaylist(playlists, kind, playlistId[kind])
+      : undefined;
   const card =
-    kind === "mega"
-      ? megaCard
-      : kind === "gmax"
-        ? gmaxCard
-        : cardId === RANDOM_POKEDEX_ID
-          ? randomCard
-          : cardId === RANDOM_GUESS_ID
-            ? guessCard
-            : (cards.find((item) => item.id === cardId) ?? cards.find((item) => item.kind === kind));
+    playlistCard ??
+    (cardId === RANDOM_POKEDEX_ID
+      ? randomCard
+      : cardId === RANDOM_GUESS_ID
+        ? guessCard
+        : (cards.find((item) => item.id === cardId) ?? cards.find((item) => item.kind === kind)));
   const randomFacts = card?.id === RANDOM_POKEDEX_ID;
   const randomGuess = card?.id === RANDOM_GUESS_ID;
   const chapter =
     card?.chapters.find((item) => item.key === chapterKey) ??
     (card ? playableChapters(card)[0] : undefined);
   const rangeCards =
-    kind === "mega" ? [megaCard] : kind === "gmax" ? [gmaxCard] : kind === "meet" ? [randomCard, ...factsCards] : [guessCard];
+    isFormPlaylistKind(kind) || isSpeciesPlaylistKind(kind)
+      ? playlists[kind]
+      : kind === "meet"
+        ? [randomCard, ...factsCards]
+        : [guessCard];
   const listed = (card ? playableChapters(card) : []).filter((item) => {
     const needle = query.trim().toLowerCase();
     if (!needle) return true;
     if (card?.kind === "guess") return item.overlay.includes(needle);
-    return item.title.toLowerCase().includes(needle) || item.overlay === needle;
+    const number = chapterNumber(item);
+    return (
+      item.title.toLowerCase().includes(needle) ||
+      number === needle ||
+      item.overlay.toLowerCase() === needle
+    );
   });
 
   useEffect(() => {
@@ -431,7 +512,7 @@ export function Studio({
   }, []);
 
   useEffect(() => {
-    if (kind !== "meet" || !chapter?.dexId) return;
+    if (!readsSpeciesBiology(kind) || !chapter?.dexId) return;
     const id = chapter.dexId;
     const name = chapter.title;
     const controller = new AbortController();
@@ -476,42 +557,49 @@ export function Studio({
     setKind(next.kind);
     if (next.kind === "meet") setFactsId(next.id);
     else if (next.kind === "guess") setGuessId(next.id);
+    else if (isFormPlaylistKind(next.kind) || isSpeciesPlaylistKind(next.kind)) {
+      const playlistKind = next.kind;
+      setPlaylistId((current) => ({ ...current, [playlistKind]: next.id }));
+    }
     setChapterKey(playableChapters(next)[0]?.key ?? "start");
     setJob(null);
   }
 
-  function rememberForm(nextKind: "mega" | "gmax", next: KidCard) {
-    if (nextKind === "mega") {
-      megaRef.current = next;
-      setMegaCard(next);
-    } else {
-      gmaxRef.current = next;
-      setGmaxCard(next);
-    }
+  function rememberFormLists(nextKind: FormPlaylistKind, next: KidCard[]) {
+    const updated = { ...playlistsRef.current, [nextKind]: next };
+    playlistsRef.current = updated;
+    setPlaylists(updated);
   }
 
   function ensureFormProse(
-    nextKind: "mega" | "gmax",
+    nextKind: FormPlaylistKind,
     onProgress?: (detail: string) => void,
   ): Promise<void> {
     const existing = formLoad.current[nextKind];
     if (existing) return existing;
     const job = (async () => {
-      const source = nextKind === "mega" ? megaRef.current : gmaxRef.current;
+      const source = playlistsRef.current[nextKind];
       let current = source;
-      const pending = current.chapters.filter((chapter) => chapter.formId && !chapter.articleStatus);
+      const pending = current.flatMap((card) => card.chapters.filter((chapter) => chapter.formId && !chapter.articleStatus));
       let finished = 0;
+      const label = current.find((card) => card.chapters.length > 0)?.title ?? "Forms";
       const readings = await mapPool(pending, async (chapter) => {
         const reading = chapter.formId ? await formReading(chapter.formId) : null;
         finished += 1;
-        onProgress?.(`${current.libraryTitle}, description ${finished} of ${pending.length}`);
+        onProgress?.(`${label}, description ${finished} of ${pending.length}`);
         return { formId: chapter.formId, reading };
       });
       for (const item of readings) {
-        if (!item.formId || !item.reading) continue;
-        current = withFormReading(current, item.formId, item.reading);
+        const formId = item.formId;
+        const reading = item.reading;
+        if (!formId || !reading) continue;
+        current = current.map((card) =>
+          card.chapters.some((chapter) => chapter.formId === formId)
+            ? withFormReading(card, formId, reading)
+            : card,
+        );
       }
-      if (readings.length > 0) rememberForm(nextKind, current);
+      if (readings.length > 0) rememberFormLists(nextKind, current);
     })();
     formLoad.current[nextKind] = job;
     return job;
@@ -520,13 +608,17 @@ export function Studio({
   function showKind(nextKind: KidCardKind) {
     stopDemo();
     setRevealed(false);
+    if (view !== "cards" || nextKind !== kind) {
+      setQuery("");
+      setJob(null);
+    }
     setView("cards");
     setKind(nextKind);
-    if (nextKind === "mega" || nextKind === "gmax") {
-      const next = nextKind === "mega" ? megaRef.current : gmaxRef.current;
-      setChapterKey(playableChapters(next)[0]?.key ?? "start");
+    if (isFormPlaylistKind(nextKind) || isSpeciesPlaylistKind(nextKind)) {
+      const next = activePlaylist(playlistsRef.current, nextKind, playlistId[nextKind]);
+      setChapterKey(next ? (playableChapters(next)[0]?.key ?? "start") : "start");
       setJob(null);
-      void ensureFormProse(nextKind);
+      if (isFormPlaylistKind(nextKind)) void ensureFormProse(nextKind);
       return;
     }
     const id = nextKind === "meet" ? factsId : guessId;
@@ -573,6 +665,12 @@ export function Studio({
     setRevealed(false);
     setChapterKey(key);
   }
+
+  useEffect(() => {
+    const nav = choiceListRef.current;
+    if (!nav) return;
+    revealChoice(nav);
+  }, [chapter?.key, card?.id, query, kind, view]);
 
   async function requestDemo(text: string, title: string, dexId?: number) {
     const script = text.replace(/\s+/g, " ").trim();
@@ -1046,7 +1144,7 @@ export function Studio({
         const free = YOTO_TRACK_LIMIT - (summary.tracks ?? 0);
         if (adding > free) throw new SendFailure(freeSlotMessage(free, adding), false);
       }
-      const formKind = card.kind === "mega" || card.kind === "gmax";
+      const formKind = isFormPlaylistKind(card.kind);
       const spokenCard = formKind
         ? card
         : card.kind === "guess"
@@ -1062,12 +1160,14 @@ export function Studio({
                 });
               }),
             );
-      if (card.kind === "mega" || card.kind === "gmax") {
+      if (isFormPlaylistKind(card.kind)) {
         await ensureFormProse(card.kind, (detail) => {
           setJob({ status: "sending", detail });
         });
       }
-      const readyForm = card.kind === "mega" ? megaRef.current : card.kind === "gmax" ? gmaxRef.current : spokenCard;
+      const readyForm = isFormPlaylistKind(card.kind)
+        ? (activePlaylist(playlistsRef.current, card.kind, card.id) ?? spokenCard)
+        : spokenCard;
       const base = randomGuess
         ? await (async () => {
             const icons = await uploadGuessIcons(card);
@@ -1182,9 +1282,11 @@ export function Studio({
   }
 
   const guessing = card?.kind === "guess";
-  const formMode = card?.kind === "mega" || card?.kind === "gmax";
+  const formMode = card ? isFormPlaylistKind(card.kind) : false;
+  const speciesSet = card ? isSpeciesPlaylistKind(card.kind) : false;
+  const splitSet = (formMode || speciesSet) && rangeCards.length > 1;
   const factReading =
-    kind === "meet" && chapter?.dexId && factSpeech?.id === chapter.dexId ? factSpeech : null;
+    readsSpeciesBiology(kind) && chapter?.dexId && factSpeech?.id === chapter.dexId ? factSpeech : null;
   const visibleTracks =
     guessing && !revealed ? chapter?.tracks.slice(0, 1) : chapter?.tracks;
   const source = visibleTracks?.find((track) => track.source)?.source;
@@ -1199,7 +1301,7 @@ export function Studio({
 
   return (
     <div className="pk-page">
-      <header className="mx-auto w-full max-w-5xl px-4 pt-6 pb-2 sm:px-6">
+      <header className="mx-auto w-full min-w-0 max-w-5xl px-4 pt-6 pb-2 sm:px-6">
         <div className="pk-banner">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <a className="pk-wordmark" href={DONATE_URL} target="_blank" rel="noreferrer">
@@ -1224,14 +1326,16 @@ export function Studio({
               )}
             </div>
           </div>
-          <h1 className="mt-4 text-3xl font-bold tracking-tight text-white sm:text-4xl">
+          <h1 className="mt-3 text-2xl font-bold tracking-tight text-white sm:mt-4 sm:text-4xl">
             {view === "setup"
               ? "Set up Pokefacts"
               : view === "catalogue"
               ? "Reference catalogue"
+              : view === "music"
+                ? "Pokémon music"
               : guessing
                 ? "Guess Who"
-                : formMode
+                : formMode || speciesSet
                   ? card?.libraryTitle
                   : "Pokémon facts"}
           </h1>
@@ -1240,16 +1344,25 @@ export function Studio({
               ? "Connect Yoto, send a playlist, then link it to a blank card in the Yoto app."
               : view === "catalogue"
               ? "Every species from Kanto to Paldea. The Pokédex line is from the games, with the type, size, abilities, evolution, and stats."
+              : view === "music"
+                ? "Albums and songs from Bulbapedia, with the YouTube video from each song page."
               : guessing
                 ? "Fifty riddles, drawn at random. You hear the cry, then the clues. The picture stays a shadow until the answer."
                 : formMode
                   ? "The cry, then the selected voice reads that form."
+                  : speciesSet
+                    ? "The cry, then the selected voice reads the name and a short description."
                   : randomFacts
                     ? "One hundred Pokémon, drawn at random. You hear the cry, then the selected voice reads the name and a short description."
                     : "The cry, then the name, then a short description."}
           </p>
         </div>
-        <div className="mt-5 flex flex-wrap gap-2" role="tablist" aria-label="Play mode">
+      </header>
+      <div
+        className="pk-tabs pk-scroll mx-auto flex w-full min-w-0 max-w-5xl flex-nowrap gap-2 overflow-x-auto px-4 sm:px-6 md:flex-wrap md:overflow-visible"
+        role="tablist"
+        aria-label="Play mode"
+      >
           <button
             type="button"
             role="tab"
@@ -1301,6 +1414,54 @@ export function Studio({
           <button
             type="button"
             role="tab"
+            aria-selected={view === "cards" && kind === "alola"}
+            onClick={() => showKind("alola")}
+            className="pk-tab"
+          >
+            Alolan forms
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "cards" && kind === "hisui"}
+            onClick={() => showKind("hisui")}
+            className="pk-tab"
+          >
+            Hisuian forms
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "cards" && kind === "legendary"}
+            onClick={() => showKind("legendary")}
+            className="pk-tab"
+          >
+            Legendary Pokémon
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "cards" && kind === "mythical"}
+            onClick={() => showKind("mythical")}
+            className="pk-tab"
+          >
+            Mythical Pokémon
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "music"}
+            onClick={() => {
+              stopDemo();
+              setView("music");
+            }}
+            className="pk-tab"
+          >
+            Music
+          </button>
+          <button
+            type="button"
+            role="tab"
             aria-selected={view === "setup"}
             onClick={() => {
               stopDemo();
@@ -1310,11 +1471,12 @@ export function Studio({
           >
             Setup
           </button>
-        </div>
+      </div>
+      <div className="mx-auto w-full min-w-0 max-w-5xl px-4 sm:px-6">
         <PlaybackPanel settings={playback} onChange={setPlayback} />
-      </header>
+      </div>
 
-      <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6">
+      <main className="mx-auto w-full min-w-0 max-w-5xl px-4 py-6 sm:px-6">
         <div key={view === "cards" ? `${view}-${kind}` : view} className="pk-view">
         {view === "setup" ? (
           <SetupGuide onConnect={() => setConnectOpen(true)} />
@@ -1330,11 +1492,13 @@ export function Studio({
             units={playback.units}
             job={job}
           />
+        ) : view === "music" ? (
+          <MusicPanel />
         ) : card && chapter ? (
-          <div className="grid gap-6 md:grid-cols-[220px_minmax(0,1fr)]">
-            <div className="md:col-span-2">
+          <div className="grid min-w-0 gap-6 md:grid-cols-[17.5rem_minmax(0,1fr)]">
+            <div className="order-3 min-w-0 md:order-1 md:col-span-2">
               <div className="flex flex-wrap items-center gap-3">
-                <Button type="button" variant="outline" className="h-10 px-4" onClick={() => setStickersOpen(true)}>
+                <Button type="button" variant="outline" className="h-11 px-4" onClick={() => setStickersOpen(true)}>
                   Print stickers
                 </Button>
                 <p className="text-sm leading-6 text-muted-foreground">
@@ -1351,12 +1515,24 @@ export function Studio({
                       <span className="font-bold text-ink">100 Pokémon on this page</span>.
                       Shuffle draws a new hundred. Send uses this list, not a new draw.
                     </>
+                  ) : splitSet ? (
+                    <>
+                      This playlist is{" "}
+                      <span className="font-bold text-ink">{card.rangeLabel}</span>. {card.blurb}
+                    </>
                   ) : formMode ? (
                     <>
                       This playlist is{" "}
                       <span className="font-bold text-ink">{card.libraryTitle}</span>. One
                       track for each form. The picture is that form&apos;s full artwork.
                       The Yoto card still uses the species&apos; 16×16 pixel.
+                    </>
+                  ) : speciesSet ? (
+                    <>
+                      This playlist is{" "}
+                      <span className="font-bold text-ink">{card.libraryTitle}</span>. One
+                      track for each Pokémon. The picture is the full artwork. The Yoto icon is
+                      the 16×16 pixel.
                     </>
                   ) : (
                     <>
@@ -1404,9 +1580,15 @@ export function Studio({
                 />
               ) : null}
               <div
-                className="mt-3 flex gap-2 overflow-x-auto pb-1"
+                className="pk-scroll mt-3 flex gap-2 overflow-x-auto pb-1"
                 role="listbox"
-                aria-label={guessing ? "Guess Who playlists" : "Facts playlists"}
+                aria-label={
+                  guessing
+                    ? "Guess Who playlists"
+                    : formMode || speciesSet
+                      ? `${card.title} playlists`
+                      : "Facts playlists"
+                }
               >
                 {rangeCards.map((item) => {
                   const selected = item.id === card.id;
@@ -1426,7 +1608,7 @@ export function Studio({
               </div>
             </div>
 
-            <div className="grid content-start gap-2 self-start">
+            <div className="order-2 grid min-w-0 content-start gap-2 self-start md:order-2">
               <label className="grid gap-1 text-sm" htmlFor="picker">
                 {guessing ? "Riddle on this card" : "Pokémon on this card"}
                 <input
@@ -1440,35 +1622,51 @@ export function Studio({
               <select
                 aria-label={guessing ? "Choose a riddle" : "Choose a Pokémon"}
                 className="pk-field md:hidden"
-                value={chapter.key}
+                value={listed.some((item) => item.key === chapter.key) ? chapter.key : ""}
                 onChange={(event) => {
-                  const next = playableChapters(card).find((item) => item.key === event.target.value);
+                  const next = listed.find((item) => item.key === event.target.value);
                   if (next) chooseChapter(next.key);
                 }}
               >
-                {playableChapters(card).map((item) => (
+                {listed.length === 0 ? <option value="">Nothing matches</option> : null}
+                {listed.some((item) => item.key === chapter.key) ? null : listed.length > 0 ? (
+                  <option value="">Choose a match</option>
+                ) : null}
+                {listed.map((item) => (
                   <option key={item.key} value={item.key}>
-                    {guessing ? `Riddle ${item.overlay}` : `${item.overlay}. ${item.title}`}
+                    {guessing ? `Riddle ${chapterNumber(item)}` : `${chapterNumber(item)}. ${item.title}`}
                   </option>
                 ))}
               </select>
               <nav
+                ref={choiceListRef}
                 aria-label={guessing ? "Riddles" : "Pokémon"}
-                className="grid max-h-[40dvh] content-start grid-cols-3 gap-2 overflow-y-auto md:max-h-[70dvh] md:grid-cols-1"
+                className="pk-scroll flex gap-2 overflow-x-auto pb-1 md:grid md:max-h-[70dvh] md:content-start md:grid-cols-1 md:overflow-x-hidden md:overflow-y-auto"
               >
+                {listed.length === 0 ? (
+                  <p className="px-1 py-3 text-sm text-muted-foreground">Nothing matches that search.</p>
+                ) : null}
                 {listed.map((item) => {
                   const selected = item.key === chapter.key;
-                  const label = guessing ? `Riddle ${item.overlay}` : item.title;
+                  const label = guessing ? `Riddle ${chapterNumber(item)}` : item.title;
                   return (
                     <button
                       key={item.key}
                       type="button"
                       onClick={() => chooseChapter(item.key)}
                       aria-current={selected ? "true" : undefined}
-                      className="pk-choice flex items-center gap-2 px-2.5 py-2 text-left text-sm"
+                      className="pk-choice flex w-44 shrink-0 items-center gap-2 px-2.5 py-2 text-left text-sm md:w-auto md:shrink"
                     >
-                      {formMode && item.sprite ? (
-                        <img src={item.sprite} alt="" width={44} height={44} className="pk-artwork-thumb" />
+                      {!guessing && item.sprite ? (
+                        <img
+                          src={item.sprite}
+                          alt=""
+                          width={44}
+                          height={44}
+                          data-fallback={item.dexId && item.sprite !== artworkSrc(item.dexId) ? artworkSrc(item.dexId) : undefined}
+                          onError={hideBrokenPicture}
+                          className="pk-artwork-thumb"
+                        />
                       ) : null}
                       <span className="min-w-0">{label}</span>
                     </button>
@@ -1477,24 +1675,30 @@ export function Studio({
               </nav>
             </div>
 
-            <div className="min-w-0">
-              <article className="pk-card pk-dex px-5 py-6 sm:px-8 sm:py-8">
+            <div className="order-1 min-w-0 md:order-3">
+              <article className="pk-card pk-dex px-4 py-6 sm:px-8 sm:py-8">
                 <div key={chapter.key} className="pk-swap">
                 <p className="pk-kicker">
                   {guessing
                     ? revealed
                       ? "Answer"
                       : "Clues"
-                    : `Number ${chapter.overlay}`}
+                    : `Number ${chapterNumber(chapter)}`}
                 </p>
-                <div className="mt-3 flex items-end gap-4">
+                <div className="pk-hero">
                   {portrait ? (
                     <img
                       src={portrait}
                       alt={guessing && !revealed ? "" : chapter.title}
-                      width={formMode ? 144 : 96}
-                      height={formMode ? 144 : 96}
-                      className={formMode ? "pk-artwork" : "pk-sprite"}
+                      width={guessing ? 96 : 176}
+                      height={guessing ? 96 : 176}
+                      data-fallback={
+                        !guessing && chapter.dexId && portrait !== artworkSrc(chapter.dexId)
+                          ? artworkSrc(chapter.dexId)
+                          : undefined
+                      }
+                      onError={hideBrokenPicture}
+                      className={guessing ? "pk-sprite" : "pk-art"}
                     />
                   ) : null}
                   <h2 className="font-display text-4xl leading-tight sm:text-5xl">
@@ -1502,7 +1706,7 @@ export function Studio({
                   </h2>
                 </div>
                 <div className="mt-6 max-w-prose space-y-3 text-base leading-7">
-                  {kind === "meet" && chapter.dexId ? (
+                  {readsSpeciesBiology(kind) && chapter.dexId ? (
                     factReading ? (
                       <p>{factReading.speech}</p>
                     ) : (
@@ -1535,7 +1739,7 @@ export function Studio({
                     )
                   )}
                 </div>
-                {kind === "meet" && factReading?.url ? <WikiCredit url={factReading.url} /> : null}
+                {readsSpeciesBiology(kind) && factReading?.url ? <WikiCredit url={factReading.url} /> : null}
                 {formMode &&
                 chapter.articleUrl &&
                 chapter.articleStatus &&
@@ -1612,16 +1816,16 @@ export function Studio({
                         void hearScript(async () => {
                           let line = "";
                           let dexId = chapter.dexId;
-                          if (formMode && chapter.formId) {
+                          if (formMode && chapter.formId && isFormPlaylistKind(card.kind)) {
                             if (!chapter.articleStatus) {
-                              await ensureFormProse(card.kind === "gmax" ? "gmax" : "mega");
+                              await ensureFormProse(card.kind);
                             }
-                            const fresh = (card.kind === "gmax" ? gmaxRef : megaRef).current.chapters.find(
-                              (item) => item.key === chapter.key,
-                            );
+                            const fresh = playlistsRef.current[card.kind]
+                              .flatMap((item) => item.chapters)
+                              .find((item) => item.key === chapter.key);
                             line = fresh?.tracks[0] ? trackSpeech(fresh.tracks[0]) : "";
                             dexId = fresh?.tracks[0]?.lead === "cry" ? fresh.dexId : undefined;
-                          } else if (chapter.dexId && kind === "meet") {
+                          } else if (chapter.dexId && readsSpeciesBiology(kind)) {
                             const prefix = chapter.tracks[0]?.text.startsWith(POKEDEX_HOWTO) ? POKEDEX_HOWTO : "";
                             const speech =
                               factReading?.speech ?? (await speciesSpeech(chapter.dexId, chapter.title));
@@ -1655,12 +1859,18 @@ export function Studio({
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
                   On the player: {card.childDoes} In the Yoto app, look for{" "}
                   <span className="font-bold text-ink">{card.libraryTitle}</span>.
+                  {randomGuess
+                    ? " Send uploads a shadow of each 16×16 pixel for the clue, then the real pixel for the answer."
+                    : formMode
+                      ? " The picture on the card is the species 16×16 pixel."
+                      : speciesSet
+                        ? " The Yoto icon is the 16×16 pixel."
+                        : ""}
                 </p>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
                   {isPiperVoice(voiceId)
                     ? "Piper reads on this computer. The cry plays first, then that recording is uploaded."
                     : "The voice you picked reads every track. The cry plays first."}
-                  {formMode ? " The picture on the card is the species pixel." : ""}
                 </p>
                 <label className="mt-3 grid gap-1 text-sm" htmlFor="yoto-playlist">
                   Where it goes

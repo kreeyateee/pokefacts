@@ -68,12 +68,12 @@ export function SetupGuide({ onConnect }: { onConnect: () => void }) {
             dashboard.yoto.dev
           </a>{" "}
           choose public. There is no client secret. Set the redirect to exactly{" "}
-          <code className="rounded bg-white px-1">{YOTO_REDIRECT_URI}</code>.
+          <code className="break-all rounded bg-white px-1">{YOTO_REDIRECT_URI}</code>.
         </li>
         <li>
           <span className="font-bold">6. Allow these permissions.</span>{" "}
           {SCOPES.map((scope) => (
-            <code key={scope} className="mr-1 rounded bg-white px-1">
+            <code key={scope} className="mr-1 inline-block break-all rounded bg-white px-1">
               {scope}
             </code>
           ))}

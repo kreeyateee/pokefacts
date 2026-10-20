@@ -69,7 +69,7 @@ function paintingUrl(value: unknown): string {
 
 function nounFor(kind: KidCard["kind"]): string {
   if (kind === "guess") return "riddles";
-  if (kind === "mega" || kind === "gmax") return "forms";
+  if (kind === "mega" || kind === "gmax" || kind === "alola" || kind === "hisui") return "forms";
   return "Pokémon";
 }
 
@@ -988,7 +988,7 @@ export function StickerStudio({
         tabIndex={-1}
         className="pk-studio-panel pk-card mx-auto w-full max-w-6xl bg-cream px-4 py-4 outline-none sm:px-6 sm:py-5"
       >
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col items-start justify-between gap-3 sm:flex-row">
           <div>
             <h2 id="sticker-heading" className="font-display text-3xl leading-tight">
               Stickers for {focus.rangeLabel}
