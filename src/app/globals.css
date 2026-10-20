@@ -842,3 +842,7 @@
   border-radius: 1rem;
   background: #172033;
 }
+
+.pk-playlist-row[aria-current="true"] {
+  background: var(--poke-yellow);
+}

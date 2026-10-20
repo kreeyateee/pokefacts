@@ -1345,7 +1345,7 @@ export function Studio({
               : view === "catalogue"
               ? "Every species from Kanto to Paldea. The Pokédex line is from the games, with the type, size, abilities, evolution, and stats."
               : view === "music"
-                ? "Albums and songs from Bulbapedia, with the YouTube video from each song page."
+                ? "Albums and songs from Bulbapedia. Add YouTube videos to My playlist and play that list here."
               : guessing
                 ? "Fifty riddles, drawn at random. You hear the cry, then the clues. The picture stays a shadow until the answer."
                 : formMode

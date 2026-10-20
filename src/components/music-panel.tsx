@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { MusicPlaylistSection, useMusicPlaylist } from "@/components/music-playlist";
 import rawIndex from "@/data/music-index.json";
 import { readMusicIndex, type MusicSong } from "@/lib/music-index";
 
@@ -21,6 +22,7 @@ export function MusicPanel() {
   const [query, setQuery] = useState("");
   const [albumPage, setAlbumPage] = useState(index.albums[0]?.page ?? "");
   const [songPage, setSongPage] = useState("");
+  const playlist = useMusicPlaylist();
 
   const needle = query.trim().toLowerCase();
   const visibleAlbums = index.albums.filter((album) => {
@@ -107,23 +109,45 @@ export function MusicPanel() {
               {visibleSongs.map((item) => {
                 const selected = item.page === song?.page;
                 return (
-                  <button
-                    key={item.page}
-                    type="button"
-                    aria-current={selected ? "true" : undefined}
-                    onClick={() => setSongPage(item.page)}
-                    className="pk-choice min-w-0 px-3 py-2 text-left break-words"
-                  >
-                    {item.title}
-                  </button>
+                  <div key={item.page} className="flex min-w-0 items-stretch gap-2">
+                    <button
+                      type="button"
+                      aria-current={selected ? "true" : undefined}
+                      onClick={() => setSongPage(item.page)}
+                      className="pk-choice min-w-0 flex-1 px-3 py-2 text-left break-words"
+                    >
+                      {item.title}
+                    </button>
+                    <button
+                      type="button"
+                      className="pk-pill min-h-11 self-center"
+                      aria-label={`Add ${item.title} to My playlist`}
+                      onClick={() => {
+                        setSongPage(item.page);
+                        playlist.addSong({
+                          page: item.page,
+                          title: item.title,
+                          album: album.title,
+                          youtubeId: item.youtubeId,
+                        });
+                      }}
+                    >
+                      Add
+                    </button>
+                  </div>
                 );
               })}
             </div>
           )}
+          {playlist.notice ? (
+            <p role="status" className="text-sm leading-6">
+              {playlist.notice}
+            </p>
+          ) : null}
           {song ? (
             <div id="music-player" className="pk-card min-w-0 p-3">
               <p className="text-lg font-bold break-words text-ink">{song.title}</p>
-              {song.youtubeId ? (
+              {song.youtubeId && !playlist.playing ? (
                 <>
                   <iframe
                     className="pk-music-frame mt-3"
@@ -146,7 +170,7 @@ export function MusicPanel() {
                     .
                   </p>
                 </>
-              ) : (
+              ) : song.youtubeId ? null : (
                 <p className="mt-2 text-sm leading-6">{note}</p>
               )}
               <p className="mt-2 text-sm leading-6">
@@ -158,6 +182,7 @@ export function MusicPanel() {
           ) : null}
         </section>
       </div>
+      <MusicPlaylistSection playlist={playlist} />
     </div>
   );
 }
