@@ -1206,6 +1206,9 @@ describe("biology speech and form playlists", () => {
     assert.equal(live.libraryTitle, "Mega Evolutions");
     assert.ok(live.chapters.some((chapter) => chapter.title === "Mega Charizard X"));
     assert.ok(live.chapters.some((chapter) => chapter.title === "Mega Charizard Y"));
+    assert.ok(live.chapters.some((chapter) => chapter.title === "Mega Meowstic (Male)"));
+    assert.ok(live.chapters.some((chapter) => chapter.title === "Mega Meowstic (Female)"));
+    assert.equal(live.chapters.some((chapter) => chapter.title === "Mega Meowstic"), false);
     assert.ok(live.chapters.length <= YOTO_TRACK_LIMIT);
     assert.equal(chaptersForCries(live).length, live.chapters.length);
     const sentLive = formPlaylistUpload(live, { 6: "char-pixel" }, "deleted-card");

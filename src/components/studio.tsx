@@ -34,6 +34,7 @@ import {
   type KidCard,
   type KidCardKind,
 } from "@/lib/kid-cards";
+import { artworkSrc } from "@/lib/artwork";
 import { pronounce } from "@/lib/pronounce";
 import { selectionUpload } from "@/lib/selection-playlist";
 import { APP_NAME, DONATE_URL, SOURCE_URL } from "@/lib/site";
@@ -342,6 +343,37 @@ function firstCard(cards: KidCard[], kind: KidCardKind): KidCard | undefined {
   return cards.find((card) => card.kind === kind);
 }
 
+/** Species number on the page. A repeated form keeps a unique Yoto overlay such as 678b. */
+function chapterNumber(item: { overlay: string; dexId?: number }): string {
+  return item.dexId ? String(item.dexId) : item.overlay;
+}
+
+function hideBrokenPicture(event: { currentTarget: HTMLImageElement }): void {
+  const image = event.currentTarget;
+  const fallback = image.dataset.fallback;
+  if (fallback && image.dataset.tried !== "1" && image.getAttribute("src") !== fallback) {
+    image.dataset.tried = "1";
+    image.src = fallback;
+    return;
+  }
+  image.style.display = "none";
+}
+
+function revealChoice(nav: HTMLElement) {
+  const selected = nav.querySelector<HTMLElement>('[aria-current="true"]');
+  if (!selected) return;
+  const navRect = nav.getBoundingClientRect();
+  const itemRect = selected.getBoundingClientRect();
+  const vertical = window.matchMedia("(min-width: 768px)").matches;
+  if (vertical) {
+    if (itemRect.top >= navRect.top && itemRect.bottom <= navRect.bottom) return;
+    nav.scrollTop += itemRect.top - navRect.top - (nav.clientHeight - selected.clientHeight) / 2;
+    return;
+  }
+  if (itemRect.left >= navRect.left && itemRect.right <= navRect.right) return;
+  nav.scrollLeft += itemRect.left - navRect.left - (nav.clientWidth - selected.clientWidth) / 2;
+}
+
 export function Studio({
   cards,
   mega = formPlaylist("mega", []),
@@ -384,6 +416,7 @@ export function Studio({
   const [job, setJob] = useState<JobView | null>(null);
   const [stickersOpen, setStickersOpen] = useState(false);
   const [ready, setReady] = useState(false);
+  const choiceListRef = useRef<HTMLElement | null>(null);
   const clipRef = useRef<HTMLAudioElement | null>(null);
   const clipUrl = useRef<string | null>(null);
   const hearAbort = useRef<AbortController | null>(null);
@@ -411,7 +444,12 @@ export function Studio({
     const needle = query.trim().toLowerCase();
     if (!needle) return true;
     if (card?.kind === "guess") return item.overlay.includes(needle);
-    return item.title.toLowerCase().includes(needle) || item.overlay === needle;
+    const number = chapterNumber(item);
+    return (
+      item.title.toLowerCase().includes(needle) ||
+      number === needle ||
+      item.overlay.toLowerCase() === needle
+    );
   });
 
   useEffect(() => {
@@ -520,6 +558,10 @@ export function Studio({
   function showKind(nextKind: KidCardKind) {
     stopDemo();
     setRevealed(false);
+    if (view !== "cards" || nextKind !== kind) {
+      setQuery("");
+      setJob(null);
+    }
     setView("cards");
     setKind(nextKind);
     if (nextKind === "mega" || nextKind === "gmax") {
@@ -573,6 +615,12 @@ export function Studio({
     setRevealed(false);
     setChapterKey(key);
   }
+
+  useEffect(() => {
+    const nav = choiceListRef.current;
+    if (!nav) return;
+    revealChoice(nav);
+  }, [chapter?.key, card?.id, query, kind, view]);
 
   async function requestDemo(text: string, title: string, dexId?: number) {
     const script = text.replace(/\s+/g, " ").trim();
@@ -1444,25 +1492,33 @@ export function Studio({
               <select
                 aria-label={guessing ? "Choose a riddle" : "Choose a Pokémon"}
                 className="pk-field md:hidden"
-                value={chapter.key}
+                value={listed.some((item) => item.key === chapter.key) ? chapter.key : ""}
                 onChange={(event) => {
-                  const next = playableChapters(card).find((item) => item.key === event.target.value);
+                  const next = listed.find((item) => item.key === event.target.value);
                   if (next) chooseChapter(next.key);
                 }}
               >
-                {playableChapters(card).map((item) => (
+                {listed.length === 0 ? <option value="">Nothing matches</option> : null}
+                {listed.some((item) => item.key === chapter.key) ? null : listed.length > 0 ? (
+                  <option value="">Choose a match</option>
+                ) : null}
+                {listed.map((item) => (
                   <option key={item.key} value={item.key}>
-                    {guessing ? `Riddle ${item.overlay}` : `${item.overlay}. ${item.title}`}
+                    {guessing ? `Riddle ${chapterNumber(item)}` : `${chapterNumber(item)}. ${item.title}`}
                   </option>
                 ))}
               </select>
               <nav
+                ref={choiceListRef}
                 aria-label={guessing ? "Riddles" : "Pokémon"}
                 className="pk-scroll flex gap-2 overflow-x-auto pb-1 md:grid md:max-h-[70dvh] md:content-start md:grid-cols-1 md:overflow-x-hidden md:overflow-y-auto"
               >
+                {listed.length === 0 ? (
+                  <p className="px-1 py-3 text-sm text-muted-foreground">Nothing matches that search.</p>
+                ) : null}
                 {listed.map((item) => {
                   const selected = item.key === chapter.key;
-                  const label = guessing ? `Riddle ${item.overlay}` : item.title;
+                  const label = guessing ? `Riddle ${chapterNumber(item)}` : item.title;
                   return (
                     <button
                       key={item.key}
@@ -1477,6 +1533,8 @@ export function Studio({
                           alt=""
                           width={48}
                           height={48}
+                          data-fallback={item.dexId ? artworkSrc(item.dexId) : undefined}
+                          onError={hideBrokenPicture}
                           className="h-12 w-12 shrink-0 object-contain"
                         />
                       ) : null}
@@ -1494,7 +1552,7 @@ export function Studio({
                     ? revealed
                       ? "Answer"
                       : "Clues"
-                    : `Number ${chapter.overlay}`}
+                    : `Number ${chapterNumber(chapter)}`}
                 </p>
                 <div className="pk-hero">
                   {portrait ? (
@@ -1503,6 +1561,12 @@ export function Studio({
                       alt={guessing && !revealed ? "" : chapter.title}
                       width={guessing ? 96 : 176}
                       height={guessing ? 96 : 176}
+                      data-fallback={
+                        !guessing && chapter.dexId && portrait !== artworkSrc(chapter.dexId)
+                          ? artworkSrc(chapter.dexId)
+                          : undefined
+                      }
+                      onError={hideBrokenPicture}
                       className={guessing ? "pk-sprite" : "pk-art"}
                     />
                   ) : null}

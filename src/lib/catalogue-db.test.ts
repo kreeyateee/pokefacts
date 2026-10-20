@@ -72,6 +72,16 @@ describe("catalogue database", () => {
     assert.ok(names.includes("Vaporeon"));
     assert.ok(names.includes("Jolteon"));
     assert.ok(names.includes("Flareon"));
+    const meowstic = getCatalogueEntry(678);
+    const megaNames = meowstic?.forms.map((form) => form.name) ?? [];
+    assert.ok(megaNames.includes("Mega Meowstic (Male)"));
+    assert.ok(megaNames.includes("Mega Meowstic (Female)"));
+    assert.equal(megaNames.filter((name) => name === "Mega Meowstic").length, 0);
+    const zygarde = getCatalogueEntry(718);
+    const zygardeNames = zygarde?.forms.map((form) => form.name) ?? [];
+    assert.ok(zygardeNames.includes("10% Zygarde"));
+    assert.ok(zygardeNames.includes("10% Zygarde (Power Construct)"));
+    assert.equal(zygardeNames.filter((name) => name === "10% Zygarde").length, 1);
     const farfetchd = getCatalogueEntry(83);
     assert.match(
       farfetchd?.evolutions.find((evolution) => /Sirfetch/.test(evolution.name))?.method ?? "",

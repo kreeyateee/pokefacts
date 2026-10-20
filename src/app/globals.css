@@ -312,8 +312,10 @@
 .pk-pill {
   min-height: 2.75rem;
   height: auto;
+  flex: none;
   padding: 0.35rem 0.85rem;
   font-size: 0.85rem;
+  white-space: nowrap;
 }
 
 .pk-tab:hover,
@@ -370,6 +372,12 @@
 
 .pk-scroll > * {
   scroll-snap-align: start;
+}
+
+@media (min-width: 768px) {
+  nav.pk-scroll {
+    scroll-snap-type: y proximity;
+  }
 }
 
 .pk-choice {
@@ -476,6 +484,45 @@
   padding: 0.35rem;
 }
 
+@media (max-width: 29.99rem) {
+  .pk-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pk-hero .pk-art,
+  .pk-hero .pk-sprite {
+    order: 2;
+  }
+
+  .pk-hero .pk-art {
+    height: 9rem;
+  }
+
+  .pk-hero h2 {
+    order: 1;
+    font-size: 1.7rem;
+    line-height: 1.15;
+  }
+
+  .pk-hero:has(.pk-art-entry) {
+    display: grid;
+  }
+
+  .pk-hero .pk-art-entry {
+    order: 2;
+    height: 7.5rem;
+  }
+
+  .pk-entry-name {
+    order: 1;
+  }
+
+  .pk-entry-meta {
+    order: 3;
+  }
+}
+
 @media (min-width: 30rem) {
   .pk-hero {
     flex-direction: row;
@@ -483,9 +530,22 @@
     gap: 1rem;
   }
 
+  .pk-hero:has(.pk-art-entry) {
+    flex-wrap: wrap;
+  }
+
   .pk-art {
     width: 11rem;
     height: 11rem;
+  }
+
+  .pk-entry-name,
+  .pk-entry-meta {
+    flex: 1;
+  }
+
+  .pk-entry-meta {
+    flex-basis: 100%;
   }
 }
 

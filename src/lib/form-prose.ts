@@ -74,6 +74,7 @@ function sameForm(formName: string, line: string): boolean {
 export function formWikiTitle(name: string): string {
   return name
     .trim()
+    .replace(/\s+\([^)]*\)$/, "")
     .replace(/[\u2018\u2019\u02bc]/g, "'")
     .replace(/\s+/g, "_");
 }

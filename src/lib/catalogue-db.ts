@@ -34,6 +34,21 @@ export function centimetresLabel(decimetres: number): string {
   return `${decimetres * 10} centimetres`;
 }
 
+/**
+ * PokéAPI stores one English name for each of these pairs.
+ * The pictures are different: male and female Mega Meowstic, and
+ * Zygarde's Power Construct 10% forme beside the ordinary 10% forme.
+ */
+const DISTINCT_FORM_NAMES: Record<number, string> = {
+  10314: "Mega Meowstic (Male)",
+  10326: "Mega Meowstic (Female)",
+  10118: "10% Zygarde (Power Construct)",
+};
+
+function formDisplayName(id: number, name: string): string {
+  return DISTINCT_FORM_NAMES[id] ?? name;
+}
+
 function meta(key: string): number {
   const row = db().prepare("SELECT value FROM meta WHERE key = ?").get(key) as
     | { value: string }
@@ -273,7 +288,7 @@ export function getCatalogueEntry(id: number): CatalogueEntry | null {
 
   const otherForms: CatalogueForm[] = forms.map((form) => ({
     id: form.id,
-    name: form.name,
+    name: formDisplayName(form.id, form.name),
     isDefault: false,
     isMega: form.is_mega === 1,
     isBattleOnly: form.is_battle_only === 1,
@@ -431,7 +446,7 @@ function mapFormRef(row: FormRefRow): CatalogueFormRef {
     formId: row.id,
     speciesId: row.species_id,
     speciesName: row.species_name,
-    formName: row.form_name,
+    formName: formDisplayName(row.id, row.form_name),
   };
 }
 

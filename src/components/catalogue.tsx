@@ -95,7 +95,7 @@ function multiplierLabel(multiplier: number): string {
 function hideBrokenPicture(event: { currentTarget: HTMLImageElement }): void {
   const image = event.currentTarget;
   const fallback = image.dataset.fallback;
-  if (fallback && image.dataset.tried !== "1") {
+  if (fallback && image.dataset.tried !== "1" && image.getAttribute("src") !== fallback) {
     image.dataset.tried = "1";
     image.src = fallback;
     return;
@@ -486,7 +486,7 @@ export function Catalogue({
               setType("");
               setPage(1);
             }}
-            className="pk-pill px-3 text-xs"
+            className="pk-pill shrink-0 px-3 text-xs"
             aria-pressed={type === ""}
           >
             All types
@@ -768,13 +768,15 @@ export function Catalogue({
       </section>
 
       <article className={`pk-card pk-dex min-w-0 self-start px-4 py-6 sm:px-8 sm:py-8 ${showList ? "hidden lg:block" : "block"}`}>
-        <button
-          type="button"
-          className="mb-4 inline-flex min-h-11 items-center text-sm font-bold text-poke-red underline lg:hidden"
-          onClick={() => setShowList(true)}
-        >
-          Back to the list
-        </button>
+        {entry && entry.id === selected ? null : (
+          <button
+            type="button"
+            className="mb-4 inline-flex min-h-11 items-center text-sm font-bold text-poke-red underline lg:hidden"
+            onClick={() => setShowList(true)}
+          >
+            Back to the list
+          </button>
+        )}
         {entryError ? (
           <p className="text-sm pk-danger" role="alert">
             {entryError}
@@ -785,20 +787,32 @@ export function Catalogue({
         ) : null}
         {entry && entry.id === selected ? (
           <>
-            <p className="pk-kicker">
-              {numberLabel(entry.id)} · {entry.region}
-            </p>
             <div className="pk-hero">
               <img
                 src={artworkSrc(entry.id)}
                 alt=""
                 width={176}
                 height={176}
-                className="pk-art"
+                className="pk-art pk-art-entry"
+                onError={hideBrokenPicture}
               />
-              <div>
-                <h2 className="font-display text-4xl leading-tight sm:text-5xl">{entry.name}</h2>
-                <p className="mt-1 text-sm text-muted-foreground">The {entry.genus}</p>
+              <div className="pk-entry-name min-w-0">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="pk-kicker">
+                    {numberLabel(entry.id)} · {entry.region}
+                  </p>
+                  <button
+                    type="button"
+                    className="inline-flex min-h-11 shrink-0 items-center text-sm font-bold text-poke-red underline lg:hidden"
+                    onClick={() => setShowList(true)}
+                  >
+                    Back to the list
+                  </button>
+                </div>
+                <h2 className="font-display text-3xl leading-tight sm:text-5xl">{entry.name}</h2>
+              </div>
+              <div className="pk-entry-meta min-w-0">
+                <p className="text-sm text-muted-foreground">The {entry.genus}</p>
                 <div className="mt-2">
                   <TypeChips types={entry.types} />
                 </div>
