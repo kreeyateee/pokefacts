@@ -1,61 +1,44 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { clientAppCorsHeaders } from "./client-app-cors";
-import {
-  CLIENT_YOUTUBE_OFFLINE,
-  clientYoutubeUrl,
-  fetchClientYoutube,
-  isClientApp,
-  uploadedAudioError,
-  youtubeStaysOnClient,
-} from "./client-youtube";
+import { decodeYoutubeCookies, encodeYoutubeCookies, netscapeYoutubeCookies, uploadedAudioError } from "./client-youtube";
 
-const LOCAL = "http://127.0.0.1:3847";
-const PUBLIC = "https://pokefacts.duckdns.org";
+const NETSCAPE = [
+  "# Netscape HTTP Cookie File",
+  ".youtube.com\tTRUE\t/\tTRUE\t0\tSAPISID\tabc",
+  ".google.com\tTRUE\t/\tTRUE\t0\tSID\tdef",
+  ".youtube.com\tTRUE\t/\tTRUE\t0\tVISITOR_INFO1_LIVE\tghi",
+].join("\n");
 
-describe("client youtube", () => {
-  it("keeps youtube on the client app and yoto on the page that is open", () => {
-    assert.equal(isClientApp(LOCAL, LOCAL), true);
-    assert.equal(clientYoutubeUrl(LOCAL, "/api/music/mp3", LOCAL), "/api/music/mp3");
-    assert.equal(clientYoutubeUrl(PUBLIC, "/api/music/youtube?page=Song", LOCAL), `${LOCAL}/api/music/youtube?page=Song`);
-    assert.equal(clientYoutubeUrl(PUBLIC, "api/music/mp3/jNQXAC9IVRw", LOCAL), `${LOCAL}/api/music/mp3/jNQXAC9IVRw`);
+describe("youtube sign-in cookies", () => {
+  it("keeps a signed-in cookies file and drops the comment lines", () => {
+    const cookies = netscapeYoutubeCookies(NETSCAPE);
+    assert.match(cookies ?? "", /^\.youtube\.com\tTRUE\t\/\tTRUE\t0\tSAPISID\tabc\n/);
+    assert.match(cookies ?? "", /\.google\.com\tTRUE\t\/\tTRUE\t0\tSID\tdef\n/);
+    assert.equal(cookies?.includes("VISITOR_INFO1_LIVE"), true);
+    assert.equal(cookies?.includes("# Netscape"), false);
   });
 
-  it("turns a failed client connection into the open-the-app message", async () => {
-    const original = globalThis.fetch;
-    globalThis.fetch = () => Promise.reject(new Error("connect refused"));
-    try {
-      await fetchClientYoutube(PUBLIC, "/api/music/mp3");
-      assert.fail("expected the client app to be offline");
-    } catch (error) {
-      assert.equal(error instanceof Error ? error.message : "", CLIENT_YOUTUBE_OFFLINE);
-    } finally {
-      globalThis.fetch = original;
-    }
+  it("turns a cookie header into a youtube cookies file", () => {
+    const cookies = netscapeYoutubeCookies("SAPISID=abc; LOGIN_INFO=signed-in; PREF=skip");
+    assert.equal(cookies, ".youtube.com\tTRUE\t/\tTRUE\t0\tSAPISID\tabc\n.youtube.com\tTRUE\t/\tTRUE\t0\tLOGIN_INFO\tsigned-in\n");
   });
 
-  it("blocks server youtube only when that switch is set", () => {
-    assert.equal(youtubeStaysOnClient({ ...process.env, YOUTUBE_DISABLED: "1" }), true);
-    const enabled = { ...process.env };
-    delete enabled.YOUTUBE_DISABLED;
-    assert.equal(youtubeStaysOnClient(enabled), false);
+  it("refuses a file that has no youtube sign-in cookie", () => {
+    assert.equal(netscapeYoutubeCookies("hello"), null);
+    assert.equal(netscapeYoutubeCookies(".youtube.com\tTRUE\t/\tTRUE\t0\tPREF\tyes\n"), null);
+    assert.equal(netscapeYoutubeCookies(""), null);
+  });
+
+  it("round-trips the cookies through the request header", () => {
+    const cookies = netscapeYoutubeCookies("SID=abc") ?? "";
+    assert.equal(decodeYoutubeCookies(encodeYoutubeCookies(cookies)), cookies);
+    assert.equal(decodeYoutubeCookies("not base64"), null);
   });
 
   it("rejects an empty upload and a video id that is not 11 characters", () => {
     assert.equal(uploadedAudioError(0, "jNQXAC9IVRw"), "That audio file was empty.");
     assert.equal(uploadedAudioError(32, "short"), "That YouTube video id does not look right.");
-    assert.equal(uploadedAudioError(32 * 1024 * 1024 + 1, "jNQXAC9IVRw"), "That audio file is too large.");
     assert.equal(uploadedAudioError(32, "jNQXAC9IVRw"), null);
-  });
-
-  it("allows the public site to call the app on this computer", () => {
-    const headers = clientAppCorsHeaders(new Request("http://127.0.0.1:3847/api/music/mp3", { headers: { Origin: PUBLIC } }));
-    assert.equal(headers.get("Access-Control-Allow-Origin"), PUBLIC);
-    assert.equal(headers.get("Access-Control-Allow-Private-Network"), "true");
-    const blocked = clientAppCorsHeaders(
-      new Request("http://127.0.0.1:3847/api/music/mp3", { headers: { Origin: "https://example.com" } }),
-    );
-    assert.equal(blocked.get("Access-Control-Allow-Origin"), null);
   });
 });

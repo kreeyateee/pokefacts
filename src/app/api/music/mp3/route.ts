@@ -1,10 +1,10 @@
 import rawIndex from "@/data/music-index.json";
 import { clientAppPreflight, withClientAppCors } from "@/lib/client-app-cors";
-import { CLIENT_YOUTUBE_MESSAGE, uploadedAudioError, youtubeStaysOnClient } from "@/lib/client-youtube";
+import { decodeYoutubeCookies, uploadedAudioError } from "@/lib/client-youtube";
 import { readMusicIndex } from "@/lib/music-index";
 import { bearerToken, jsonError } from "@/lib/yoto-proxy";
 import { finishFactUpload } from "@/lib/yoto-fact-audio";
-import { downloadYoutubeMp3s, ensureYoutubeMp3, mp3FromUploadedAudio, type ParsedMp3 } from "@/lib/youtube-mp3";
+import { downloadYoutubeMp3s, ensureYoutubeMp3, mp3FromUploadedAudio, withYoutubeCookies, type ParsedMp3 } from "@/lib/youtube-mp3";
 import { youtubeIdForSong } from "@/lib/youtube-search";
 import { YOTO_TRACK_LIMIT } from "@/lib/kid-cards";
 
@@ -81,7 +81,10 @@ async function uploadMp3(request: Request) {
 
 export async function POST(request: Request) {
   const type = request.headers.get("content-type") ?? "";
-  const response = type.includes("multipart/form-data") ? await uploadMp3(request) : await postMp3(request);
+  const cookies = decodeYoutubeCookies(request.headers.get("x-youtube-cookies"));
+  const response = await withYoutubeCookies(cookies, () =>
+    type.includes("multipart/form-data") ? uploadMp3(request) : postMp3(request),
+  );
   return withClientAppCors(request, response);
 }
 
@@ -101,7 +104,6 @@ async function postMp3(request: Request) {
   const url = body.url?.trim() ?? "";
   if (page && url) return jsonError("Send a song or a link, not both.");
   if (!page && !url) return jsonError("Choose a song or paste a YouTube link.");
-  if (youtubeStaysOnClient()) return jsonError(CLIENT_YOUTUBE_MESSAGE, 422);
 
   try {
     let songs: Array<ParsedMp3 & { page?: string }>;

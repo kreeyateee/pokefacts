@@ -6,11 +6,7 @@ import { SongLyrics } from "@/components/song-lyrics";
 import { MusicPlaylistEmbed, MusicPlaylistSection, useMusicPlaylist } from "@/components/music-playlist";
 import { Button } from "@/components/ui/button";
 import rawIndex from "@/data/music-index.json";
-import {
-  CLIENT_YOUTUBE_OFFLINE,
-  fetchClientYoutube,
-  isClientApp,
-} from "@/lib/client-youtube";
+import { encodeYoutubeCookies, netscapeYoutubeCookies, YOUTUBE_COOKIE_STORAGE } from "@/lib/client-youtube";
 import { readMusicIndex, type MusicSong } from "@/lib/music-index";
 import { musicPlaylistUpload, musicYotoSavePlan, type MusicPlaylistTrack } from "@/lib/youtube-playlist";
 import { yotoFetch } from "@/lib/yoto-session";
@@ -24,34 +20,19 @@ function songMessage(code: string | undefined, found: string | null | undefined)
   return "No YouTube video was found for this song.";
 }
 
-async function lookupYoutubeId(page: string): Promise<string | null> {
-  const response = await fetchClientYoutube(
-    window.location.origin,
-    `/api/music/youtube?page=${encodeURIComponent(page)}`,
-  );
+function cookieHeaders(cookies: string, headers: Record<string, string> = {}): Record<string, string> {
+  if (!cookies) return headers;
+  return { ...headers, "X-Youtube-Cookies": encodeYoutubeCookies(cookies) };
+}
+
+async function lookupYoutubeId(page: string, cookies: string): Promise<string | null> {
+  const response = await fetch(`/api/music/youtube?page=${encodeURIComponent(page)}`, {
+    headers: cookieHeaders(cookies),
+  });
   const payload = (await response.json().catch(() => null)) as { youtubeId?: unknown; error?: string } | null;
   if (!response.ok) throw new Error(payload?.error?.trim() || "That song could not be found on YouTube.");
   const id = payload?.youtubeId;
   return typeof id === "string" && /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
-}
-
-async function downloadFromClient(page: string): Promise<MusicPlaylistTrack> {
-  const response = await fetchClientYoutube(window.location.origin, "/api/music/mp3", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ page, upload: false }),
-  });
-  if (!response.ok) throw new Error(await messageOf(response, "That song could not be saved as an MP3."));
-  const payload = (await response.json()) as { tracks?: MusicPlaylistTrack[] };
-  const track = payload.tracks?.[0];
-  if (!track?.youtubeId) throw new Error("That song could not be saved as an MP3.");
-  return track;
-}
-
-async function clientMp3Blob(youtubeId: string): Promise<Blob> {
-  const response = await fetchClientYoutube(window.location.origin, `/api/music/mp3/${youtubeId}`);
-  if (!response.ok) throw new Error(await messageOf(response, "That MP3 has not been downloaded yet."));
-  return response.blob();
 }
 
 async function messageOf(response: Response, fallback: string): Promise<string> {
@@ -81,11 +62,25 @@ export function MusicPanel({
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [mp3Id, setMp3Id] = useState("");
-  const [mp3Src, setMp3Src] = useState("");
-  const mp3SrcRef = useRef("");
+  const [youtubeCookies, setYoutubeCookies] = useState("");
+  const cookiesRef = useRef("");
   const [found, setFound] = useState<Record<string, string | null>>({});
   const foundRef = useRef(found);
   const playlist = useMusicPlaylist();
+
+  useEffect(() => {
+    const saved = window.sessionStorage.getItem(YOUTUBE_COOKIE_STORAGE) ?? "";
+    if (!netscapeYoutubeCookies(saved)) return;
+    cookiesRef.current = saved;
+    setYoutubeCookies(saved);
+  }, []);
+
+  function rememberYoutubeCookies(value: string) {
+    cookiesRef.current = value;
+    setYoutubeCookies(value);
+    if (value) window.sessionStorage.setItem(YOUTUBE_COOKIE_STORAGE, value);
+    else window.sessionStorage.removeItem(YOUTUBE_COOKIE_STORAGE);
+  }
 
   const needle = query.trim().toLowerCase();
   const visibleAlbums = index.albums.filter((album) => {
@@ -157,11 +152,11 @@ export function MusicPanel({
         if (cancelled || foundRef.current[page] !== undefined) continue;
         let id: string | null;
         try {
-          id = await lookupYoutubeId(page);
+          id = await lookupYoutubeId(page, cookiesRef.current);
         } catch (caught) {
           if (cancelled) return;
           setFailed(true);
-          setNote(caught instanceof Error ? caught.message : CLIENT_YOUTUBE_OFFLINE);
+          setNote(caught instanceof Error ? caught.message : "That song could not be found on YouTube.");
           return;
         }
         if (cancelled) return;
@@ -172,19 +167,7 @@ export function MusicPanel({
     return () => {
       cancelled = true;
     };
-  }, [album?.page, album?.songs, playingPage, song?.page, songsByPage]);
-
-  function replaceMp3Src(next: string) {
-    if (mp3SrcRef.current.startsWith("blob:")) URL.revokeObjectURL(mp3SrcRef.current);
-    mp3SrcRef.current = next;
-    setMp3Src(next);
-  }
-
-  useEffect(() => {
-    return () => {
-      if (mp3SrcRef.current.startsWith("blob:")) URL.revokeObjectURL(mp3SrcRef.current);
-    };
-  }, []);
+  }, [album?.page, album?.songs, playingPage, song?.page, songsByPage, youtubeCookies]);
 
   async function playMp3(item: MusicSong, youtubeId: string) {
     if (!youtubeId || busy || saving) return;
@@ -192,25 +175,18 @@ export function MusicPanel({
     setFailed(false);
     setNote(`Saving ${item.title} as an MP3…`);
     try {
-      if (isClientApp(window.location.origin)) {
-        const response = await fetch("/api/music/mp3", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ page: item.page, upload: false }),
-        });
-        if (!response.ok) throw new Error(await messageOf(response, "That song could not be saved as an MP3."));
-        replaceMp3Src(`/api/music/mp3/${youtubeId}`);
-        setMp3Id(youtubeId);
-      } else {
-        const saved = await downloadFromClient(item.page);
-        const blob = await clientMp3Blob(saved.youtubeId);
-        replaceMp3Src(URL.createObjectURL(blob));
-        setMp3Id(saved.youtubeId);
-      }
+      const response = await fetch("/api/music/mp3", {
+        method: "POST",
+        headers: cookieHeaders(cookiesRef.current, { "Content-Type": "application/json" }),
+        body: JSON.stringify({ page: item.page, upload: false }),
+      });
+      if (!response.ok) throw new Error(await messageOf(response, "That song could not be saved as an MP3."));
+      setMp3Id(youtubeId);
       setNote("");
     } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "That song could not be saved as an MP3.";
       setFailed(true);
-      setNote(caught instanceof Error ? caught.message : "That song could not be saved as an MP3.");
+      setNote(message);
     } finally {
       setBusy(false);
     }
@@ -235,22 +211,11 @@ export function MusicPanel({
       const finished: MusicPlaylistTrack[] = [];
       for (const item of playlist.songs) {
         setNote(`Saving ${item.title} as an MP3…`);
-        const response = isClientApp(window.location.origin)
-          ? await yotoFetch("/api/music/mp3", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ page: item.page, upload: true }),
-            })
-          : await (async () => {
-              const saved = await downloadFromClient(item.page);
-              const blob = await clientMp3Blob(saved.youtubeId);
-              const form = new FormData();
-              form.set("audio", new File([blob], `${saved.youtubeId}.mp3`, { type: blob.type || "audio/mpeg" }));
-              form.set("youtubeId", saved.youtubeId);
-              form.set("title", item.title);
-              form.set("upload", "true");
-              return yotoFetch("/api/music/mp3", { method: "POST", body: form });
-            })();
+        const response = await yotoFetch("/api/music/mp3", {
+          method: "POST",
+          headers: cookieHeaders(cookiesRef.current, { "Content-Type": "application/json" }),
+          body: JSON.stringify({ page: item.page, upload: true }),
+        });
         if (!response.ok) throw new Error(await messageOf(response, "That audio could not be saved as an MP3."));
         const payload = (await response.json()) as { tracks?: MusicPlaylistTrack[] };
         const track = payload.tracks?.[0];
@@ -307,6 +272,11 @@ export function MusicPanel({
       {!error && index.albums.length === 0 ? (
         <p className="pk-card px-4 py-4 text-sm leading-6">No albums are in the music list yet.</p>
       ) : null}
+      <YoutubeSignIn
+        ready={Boolean(youtubeCookies)}
+        onSave={rememberYoutubeCookies}
+        onForget={() => rememberYoutubeCookies("")}
+      />
       <label className="grid min-w-0 gap-1 text-sm font-bold" htmlFor="music-search">
         Search
         <input
@@ -379,7 +349,7 @@ export function MusicPanel({
                         void (async () => {
                           let youtubeId = foundRef.current[item.page];
                           if (youtubeId === undefined) {
-                            youtubeId = await lookupYoutubeId(item.page);
+                            youtubeId = await lookupYoutubeId(item.page, cookiesRef.current);
                             foundRef.current = { ...foundRef.current, [item.page]: youtubeId };
                             setFound(foundRef.current);
                           }
@@ -458,7 +428,7 @@ export function MusicPanel({
             </Button>
           ) : null}
           {song && mp3Id && mp3Id === playerSong.youtubeId ? (
-            <audio className="mt-3 w-full" controls autoPlay src={mp3Src} />
+            <audio className="mt-3 w-full" controls autoPlay src={`/api/music/mp3/${mp3Id}`} />
           ) : null}
           {playerSong.url ? (
             <p className="mt-2 text-sm leading-6">
@@ -478,5 +448,61 @@ export function MusicPanel({
       ) : null}
       <MusicPlaylistSection playlist={playlist} saving={saving} onSave={() => void saveToYoto()} />
     </div>
+  );
+}
+
+function YoutubeSignIn({
+  ready,
+  onSave,
+  onForget,
+}: {
+  ready: boolean;
+  onSave: (cookies: string) => void;
+  onForget: () => void;
+}) {
+  const [problem, setProblem] = useState("");
+
+  async function choose(file: File | undefined) {
+    if (!file) return;
+    const cookies = netscapeYoutubeCookies(await file.text());
+    if (!cookies) {
+      setProblem("That file does not look like YouTube cookies from a signed-in browser.");
+      return;
+    }
+    setProblem("");
+    onSave(cookies);
+  }
+
+  return (
+    <section className="pk-card grid gap-2 p-4" aria-label="YouTube sign-in">
+      <h2 className="text-base font-bold text-ink">YouTube sign-in</h2>
+      <p className="text-sm leading-6">
+        YouTube asks for your own sign-in before a song can be saved. Choose a cookies.txt from a browser where you are signed in to YouTube. It stays in this tab and is sent only for the download.
+      </p>
+      {ready ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm leading-6">Your YouTube sign-in is ready.</p>
+          <Button type="button" variant="outline" className="h-11 px-4" onClick={onForget}>
+            Forget sign-in
+          </Button>
+        </div>
+      ) : (
+        <label className="text-sm font-bold" htmlFor="youtube-cookies">
+          cookies.txt
+          <input
+            id="youtube-cookies"
+            className="mt-1 block text-sm font-normal"
+            type="file"
+            accept=".txt,text/plain"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              void choose(file);
+            }}
+          />
+        </label>
+      )}
+      {problem ? <p className="text-sm leading-6 text-poke-red">{problem}</p> : null}
+    </section>
   );
 }

@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { execFile, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
@@ -258,33 +259,54 @@ function ytdlpFailure(error: Error, stderr: string, stdout: string): Error {
   return new Error(explainYtdlpFailure(stderr, stdout, { killed, timedOut: killed || code === "ETIMEDOUT" }));
 }
 
-export function ytdlpOutput(args: string[], timeoutMs: number): Promise<string> {
+const youtubeCookieStore = new AsyncLocalStorage<string>();
+
+/** Use one visitor's YouTube cookies for the yt-dlp calls inside this function. */
+export function withYoutubeCookies<T>(cookies: string | null, run: () => Promise<T>): Promise<T> {
+  if (!cookies) return run();
+  return youtubeCookieStore.run(cookies, run);
+}
+
+export async function ytdlpOutput(args: string[], timeoutMs: number): Promise<string> {
   const launch = ytdlpLaunch();
   if (launch.packaged && !launch.python) {
-    return Promise.reject(new Error("Python 3 is needed to run the packaged yt-dlp."));
+    throw new Error("Python 3 is needed to run the packaged yt-dlp.");
   }
   if (launch.packaged && !launch.deno) {
-    return Promise.reject(new Error("The packaged Deno runtime was not found in vendor/deno."));
+    throw new Error("The packaged Deno runtime was not found in vendor/deno.");
   }
   ensureFfmpegPath();
-  return new Promise((resolve, reject) => {
-    execFile(
-      launch.command,
-      [...launch.args, ...args],
-      { timeout: timeoutMs, windowsHide: true, maxBuffer: 4_000_000, env: launch.env },
-      (error, stdout, stderr) => {
-        const out = typeof stdout === "string" ? stdout : "";
-        const err = typeof stderr === "string" ? stderr : "";
-        const rawCode = error && typeof error === "object" && "code" in error ? error.code : null;
-        const status = typeof rawCode === "number" ? rawCode : null;
-        if (error && !ytdlpStoppedAfterLimit(status, out, err)) {
-          reject(ytdlpFailure(error, err, out));
-          return;
-        }
-        resolve(out);
-      },
-    );
-  });
+  const cookies = youtubeCookieStore.getStore();
+  let cookieDir = "";
+  const finalArgs = [...args];
+  if (cookies) {
+    cookieDir = await mkdtemp(path.join(tmpdir(), "pokefacts-yt-cookies-"));
+    const file = path.join(cookieDir, "cookies.txt");
+    await writeFile(file, cookies, { encoding: "utf8", mode: 0o600 });
+    finalArgs.unshift("--cookies", file);
+  }
+  try {
+    return await new Promise((resolve, reject) => {
+      execFile(
+        launch.command,
+        [...launch.args, ...finalArgs],
+        { timeout: timeoutMs, windowsHide: true, maxBuffer: 4_000_000, env: launch.env },
+        (error, stdout, stderr) => {
+          const out = typeof stdout === "string" ? stdout : "";
+          const err = typeof stderr === "string" ? stderr : "";
+          const rawCode = error && typeof error === "object" && "code" in error ? error.code : null;
+          const status = typeof rawCode === "number" ? rawCode : null;
+          if (error && !ytdlpStoppedAfterLimit(status, out, err)) {
+            reject(ytdlpFailure(error, err, out));
+            return;
+          }
+          resolve(out);
+        },
+      );
+    });
+  } finally {
+    if (cookieDir) await rm(cookieDir, { recursive: true, force: true });
+  }
 }
 
 async function plainMp3(bytes: Buffer): Promise<ParsedMp3 | null> {
