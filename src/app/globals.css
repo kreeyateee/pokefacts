@@ -385,6 +385,7 @@
 .pk-subtabs {
   flex-wrap: nowrap;
   overflow-x: auto;
+  margin-top: 0.5rem;
 }
 
 .pk-account-menu {
@@ -593,6 +594,122 @@
 .pk-choice[aria-selected="true"]:hover,
 .pk-choice[aria-pressed="true"]:hover {
   background: var(--poke-yellow);
+}
+
+.pk-step {
+  display: grid;
+  grid-template-columns: 1.85rem minmax(0, 1fr);
+  gap: 0.35rem 0.85rem;
+  align-items: start;
+}
+
+.pk-step-num {
+  display: grid;
+  place-items: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  background: var(--poke-yellow);
+  font-family: var(--font-fredoka), sans-serif;
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.pk-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 1.25rem;
+  margin-left: 0.4rem;
+  padding: 0 0.45rem;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  background: var(--poke-red);
+  color: white;
+  font-family: var(--font-fredoka), sans-serif;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.pk-badge-lite {
+  background: white;
+  color: var(--ink);
+}
+
+.pk-voice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  width: 100%;
+  padding: 0.65rem 0.8rem;
+  border: 3px solid var(--ink);
+  border-radius: 1rem;
+  background: white;
+  box-shadow: 3px 3px 0 var(--ink);
+  transition:
+    background-color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.pk-voice:hover {
+  background: #fff4c2;
+}
+
+.pk-voice[data-checked="true"] {
+  background: var(--poke-yellow);
+}
+
+.pk-voice:focus-within {
+  box-shadow:
+    3px 3px 0 var(--ink),
+    0 0 0 3px var(--poke-yellow);
+}
+
+.pk-voice-copy {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 0.65rem;
+  row-gap: 0.1rem;
+  min-width: 0;
+  flex: 1;
+  cursor: pointer;
+}
+
+.pk-voice-copy input {
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+
+.pk-voice-name {
+  font-family: var(--font-fredoka), sans-serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.pk-voice-note {
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: #5d7494;
+}
+
+.pk-voice[data-checked="true"] .pk-voice-note {
+  color: var(--ink);
+}
+
+.pk-audio,
+.pk-page audio {
+  width: 100%;
+  max-width: 28rem;
+  height: 2.6rem;
+  border-radius: 999px;
+  accent-color: var(--poke-red);
 }
 
 .pk-field {
@@ -982,7 +1099,8 @@
   .pk-banner-btn,
   .pk-field,
   .pk-bar-fill,
-  .pk-send-dismiss {
+  .pk-send-dismiss,
+  .pk-voice {
     transition: none;
   }
 
@@ -992,7 +1110,8 @@
   .pk-chip:active,
   .pk-choice:active,
   .pk-banner-btn:active,
-  .pk-send-dismiss:active {
+  .pk-send-dismiss:active,
+  .pk-voice:hover {
     transform: none;
   }
 }

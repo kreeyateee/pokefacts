@@ -176,9 +176,6 @@ export function Catalogue({
   onSendSelection,
   onPrepareSend,
   onBuildStart,
-  playlists = [],
-  playlistTarget = "",
-  onPlaylistTarget,
   units = "metric",
   job = null,
   sending = false,
@@ -186,11 +183,6 @@ export function Catalogue({
   onSendSelection?: (card: KidCard) => Promise<void>;
   onPrepareSend?: (confirmLabel: string, newTitle: string, run: () => void | Promise<void>) => void;
   onBuildStart?: () => void;
-  playlists?: Array<{ cardId: string; title: string }>;
-  playlistTarget?: string;
-  onPlaylistTarget?: (cardId: string) => void;
-  voiceId?: string;
-  onVoiceId?: (voiceId: string) => void;
   units?: MeasureUnits;
   job?: { status: string; detail: string; done?: number; total?: number } | null;
   sending?: boolean;
@@ -639,22 +631,21 @@ export function Catalogue({
           <fieldset className="mt-2 grid gap-2">
             <legend className="text-sm font-medium">Playlist type</legend>
             {PLAYLIST_KINDS.map((option) => (
-              <label key={option.id} className="grid grid-cols-[1rem_minmax(0,1fr)] gap-x-2 text-sm">
-                <input
-                  type="radio"
-                  name="playlist-type"
-                  className="mt-1"
-                  checked={playlistKind === option.id}
-                  onChange={() => {
-                    setPlaylistKind(option.id);
-                    setBuildMessage("");
-                  }}
-                />
-                <span>
-                  <span className="font-medium">{option.label}</span>
-                  <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{option.detail}</span>
+              <button
+                key={option.id}
+                type="button"
+                className="pk-choice w-full px-3 py-2"
+                aria-pressed={playlistKind === option.id}
+                onClick={() => {
+                  setPlaylistKind(option.id);
+                  setBuildMessage("");
+                }}
+              >
+                <span className="block text-left text-sm font-bold">{option.label}</span>
+                <span className="mt-0.5 block text-left text-xs leading-5 font-medium text-muted-foreground">
+                  {option.detail}
                 </span>
-              </label>
+              </button>
             ))}
           </fieldset>
           <label className="mt-3 grid gap-1 text-sm" htmlFor="playlist-title">
@@ -673,29 +664,8 @@ export function Catalogue({
             className="pk-field"
           />
           </label>
-          <label className="mt-3 grid gap-1 text-sm" htmlFor="catalogue-playlist">
-            Where it goes
-            <select
-              id="catalogue-playlist"
-              aria-label="Yoto playlist"
-              className="pk-field"
-              value={playlistTarget}
-              onChange={(event) => onPlaylistTarget?.(event.target.value)}
-            >
-              <option value="">Make a new playlist</option>
-              {playlists.map((item) => (
-                <option key={item.cardId} value={item.cardId}>
-                  Add to {item.title}
-                </option>
-              ))}
-            </select>
-          </label>
           <p className="mt-1 text-xs leading-5 pk-quiet">
-            {playlistTarget
-              ? "Adds these tracks at the end. Tracks already on that playlist stay."
-              : "Makes a new playlist. Playlists you already have stay as they are."}{" "}
-            Send this pick asks for the voice and the playlist before anything is recorded. Recording then
-            continues in the background.
+            Send this pick asks for the voice and where the playlist goes before anything is recorded.
           </p>
           <Button
             type="button"

@@ -13,6 +13,7 @@ export function PlaybackPanel({
   onVoiceId,
   idPrefix = "studio",
   embedded = false,
+  voicesOnly = false,
 }: {
   settings: PlaybackSettings;
   onChange: (settings: PlaybackSettings) => void;
@@ -20,6 +21,7 @@ export function PlaybackPanel({
   onVoiceId?: (voiceId: string) => void;
   idPrefix?: string;
   embedded?: boolean;
+  voicesOnly?: boolean;
 }) {
   function update(next: PlaybackSettings) {
     onChange(writePlayback(localStorage, next));
@@ -99,23 +101,28 @@ export function PlaybackPanel({
     return (
       <div className="grid gap-4">
         {voices}
-        {mix}
+        {voicesOnly ? null : mix}
       </div>
     );
   }
 
   return (
     <div className="pk-card mt-4 px-4 py-3">
-      {voices}
-      <details className="mt-3">
-        <summary className="cursor-pointer text-sm font-bold">Cry, loudness, and units</summary>
-        <div className="mt-3 grid gap-4">
-          {mix}
-          <p className="text-xs leading-5 text-muted-foreground">
-            Hear a sample of each voice above. These settings are mixed into the recording that goes on the card.
-          </p>
-        </div>
-      </details>
+      <p className="text-xs leading-5 pk-quiet">
+        Lily is the usual voice. Hear any of them here, then send. Send asks you to confirm before it records.
+      </p>
+      <div className="mt-3 grid gap-3">
+        {voices}
+        <details>
+          <summary className="cursor-pointer text-sm font-bold">Cry, loudness, and units</summary>
+          <div className="mt-3 grid gap-4">
+            {mix}
+            <p className="text-xs leading-5 text-muted-foreground">
+              These settings are mixed into the recording that goes on the card.
+            </p>
+          </div>
+        </details>
+      </div>
     </div>
   );
 }

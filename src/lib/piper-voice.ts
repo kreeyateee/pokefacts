@@ -24,6 +24,12 @@ export function isPiperVoice(id?: string | null): boolean {
   return id === PIPER_VOICE_ID;
 }
 
+/** Lily first. Unknown ids become Lily. */
+export function pickerVoice(id?: string | null) {
+  const voiceId = chosenVoice(id);
+  return PICKER_VOICES.find((voice) => voice.id === voiceId) ?? YOTO_VOICES[0];
+}
+
 /** Piper stays Piper. Any other saved id is a Yoto Labs voice, or Lily. */
 export function chosenVoice(id?: string | null): string {
   if (isPiperVoice(id)) return PIPER_VOICE_ID;

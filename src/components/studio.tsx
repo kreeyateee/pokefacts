@@ -1223,11 +1223,16 @@ export function Studio({
   }
 
   function askCardOptions(confirmLabel: string, newTitle: string, run: () => void | Promise<void>) {
+    if (sendingRef.current) return;
     pendingCardAction.current = run;
     setCardPrompt({ confirmLabel, newTitle });
   }
 
   function confirmCardOptions() {
+    if (!session) {
+      setConnectOpen(true);
+      return;
+    }
     const run = pendingCardAction.current;
     pendingCardAction.current = null;
     setCardPrompt(null);
@@ -1505,7 +1510,7 @@ export function Studio({
         onPrimary={choosePrimary}
         onCollection={showKind}
       />
-      {view !== "setup" ? (
+      {view !== "setup" && !cardPrompt ? (
         <div className="mx-auto w-full min-w-0 max-w-5xl px-4 sm:px-6">
           <PlaybackPanel
             settings={playback}
@@ -1528,11 +1533,6 @@ export function Studio({
             onBuildStart={() => {
               if (!sendingRef.current) setJob(null);
             }}
-            playlists={library}
-            playlistTarget={targetPlaylist}
-            onPlaylistTarget={setTargetPlaylist}
-            voiceId={voiceId}
-            onVoiceId={(id) => setVoiceId(writeVoiceId(localStorage, id))}
             units={playback.units}
             job={job}
           />
@@ -1847,10 +1847,9 @@ export function Studio({
                 Make this card
               </h3>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                Send opens the voice and playlist choices first. Hear a sample there, then confirm. Recording
-                continues in the background — a cheer pops up when it is ready, with a Buy me a coffee link. On
-                the player: {card.childDoes} In the Yoto app, look for{" "}
-                <span className="font-bold text-ink">{card.libraryTitle}</span>.
+                Hear a voice above, then send. The next step asks you to confirm the voice and where the playlist
+                goes. Recording starts after that, in the background. On the player: {card.childDoes} In the Yoto
+                app, look for <span className="font-bold text-ink">{card.libraryTitle}</span>.
                 {randomGuess
                   ? " Send uploads a shadow of each 16×16 pixel for the clue, then the real pixel for the answer."
                   : formMode
@@ -1859,34 +1858,11 @@ export function Studio({
                       ? " The Yoto icon is the 16×16 pixel."
                       : ""}
               </p>
-              <label className="mt-3 grid gap-1 text-sm" htmlFor="yoto-playlist">
-                Where it goes
-                <select
-                  id="yoto-playlist"
-                  aria-label="Yoto playlist"
-                  className="pk-field"
-                  value={targetPlaylist}
-                  onChange={(event) => setTargetPlaylist(event.target.value)}
-                >
-                  <option value="">Make a new playlist</option>
-                  {library.map((item) => (
-                    <option key={item.cardId} value={item.cardId}>
-                      Add to {item.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
               {libraryNote ? (
                 <p className="mt-2 text-sm leading-5 pk-danger" role="status">
                   {libraryNote}
                 </p>
-              ) : (
-                <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                  {targetPlaylist
-                    ? "Adds these tracks at the end. Tracks already on that playlist stay."
-                    : `Makes a new playlist named ${card.libraryTitle}. Playlists you already have stay as they are.`}
-                </p>
-              )}
+              ) : null}
               <div className="mt-4 flex flex-wrap gap-2">
                 <Button
                   type="button"
@@ -1989,6 +1965,12 @@ export function Studio({
         }}
         confirmLabel={cardPrompt?.confirmLabel ?? "Send"}
         onConfirm={confirmCardOptions}
+        connected={Boolean(session)}
+        onConnect={() => {
+          pendingCardAction.current = null;
+          setCardPrompt(null);
+          setConnectOpen(true);
+        }}
         voiceId={voiceId}
         onVoiceId={(id) => setVoiceId(writeVoiceId(localStorage, id))}
         playback={playback}

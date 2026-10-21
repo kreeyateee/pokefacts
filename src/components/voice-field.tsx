@@ -5,7 +5,10 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { isPiperVoice, PICKER_VOICES } from "@/lib/piper-voice";
 import { voiceSampleBody } from "@/lib/voice-choice";
+import { YOTO_VOICES } from "@/lib/yoto-icons";
 import { yotoFetch } from "@/lib/yoto-session";
+
+const sampleUrls = new Map<string, string>();
 
 export function VoiceField({
   id,
@@ -19,15 +22,15 @@ export function VoiceField({
   disabled?: boolean;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const clipUrl = useRef<string | null>(null);
   const hearAbort = useRef<AbortController | null>(null);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
   const [hearingId, setHearingId] = useState<string | null>(null);
   const [hearError, setHearError] = useState("");
+  const [hasClip, setHasClip] = useState(false);
 
   useEffect(() => {
     return () => {
       hearAbort.current?.abort();
-      if (clipUrl.current) URL.revokeObjectURL(clipUrl.current);
     };
   }, []);
 
@@ -35,28 +38,42 @@ export function VoiceField({
     hearAbort.current?.abort();
     hearAbort.current = null;
     const audio = audioRef.current;
-    if (audio) {
-      audio.pause();
-      audio.removeAttribute("src");
-    }
-    if (clipUrl.current) {
-      URL.revokeObjectURL(clipUrl.current);
-      clipUrl.current = null;
-    }
+    if (audio) audio.pause();
+    setLoadingId(null);
     setHearingId(null);
   }
 
+  async function playUrl(voiceId: string, url: string) {
+    const audio = audioRef.current;
+    if (!audio) throw new Error("Could not play this voice.");
+    audio.src = url;
+    audio.onended = () => setHearingId(null);
+    setHasClip(true);
+    setHearingId(voiceId);
+    setLoadingId(null);
+    try {
+      await audio.play();
+    } catch {
+      setHearError("Press play on the recording.");
+    }
+  }
+
   async function hearSample(voiceId: string) {
-    if (hearingId === voiceId) {
+    if (hearingId === voiceId || loadingId === voiceId) {
       stopSample();
       return;
     }
     stopSample();
     onChange(voiceId);
+    setHearError("");
+    const cached = sampleUrls.get(voiceId);
+    if (cached) {
+      await playUrl(voiceId, cached);
+      return;
+    }
     const controller = new AbortController();
     hearAbort.current = controller;
-    setHearingId(voiceId);
-    setHearError("");
+    setLoadingId(voiceId);
     try {
       const piper = isPiperVoice(voiceId);
       const response = await (piper ? fetch : yotoFetch)("/api/yoto/hear", {
@@ -74,18 +91,11 @@ export function VoiceField({
       const blob = await response.blob();
       if (controller.signal.aborted) return;
       const url = URL.createObjectURL(blob);
-      clipUrl.current = url;
-      const audio = audioRef.current;
-      if (!audio) throw new Error("Could not play this voice.");
-      audio.src = url;
-      audio.onended = () => setHearingId(null);
-      try {
-        await audio.play();
-      } catch {
-        setHearError("Press play on the recording.");
-      }
+      sampleUrls.set(voiceId, url);
+      await playUrl(voiceId, url);
     } catch (error) {
       if (controller.signal.aborted) return;
+      setLoadingId(null);
       setHearingId(null);
       const message = error instanceof Error ? error.message : "Could not play this voice.";
       setHearError(
@@ -96,13 +106,19 @@ export function VoiceField({
 
   return (
     <fieldset className="grid gap-2 text-sm" disabled={disabled}>
-      <legend className="font-medium">Voice</legend>
+      <legend className="pk-section-title">Voice</legend>
       <div className="grid gap-2">
         {PICKER_VOICES.map((voice) => {
           const selected = value === voice.id;
+          const busy = loadingId === voice.id;
+          const playing = hearingId === voice.id;
           return (
-            <div key={voice.id} className="flex flex-wrap items-center gap-2">
-              <label className="flex min-w-0 flex-1 items-center gap-2">
+            <div
+              key={voice.id}
+              className="pk-voice"
+              data-checked={selected ? "true" : undefined}
+            >
+              <label className="pk-voice-copy">
                 <input
                   type="radio"
                   name={id}
@@ -110,38 +126,45 @@ export function VoiceField({
                   checked={selected}
                   onChange={() => onChange(voice.id)}
                 />
-                <span>
-                  {voice.name} — {voice.note}
+                <span className="pk-voice-name">
+                  {voice.name}
+                  {voice.id === YOTO_VOICES[0].id ? <span className="pk-badge">Usual</span> : null}
+                  {isPiperVoice(voice.id) ? <span className="pk-badge pk-badge-lite">On this site</span> : null}
                 </span>
+                <span className="pk-voice-note">{voice.note}</span>
               </label>
               <Button
                 type="button"
                 variant="outline"
                 className="h-9 px-3"
                 disabled={disabled}
-                aria-label={`Hear ${voice.name}`}
+                aria-label={playing || busy ? `Stop ${voice.name}` : `Hear ${voice.name}`}
                 onClick={() => void hearSample(voice.id)}
               >
-                {hearingId === voice.id ? "Stop" : "Hear"}
+                {busy ? "Hearing…" : playing ? "Stop" : "Hear"}
               </Button>
             </div>
           );
         })}
       </div>
-      <audio ref={audioRef} controls className="mt-1 w-full max-w-md" preload="none" />
+      <audio
+        ref={audioRef}
+        controls={hasClip}
+        className={hasClip ? "pk-audio mt-1" : "hidden"}
+        preload="none"
+      />
       {hearError ? (
         <p className="text-xs leading-5 pk-danger" role="alert">
           {hearError}
         </p>
       ) : isPiperVoice(value) ? (
         <p className="text-xs leading-5 pk-quiet">
-          Cori, British, in a Pokédex cadence. Piper reads here, so Hear works before you connect Yoto. Send still
-          needs a Yoto login. Lily, George, Brian, and Adam are Yoto voices.
+          Cori, British, in a Pokédex cadence. Hear works before you connect Yoto. Sending the card still needs a
+          login. Lily, George, Brian, and Adam are Yoto voices.
         </p>
       ) : (
         <p className="text-xs leading-5 pk-quiet">
-          This voice is recorded by Yoto. Hear a sample on this page, then send. If that sample fails, try Piper —
-          Pokédex.
+          This voice is recorded by Yoto. Hear it here, then send. If that sample fails, try Piper — Pokédex.
         </p>
       )}
     </fieldset>

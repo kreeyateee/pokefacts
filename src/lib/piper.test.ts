@@ -11,7 +11,14 @@ import { cryUrl, inputContainer } from "./cry-audio";
 import { ffmpegCommand } from "./ffmpeg-bin";
 import { factsPlaylistUpload, LILY_VOICE_ID } from "./kid-cards";
 import { piperReleaseArchive, piperSpeechCommand, PIPER_POKEDEX_ARGS, type PiperCommand } from "./piper";
-import { PIPER_MODEL_NAME, PIPER_SYNTH_ID, PIPER_VOICE_ID, piperCacheToken } from "./piper-voice";
+import {
+  PICKER_VOICES,
+  PIPER_MODEL_NAME,
+  PIPER_SYNTH_ID,
+  PIPER_VOICE_ID,
+  pickerVoice,
+  piperCacheToken,
+} from "./piper-voice";
 import { demoHearBody, factTrackBody, readVoiceId, voiceSampleBody, writeVoiceId } from "./voice-choice";
 import { prepareFactTrack, renderedCacheKey } from "./yoto-fact-audio";
 import { prepareDemoAudio } from "./yoto-demo";
@@ -38,6 +45,9 @@ describe("Piper Pokédex voice", () => {
     assert.equal(readVoiceId({ getItem: () => null }), LILY_VOICE_ID);
     assert.equal(voiceSampleBody().voiceId, LILY_VOICE_ID);
     assert.equal(voiceSampleBody("").voiceId, LILY_VOICE_ID);
+    assert.equal(pickerVoice(undefined).id, LILY_VOICE_ID);
+    assert.equal(pickerVoice("").name, "Lily");
+    assert.equal(PICKER_VOICES[0]?.id, LILY_VOICE_ID);
     assert.equal(writeVoiceId(storage, PIPER_VOICE_ID), PIPER_VOICE_ID);
     assert.equal(memory.value, PIPER_VOICE_ID);
     const sample = voiceSampleBody(PIPER_VOICE_ID);
