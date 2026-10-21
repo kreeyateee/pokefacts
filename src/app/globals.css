@@ -313,9 +313,17 @@
 .pk-tabs,
 .pk-subtabs {
   display: flex;
-  flex-wrap: nowrap;
   gap: 0.5rem;
   padding-bottom: 0.35rem;
+}
+
+.pk-tabs {
+  flex-wrap: wrap;
+}
+
+.pk-subtabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
 }
 
 .pk-account-menu {
@@ -473,6 +481,7 @@
 .pk-scroll {
   min-width: 0;
   max-width: 100%;
+  overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
   scroll-snap-type: x proximity;

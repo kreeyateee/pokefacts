@@ -1,3 +1,5 @@
+import { connection } from "next/server";
+
 import { Studio } from "@/components/studio";
 import {
   listAlolanForms,
@@ -11,6 +13,7 @@ import { formPlaylist, formPlaylists, speciesPlaylists } from "@/lib/kid-cards";
 import { loadKidCards } from "@/lib/load-kid-cards";
 
 export default async function Home() {
+  await connection();
   const cards = await loadKidCards();
   const mega = formPlaylist("mega", listMegaForms());
   const gmax = formPlaylist("gmax", listGigantamaxForms());

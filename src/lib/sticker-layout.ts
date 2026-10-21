@@ -159,7 +159,7 @@ export function stickerFilename(title: string, paper: PaperId): string {
 }
 
 export function stickerStorageKey(cardId: string): string {
-  return `pokefacts.stickers.v2.${cardId}`;
+  return `pokefacts.stickers.v3.${cardId}`;
 }
 
 function lineMm(fontPt: number): number {
