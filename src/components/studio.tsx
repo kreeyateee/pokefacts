@@ -40,6 +40,7 @@ import {
   type KidCard,
   type KidCardKind,
 } from "@/lib/kid-cards";
+import { artworkSrc as artworkApi } from "@/lib/artwork-path";
 import { artworkSrc } from "@/lib/page-artwork";
 import { riddleParts } from "@/lib/dex-facts";
 import { pronounce } from "@/lib/pronounce";
@@ -1388,11 +1389,11 @@ export function Studio({
   const visibleTracks =
     guessing && !revealed ? chapter?.tracks.slice(0, 1) : chapter?.tracks;
   const source = visibleTracks?.find((track) => track.source)?.source;
-  const portrait =
-    guessing && chapter?.dexId
-      ? revealed
-        ? `/pixels/${chapter.dexId}.png`
-        : `/pixels/${chapter.dexId}-shadow.png`
+  const mysteryId = guessing && !revealed ? chapter?.dexId : undefined;
+  const portrait = mysteryId
+    ? artworkSrc(mysteryId)
+    : guessing && chapter?.dexId
+      ? `/pixels/${chapter.dexId}.png`
       : guessing
         ? undefined
         : chapter?.sprite;
@@ -1784,10 +1785,22 @@ export function Studio({
                     : `Number ${chapterNumber(chapter)}`}
                 </p>
                 <div className="pk-hero">
-                  {portrait ? (
+                  {portrait && mysteryId ? (
+                    <div className="pk-silhouette">
+                      <img
+                        src={portrait}
+                        alt=""
+                        width={176}
+                        height={176}
+                        data-fallback={artworkApi("species", mysteryId)}
+                        onError={hideBrokenPicture}
+                        className="pk-silhouette-shape"
+                      />
+                    </div>
+                  ) : portrait ? (
                     <img
                       src={portrait}
-                      alt={guessing && !revealed ? "" : chapter.title}
+                      alt={chapter.title}
                       width={guessing ? 96 : 176}
                       height={guessing ? 96 : 176}
                       data-fallback={
