@@ -1,9 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 
+import { Button } from "@/components/ui/button";
 import rawIndex from "@/data/music-index.json";
+import { YOTO_TRACK_LIMIT } from "@/lib/kid-cards";
 import { readMusicIndex, type MusicSong } from "@/lib/music-index";
+import { musicPlaylistTitle, musicPlaylistUpload, type MusicPlaylistTrack } from "@/lib/music-playlist";
+import { youtubeTarget } from "@/lib/youtube-link";
+import { uploadForPlaylist } from "@/lib/yoto-send";
+import { yotoFetch } from "@/lib/yoto-session";
 
 function songMessage(song: MusicSong, code: string | undefined): string {
   if (code === "missingtitle") return "Bulbapedia does not have a page for this song.";
@@ -12,7 +19,24 @@ function songMessage(song: MusicSong, code: string | undefined): string {
   return "";
 }
 
-export function MusicPanel() {
+type SavedTrack = MusicPlaylistTrack & { page?: string };
+
+async function messageOf(response: Response, fallback: string): Promise<string> {
+  const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+  return payload?.error?.trim() || fallback;
+}
+
+export function MusicPanel({
+  playlists = [],
+  playlistTarget = "",
+  onPlaylistTarget,
+  voiceId,
+}: {
+  playlists?: Array<{ cardId: string; title: string }>;
+  playlistTarget?: string;
+  onPlaylistTarget?: (id: string) => void;
+  voiceId?: string;
+}) {
   const loaded = useMemo(() => readMusicIndex(rawIndex), []);
   const { index, error } = loaded;
   const songsByPage = useMemo(() => new Map(index.songs.map((song) => [song.page, song])), [index.songs]);
@@ -21,6 +45,14 @@ export function MusicPanel() {
   const [query, setQuery] = useState("");
   const [albumPage, setAlbumPage] = useState(index.albums[0]?.page ?? "");
   const [songPage, setSongPage] = useState("");
+  const [picked, setPicked] = useState<string[]>([]);
+  const [links, setLinks] = useState<Array<{ url: string; playlist: boolean }>>([]);
+  const [link, setLink] = useState("");
+  const [playlistTitle, setPlaylistTitle] = useState("");
+  const [note, setNote] = useState("");
+  const [failed, setFailed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [mp3Id, setMp3Id] = useState("");
 
   const needle = query.trim().toLowerCase();
   const visibleAlbums = index.albums.filter((album) => {
@@ -40,7 +72,148 @@ export function MusicPanel() {
     .filter((song) => albumMatches || !needle || song.title.toLowerCase().includes(needle));
   const song = visibleSongs.find((item) => item.page === songPage) ?? visibleSongs[0];
   const gap = song ? gapByPage.get(song.page) : undefined;
-  const note = song ? songMessage(song, gap) : "";
+  const playerNote = song ? songMessage(song, gap) : "";
+  const queued = picked.length + links.length;
+
+  function toggleSong(page: string) {
+    setPicked((current) => {
+      if (current.includes(page)) return current.filter((item) => item !== page);
+      if (current.length + links.length >= YOTO_TRACK_LIMIT) return current;
+      return [...current, page];
+    });
+    setFailed(false);
+  }
+
+  function addAlbum() {
+    const pages = visibleSongs.filter((item) => item.youtubeId).map((item) => item.page);
+    const missing = visibleSongs.length - pages.length;
+    setPicked((current) => {
+      const next = [...current];
+      for (const page of pages) {
+        if (next.length + links.length >= YOTO_TRACK_LIMIT) break;
+        if (!next.includes(page)) next.push(page);
+      }
+      return next;
+    });
+    setFailed(missing > 0);
+    setNote(
+      missing > 0
+        ? "Some songs on this album have no YouTube video, so they were left off the playlist."
+        : "",
+    );
+  }
+
+  function addLink() {
+    const target = youtubeTarget(link);
+    if (!target) {
+      setFailed(true);
+      setNote("Paste a YouTube video or playlist link.");
+      return;
+    }
+    if (picked.length + links.length >= YOTO_TRACK_LIMIT) {
+      setFailed(true);
+      setNote(`A playlist holds ${YOTO_TRACK_LIMIT} tracks.`);
+      return;
+    }
+    setLinks((current) => (current.some((item) => item.url === target.url) ? current : [...current, target]));
+    setLink("");
+    setFailed(false);
+    setNote("");
+  }
+
+  async function playMp3(item: MusicSong) {
+    if (!item.youtubeId || busy) return;
+    setBusy(true);
+    setFailed(false);
+    setNote(`Saving ${item.title} as an MP3…`);
+    try {
+      const response = await fetch("/api/music/mp3", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ page: item.page, upload: false }),
+      });
+      if (!response.ok) throw new Error(await messageOf(response, "That song could not be saved as an MP3."));
+      setMp3Id(item.youtubeId);
+      setNote("");
+    } catch (caught) {
+      setFailed(true);
+      setNote(caught instanceof Error ? caught.message : "That song could not be saved as an MP3.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function addToPlaylist() {
+    if (busy || queued === 0) return;
+    if (picked.length > YOTO_TRACK_LIMIT) {
+      setFailed(true);
+      setNote(`A playlist holds ${YOTO_TRACK_LIMIT} tracks. ${picked.length} songs are picked. Nothing was sent.`);
+      return;
+    }
+    setBusy(true);
+    setFailed(false);
+    const title = musicPlaylistTitle(playlistTitle, album?.title || "Pokémon music");
+    try {
+      const finished: SavedTrack[] = [];
+      let remaining = YOTO_TRACK_LIMIT;
+      const steps: Array<{ page?: string; url?: string; label: string }> = [
+        ...picked.map((page) => ({ page, label: songsByPage.get(page)?.title || "Song" })),
+        ...links.map((item) => ({ url: item.url, label: item.playlist ? "YouTube playlist" : "YouTube video" })),
+      ];
+      for (let index = 0; index < steps.length; index += 1) {
+        const step = steps[index];
+        if (!step || remaining < 1) break;
+        setNote(`Saving ${step.label} as an MP3…`);
+        const response = await yotoFetch("/api/music/mp3", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            page: step.page,
+            url: step.url,
+            limit: step.url ? remaining : 1,
+            upload: true,
+          }),
+        });
+        if (!response.ok) throw new Error(await messageOf(response, "That audio could not be saved as an MP3."));
+        const payload = (await response.json()) as { tracks?: SavedTrack[] };
+        const tracks = payload.tracks ?? [];
+        if (tracks.length > remaining) {
+          throw new Error(`A playlist holds ${YOTO_TRACK_LIMIT} tracks. Nothing was sent.`);
+        }
+        for (const track of tracks) {
+          if (!track.trackUrl?.startsWith("yoto:#")) throw new Error(`${track.title} is not a finished MP3.`);
+          finished.push(track);
+        }
+        remaining -= tracks.length;
+      }
+      if (finished.length === 0) throw new Error("Add at least one song.");
+      setNote("Sending the playlist…");
+      const upload = uploadForPlaylist(musicPlaylistUpload(title, finished, voiceId), playlistTarget);
+      const response = await yotoFetch("/api/yoto/job", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(upload),
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        error?: string;
+        status?: string;
+        result?: { cardId?: string };
+      } | null;
+      if (!response.ok || payload?.status !== "completed" || !payload.result?.cardId) {
+        throw new Error(payload?.error || "Yoto did not accept this playlist.");
+      }
+      const where = playlists.find((item) => item.cardId === playlistTarget)?.title;
+      const done = playlistTarget ? `${where || "The playlist"} was updated.` : `${title} is in your Yoto library.`;
+      setFailed(false);
+      setNote(done);
+      toast.success(done);
+    } catch (caught) {
+      setFailed(true);
+      setNote(caught instanceof Error ? caught.message : "The playlist was not sent.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div className="grid min-w-0 gap-4">
@@ -93,7 +266,17 @@ export function MusicPanel() {
           )}
         </section>
         <section className="grid min-w-0 content-start gap-3" aria-label="Songs">
-          <h2 className="text-xl text-ink">Songs</h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-xl text-ink">Songs</h2>
+            <button
+              type="button"
+              className="text-sm font-bold text-poke-red underline decoration-poke-yellow decoration-2 disabled:opacity-40"
+              disabled={!album || visibleSongs.every((item) => !item.youtubeId) || busy}
+              onClick={addAlbum}
+            >
+              Add this album
+            </button>
+          </div>
           {!album ? null : visibleSongs.length === 0 ? (
             <p className="text-sm leading-6">
               {gapByPage.has(album.page)
@@ -106,16 +289,30 @@ export function MusicPanel() {
             <div className="grid max-h-64 gap-2 overflow-y-auto pr-1">
               {visibleSongs.map((item) => {
                 const selected = item.page === song?.page;
+                const checked = picked.includes(item.page);
                 return (
-                  <button
-                    key={item.page}
-                    type="button"
-                    aria-current={selected ? "true" : undefined}
-                    onClick={() => setSongPage(item.page)}
-                    className="pk-choice min-w-0 px-3 py-2 text-left break-words"
-                  >
-                    {item.title}
-                  </button>
+                  <div key={item.page} className="flex min-w-0 items-start gap-2">
+                    <input
+                      type="checkbox"
+                      className="mt-3"
+                      checked={checked}
+                      disabled={
+                        !item.youtubeId ||
+                        busy ||
+                        (!checked && picked.length + links.length >= YOTO_TRACK_LIMIT)
+                      }
+                      aria-label={`Add ${item.title} to the playlist`}
+                      onChange={() => toggleSong(item.page)}
+                    />
+                    <button
+                      type="button"
+                      aria-current={selected ? "true" : undefined}
+                      onClick={() => setSongPage(item.page)}
+                      className="pk-choice min-w-0 flex-1 px-3 py-2 text-left break-words"
+                    >
+                      {item.title}
+                    </button>
+                  </div>
                 );
               })}
             </div>
@@ -125,6 +322,20 @@ export function MusicPanel() {
               <p className="text-lg font-bold break-words text-ink">{song.title}</p>
               {song.youtubeId ? (
                 <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-3 h-11 px-4"
+                    disabled={busy}
+                    onClick={() => void playMp3(song)}
+                  >
+                    {busy && note.startsWith("Saving") && note.includes(song.title) ? "Saving the MP3…" : "Play MP3"}
+                  </Button>
+                  {mp3Id === song.youtubeId ? (
+                    <audio className="mt-3 w-full" controls autoPlay src={`/api/music/mp3/${song.youtubeId}`} />
+                  ) : (
+                    <p className="mt-2 text-sm leading-6">Play MP3 downloads the YouTube audio and keeps it as an MP3.</p>
+                  )}
                   <iframe
                     className="pk-music-frame mt-3"
                     title={song.title}
@@ -147,7 +358,7 @@ export function MusicPanel() {
                   </p>
                 </>
               ) : (
-                <p className="mt-2 text-sm leading-6">{note}</p>
+                <p className="mt-2 text-sm leading-6">{playerNote}</p>
               )}
               <p className="mt-2 text-sm leading-6">
                 <a className="font-bold underline decoration-poke-red decoration-2" href={song.url} target="_blank" rel="noreferrer">
@@ -158,6 +369,99 @@ export function MusicPanel() {
           ) : null}
         </section>
       </div>
+      <section className="pk-card grid min-w-0 gap-3 p-4" aria-label="Playlist">
+        <h2 className="text-xl text-ink">Playlist</h2>
+        <p className="text-sm leading-6">
+          Tick songs, or paste a YouTube video or playlist. Each file is parsed as an MP3 before it is added.
+        </p>
+        <p className="text-sm font-bold">
+          {queued === 1 ? "1 item on this playlist" : `${queued} items on this playlist`}
+        </p>
+        {picked.length > 0 || links.length > 0 ? (
+          <ul className="grid max-h-40 gap-1 overflow-y-auto text-sm">
+            {picked.map((page) => (
+              <li key={page} className="flex items-center justify-between gap-2">
+                <span className="min-w-0 break-words">{songsByPage.get(page)?.title || "Song"}</span>
+                <button type="button" className="shrink-0 text-xs underline" disabled={busy} onClick={() => toggleSong(page)}>
+                  Remove
+                </button>
+              </li>
+            ))}
+            {links.map((item) => (
+              <li key={item.url} className="flex items-center justify-between gap-2">
+                <span className="min-w-0 break-all">{item.playlist ? "YouTube playlist" : "YouTube video"}</span>
+                <button
+                  type="button"
+                  className="shrink-0 text-xs underline"
+                  disabled={busy}
+                  onClick={() => setLinks((current) => current.filter((linkItem) => linkItem.url !== item.url))}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <label className="grid gap-1 text-sm font-bold" htmlFor="music-link">
+          YouTube link
+          <input
+            id="music-link"
+            value={link}
+            onChange={(event) => setLink(event.target.value)}
+            placeholder="Video or playlist link"
+            className="pk-field font-normal"
+            style={{ fontSize: 16 }}
+            disabled={busy}
+          />
+        </label>
+        <button
+          type="button"
+          className="justify-self-start text-sm font-bold text-poke-red underline decoration-poke-yellow decoration-2 disabled:opacity-40"
+          disabled={busy || !link.trim()}
+          onClick={addLink}
+        >
+          Add link
+        </button>
+        <label className="grid gap-1 text-sm font-bold" htmlFor="music-playlist-title">
+          Title
+          <input
+            id="music-playlist-title"
+            value={playlistTitle}
+            onChange={(event) => setPlaylistTitle(event.target.value)}
+            placeholder={album?.title || "Pokémon music"}
+            className="pk-field font-normal"
+            style={{ fontSize: 16 }}
+            disabled={busy}
+          />
+        </label>
+        <label className="grid gap-1 text-sm font-bold" htmlFor="music-playlist-target">
+          Where it goes
+          <select
+            id="music-playlist-target"
+            aria-label="Yoto playlist"
+            className="pk-field font-normal"
+            value={playlistTarget}
+            disabled={busy}
+            onChange={(event) => onPlaylistTarget?.(event.target.value)}
+          >
+            <option value="">Make a new playlist</option>
+            {playlists.map((item) => (
+              <option key={item.cardId} value={item.cardId}>
+                Add to {item.title}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="text-xs leading-5 pk-quiet">
+          {playlistTarget
+            ? "Adds these MP3s at the end. Tracks already on that playlist stay."
+            : "Makes a new playlist. Playlists you already have stay as they are."}
+        </p>
+        <Button type="button" className="h-11 w-full" disabled={busy || queued === 0} onClick={() => void addToPlaylist()}>
+          {busy && note === "Sending the playlist…" ? "Sending…" : "Add to Yoto playlist"}
+        </Button>
+        {note ? <p className={`text-sm leading-6 ${failed ? "text-poke-red" : ""}`}>{note}</p> : null}
+      </section>
     </div>
   );
 }

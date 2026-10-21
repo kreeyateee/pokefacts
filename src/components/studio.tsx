@@ -1345,7 +1345,7 @@ export function Studio({
               : view === "catalogue"
               ? "Every species from Kanto to Paldea. The Pokédex line is from the games, with the type, size, abilities, evolution, and stats."
               : view === "music"
-                ? "Albums and songs from Bulbapedia, with the YouTube video from each song page."
+                ? "Albums and songs from Bulbapedia. Save the YouTube audio as an MP3 and add it to a Yoto playlist."
               : guessing
                 ? "Fifty riddles, drawn at random. You hear the cry, then the clues. The picture stays a shadow until the answer."
                 : formMode
@@ -1493,7 +1493,12 @@ export function Studio({
             job={job}
           />
         ) : view === "music" ? (
-          <MusicPanel />
+          <MusicPanel
+            playlists={library}
+            playlistTarget={targetPlaylist}
+            onPlaylistTarget={setTargetPlaylist}
+            voiceId={voiceId}
+          />
         ) : card && chapter ? (
           <div className="grid min-w-0 gap-6 md:grid-cols-[17.5rem_minmax(0,1fr)]">
             <div className="order-3 min-w-0 md:order-1 md:col-span-2">

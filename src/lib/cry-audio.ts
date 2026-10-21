@@ -188,6 +188,20 @@ function assertCryDecodable(info: ClipInfo): void {
   }
 }
 
+/** True when the bytes are the plain MP3 Yoto accepts, not a VBR file wearing an .mp3 name. */
+export function isPlainYotoMp3(bytes: Buffer, info: ClipInfo): boolean {
+  if (bytes.length >= 3 && bytes.subarray(0, 3).toString("ascii") === "ID3") return false;
+  if (info.otherStreams > 0 || info.audioStreams !== 1) return false;
+  return (
+    info.codec === "mp3" &&
+    info.sampleRate === 44100 &&
+    info.channels === 1 &&
+    info.bitRate >= 120_000 &&
+    info.bitRate <= 140_000 &&
+    info.duration >= MIN_MERGED_SECONDS
+  );
+}
+
 function assertYotoMp3(bytes: Buffer, info: ClipInfo): void {
   const summary = clipSummary(info);
   if (bytes.length >= 3 && bytes.subarray(0, 3).toString("ascii") === "ID3") {
@@ -196,15 +210,36 @@ function assertYotoMp3(bytes: Buffer, info: ClipInfo): void {
   if (info.otherStreams > 0 || info.audioStreams !== 1) {
     throw new Error(`ffprobe: the merged file is not a single audio stream (${summary}).`);
   }
-  const plain =
-    info.codec === "mp3" &&
-    info.sampleRate === 44100 &&
-    info.channels === 1 &&
-    info.bitRate >= 120_000 &&
-    info.bitRate <= 140_000 &&
-    info.duration >= MIN_MERGED_SECONDS;
-  if (!plain) {
+  if (!isPlainYotoMp3(bytes, info)) {
     throw new Error(`ffprobe: the merged file is not a plain 44.1 kHz mono 128 kb/s MP3 (${summary}).`);
+  }
+}
+
+/** Convert one audio file to the plain MP3. `ffmpegFormat` is the real container, such as webm or mp4. */
+export async function transcodeToYotoMp3(bytes: Buffer, ffmpegFormat?: string): Promise<Buffer> {
+  if (ffmpegFormat && !/^[a-z0-9_]+$/.test(ffmpegFormat)) {
+    throw new Error("That audio format cannot be converted.");
+  }
+  const dir = await mkdtemp(path.join(tmpdir(), "champdex-yoto-mp3-"));
+  const inPath = path.join(dir, `in.${ffmpegFormat || "bin"}`);
+  const outPath = path.join(dir, "out.mp3");
+  try {
+    await writeFile(inPath, bytes);
+    await run(ffmpegCommand(), [
+      "-y",
+      "-loglevel",
+      "error",
+      ...(ffmpegFormat ? ["-f", ffmpegFormat] : []),
+      "-i",
+      inPath,
+      ...YOTO_MP3_ARGS,
+      outPath,
+    ]);
+    const mp3 = await readFile(outPath);
+    assertYotoMp3(mp3, await describeClip(mp3, "out.mp3"));
+    return mp3;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
   }
 }
 

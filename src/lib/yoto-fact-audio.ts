@@ -691,6 +691,27 @@ async function pollUpload(
   return undefined;
 }
 
+/** Upload one plain MP3. The label is the song name used when Yoto refuses the file. */
+export async function uploadPlainMp3(
+  token: string,
+  audio: Buffer,
+  label: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<UploadedAudio> {
+  const name = label.replace(/\s+/g, " ").trim().slice(0, 80) || "this song";
+  if (audioContainer(audio) !== "mp3") throw new Error(`${name} is not an MP3.`);
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 24) || "song";
+  const uploadId = await openUpload(token, slug, audio, fetchImpl);
+  const uploaded = await pollUpload(token, uploadId, name, fetchImpl, 150);
+  if (!uploaded?.trackUrl.startsWith("yoto:#")) throw new Error(`Yoto is still transcoding ${name}.`);
+  return {
+    ...uploaded,
+    format: uploaded.format ?? "mp3",
+    fileSize: uploaded.fileSize ?? audio.length,
+    channels: uploaded.channels ?? "mono",
+  };
+}
+
 function clipReason(text: string): string {
   const clean = text.replace(/\s+/g, " ").trim();
   if (!clean || /<!doctype|<html[\s>]/i.test(clean) || /^Command failed:/i.test(clean)) return "";
