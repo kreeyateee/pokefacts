@@ -9,12 +9,17 @@ import {
   nearestTileIndex,
   sanitizeStickers,
   stickerHits,
+  stickerStorageKey,
   stickerStyle,
   tileCells,
   tileGrid,
 } from "./sticker-layout";
 
 describe("sticker looks", () => {
+  it("does not reuse a hex-grid draft from the old cover", () => {
+    assert.match(stickerStorageKey("facts-1"), /^pokefacts\.stickers\.v3\./);
+  });
+
   it("gives each suggested picture a different shape", () => {
     const stickers = defaultStickers(["a", "b", "c", "d", "e"]);
     const shapes = new Set(stickers.map((sticker) => sticker.shape));
