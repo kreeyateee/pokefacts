@@ -18,7 +18,6 @@ import type {
 import { heightForUnits, weightForUnits, type MeasureUnits } from "@/lib/format";
 import { statusWithDexNote } from "@/lib/spoken-wiki";
 import type { KidCard } from "@/lib/kid-cards";
-import { PICKER_VOICES } from "@/lib/piper-voice";
 import {
   selectionPlaylist,
   selectionSpeciesLimit,
@@ -179,8 +178,6 @@ export function Catalogue({
   playlists = [],
   playlistTarget = "",
   onPlaylistTarget,
-  voiceId = "",
-  onVoiceId,
   units = "metric",
   job = null,
 }: {
@@ -514,7 +511,8 @@ export function Catalogue({
   return (
     <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
       <section className="flex min-w-0 flex-col self-start">
-        <label className="order-1 grid gap-1 text-sm" htmlFor="catalogue-search">
+        <h2 className="order-1 pk-section-title">Find Pokémon</h2>
+        <label className="order-1 mt-2 grid gap-1 text-sm" htmlFor="catalogue-search">
           Search
           <input
             id="catalogue-search"
@@ -574,12 +572,23 @@ export function Catalogue({
             ))}
           </select>
         </label>
-        <div className="pk-card order-3 mt-4 px-3 py-3 lg:order-2">
-          <p className="text-sm font-medium">
+        <div className="pk-card order-2 mt-3 px-3 py-3 lg:hidden">
+          <div className="pk-pick-bar">
+            <p className="text-sm font-medium">
+              {picked.length.toLocaleString("en-GB")} Pokémon picked
+            </p>
+            <a href="#catalogue-build" className="pk-pill shrink-0">
+              Make card
+            </a>
+          </div>
+        </div>
+        <div id="catalogue-build" className="pk-card order-3 mt-4 px-3 py-3 lg:order-2">
+          <h2 className="pk-section-title">Your pick</h2>
+          <p className="mt-2 text-sm font-medium">
             {picked.length.toLocaleString("en-GB")} Pokémon picked
           </p>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            Ticking adds a Pokémon at the end. Open the playlist to drag the cards into order. Select all on this page checks only the list below.
+            Tick a Pokémon to add it at the end. Open the playlist to change the order.
           </p>
           <Button
             type="button"
@@ -622,7 +631,8 @@ export function Catalogue({
               Clear the pick
             </button>
           ) : null}
-          <fieldset className="mt-3 grid gap-2">
+          <h2 className="mt-4 pk-section-title">Make a card</h2>
+          <fieldset className="mt-2 grid gap-2">
             <legend className="text-sm font-medium">Playlist type</legend>
             {PLAYLIST_KINDS.map((option) => (
               <label key={option.id} className="grid grid-cols-[1rem_minmax(0,1fr)] gap-x-2 text-sm">
@@ -659,28 +669,6 @@ export function Catalogue({
             className="pk-field"
           />
           </label>
-          {onVoiceId ? (
-            <label className="mt-3 grid gap-1 text-sm" htmlFor="catalogue-voice">
-              Voice
-              <select
-                id="catalogue-voice"
-                aria-label="Voice"
-                className="pk-field"
-                value={voiceId}
-                disabled={building}
-                onChange={(event) => onVoiceId(event.target.value)}
-              >
-                {PICKER_VOICES.map((voice) => (
-                  <option key={voice.id} value={voice.id}>
-                    {voice.name} — {voice.note}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-          {onVoiceId ? (
-            <p className="mt-1 text-xs leading-5 pk-quiet">This voice reads every track on the playlist.</p>
-          ) : null}
           <label className="mt-3 grid gap-1 text-sm" htmlFor="catalogue-playlist">
             Where it goes
             <select
@@ -701,7 +689,8 @@ export function Catalogue({
           <p className="mt-1 text-xs leading-5 pk-quiet">
             {playlistTarget
               ? "Adds these tracks at the end. Tracks already on that playlist stay."
-              : "Makes a new playlist. Playlists you already have stay as they are."}
+              : "Makes a new playlist. Playlists you already have stay as they are."}{" "}
+            The voice is in Voice and sound, above.
           </p>
           <Button
             type="button"
@@ -719,17 +708,17 @@ export function Catalogue({
                 ? "Prints one card for this pick, at Yoto card size."
                 : `Prints ${Math.ceil(picked.length / speciesLimit)} cards. Each row on the sheet is a different card.`}
           </p>
-          <button
+          <Button
             type="button"
-            className="mt-3 h-11 w-full rounded-full border-[3px] border-ink bg-poke-red px-3 font-heading text-sm font-bold text-white shadow-[3px_3px_0_var(--ink)] disabled:opacity-40"
+            className="mt-3 h-11 w-full"
             disabled={picked.length === 0 || building}
             onClick={() => void buildPlaylist()}
           >
-            {building ? "Building playlist…" : "Build playlist from selection"}
-          </button>
+            {building ? "Sending…" : "Send this pick"}
+          </Button>
           {picked.length > speciesLimit ? (
             <p className="mt-2 text-xs leading-5 text-muted-foreground">
-              {`Build playlist sends one card of ${speciesLimit}. Print stickers splits this pick into ${Math.ceil(picked.length / speciesLimit)} cards.`}
+              {`Send this pick sends one card of ${speciesLimit}. Print stickers splits this pick into ${Math.ceil(picked.length / speciesLimit)} cards.`}
             </p>
           ) : null}
           {statusLabel ? (

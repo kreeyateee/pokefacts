@@ -5,7 +5,13 @@ import { YOTO_SCOPES } from "@/lib/yoto-icons";
 
 const SCOPES = YOTO_SCOPES.split(" ");
 
-export function SetupGuide({ onConnect }: { onConnect: () => void }) {
+export function SetupGuide({
+  onConnect,
+  onHome,
+}: {
+  onConnect: () => void;
+  onHome?: () => void;
+}) {
   return (
     <section className="pk-card mx-auto max-w-3xl px-5 py-6 sm:px-8">
       <h2 className="font-display text-3xl">Put a playlist on a card</h2>
@@ -19,25 +25,37 @@ export function SetupGuide({ onConnect }: { onConnect: () => void }) {
           library. It never asks for your Yoto password.
         </li>
         <li>
-          <span className="font-bold">2. Pick what to send.</span> Facts, Who&apos;s That Pokémon, Mega Evolutions, Gigantamax, or a
-          catalogue pick.
+          <span className="font-bold">2. Pick what to send.</span> Use Facts or Who&apos;s That for the ready-made
+          cards. Collections holds Mega Evolutions, Gigantamax, Alolan, Hisuian, Legendary, and Mythical sets.
+          Catalogue lets you tick your own list.
         </li>
         <li>
-          <span className="font-bold">3. Press Hear, then Send.</span> Hear plays one entry on this page. Send puts the
-          whole playlist in Make Your Own.
+          <span className="font-bold">3. Hear one, then make the card.</span> Hear plays one entry on this page. Make
+          this card sends the whole playlist to Make Your Own. Print stickers is next to Send.
         </li>
         <li>
           <span className="font-bold">4. Link it in the Yoto app.</span> Open Make Your Own, find the playlist name, and
           choose Link to a card. Hold a blank card to the player. The next playlist needs another blank card.
         </li>
       </ol>
-      <button
-        type="button"
-        className="mt-6 h-11 rounded-full border-[3px] border-ink bg-poke-red px-5 font-heading text-sm font-bold text-white shadow-[3px_3px_0_var(--ink)]"
-        onClick={onConnect}
-      >
-        Connect Yoto
-      </button>
+      <div className="mt-6 flex flex-wrap gap-2">
+        <button
+          type="button"
+          className="h-11 rounded-full border-[3px] border-ink bg-poke-red px-5 font-heading text-sm font-bold text-white shadow-[3px_3px_0_var(--ink)]"
+          onClick={onConnect}
+        >
+          Connect Yoto
+        </button>
+        {onHome ? (
+          <button
+            type="button"
+            className="h-11 rounded-full border-[3px] border-ink bg-white px-5 font-heading text-sm font-bold text-ink shadow-[3px_3px_0_var(--ink)]"
+            onClick={onHome}
+          >
+            Start with Facts
+          </button>
+        ) : null}
+      </div>
       <details className="mt-6 text-sm leading-6">
         <summary className="cursor-pointer font-bold">
           If you run Pokefacts on your own computer

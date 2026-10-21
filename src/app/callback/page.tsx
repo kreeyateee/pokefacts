@@ -1,9 +1,9 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { DONATE_URL } from "@/lib/site";
 import { exchangeCode } from "@/lib/yoto-session";
 
 function CallbackInner() {
@@ -38,13 +38,13 @@ function CallbackInner() {
   return (
     <main className="pk-page mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-4 px-6">
       <div className="pk-banner">
-        <a className="pk-wordmark" href={DONATE_URL} target="_blank" rel="noreferrer">
+        <Link className="pk-wordmark" href="/">
           <span className="pk-ball" aria-hidden="true" />
           <span>
             <span className="pk-wordmark-name">Pokefacts</span>
-            <span className="pk-wordmark-coffee">Buy me a coffee</span>
+            <span className="pk-wordmark-tag">Pokémon cards for Yoto</span>
           </span>
-        </a>
+        </Link>
       </div>
       <h1 className="text-3xl font-bold text-ink">Signing in</h1>
       <p className="text-sm leading-6 text-muted-foreground">{message}</p>
