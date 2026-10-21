@@ -771,13 +771,14 @@
   image-rendering: pixelated;
 }
 
-/* Frame around the canvas. The white the reader sees is painted into the canvas pixels. */
+/* Square frame around the canvas. The white the reader sees is painted into the canvas pixels. */
 .pk-silhouette {
   display: grid;
   width: min(16rem, 100%);
-  height: 12rem;
+  aspect-ratio: 1;
+  height: auto;
   flex: none;
-  place-items: center;
+  place-items: stretch;
   border: 3px solid var(--ink);
   border-radius: 1.25rem;
   background: #fff;
@@ -848,9 +849,15 @@
     order: 2;
   }
 
-  .pk-hero .pk-art,
-  .pk-hero .pk-silhouette {
+  .pk-hero .pk-art {
     height: 9rem;
+  }
+
+  .pk-hero .pk-silhouette {
+    width: min(16rem, 100%);
+    height: auto;
+    aspect-ratio: 1;
+    justify-self: start;
   }
 
   .pk-hero h2 {
