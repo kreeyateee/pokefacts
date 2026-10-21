@@ -9,6 +9,7 @@ import { SetupGuide } from "@/components/setup-guide";
 import { StatusBar } from "@/components/status-bar";
 import { ConnectDialog } from "@/components/connect-dialog";
 import { MusicPanel } from "@/components/music-panel";
+import { MysterySilhouette } from "@/components/mystery-silhouette";
 import { StickerStudio } from "@/components/sticker-studio";
 import { Button } from "@/components/ui/button";
 import {
@@ -1787,15 +1788,7 @@ export function Studio({
                 <div className="pk-hero">
                   {portrait && mysteryId ? (
                     <div className="pk-silhouette">
-                      <img
-                        src={portrait}
-                        alt=""
-                        width={176}
-                        height={176}
-                        data-fallback={artworkApi("species", mysteryId)}
-                        onError={hideBrokenPicture}
-                        className="pk-silhouette-shape"
-                      />
+                      <MysterySilhouette src={portrait} fallback={artworkApi("species", mysteryId)} />
                     </div>
                   ) : portrait ? (
                     <img
