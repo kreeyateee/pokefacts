@@ -12,7 +12,7 @@ import { ffmpegCommand } from "./ffmpeg-bin";
 import { factsPlaylistUpload, LILY_VOICE_ID } from "./kid-cards";
 import { piperReleaseArchive, piperSpeechCommand, PIPER_POKEDEX_ARGS, type PiperCommand } from "./piper";
 import { PIPER_MODEL_NAME, PIPER_SYNTH_ID, PIPER_VOICE_ID, piperCacheToken } from "./piper-voice";
-import { demoHearBody, factTrackBody, writeVoiceId } from "./voice-choice";
+import { demoHearBody, factTrackBody, readVoiceId, voiceSampleBody, writeVoiceId } from "./voice-choice";
 import { prepareFactTrack, renderedCacheKey } from "./yoto-fact-audio";
 import { prepareDemoAudio } from "./yoto-demo";
 
@@ -35,8 +35,17 @@ describe("Piper Pokédex voice", () => {
         memory.value = value;
       },
     };
+    assert.equal(readVoiceId({ getItem: () => null }), LILY_VOICE_ID);
+    assert.equal(voiceSampleBody().voiceId, LILY_VOICE_ID);
+    assert.equal(voiceSampleBody("").voiceId, LILY_VOICE_ID);
     assert.equal(writeVoiceId(storage, PIPER_VOICE_ID), PIPER_VOICE_ID);
     assert.equal(memory.value, PIPER_VOICE_ID);
+    const sample = voiceSampleBody(PIPER_VOICE_ID);
+    assert.equal(sample.voiceId, PIPER_VOICE_ID);
+    assert.equal(sample.dexId, undefined);
+    assert.equal("dexId" in sample, false);
+    assert.match(sample.text, /Pikachu/);
+    assert.equal(sample.title, "Voice sample");
     const hear = demoHearBody({ text: "Bulbasaur waits. Bulbapedia.", voiceId: PIPER_VOICE_ID, dexId: 1 });
     const track = factTrackBody({ text: "Bulbasaur waits.", title: "Bulbasaur", dexId: 1, voiceId: PIPER_VOICE_ID });
     assert.equal(hear.voiceId, PIPER_VOICE_ID);

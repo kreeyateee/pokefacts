@@ -9,6 +9,7 @@ import { Catalogue } from "@/components/catalogue";
 import { PlaybackPanel } from "@/components/playback-panel";
 import { SetupGuide } from "@/components/setup-guide";
 import { StatusBar } from "@/components/status-bar";
+import { CardOptionsDialog } from "@/components/card-options-dialog";
 import { ConnectDialog } from "@/components/connect-dialog";
 import { MusicPanel } from "@/components/music-panel";
 import { MysterySilhouette } from "@/components/mystery-silhouette";
@@ -540,6 +541,8 @@ export function Studio({
   const [bulkActive, setBulkActive] = useState(false);
   const [job, setJob] = useState<JobView | null>(null);
   const [stickersOpen, setStickersOpen] = useState(false);
+  const [cardPrompt, setCardPrompt] = useState<{ confirmLabel: string; newTitle: string } | null>(null);
+  const pendingCardAction = useRef<(() => void | Promise<void>) | null>(null);
   const [ready, setReady] = useState(false);
   const choiceListRef = useRef<HTMLElement | null>(null);
   const clipRef = useRef<HTMLAudioElement | null>(null);
@@ -1218,6 +1221,18 @@ export function Studio({
     return postPlaylist(playlist, prepared, headline ?? libraryTitle);
   }
 
+  function askCardOptions(confirmLabel: string, newTitle: string, run: () => void | Promise<void>) {
+    pendingCardAction.current = run;
+    setCardPrompt({ confirmLabel, newTitle });
+  }
+
+  function confirmCardOptions() {
+    const run = pendingCardAction.current;
+    pendingCardAction.current = null;
+    setCardPrompt(null);
+    if (run) void run();
+  }
+
   async function sendSelection(playlist: KidCard): Promise<void> {
     if (!(await connectedSession())) {
       throw new Error("Connect Yoto before building a playlist.");
@@ -1508,6 +1523,7 @@ export function Studio({
         ) : view === "catalogue" ? (
           <Catalogue
             onSendSelection={sendSelection}
+            onPrepareSend={(confirmLabel, newTitle, run) => askCardOptions(confirmLabel, newTitle, run)}
             onBuildStart={() => setJob(null)}
             playlists={library}
             playlistTarget={targetPlaylist}
@@ -1839,9 +1855,8 @@ export function Studio({
                       : ""}
               </p>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                {isPiperVoice(voiceId)
-                  ? "Piper reads here. The cry plays first, then that recording is uploaded."
-                  : "The voice you picked reads every track. The cry plays first."}
+                Send opens the voice and playlist choices first. Hear a sample there, then confirm. Recording
+                continues in the background after that. The cry plays first on the card.
               </p>
               <label className="mt-3 grid gap-1 text-sm" htmlFor="yoto-playlist">
                 Where it goes
@@ -1876,7 +1891,17 @@ export function Studio({
                   type="button"
                   className="h-11 px-4"
                   disabled={sending || !ready}
-                  onClick={() => void send()}
+                  onClick={() =>
+                    askCardOptions(
+                      randomGuess
+                        ? "Send these 50 riddles"
+                        : randomFacts
+                          ? "Send these 100"
+                          : `Send ${card.rangeLabel}`,
+                      card.libraryTitle,
+                      () => send(),
+                    )
+                  }
                 >
                   {sending && !bulkActive
                     ? "Recording…"
@@ -1895,8 +1920,14 @@ export function Studio({
                     variant="outline"
                     className="h-11 px-4"
                     disabled={sending || !ready}
-                    onClick={() => void sendAllFacts()}
-                  >
+                    onClick={() =>
+                      askCardOptions(
+                        `Send all ${factsPlaylists.length} playlists`,
+                        "Pokefacts 1",
+                        () => sendAllFacts(),
+                      )
+                    }
+                  }
                     {sending && bulkActive
                       ? "Recording…"
                       : `Send all ${factsPlaylists.length} playlists`}
@@ -1954,6 +1985,25 @@ export function Studio({
         <StickerStudio key={card.id} card={card} cards={rangeCards} onClose={() => setStickersOpen(false)} />
       ) : null}
       <ConnectDialog open={connectOpen} onOpenChange={setConnectOpen} />
+      <CardOptionsDialog
+        open={Boolean(cardPrompt)}
+        onOpenChange={(open) => {
+          if (!open) {
+            pendingCardAction.current = null;
+            setCardPrompt(null);
+          }
+        }}
+        confirmLabel={cardPrompt?.confirmLabel ?? "Send"}
+        onConfirm={confirmCardOptions}
+        voiceId={voiceId}
+        onVoiceId={(id) => setVoiceId(writeVoiceId(localStorage, id))}
+        playback={playback}
+        onPlayback={setPlayback}
+        targetPlaylist={targetPlaylist}
+        onTargetPlaylist={setTargetPlaylist}
+        library={library}
+        newTitle={cardPrompt?.newTitle ?? card?.libraryTitle ?? "Pokefacts"}
+      />
     </div>
   );
 }

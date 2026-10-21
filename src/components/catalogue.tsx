@@ -174,6 +174,7 @@ const PLAYLIST_KINDS: Array<{ id: SelectionKind; label: string; detail: string }
 
 export function Catalogue({
   onSendSelection,
+  onPrepareSend,
   onBuildStart,
   playlists = [],
   playlistTarget = "",
@@ -182,6 +183,7 @@ export function Catalogue({
   job = null,
 }: {
   onSendSelection?: (card: KidCard) => Promise<void>;
+  onPrepareSend?: (confirmLabel: string, newTitle: string, run: () => void | Promise<void>) => void;
   onBuildStart?: () => void;
   playlists?: Array<{ cardId: string; title: string }>;
   playlistTarget?: string;
@@ -690,7 +692,8 @@ export function Catalogue({
             {playlistTarget
               ? "Adds these tracks at the end. Tracks already on that playlist stay."
               : "Makes a new playlist. Playlists you already have stay as they are."}{" "}
-            The voice is in Voice and sound, above.
+            Send this pick asks for the voice and the playlist before anything is recorded. Recording then
+            continues in the background.
           </p>
           <Button
             type="button"
@@ -712,7 +715,20 @@ export function Catalogue({
             type="button"
             className="mt-3 h-11 w-full"
             disabled={picked.length === 0 || building}
-            onClick={() => void buildPlaylist()}
+            onClick={() => {
+              const title =
+                playlistTitle.trim() ||
+                (playlistKind === "whos-that"
+                  ? "Who's That Pokémon"
+                  : playlistKind === "advanced"
+                    ? "Advanced facts"
+                    : "Facts");
+              if (onPrepareSend) {
+                onPrepareSend("Send this pick", title, () => buildPlaylist());
+                return;
+              }
+              void buildPlaylist();
+            }}
           >
             {building ? "Sending…" : "Send this pick"}
           </Button>

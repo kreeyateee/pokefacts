@@ -18,6 +18,16 @@ export function writeVoiceId(storage: Required<Pick<VoiceStorage, "getItem" | "s
   return voiceId;
 }
 
+/** Short Pokédex line for the on-page voice buttons. No cry is mixed in. */
+export const VOICE_SAMPLE_TITLE = "Voice sample";
+export const VOICE_SAMPLE_TEXT =
+  "Pikachu. This Pokémon stores electricity in its cheeks. It lets that charge go when it is excited.";
+
+/** Hear request for one voice, with no cry in front. */
+export function voiceSampleBody(voiceId?: string) {
+  return demoHearBody({ text: VOICE_SAMPLE_TEXT, voiceId, title: VOICE_SAMPLE_TITLE });
+}
+
 /** Drop the wiki name. The on-page credit stays; the recording must not say it. */
 export function spokenForDemo(text: string): string {
   return text.replace(/\bBulbapedia\b/gi, "").replace(/\s+/g, " ").trim();
