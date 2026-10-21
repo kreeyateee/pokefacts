@@ -1439,7 +1439,7 @@ export function Studio({
         </div>
       </header>
       <div
-        className="pk-tabs pk-scroll mx-auto flex w-full min-w-0 max-w-5xl flex-nowrap gap-2 overflow-x-auto px-4 sm:px-6 md:flex-wrap md:overflow-visible"
+        className="pk-tabs mx-auto flex w-full min-w-0 max-w-5xl flex-wrap content-start gap-x-2 gap-y-3 px-4 sm:px-6"
         role="tablist"
         aria-label="Play mode"
       >

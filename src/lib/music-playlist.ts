@@ -1,4 +1,4 @@
-import { shiftPlaylistItem } from "./playlist-order";
+import { movePlaylistItem, shiftPlaylistItem } from "./playlist-order";
 
 /** Same cap as a Yoto playlist, without building a card. */
 export const MUSIC_PLAYLIST_LIMIT = 100;
@@ -98,6 +98,29 @@ export function musicPlaylistIndexAfterRemove(index: number, removed: number, le
   if (removed < index) return index - 1;
   if (removed === index) return Math.min(index, nextLength - 1);
   return clampIndex(index, nextLength);
+}
+
+/** Drop the song at `from` onto `to`. The moved song occupies `to`. */
+export function placeMusicPlaylistSong<T>(songs: readonly T[], from: number, to: number): T[] {
+  return movePlaylistItem(songs, from, to);
+}
+
+export function musicPlaylistIndexAfterPlace(index: number, from: number, to: number, length: number): number {
+  if (
+    !Number.isInteger(from) ||
+    !Number.isInteger(to) ||
+    from < 0 ||
+    to < 0 ||
+    from >= length ||
+    to >= length ||
+    from === to
+  ) {
+    return clampIndex(index, length);
+  }
+  if (index === from) return to;
+  if (from < to && index > from && index <= to) return index - 1;
+  if (from > to && index >= to && index < from) return index + 1;
+  return index;
 }
 
 export function musicPlaylistIndexAfterMove(

@@ -3,12 +3,15 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { useRowDrag } from "@/components/row-drag";
+import { SongLyrics } from "@/components/song-lyrics";
 import { MusicPlaylistSection, useMusicPlaylist } from "@/components/music-playlist";
 import { Button } from "@/components/ui/button";
 import { WebaooFiles } from "@/components/webaoo-files";
 import rawIndex from "@/data/music-index.json";
 import { YOTO_TRACK_LIMIT } from "@/lib/kid-cards";
 import { readMusicIndex, type MusicSong } from "@/lib/music-index";
+import { movePlaylistItem } from "@/lib/playlist-order";
 import { youtubeTarget } from "@/lib/youtube-link";
 import { musicPlaylistTitle, musicPlaylistUpload, type MusicPlaylistTrack } from "@/lib/youtube-playlist";
 import { uploadForPlaylist } from "@/lib/yoto-send";
@@ -21,7 +24,14 @@ function songMessage(song: MusicSong, code: string | undefined): string {
   return "";
 }
 
+type QueueItem = { kind: "page"; page: string } | { kind: "link"; url: string; playlist: boolean };
+
 type SavedTrack = MusicPlaylistTrack & { page?: string };
+
+function queueLabel(item: QueueItem, songsByPage: Map<string, MusicSong>): string {
+  if (item.kind === "page") return songsByPage.get(item.page)?.title || "Song";
+  return item.playlist ? "YouTube playlist" : "YouTube video";
+}
 
 async function messageOf(response: Response, fallback: string): Promise<string> {
   const payload = (await response.json().catch(() => null)) as { error?: string } | null;
@@ -51,8 +61,7 @@ export function MusicPanel({
   const [query, setQuery] = useState("");
   const [albumPage, setAlbumPage] = useState(index.albums[0]?.page ?? "");
   const [songPage, setSongPage] = useState("");
-  const [picked, setPicked] = useState<string[]>([]);
-  const [links, setLinks] = useState<Array<{ url: string; playlist: boolean }>>([]);
+  const [queue, setQueue] = useState<QueueItem[]>([]);
   const [link, setLink] = useState("");
   const [playlistTitle, setPlaylistTitle] = useState("");
   const [note, setNote] = useState("");
@@ -80,13 +89,17 @@ export function MusicPanel({
   const song = visibleSongs.find((item) => item.page === songPage) ?? visibleSongs[0];
   const gap = song ? gapByPage.get(song.page) : undefined;
   const playerNote = song ? songMessage(song, gap) : "";
-  const queued = picked.length + links.length;
+  const queued = queue.length;
+  const queueDrag = useRowDrag("data-yoto-queue-index", (from, to) => {
+    setQueue((current) => movePlaylistItem(current, from, to));
+  });
 
   function toggleSong(page: string) {
-    setPicked((current) => {
-      if (current.includes(page)) return current.filter((item) => item !== page);
-      if (current.length + links.length >= YOTO_TRACK_LIMIT) return current;
-      return [...current, page];
+    setQueue((current) => {
+      const existing = current.findIndex((item) => item.kind === "page" && item.page === page);
+      if (existing >= 0) return current.filter((_, index) => index !== existing);
+      if (current.length >= YOTO_TRACK_LIMIT) return current;
+      return [...current, { kind: "page", page }];
     });
     setFailed(false);
   }
@@ -98,12 +111,14 @@ export function MusicPanel({
       setNote("Paste a YouTube video or playlist link.");
       return;
     }
-    if (picked.length + links.length >= YOTO_TRACK_LIMIT) {
+    if (queue.length >= YOTO_TRACK_LIMIT) {
       setFailed(true);
       setNote(`A playlist holds ${YOTO_TRACK_LIMIT} tracks.`);
       return;
     }
-    setLinks((current) => (current.some((item) => item.url === target.url) ? current : [...current, target]));
+    setQueue((current) =>
+      current.some((item) => item.kind === "link" && item.url === target.url) ? current : [...current, { kind: "link", ...target }],
+    );
     setLink("");
     setFailed(false);
     setNote("");
@@ -133,9 +148,9 @@ export function MusicPanel({
 
   async function addToPlaylist() {
     if (busy || queued === 0) return;
-    if (picked.length > YOTO_TRACK_LIMIT) {
+    if (queue.length > YOTO_TRACK_LIMIT) {
       setFailed(true);
-      setNote(`A playlist holds ${YOTO_TRACK_LIMIT} tracks. ${picked.length} songs are picked. Nothing was sent.`);
+      setNote(`A playlist holds ${YOTO_TRACK_LIMIT} tracks. ${queue.length} songs are picked. Nothing was sent.`);
       return;
     }
     setBusy(true);
@@ -144,10 +159,11 @@ export function MusicPanel({
     try {
       const finished: SavedTrack[] = [];
       let remaining = YOTO_TRACK_LIMIT;
-      const steps: Array<{ page?: string; url?: string; label: string }> = [
-        ...picked.map((page) => ({ page, label: songsByPage.get(page)?.title || "Song" })),
-        ...links.map((item) => ({ url: item.url, label: item.playlist ? "YouTube playlist" : "YouTube video" })),
-      ];
+      const steps: Array<{ page?: string; url?: string; label: string }> = queue.map((item) =>
+        item.kind === "page"
+          ? { page: item.page, label: songsByPage.get(item.page)?.title || "Song" }
+          : { url: item.url, label: item.playlist ? "YouTube playlist" : "YouTube video" },
+      );
       for (let index = 0; index < steps.length; index += 1) {
         const step = steps[index];
         if (!step || remaining < 1) break;
@@ -268,7 +284,7 @@ export function MusicPanel({
             <div className="grid max-h-64 gap-2 overflow-y-auto pr-1">
               {visibleSongs.map((item) => {
                 const selected = item.page === song?.page;
-                const checked = picked.includes(item.page);
+                const checked = queue.some((entry) => entry.kind === "page" && entry.page === item.page);
                 return (
                   <div key={item.page} className="flex min-w-0 items-stretch gap-2">
                     <input
@@ -365,6 +381,8 @@ export function MusicPanel({
                   Read this song on Bulbapedia
                 </a>
               </p>
+              <h3 className="mt-3 text-base font-bold text-ink">Lyrics</h3>
+              <SongLyrics page={song.page} />
             </div>
           ) : null}
         </section>
@@ -377,35 +395,62 @@ export function MusicPanel({
       <section className="pk-card grid min-w-0 gap-3 p-4" aria-label="Yoto playlist">
         <h2 className="text-xl text-ink">Yoto playlist</h2>
         <p className="text-sm leading-6">
-          Tick songs, or paste a YouTube video or playlist. Each file is saved as a plain MP3 before it is added.
+          Tick songs, or paste a YouTube video or playlist. Drag a row to set the order. Each file is saved as a plain MP3 before it is added.
         </p>
         <p className="text-sm font-bold">
           {queued === 1 ? "1 item on this playlist" : `${queued} items on this playlist`}
         </p>
-        {picked.length > 0 || links.length > 0 ? (
-          <ul className="grid max-h-40 gap-1 overflow-y-auto text-sm">
-            {picked.map((page) => (
-              <li key={page} className="flex items-center justify-between gap-2">
-                <span className="min-w-0 break-words">{songsByPage.get(page)?.title || "Song"}</span>
-                <button type="button" className="shrink-0 text-xs underline" disabled={busy} onClick={() => toggleSong(page)}>
-                  Remove
-                </button>
-              </li>
-            ))}
-            {links.map((item) => (
-              <li key={item.url} className="flex items-center justify-between gap-2">
-                <span className="min-w-0 break-all">{item.playlist ? "YouTube playlist" : "YouTube video"}</span>
-                <button
-                  type="button"
-                  className="shrink-0 text-xs underline"
-                  disabled={busy}
-                  onClick={() => setLinks((current) => current.filter((linkItem) => linkItem.url !== item.url))}
+        {queue.length > 0 ? (
+          <ol className="grid max-h-80 gap-2 overflow-y-auto text-sm">
+            {queue.map((item, itemIndex) => {
+              const label = queueLabel(item, songsByPage);
+              const dropping =
+                queueDrag.overIndex === itemIndex && queueDrag.dragIndex !== null && queueDrag.dragIndex !== itemIndex;
+              return (
+                <li
+                  key={item.kind === "page" ? item.page : item.url}
+                  {...queueDrag.rowProps(itemIndex)}
+                  className={`flex cursor-grab flex-wrap items-center justify-between gap-2 rounded-lg border-2 border-ink px-2 py-2 select-none ${
+                    queueDrag.dragIndex === itemIndex ? "opacity-60" : ""
+                  } ${dropping ? "bg-poke-yellow" : ""}`}
                 >
-                  Remove
-                </button>
-              </li>
-            ))}
-          </ul>
+                  <span className="min-w-0 break-words">
+                    {itemIndex + 1}. {label}
+                  </span>
+                  <span className="flex shrink-0 gap-2">
+                    <button
+                      type="button"
+                      className="text-xs underline disabled:opacity-40"
+                      disabled={busy || itemIndex === 0}
+                      aria-label={`Move ${label} up`}
+                      onClick={() => setQueue((current) => movePlaylistItem(current, itemIndex, itemIndex - 1))}
+                    >
+                      Up
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs underline disabled:opacity-40"
+                      disabled={busy || itemIndex === queue.length - 1}
+                      aria-label={`Move ${label} down`}
+                      onClick={() => setQueue((current) => movePlaylistItem(current, itemIndex, itemIndex + 1))}
+                    >
+                      Down
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs underline"
+                      disabled={busy}
+                      onClick={() =>
+                        setQueue((current) => current.filter((_, index) => index !== itemIndex))
+                      }
+                    >
+                      Remove
+                    </button>
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
         ) : null}
         <label className="grid gap-1 text-sm font-bold" htmlFor="music-link">
           YouTube link
