@@ -1931,7 +1931,7 @@ export function Studio({
               </div>
             </section>
           </div>
-        ) : null}}
+        ) : null}
         </div>
       </main>
 
