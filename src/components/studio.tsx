@@ -1928,7 +1928,7 @@ export function Studio({
                         () => sendAllFacts(),
                       )
                     }
-                  }
+                  >
                     {sending && bulkActive
                       ? "Recording in the background…"
                       : `Send all ${factsPlaylists.length} playlists`}
