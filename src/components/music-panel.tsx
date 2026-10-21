@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { SongLyrics } from "@/components/song-lyrics";
 import { MusicPlaylistEmbed, MusicPlaylistSection, useMusicPlaylist } from "@/components/music-playlist";
+import { toastSendReady } from "@/components/send-banner";
 import { Button } from "@/components/ui/button";
 import rawIndex from "@/data/music-index.json";
 import { readMusicIndex, type MusicSong } from "@/lib/music-index";
@@ -216,6 +217,7 @@ export function MusicPanel({
       }
       setFailed(false);
       setNote(`${plan.title} is in your Yoto library.`);
+      toastSendReady(plan.title);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "The playlist was not sent.";
       if (/connect yoto/i.test(message)) {

@@ -180,6 +180,7 @@ export function Catalogue({
   onPlaylistTarget,
   units = "metric",
   job = null,
+  sending = false,
 }: {
   onSendSelection?: (card: KidCard) => Promise<void>;
   onBuildStart?: () => void;
@@ -190,6 +191,7 @@ export function Catalogue({
   onVoiceId?: (voiceId: string) => void;
   units?: MeasureUnits;
   job?: { status: string; detail: string; done?: number; total?: number } | null;
+  sending?: boolean;
 } = {}) {
   const [query, setQuery] = useState("");
   const [type, setType] = useState("");
@@ -690,7 +692,7 @@ export function Catalogue({
             {playlistTarget
               ? "Adds these tracks at the end. Tracks already on that playlist stay."
               : "Makes a new playlist. Playlists you already have stay as they are."}{" "}
-            The voice is in Voice and sound, above.
+            The voice is in Voice and sound, above. Send keeps recording in the background.
           </p>
           <Button
             type="button"
@@ -711,10 +713,10 @@ export function Catalogue({
           <Button
             type="button"
             className="mt-3 h-11 w-full"
-            disabled={picked.length === 0 || building}
+            disabled={picked.length === 0 || building || sending}
             onClick={() => void buildPlaylist()}
           >
-            {building ? "Sending…" : "Send this pick"}
+            {building || sending ? "Recording in the background…" : "Send this pick"}
           </Button>
           {picked.length > speciesLimit ? (
             <p className="mt-2 text-xs leading-5 text-muted-foreground">
