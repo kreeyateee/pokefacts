@@ -124,7 +124,7 @@ function talk(
   source?: string,
   lead?: "cry",
 ): KidTrack {
-  const readable = text.replace(/\s+/g, " ").trim();
+  const readable = text.replace(/[^\S\n]+/g, " ").replace(/ *\n+ */g, "\n").trim();
   return {
     key,
     title,
@@ -200,7 +200,7 @@ export function rangeLabel(kind: KidCardKind, first: number, last: number, index
   if (kind === "mythical") return "Mythical Pokémon";
   const span = first === last ? String(first) : `${first}-${last}`;
   if (kind === "meet") return `${pokefactsTitle(index)} (${span})`;
-  return `Guess Who ${span}`;
+  return `Who's That Pokémon ${span}`;
 }
 
 /** One cry-or-speech line while a playlist is recording. */
@@ -267,9 +267,9 @@ function intro(kind: KidCardKind, index: number, first: number, last: number, fi
   const text =
     kind === "meet"
       ? `Pokefacts ${index}. Turn the wheel until you see a picture, then press play. You hear the cry, then the name. Number ${first} is ${firstName}.`
-      : `Guess Who, numbers ${span}. Turn the wheel until you see a dark picture, then press play. You hear three short clues. Say the name before the count ends. The next track says the answer.`;
+      : `Who's That Pokémon, numbers ${span}. Turn the wheel until you see a dark picture, then press play. You hear the colour and the type, two Pokédex lines, and how big it is. Say the name before the count ends. The next track says the answer.`;
   return picture("start", "Start here", "Go", "a star", "★", I.star, [
-    talk("how", kind === "meet" ? "How to play" : "How to play Guess Who", text, I.star, "Go"),
+    talk("how", kind === "meet" ? "How to play" : "How to play Who's That Pokémon", text, I.star, "Go"),
   ]);
 }
 
@@ -288,9 +288,9 @@ function buildGroup(sheets: MonSheet[], kind: KidCardKind, size: number): KidCar
     return {
       id: `${kind}-${playlistIndex}`,
       kind,
-      title: kind === "meet" ? "Pokefacts" : "Guess Who",
+      title: kind === "meet" ? "Pokefacts" : "Who's That Pokémon",
       rangeLabel: label,
-      libraryTitle: kind === "meet" ? pokefactsTitle(playlistIndex) : "Guess Who",
+      libraryTitle: kind === "meet" ? pokefactsTitle(playlistIndex) : "Who's That Pokémon",
       recommended: kind === "meet" && index === 0,
       blurb:
         kind === "meet"
@@ -511,7 +511,7 @@ export function shadowPixelPath(id: number): string {
 
 /**
  * One playlist of 50 riddles. Two tracks each fills the 100-track card.
- * Each clue is the number, three short sentences, and the count.
+ * Each clue is the number, the colour and type, two Pokédex lines, the size, and the count.
  */
 export function randomGuessCard(pool: KidChapter[], random: () => number = Math.random): KidCard {
   const drawn = drawSample(
@@ -542,12 +542,12 @@ export function randomGuessCard(pool: KidChapter[], random: () => number = Math.
   return {
     id: RANDOM_GUESS_ID,
     kind: "guess",
-    title: "Guess Who",
+    title: "Who's That Pokémon",
     rangeLabel: "Random 50",
-    libraryTitle: "Guess Who",
+    libraryTitle: "Who's That Pokémon",
     blurb: "Fifty riddles drawn at random. The cry, then the clue. The cry again, then the answer.",
     childDoes:
-      "Pick a dark picture and press play. You hear the cry, then three short clues, then a count of three. The answer plays the cry again, then the name.",
+      "Pick a dark picture and press play. You hear the cry, then the colour and type, two Pokédex lines, and how big it is. The answer plays the cry again, then the name.",
     chapters,
   };
 }
@@ -584,10 +584,10 @@ export function guessUpload(
     }),
   };
   const content = buildKidCard(prepared, cardId);
-  content.metadata.title = "Guess Who";
-  content.title = "Guess Who";
+  content.metadata.title = "Who's That Pokémon";
+  content.title = "Who's That Pokémon";
   content.metadata.description =
-    "Guess Who. Fifty riddles drawn at random. Each track starts with the cry, then Lily. The clue never says the name. The answer says the name. The clue icon is a dark shadow. The answer icon is the real pixel. Written for ages 8 to 12. Link this playlist to its own card.";
+    "Who's That Pokémon. Fifty riddles drawn at random. Each track starts with the cry, then Lily. The clue never says the name. The answer says the name. The clue icon is a dark shadow on white. The answer icon is the real pixel on white. Written for ages 8 to 12. Link this playlist to its own card.";
   return { voiceId: spoken, content };
 }
 

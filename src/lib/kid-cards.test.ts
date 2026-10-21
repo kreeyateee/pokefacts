@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import {
@@ -11,7 +11,7 @@ import {
   listMonSheets,
   listMythicalSheets,
 } from "./catalogue-db";
-import { dexBlurb, pickDexEntry, threeClues, type FlavorSource, type MonSheet } from "./dex-facts";
+import { dexBlurb, pickDexEntry, riddleParts, threeClues, type FlavorSource, type MonSheet } from "./dex-facts";
 import {
   applySpeciesSpeech,
   buildKidCard,
@@ -40,6 +40,7 @@ import {
 } from "./kid-cards";
 import { spokenWiki } from "./spoken-wiki";
 import type { BiologyBlock } from "./catalogue-types";
+import { readPngRgba } from "./pixel-paint";
 import { pronounce } from "./pronounce";
 import {
   afterRejectedPlaylist,
@@ -153,10 +154,12 @@ describe("Pokédex entries", () => {
     assert.doesNotMatch(chosen.text, /feet/);
   });
 
-  it("hides the answer name inside three Pokédex clues", () => {
+  it("hides the answer name and keeps both Pokédex lines", () => {
     const clues = threeClues("Bulbasaur", entry("Bulbasaur"));
-    assert.equal(clues.length, 3);
+    assert.equal(clues.length, 2);
     for (const clue of clues) assert.doesNotMatch(clue, /Bulbasaur/);
+    assert.match(clues[0] ?? "", /quiet habit/);
+    assert.match(clues[1] ?? "", /wanders far from home/);
   });
 
   it("keeps a dex entry to name, type, description, and size", () => {
@@ -216,7 +219,7 @@ describe("Pokédex entries", () => {
     assert.match(authored, /large plant bulb on its back/);
   });
 
-  it("writes original clues when the Pokédex has fewer than three sentences", () => {
+  it("writes the type, the Pokédex line, and a size picture", () => {
     const clues = threeClues(
       "Mew",
       [
@@ -234,15 +237,19 @@ describe("Pokédex entries", () => {
       },
     );
     assert.equal(clues.length, 3);
-    for (const clue of clues) assert.doesNotMatch(clue, /Mew/i);
-    assert.doesNotThrow(() =>
-      threeClues("Mr. Mime", [
-        {
-          version: "red",
-          text: "Mr. Mime is a master of pantomime and can make walls of thin air.",
-        },
-      ]),
-    );
+    assert.match(clues[0] ?? "", /It is a Psychic type\./);
+    assert.match(clues[1] ?? "", /mirage/);
+    assert.match(clues[2] ?? "", /about as tall as a cat/);
+    for (const clue of clues) assert.doesNotMatch(clue, /\bMew\b/i);
+    const mime = threeClues("Mr. Mime", [
+      {
+        version: "red",
+        text: "Mr. Mime is a master of pantomime and can make walls of thin air.",
+      },
+    ]);
+    assert.equal(mime.length, 1);
+    assert.match(mime[0] ?? "", /master of pantomime/);
+    assert.doesNotMatch(mime[0] ?? "", /Mr\. Mime/);
   });
 
   it("respells the names the narrator gets wrong", () => {
@@ -267,7 +274,7 @@ describe("cards for ages 8 to 12", () => {
     assert.equal(cards[0]?.kind, "meet");
     assert.equal(cards[1]?.kind, "guess");
     assert.equal(cards[0]?.title, "Pokefacts");
-    assert.equal(cards[1]?.title, "Guess Who");
+    assert.equal(cards[1]?.title, "Who's That Pokémon");
   });
 
   it("tells the child how to use the player before any facts", () => {
@@ -360,6 +367,11 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function clueNamesPokemon(name: string, text: string): boolean {
+  const token = escapeRegExp(name);
+  return new RegExp(`(?:^|(?<=\\s))${token}(?![\\p{L}\\p{N}])`, "iu").test(text);
+}
+
 const GUESS_LECTURE = /picture changes|Turn to another number/i;
 
 function assertGuessScriptsStayShort(
@@ -375,13 +387,11 @@ function assertGuessScriptsStayShort(
     const answer = chapter.tracks[1]?.text ?? "";
     assert.match(clue, new RegExp(`^Number ${chapter.dexId}\\.`));
     assert.match(clue, /Shout your guess\. One\. Two\. Three\.$/);
-    const middle = clue
-      .replace(/^Number \d+\. /, "")
-      .replace(/ Shout your guess\. One\. Two\. Three\.$/, "");
-    const sentences = middle.match(/[^.!?]+[.!?]+/g) ?? [];
-    assert.equal(sentences.length, 3);
-    for (const sentence of sentences) {
-      assert.equal(answer.includes(sentence.trim()), false);
+    const parts = riddleParts(clue);
+    assert.equal(parts.countdown, "Shout your guess. One. Two. Three.");
+    assert.ok(parts.clues.length >= 2 && parts.clues.length <= 4);
+    for (const line of parts.clues) {
+      assert.equal(answer.includes(line), false);
     }
   }
 }
@@ -405,9 +415,9 @@ describe("every national species", () => {
     assert.equal(facts[1]?.libraryTitle, "Pokefacts 2");
     assert.equal(facts[10]?.libraryTitle, "Pokefacts 11");
     assert.equal(facts[10]?.rangeLabel, "Pokefacts 11 (991-1025)");
-    assert.equal(guess[0]?.libraryTitle, "Guess Who");
-    assert.equal(guess[0]?.rangeLabel, "Guess Who 1-49");
-    assert.equal(guess[20]?.rangeLabel, "Guess Who 981-1025");
+    assert.equal(guess[0]?.libraryTitle, "Who's That Pokémon");
+    assert.equal(guess[0]?.rangeLabel, "Who's That Pokémon 1-49");
+    assert.equal(guess[20]?.rangeLabel, "Who's That Pokémon 981-1025");
     for (const card of facts) {
       const payload = buildKidCard(card);
       assert.equal(payload.title, card.libraryTitle);
@@ -454,9 +464,13 @@ describe("every national species", () => {
       for (const chapter of card.chapters) {
         if (!chapter.dexId) continue;
         const clue = chapter.tracks[0]?.text ?? "";
-        assert.doesNotMatch(clue, new RegExp(escapeRegExp(chapter.title), "i"));
-        assert.doesNotMatch(clue, /\btype\b/i);
-        assert.match(clue, /tall as|shorter than|taller than|heavy as|heavier than|lighter than|size is hard to picture/);
+        const sheet = sheets.find((item) => item.id === chapter.dexId);
+        const hidden = [chapter.title, sheet?.evolvesFrom, ...(sheet?.evolvesInto ?? [])].filter(
+          (name): name is string => Boolean(name),
+        );
+        for (const name of hidden) assert.equal(clueNamesPokemon(name, clue), false, `${chapter.dexId} ${name}`);
+        assert.match(clue, /\btype\b/i);
+        assert.match(clue, /tall as|shorter than|taller than|heavy as|heavier than|lighter than/);
         assert.match(chapter.tracks[1]?.text ?? "", /^It is /);
         assert.equal(chapter.tracks[0]?.lead, "cry");
         assert.equal(chapter.tracks[1]?.lead, "cry");
@@ -472,27 +486,36 @@ describe("every national species", () => {
     const clue = riddle.tracks[0]?.text ?? "";
     const answer = riddle.tracks[1]?.text ?? "";
     const flavor = croconaw.entries.map((entry) => entry.text).join(" ");
-    assert.equal(
-      clue,
-      "Number 159. It lives at the water's edge. The fangs hook backward like fishhooks. It is about as tall as a child and about as heavy as a child. Shout your guess. One. Two. Three.",
-    );
-    assert.doesNotMatch(clue, /type\b/i);
+    const parts = riddleParts(clue);
+    assert.match(clue, /^Number 159\./);
+    assert.equal(parts.countdown, "Shout your guess. One. Two. Three.");
+    assert.match(parts.clues[0] ?? "", /Water type/);
+    assert.match(parts.clues.at(-1) ?? "", /tall|heavy|lighter|shorter/);
+    assert.ok((parts.clues[1] ?? "").length > 20);
     assert.equal(answer, "It is Croconaw. It grows from Totodile and becomes Feraligatr.");
-    assert.doesNotMatch(clue, /Croconaw|Totodile|Feraligatr/i);
+    assert.doesNotMatch(clue, /\bCroconaw\b/i);
     assert.match(answer, /^It is Croconaw\./);
-    assert.equal(clue.includes(flavor), false);
     assert.equal(answer.includes(flavor), false);
     assert.doesNotMatch(`${clue} ${answer}`, GUESS_LECTURE);
     assert.equal(riddle.tracks[0]?.lead, "cry");
     assert.equal(riddle.tracks[1]?.lead, "cry");
-    const clueSentences =
-      clue
-        .replace(/^Number 159\. /, "")
-        .replace(/ Shout your guess\. One\. Two\. Three\.$/, "")
-        .match(/[^.!?]+[.!?]+/g) ?? [];
-    for (const sentence of clueSentences) {
-      assert.equal(answer.includes(sentence.trim()), false);
+    for (const line of parts.clues) {
+      assert.equal(answer.includes(line), false);
     }
+  });
+
+  it("reads Virizion as colour and type, two Pokédex lines, then size", () => {
+    const riddle = guess.flatMap((card) => card.chapters).find((chapter) => chapter.dexId === 640);
+    assert.ok(riddle);
+    const parts = riddleParts(riddle.tracks[0]?.text ?? "");
+    assert.deepEqual(parts.clues, [
+      "It is green, and it is a Grass and Fighting type.",
+      "It darts around opponents with a flurry of quick movements, slicing them up with its horns.",
+      "It fought humans in order to protect its friends. Legends about it continue to be passed down.",
+      "It is about as tall as a doorway and about as heavy as a motorbike.",
+    ]);
+    assert.equal(parts.countdown, "Shout your guess. One. Two. Three.");
+    assert.equal(clueNamesPokemon("Virizion", riddle.tracks[0]?.text ?? ""), false);
   });
 });
 
@@ -509,6 +532,34 @@ function pngInfoFile(file: string) {
 function pngInfo(id: number) {
   return pngInfoFile(`public/pixels/${id}.png`);
 }
+
+describe("opaque pixel icons", () => {
+  it("fills every 16×16 icon and shadow with an opaque white background", () => {
+    const files = readdirSync("public/pixels").filter((name) => name.endsWith(".png"));
+    assert.equal(files.length, 2050);
+    for (const name of files) {
+      const decoded = readPngRgba(readFileSync(`public/pixels/${name}`));
+      assert.equal(decoded.width, 16, name);
+      assert.equal(decoded.height, 16, name);
+      for (let index = 3; index < decoded.rgba.length; index += 4) {
+        assert.equal(decoded.rgba[index], 255, name);
+      }
+      if (!name.endsWith("-shadow.png")) continue;
+      for (let index = 0; index < decoded.rgba.length; index += 4) {
+        const red = decoded.rgba[index];
+        const green = decoded.rgba[index + 1];
+        const blue = decoded.rgba[index + 2];
+        const white = red === 255 && green === 255 && blue === 255;
+        const ink = red === 28 && green === 28 && blue === 32;
+        assert.equal(white || ink, true, `${name} has a pixel that is not white or the shadow`);
+      }
+    }
+    const bulbasaur = readPngRgba(readFileSync("public/pixels/1.png"));
+    assert.deepEqual(Array.from(bulbasaur.rgba.slice(0, 4)), [255, 255, 255, 255]);
+    const shadow = readPngRgba(readFileSync("public/pixels/1-shadow.png"));
+    assert.equal(shadow.rgba.includes(28), true);
+  });
+});
 
 describe("random Pokedex playlist", () => {
   const pool = factPoolFromCards(kidCardsFromDex(listMonSheets()));
@@ -1030,17 +1081,14 @@ describe("random Guess Who", () => {
       assert.ok(clue);
       assert.ok(answer);
       assert.match(clue.text, /One\. Two\. Three\./);
-      assert.doesNotMatch(clue.text, new RegExp(escapeRegExp(name), "i"));
+      assert.equal(clueNamesPokemon(name, clue.text), false);
       assert.match(answer.text, new RegExp(`^It is ${escapeRegExp(name)}\\.`));
       assert.doesNotMatch(`${clue.text} ${answer.text} ${clue.spoken} ${answer.spoken}`, GUESS_LECTURE);
-      const clueSentences =
-        clue.text
-          .replace(/^Number \d+\. /, "")
-          .replace(/ Shout your guess\. One\. Two\. Three\.$/, "")
-          .match(/[^.!?]+[.!?]+/g) ?? [];
-      assert.equal(clueSentences.length, 3);
-      for (const sentence of clueSentences) {
-        assert.equal(answer.text.includes(sentence.trim()), false);
+      const parts = riddleParts(clue.text);
+      assert.equal(parts.countdown, "Shout your guess. One. Two. Three.");
+      assert.ok(parts.clues.length >= 2 && parts.clues.length <= 4);
+      for (const line of parts.clues) {
+        assert.equal(answer.text.includes(line), false);
       }
       assert.equal(chapter.icon, shadowPixelPath(id as number));
       assert.equal(clue.icon, `/pixels/${id}-shadow.png`);
@@ -1072,7 +1120,7 @@ describe("random Guess Who", () => {
       assert.equal(chapter.tracks[0]?.voiceId, LILY_VOICE_ID);
       assert.equal(chapter.tracks[1]?.voiceId, LILY_VOICE_ID);
       assert.equal(chapter.tracks[0]?.type, "elevenlabs");
-      assert.doesNotMatch(chapter.tracks[0]?.trackUrl ?? "", new RegExp(escapeRegExp(first.chapters[index]?.title ?? "XXXX"), "i"));
+      assert.equal(clueNamesPokemon(first.chapters[index]?.title ?? "XXXX", chapter.tracks[0]?.trackUrl ?? ""), false);
       assert.match(chapter.tracks[1]?.trackUrl ?? "", /^It is /);
     });
   });
@@ -1086,7 +1134,7 @@ describe("random Guess Who", () => {
       const name = chapter.title;
       assert.equal(order.clue[0], "cry");
       assert.equal(order.answer[0], "cry");
-      assert.doesNotMatch(order.clue[1] ?? "", new RegExp(escapeRegExp(name), "i"));
+      assert.equal(clueNamesPokemon(name, order.clue[1] ?? ""), false);
       assert.match(order.answer[1] ?? "", new RegExp(`^It is ${escapeRegExp(name)}\\.`));
       assert.equal(chapter.tracks[0]?.lead, "cry");
       assert.equal(chapter.tracks[1]?.lead, "cry");

@@ -459,6 +459,8 @@ export function Catalogue({
           evolvesFrom: entry.evolvesFrom?.name ?? null,
           evolutions: entry.evolutions.map((evolution) => ({ name: evolution.name, method: evolution.method })),
           info: entry.info,
+          info2: entry.info2,
+          color: entry.color,
           biology: biologyPayload.biology?.blocks ?? [],
         });
       }
@@ -1102,7 +1104,7 @@ function EvolutionPicks({
               onClick={() => onOpen(member.id)}
             >
               <img
-                src={spriteSrc(member.id)}
+                src={artworkSrc(member.id)}
                 alt=""
                 width={48}
                 height={48}

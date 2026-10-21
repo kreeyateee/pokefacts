@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { useRowDrag } from "@/components/row-drag";
-import { SongLyrics } from "@/components/song-lyrics";
 import {
   MUSIC_PLAYLIST_STORAGE_KEY,
   addMusicPlaylistSong,
@@ -305,10 +304,21 @@ export function MusicPlaylistEmbed({
 
 export function MusicPlaylistSection({
   playlist,
+  saving = false,
+  onSave,
+  title = "Pokémon music",
+  onTitle,
+  pictures: _pictures,
+  onStickers: _onStickers,
 }: {
   playlist: ReturnType<typeof useMusicPlaylist>;
+  saving?: boolean;
+  onSave?: () => void;
+  title?: string;
+  onTitle?: (title: string) => void;
+  pictures?: Record<string, { id: number; name: string }>;
+  onStickers?: () => void;
 }) {
-  const current = playlist.songs[playlist.index];
   const countLabel =
     playlist.songs.length === 1 ? "1 of 100 songs" : `${playlist.songs.length} of 100 songs`;
   const drag = useRowDrag("data-music-index", playlist.placeSong);
@@ -318,7 +328,21 @@ export function MusicPlaylistSection({
       <div className="min-w-0">
         <h2 className="text-xl text-ink">My playlist</h2>
         <p className="text-sm leading-6">{countLabel}</p>
+        <p className="text-sm leading-6">
+          Save to Yoto turns this list into a playlist of MP3s. A song about one Pokémon uses that Pokémon's picture.
+        </p>
       </div>
+      <label className="grid min-w-0 gap-1 text-sm font-bold" htmlFor="music-card-name">
+        Card name
+        <input
+          id="music-card-name"
+          value={title}
+          onChange={(event) => onTitle?.(event.target.value)}
+          placeholder="Pokémon music"
+          className="pk-field"
+          style={{ fontSize: 16 }}
+        />
+      </label>
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
@@ -345,37 +369,19 @@ export function MusicPlaylistSection({
         >
           Next
         </button>
+        <button
+          type="button"
+          className="pk-pill min-h-11"
+          onClick={onSave}
+          disabled={!onSave || playlist.songs.length === 0 || saving}
+        >
+          {saving ? "Saving to Yoto…" : "Save to Yoto"}
+        </button>
       </div>
       {playlist.songs.length === 0 ? (
         <p className="pk-card min-w-0 px-4 py-4 text-sm leading-6">
-          Your playlist is empty. Add a song that has a YouTube video.
+          Your playlist is empty. Add a song and it plays in the player above.
         </p>
-      ) : current ? (
-        <div className="pk-card min-w-0 p-3">
-          <p className="text-lg font-bold break-words text-ink">{current.title}</p>
-          {current.album ? <p className="text-sm leading-6 break-words">{current.album}</p> : null}
-          <MusicPlaylistEmbed
-            key={`${current.id}-${playlist.playGeneration}`}
-            videoId={current.youtubeId}
-            title={current.title}
-            autoplay={playlist.playing}
-            onEnded={playlist.onEnded}
-          />
-          <p className="mt-3 text-sm leading-6">
-            If the player stays blank,{" "}
-            <a
-              className="font-bold underline decoration-poke-red decoration-2"
-              href={`https://www.youtube.com/watch?v=${current.youtubeId}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              open this video on YouTube
-            </a>
-            .
-          </p>
-          <h3 className="mt-3 text-base font-bold text-ink">Lyrics</h3>
-          <SongLyrics page={current.page} />
-        </div>
       ) : null}
       {playlist.songs.length > 0 ? (
         <>

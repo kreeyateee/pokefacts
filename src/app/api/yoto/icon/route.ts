@@ -3,6 +3,7 @@ import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { ffmpegCommand } from "@/lib/ffmpeg-bin";
+import { COLOUR_PIXEL_FILTER, SHADOW_PIXEL_FILTER } from "@/lib/pixel-paint";
 import { safeHttpStatus, yotoUpstreamFailure } from "@/lib/yoto-error";
 import { bearerToken, jsonError } from "@/lib/yoto-proxy";
 
@@ -10,7 +11,7 @@ function scalePixel(sprite: string, pixel: string): Promise<void> {
   return new Promise((resolve, reject) => {
     execFile(
       ffmpegCommand(),
-      ["-y", "-loglevel", "error", "-i", sprite, "-vf", "scale=16:16:flags=neighbor,format=rgba", pixel],
+      ["-y", "-loglevel", "error", "-i", sprite, "-vf", COLOUR_PIXEL_FILTER, pixel],
       { timeout: 20_000 },
       (error) => (error ? reject(error) : resolve()),
     );
@@ -26,20 +27,11 @@ async function ensurePixel(file: string, id: string): Promise<void> {
   }
 }
 
-function paintShadow(pixel: string, shadow: string): Promise<void> {
+function paintShadow(sprite: string, shadow: string): Promise<void> {
   return new Promise((resolve, reject) => {
     execFile(
       ffmpegCommand(),
-      [
-        "-y",
-        "-loglevel",
-        "error",
-        "-i",
-        pixel,
-        "-vf",
-        "format=rgba,geq=r='if(gt(alpha(X,Y),0),28,0)':g='if(gt(alpha(X,Y),0),28,0)':b='if(gt(alpha(X,Y),0),32,0)':a='alpha(X,Y)',format=rgba",
-        shadow,
-      ],
+      ["-y", "-loglevel", "error", "-i", sprite, "-vf", SHADOW_PIXEL_FILTER, shadow],
       { timeout: 20_000 },
       (error) => (error ? reject(error) : resolve()),
     );
@@ -50,9 +42,8 @@ async function ensureShadow(file: string, id: string): Promise<void> {
   try {
     await access(file);
   } catch {
-    const pixel = path.join(process.cwd(), "public", "pixels", `${id}.png`);
-    await ensurePixel(pixel, id);
-    await paintShadow(pixel, file);
+    const sprite = path.join(process.cwd(), "public", "sprites", `${id}.png`);
+    await paintShadow(sprite, file);
   }
 }
 

@@ -50,7 +50,7 @@ export function playableYoutubeId(value: string | null | undefined): string | nu
 
 /** The sentence already used when a song page has no embedded video. */
 export function musicPlaylistRefusalText(refusal: MusicPlaylistRefusal): string {
-  if (refusal === "novideo") return "Bulbapedia does not have a YouTube video for this song.";
+  if (refusal === "novideo") return "No YouTube video was found for this song.";
   return "A playlist holds 100 tracks.";
 }
 

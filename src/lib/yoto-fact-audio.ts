@@ -332,6 +332,12 @@ export type TrackPrepareRequest = {
   cryVolume?: number;
   voiceVolume?: number;
   pauseSeconds?: number;
+  /**
+   * Finished MP3. When this is set, the track is uploaded with the same
+   * openUpload and poll as a Pokémon mix. Speech and the cry are skipped.
+   * The HTTP track route does not send this; the music route passes the file.
+   */
+  audio?: Buffer;
 };
 
 export type TrackPrepareResult = {
@@ -693,25 +699,14 @@ async function pollUpload(
   return undefined;
 }
 
-/** Upload one plain MP3. The label is the song name used when Yoto refuses the file. */
+/** Upload one plain MP3 through prepareFactTrack. The song title is not the Yoto filename. */
 export async function uploadPlainMp3(
   token: string,
   audio: Buffer,
   label: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<UploadedAudio> {
-  const name = label.replace(/\s+/g, " ").trim().slice(0, 80) || "this song";
-  if (audioContainer(audio) !== "mp3") throw new Error(`${name} is not an MP3.`);
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 24) || "song";
-  const uploadId = await openUpload(token, slug, audio, fetchImpl);
-  const uploaded = await pollUpload(token, uploadId, name, fetchImpl, 150);
-  if (!uploaded?.trackUrl.startsWith("yoto:#")) throw new Error(`Yoto is still transcoding ${name}.`);
-  return {
-    ...uploaded,
-    format: uploaded.format ?? "mp3",
-    fileSize: uploaded.fileSize ?? audio.length,
-    channels: uploaded.channels ?? "mono",
-  };
+  return finishFactUpload(token, audio, label, fetchImpl);
 }
 
 /**
@@ -835,24 +830,27 @@ export async function prepareFactTrack(
     await discardCard(token, cardId, fetchImpl);
   };
 
-  const fresh = await readReady(renderedFile, dexId, dexId ? mergedFile : undefined);
-  if (fresh) {
-    await releaseScratch();
-    return fresh;
-  }
-  // Hashes written before the volume was part of the key. Those mixes used volume 4, voice 1, and a 0.35s pad.
-  if (isDefaultMix(mix)) {
-    const legacy = await readReady(
-      path.join(roots.rendered, `${legacyRenderedKey(text, dexId, voiceId)}.json`),
-      dexId,
-    );
-    if (legacy) {
+  // A supplied MP3 is the song file. Do not reuse a speech recording stored under the same title.
+  if (!Buffer.isBuffer(request.audio)) {
+    const fresh = await readReady(renderedFile, dexId, dexId ? mergedFile : undefined);
+    if (fresh) {
       await releaseScratch();
-      return legacy;
+      return fresh;
+    }
+    // Hashes written before the volume was part of the key. Those mixes used volume 4, voice 1, and a 0.35s pad.
+    if (isDefaultMix(mix)) {
+      const legacy = await readReady(
+        path.join(roots.rendered, `${legacyRenderedKey(text, dexId, voiceId)}.json`),
+        dexId,
+      );
+      if (legacy) {
+        await releaseScratch();
+        return legacy;
+      }
     }
   }
 
-  const readyFrom = async (uploadId: string, polls: number): Promise<TrackPrepareResult> => {
+  const readyFrom = async (uploadId: string, polls: number, persist = true): Promise<TrackPrepareResult> => {
     await releaseScratch();
     if (dexId && !(await readCryMark(uploadMarkPath(roots.rendered, uploadId)))) {
       throw cryFailure(new Error("The saved upload is not a cry-first mix."));
@@ -865,7 +863,7 @@ export async function prepareFactTrack(
       throw cryFailure(error);
     }
     if (!uploaded?.trackUrl.startsWith("yoto:#")) return { phase: "upload", uploadId };
-    await writeRendered(renderedFile, uploaded, Boolean(dexId));
+    if (persist) await writeRendered(renderedFile, uploaded, Boolean(dexId));
     return {
       phase: "ready",
       trackUrl: uploaded.trackUrl,
@@ -875,6 +873,13 @@ export async function prepareFactTrack(
       channels: uploaded.channels,
     };
   };
+
+  if (Buffer.isBuffer(request.audio)) {
+    if (audioContainer(request.audio) !== "mp3") throw new Error(`${title} is not an MP3.`);
+    if (request.uploadId) return readyFrom(request.uploadId, 8, false);
+    const uploadId = await openUpload(token, label, request.audio, fetchImpl);
+    return readyFrom(uploadId, 8, false);
+  }
 
   if (request.uploadId) return readyFrom(request.uploadId, 8);
 
@@ -1003,4 +1008,44 @@ export async function prepareFactTrack(
     throw new Error(started.error || "Yoto did not start this line.");
   }
   return { phase: "speech", speechJobId: started.jobId };
+}
+
+/**
+ * Upload a finished MP3 by calling prepareFactTrack, the same function Pokémon
+ * cards use. Eight polls per round, then the same upload id again, matching
+ * the studio track loop. The filename stays pokefacts-intro.mp3.
+ */
+export async function finishFactUpload(
+  token: string,
+  audio: Buffer,
+  title: string,
+  fetchImpl: typeof fetch = fetch,
+  roots?: { speech: string; rendered: string },
+): Promise<UploadedAudio> {
+  const name = title.replace(/\s+/g, " ").trim().slice(0, 80) || "Line";
+  let uploadId: string | undefined;
+  for (let step = 0; step < 60; step += 1) {
+    const result = await prepareFactTrack(
+      token,
+      { text: name, title: name, uploadId, audio },
+      fetchImpl,
+      roots,
+    );
+    if (result.phase === "ready" && result.trackUrl?.startsWith("yoto:#")) {
+      return {
+        trackUrl: result.trackUrl,
+        duration: result.duration,
+        fileSize: result.fileSize ?? audio.length,
+        format: result.format ?? "mp3",
+        channels: result.channels ?? "mono",
+      };
+    }
+    if (result.phase === "upload" && result.uploadId) {
+      uploadId = result.uploadId;
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      continue;
+    }
+    throw new Error(`${name} did not finish.`);
+  }
+  throw new Error(`Yoto is still transcoding track ${name}.`);
 }

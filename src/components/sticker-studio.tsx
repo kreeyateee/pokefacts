@@ -115,7 +115,7 @@ function countLabel(count: number, noun: string): string {
 }
 
 function kickerFor(card: KidCard): string {
-  if (card.kind === "guess") return "Guess Who";
+  if (card.kind === "guess") return "Who's That Pokémon";
   if (card.kind === "meet") return APP_NAME;
   return card.title;
 }

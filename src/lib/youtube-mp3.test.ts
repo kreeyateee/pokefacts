@@ -8,7 +8,15 @@ import { describe, it } from "node:test";
 import { audioContainer, describeClip, isPlainYotoMp3 } from "./cry-audio";
 import { ffmpegCommand } from "./ffmpeg-bin";
 import { parseDownloadLines, youtubeTarget, youtubeWatchUrl } from "./youtube-link";
-import { downloadContainer, isDownloadPath, parseDownloadedAudio, ytdlpMp3Args } from "./youtube-mp3";
+import {
+  downloadContainer,
+  explainYtdlpFailure,
+  isDownloadPath,
+  parseDownloadedAudio,
+  ytdlpLaunch,
+  ytdlpMp3Args,
+  ytdlpStoppedAfterLimit,
+} from "./youtube-mp3";
 
 function ffmpeg(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -79,6 +87,57 @@ describe("yt-dlp mp3 arguments", () => {
     });
     assert.ok(video.includes("--no-playlist"));
     assert.equal(video.includes("--yes-playlist"), false);
+    assert.equal(video.includes("--max-downloads"), false);
+    assert.equal(playlist.includes("--max-downloads"), false);
+  });
+
+  it("keeps a finished download when yt-dlp stops at its own limit", () => {
+    const stdout = "8xxgBFYQTL4\u001fPokémon Johto\u001fC:\\songs\\8xxgBFYQTL4.mp3\nAborting remaining downloads\n";
+    assert.equal(ytdlpStoppedAfterLimit(101, stdout, ""), true);
+    assert.equal(ytdlpStoppedAfterLimit(1, stdout, ""), false);
+    assert.equal(explainYtdlpFailure("", "", {}), "yt-dlp could not download that audio.");
+    assert.equal(
+      explainYtdlpFailure("", "ERROR: ffmpeg not found\n", {}),
+      "ffmpeg not found",
+    );
+    assert.equal(
+      explainYtdlpFailure("ERROR: [youtube] 8xxgBFYQTL4: This video is not available\n", "", {}),
+      "[youtube] 8xxgBFYQTL4: This video is not available",
+    );
+  });
+
+  it("runs the packaged yt-dlp module with Python", () => {
+    const launch = ytdlpLaunch({
+      root: path.join("/app", "pokefacts"),
+      python: { command: "python", prefix: [] },
+      exists: (file) => file.endsWith(`${path.sep}yt_dlp${path.sep}__main__.py`),
+      envCommand: "",
+      homeBin: path.join("/missing", "yt-dlp"),
+      baseEnv: { PATH: path.join("/usr", "bin"), NODE_ENV: "test" },
+    });
+    assert.equal(launch.command, "python");
+    assert.deepEqual(launch.args, ["-m", "yt_dlp"]);
+    assert.equal(launch.packaged, true);
+    assert.equal(launch.python, true);
+    assert.match(launch.env.PYTHONPATH ?? "", /vendor[/\\]yt-dlp$/);
+    assert.equal(launch.deno, null);
+  });
+
+  it("passes the packaged Deno binary to every yt-dlp launch", () => {
+    const root = path.join("/app", "pokefacts");
+    const deno = path.join(root, "vendor", "deno", process.platform === "win32" ? "deno.exe" : "deno");
+    const launch = ytdlpLaunch({
+      root,
+      python: { command: "python", prefix: [] },
+      exists: (file) => file.endsWith(`${path.sep}yt_dlp${path.sep}__main__.py`) || file === deno,
+      envCommand: "",
+      homeBin: path.join("/missing", "yt-dlp"),
+      baseEnv: { PATH: path.join("/usr", "bin"), NODE_ENV: "test" },
+    });
+    assert.equal(launch.deno, deno);
+    assert.equal(launch.args[launch.args.indexOf("--js-runtimes") + 1], `deno:${deno}`);
+    assert.equal(launch.env.DENO_DIR, path.join(root, "vendor", "deno", "cache"));
+    assert.equal(launch.env.DENO_NO_UPDATE_CHECK, "1");
   });
 
   it("only reads files inside the download folder", () => {

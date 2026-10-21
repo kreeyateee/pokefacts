@@ -8,7 +8,7 @@ import {
   sanitizeStickers,
   stickerHits,
   stickerStyle,
-} from "./sticker-layout.ts";
+} from "./sticker-layout";
 
 describe("sticker looks", () => {
   it("gives each suggested picture a different shape", () => {

@@ -1,8 +1,9 @@
 import rawIndex from "@/data/music-index.json";
 import { readMusicIndex } from "@/lib/music-index";
 import { bearerToken, jsonError } from "@/lib/yoto-proxy";
-import { uploadPlainMp3 } from "@/lib/yoto-fact-audio";
+import { finishFactUpload } from "@/lib/yoto-fact-audio";
 import { downloadYoutubeMp3s, ensureYoutubeMp3, type ParsedMp3 } from "@/lib/youtube-mp3";
+import { youtubeIdForSong } from "@/lib/youtube-search";
 import { YOTO_TRACK_LIMIT } from "@/lib/kid-cards";
 
 export const maxDuration = 900;
@@ -58,8 +59,9 @@ export async function POST(request: Request) {
       if (error) return jsonError(error);
       const song = index.songs.find((item) => item.page === page);
       if (!song) return jsonError("That song is not in the music list.");
-      if (!song.youtubeId) return jsonError("Bulbapedia does not have a YouTube video for this song.");
-      const parsed = await ensureYoutubeMp3(song.youtubeId, song.title);
+      const youtubeId = await youtubeIdForSong(song.page, song.title, song.youtubeId);
+      if (!youtubeId) return jsonError("No YouTube video was found for this song.");
+      const parsed = await ensureYoutubeMp3(youtubeId, song.title);
       songs = [{ ...parsed, page: song.page, title: song.title }];
     } else if (url) {
       const requested = Number(body.limit);
@@ -75,7 +77,7 @@ export async function POST(request: Request) {
         tracks.push(publicTrack(song));
         continue;
       }
-      const uploaded = await uploadPlainMp3(token, song.bytes, song.title);
+      const uploaded = await finishFactUpload(token, song.bytes, song.title);
       tracks.push(
         publicTrack({
           ...song,

@@ -244,9 +244,9 @@ async function chromeFetchImpl(port: number): Promise<{ fetchImpl: typeof fetch;
       const index = cursor % sessions.length;
       cursor += 1;
       const previous = locks[index] ?? Promise.resolve();
-      let release = () => undefined;
+      let release: () => void = () => {};
       locks[index] = new Promise<void>((resolve) => {
-        release = () => resolve();
+        release = resolve;
       });
       await previous;
       try {

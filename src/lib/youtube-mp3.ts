@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
@@ -41,12 +41,115 @@ export function downloadContainer(bytes: Buffer): "ogg" | "mp3" | "wav" | "webm"
   return null;
 }
 
-export function ytdlpCommand(): string {
-  const fromEnv = process.env.YT_DLP?.trim();
-  if (fromEnv) return fromEnv;
-  const local = path.join(homedir(), ".local", "bin", process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp");
-  if (existsSync(local)) return local;
-  return "yt-dlp";
+export type YtdlpLaunch = {
+  command: string;
+  args: string[];
+  env: NodeJS.ProcessEnv;
+  packaged: boolean;
+  python: boolean;
+  deno: string | null;
+};
+
+/** Deno binary packaged for this app. yt-dlp does not search PATH for it. */
+export function packagedDenoPath(root = process.cwd()): string {
+  const name = process.platform === "win32" ? "deno.exe" : "deno";
+  return path.join(/* turbopackIgnore: true */ root, "vendor", "deno", name);
+}
+
+function attachDeno(
+  args: string[],
+  root: string,
+  exists: (file: string) => boolean,
+  env: NodeJS.ProcessEnv,
+): { args: string[]; deno: string | null } {
+  const deno = packagedDenoPath(root);
+  if (!exists(deno)) return { args, deno: null };
+  env.DENO_DIR = path.join(root, "vendor", "deno", "cache");
+  env.DENO_NO_UPDATE_CHECK = "1";
+  return { args: [...args, "--js-runtimes", `deno:${deno}`], deno };
+}
+
+type PythonLauncher = { command: string; prefix: string[] };
+
+let cachedPython: PythonLauncher | null | undefined;
+
+export function detectPython(): PythonLauncher | null {
+  if (cachedPython !== undefined) return cachedPython;
+  const candidates: PythonLauncher[] =
+    process.platform === "win32"
+      ? [
+          { command: "py", prefix: ["-3"] },
+          { command: "python", prefix: [] },
+          { command: "python3", prefix: [] },
+        ]
+      : [
+          { command: "python3", prefix: [] },
+          { command: "python", prefix: [] },
+        ];
+  for (const candidate of candidates) {
+    const result = spawnSync(
+      candidate.command,
+      [...candidate.prefix, "-c", "import sys; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)"],
+      { windowsHide: true, timeout: 8_000 },
+    );
+    if (result.status === 0) {
+      cachedPython = candidate;
+      return candidate;
+    }
+  }
+  cachedPython = null;
+  return null;
+}
+
+/**
+ * Prefer the yt-dlp installed in vendor/yt-dlp. That folder is the pip package
+ * and its files, so a global `pip install yt-dlp` is not required.
+ */
+export function ytdlpLaunch(input?: {
+  root?: string;
+  python?: PythonLauncher | null;
+  exists?: (file: string) => boolean;
+  envCommand?: string;
+  homeBin?: string;
+  baseEnv?: NodeJS.ProcessEnv;
+}): YtdlpLaunch {
+  const exists = input?.exists ?? existsSync;
+  const root = input?.root ?? process.cwd();
+  const vendor = path.join(/* turbopackIgnore: true */ root, "vendor", "yt-dlp");
+  const packaged = exists(path.join(/* turbopackIgnore: true */ vendor, "yt_dlp", "__main__.py"));
+  const python = input && "python" in input ? (input.python ?? null) : detectPython();
+  const env = { ...(input?.baseEnv ?? process.env) };
+  const runtime = attachDeno([], root, exists, env);
+  if (packaged && python) {
+    const current = env.PYTHONPATH ?? "";
+    env.PYTHONPATH = current ? `${vendor}${path.delimiter}${current}` : vendor;
+    return {
+      command: python.command,
+      args: [...python.prefix, "-m", "yt_dlp", ...runtime.args],
+      env,
+      packaged: true,
+      python: true,
+      deno: runtime.deno,
+    };
+  }
+  const fromEnv = (input && "envCommand" in input ? input.envCommand : env.YT_DLP)?.trim();
+  if (fromEnv && exists(fromEnv)) {
+    return { command: fromEnv, args: runtime.args, env, packaged, python: Boolean(python), deno: runtime.deno };
+  }
+  const homeBin =
+    input?.homeBin ??
+    path.join(homedir(), ".local", "bin", process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp");
+  if (exists(homeBin)) {
+    return { command: homeBin, args: runtime.args, env, packaged, python: Boolean(python), deno: runtime.deno };
+  }
+  return {
+    command: process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp",
+    args: runtime.args,
+    env,
+    packaged,
+    python: Boolean(python),
+    deno: runtime.deno,
+  };
 }
 
 export function isDownloadPath(root: string, file: string): boolean {
@@ -80,8 +183,6 @@ export function ytdlpMp3Args(input: {
     "mp3",
     "--audio-quality",
     "192",
-    "--max-downloads",
-    String(input.limit),
     "-o",
     path.join(input.outputDir, template),
     "--print",
@@ -101,40 +202,86 @@ function clampLimit(limit: number | undefined, playlist: boolean): number {
   return Math.min(YOTO_TRACK_LIMIT, requested);
 }
 
-function ytdlpFailure(error: Error, stderr: string): Error {
-  const code = (error as NodeJS.ErrnoException).code;
-  if (code === "ENOENT") return new Error("yt-dlp was not found. Install it with pip install yt-dlp.");
-  const lines = stderr
+function clipReason(reason: string): string {
+  return reason.length > 240 ? `${reason.slice(0, 237)}...` : reason;
+}
+
+function textLines(text: string): string[] {
+  return text
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
-  const errorLine = [...lines].reverse().find((line) => /^ERROR:/i.test(line));
-  const tail = (errorLine ?? lines.at(-1) ?? "").replace(/^ERROR:\s*/i, "");
-  if (/sign in to confirm|not a bot/i.test(tail)) {
-    return new Error("YouTube asked for a sign-in, so this audio could not be saved as an MP3.");
-  }
-  const killed = (error as { killed?: boolean }).killed === true;
-  let reason = tail;
-  if (!reason) {
-    if (killed || code === "ETIMEDOUT") reason = "yt-dlp timed out.";
-    else reason = "yt-dlp could not download that audio.";
-  }
-  return new Error(reason.length > 240 ? `${reason.slice(0, 237)}...` : reason);
 }
 
-function runYtdlp(args: string[], timeoutMs: number): Promise<string> {
+function errorLine(text: string): string {
+  const line = [...textLines(text)].reverse().find((item) => /^ERROR:/i.test(item)) ?? "";
+  return line.replace(/^ERROR:\s*/i, "");
+}
+
+/**
+ * The sentence shown when yt-dlp exits with a real failure.
+ * An empty stderr used to hide the stdout line and become a generic message.
+ */
+export function explainYtdlpFailure(
+  stderr: string,
+  stdout: string,
+  outcome?: { killed?: boolean; timedOut?: boolean },
+): string {
+  const reason = errorLine(stderr) || errorLine(stdout) || textLines(stderr).at(-1) || "";
+  if (/sign in to confirm|not a bot/i.test(reason)) {
+    return "YouTube asked for a sign-in, so this audio could not be saved as an MP3.";
+  }
+  if (reason) return clipReason(reason);
+  if (outcome?.killed || outcome?.timedOut) return "yt-dlp timed out.";
+  return "yt-dlp could not download that audio.";
+}
+
+/**
+ * `--max-downloads` stops yt-dlp with exit 101 after the file is already written.
+ * That stop is stdout text, not an error, and the MP3 is usable.
+ */
+export function ytdlpStoppedAfterLimit(status: number | null, stdout: string, stderr: string): boolean {
+  if (status !== 101) return false;
+  return /Aborting remaining downloads|Maximum number of downloads reached/i.test(`${stdout}\n${stderr}`);
+}
+
+function ytdlpFailure(error: Error, stderr: string, stdout: string): Error {
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code === "ENOENT") {
+    return new Error(
+      ytdlpLaunch().packaged
+        ? "Python 3 is needed to run the packaged yt-dlp."
+        : "yt-dlp was not found. Run npm run ytdlp, then try again.",
+    );
+  }
+  const killed = (error as { killed?: boolean }).killed === true;
+  return new Error(explainYtdlpFailure(stderr, stdout, { killed, timedOut: killed || code === "ETIMEDOUT" }));
+}
+
+export function ytdlpOutput(args: string[], timeoutMs: number): Promise<string> {
+  const launch = ytdlpLaunch();
+  if (launch.packaged && !launch.python) {
+    return Promise.reject(new Error("Python 3 is needed to run the packaged yt-dlp."));
+  }
+  if (launch.packaged && !launch.deno) {
+    return Promise.reject(new Error("The packaged Deno runtime was not found in vendor/deno."));
+  }
   ensureFfmpegPath();
   return new Promise((resolve, reject) => {
     execFile(
-      ytdlpCommand(),
-      args,
-      { timeout: timeoutMs, windowsHide: true, maxBuffer: 4_000_000 },
+      launch.command,
+      [...launch.args, ...args],
+      { timeout: timeoutMs, windowsHide: true, maxBuffer: 4_000_000, env: launch.env },
       (error, stdout, stderr) => {
-        if (error) {
-          reject(ytdlpFailure(error, stderr ?? ""));
+        const out = typeof stdout === "string" ? stdout : "";
+        const err = typeof stderr === "string" ? stderr : "";
+        const rawCode = error && typeof error === "object" && "code" in error ? error.code : null;
+        const status = typeof rawCode === "number" ? rawCode : null;
+        if (error && !ytdlpStoppedAfterLimit(status, out, err)) {
+          reject(ytdlpFailure(error, err, out));
           return;
         }
-        resolve(stdout ?? "");
+        resolve(out);
       },
     );
   });
@@ -217,7 +364,7 @@ async function songFromRow(row: DownloadRow, root: string, cacheDir: string): Pr
 }
 
 async function playlistCount(url: string): Promise<number> {
-  const stdout = await runYtdlp(["--flat-playlist", "--no-warnings", "--print", "%(id)s", url], 60_000);
+  const stdout = await ytdlpOutput(["--flat-playlist", "--no-warnings", "--print", "%(id)s", url], 60_000);
   const ids = new Set(stdout.split(/\r?\n/).map((line) => line.trim()).filter((id) => isYoutubeVideoId(id)));
   return ids.size;
 }
@@ -252,7 +399,7 @@ export async function downloadYoutubeMp3s(
       ffmpegDir: ffmpegBinDir(),
     });
     const timeout = target.playlist ? Math.min(900_000, 45_000 * limit) : 180_000;
-    const stdout = await runYtdlp(args, timeout);
+    const stdout = await ytdlpOutput(args, timeout);
     const rows = parseDownloadLines(stdout).slice(0, limit);
     if (rows.length === 0) throw new Error("yt-dlp did not write an MP3.");
     const songs: ParsedMp3[] = [];

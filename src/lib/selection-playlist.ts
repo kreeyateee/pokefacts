@@ -28,8 +28,12 @@ export type SelectionSpecies = {
   abilities: Array<{ name: string; info: string; hidden?: boolean }>;
   evolvesFrom: string | null;
   evolutions: Array<{ name: string; method: string }>;
-  /** Game Pokédex line. Guess Who clues may use it. It is not read aloud as a citation. */
+  /** Game Pokédex line. Who's That Pokémon clues may use it. It is not read aloud as a citation. */
   info: string;
+  /** Older Pokédex line from a different game. */
+  info2?: string;
+  /** Official colour, such as Yellow. */
+  color?: string | null;
   biology: BiologyBlock[];
 };
 
@@ -160,12 +164,16 @@ function toSheet(species: SelectionSpecies): MonSheet {
     evolvesFrom: species.evolvesFrom,
     evolvesInto: into,
     habitat: species.habitat,
-    entries: species.info ? [{ text: species.info, version: "" }] : [],
+    color: species.color ?? null,
+    entries: [
+      species.info ? { text: species.info, version: "" } : null,
+      species.info2 ? { text: species.info2, version: "" } : null,
+    ].filter((entry): entry is { text: string; version: string } => Boolean(entry)),
   };
 }
 
 function track(key: string, title: string, text: string, icon: string, overlay: string): KidTrack {
-  const readable = text.replace(/\s+/g, " ").trim();
+  const readable = text.replace(/[^\S\n]+/g, " ").replace(/ *\n+ */g, "\n").trim();
   return {
     key,
     title,
@@ -234,7 +242,7 @@ export function selectionPlaylist(
   );
   const blurb =
     kind === "whos-that"
-      ? "The cry, then three clues. The cry again, then the name."
+      ? "The cry, then the colour and type, two Pokédex lines, and how big it is. The cry again, then the name."
       : kind === "advanced"
         ? "The cry, then the name, a short description, and how big it is."
         : "The cry, then the name and a short description.";
@@ -247,7 +255,7 @@ export function selectionPlaylist(
     blurb,
     childDoes:
       kind === "whos-that"
-        ? "Pick a dark picture and press play. You hear the cry, then three short clues. The next track plays the cry again, then the name."
+        ? "Pick a dark picture and press play. You hear the cry, then the colour and type, two Pokédex lines, and how big it is. The next track plays the cry again, then the name."
         : "Turn to a picture and press play. You hear the cry, then the reading.",
     chapters,
   };
