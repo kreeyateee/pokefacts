@@ -69,7 +69,7 @@ export function pageHeading(input: {
   if (input.view === "music") {
     return {
       title: "Music",
-      blurb: "Play songs from the games, then send a playlist to Yoto.",
+      blurb: "Play songs from the games as YouTube videos.",
     };
   }
   if (input.kind === "guess") {

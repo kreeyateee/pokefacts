@@ -17,6 +17,7 @@ import {
   ytdlpMp3Args,
   ytdlpStoppedAfterLimit,
 } from "./youtube-mp3";
+import { YOUTUBE_MP3_PUBLIC } from "./youtube-mp3-site";
 
 function ffmpeg(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -26,6 +27,12 @@ function ffmpeg(args: string[]): Promise<void> {
     });
   });
 }
+
+describe("public site", () => {
+  it("does not convert YouTube to MP3 on Pokefacts", () => {
+    assert.equal(YOUTUBE_MP3_PUBLIC, false);
+  });
+});
 
 describe("youtube links", () => {
   it("keeps a video link as one video and a list link as a playlist", () => {

@@ -304,20 +304,10 @@ export function MusicPlaylistEmbed({
 
 export function MusicPlaylistSection({
   playlist,
-  saving = false,
-  onSave,
-  playlistHref,
-  title = "Pokémon music",
-  onTitle,
   pictures: _pictures,
   onStickers: _onStickers,
 }: {
   playlist: ReturnType<typeof useMusicPlaylist>;
-  saving?: boolean;
-  onSave?: () => void;
-  playlistHref?: string;
-  title?: string;
-  onTitle?: (title: string) => void;
   pictures?: Record<string, { id: number; name: string }>;
   onStickers?: () => void;
 }) {
@@ -331,20 +321,9 @@ export function MusicPlaylistSection({
         <h2 className="text-xl text-ink">My playlist</h2>
         <p className="text-sm leading-6">{countLabel}</p>
         <p className="text-sm leading-6">
-          Save to Yoto turns this list into a playlist of MP3s. A song about one Pokémon uses that Pokémon's picture.
+          Add songs, then play them here as YouTube videos.
         </p>
       </div>
-      <label className="grid min-w-0 gap-1 text-sm font-bold" htmlFor="music-card-name">
-        Card name
-        <input
-          id="music-card-name"
-          value={title}
-          onChange={(event) => onTitle?.(event.target.value)}
-          placeholder="Pokémon music"
-          className="pk-field"
-          style={{ fontSize: 16 }}
-        />
-      </label>
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
@@ -371,19 +350,6 @@ export function MusicPlaylistSection({
         >
           Next
         </button>
-        <button
-          type="button"
-          className="pk-pill min-h-11"
-          onClick={onSave}
-          disabled={!onSave || playlist.songs.length === 0 || saving}
-        >
-          {saving ? "Saving to Yoto…" : "Save to Yoto"}
-        </button>
-        {playlistHref ? (
-          <a className="pk-pill min-h-11" href={playlistHref} target="_blank" rel="noreferrer">
-            Open in the Yoto app
-          </a>
-        ) : null}
       </div>
       {playlist.songs.length === 0 ? (
         <p className="pk-card min-w-0 px-4 py-4 text-sm leading-6">

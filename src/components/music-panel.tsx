@@ -4,14 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { SongLyrics } from "@/components/song-lyrics";
 import { MusicPlaylistEmbed, MusicPlaylistSection, useMusicPlaylist } from "@/components/music-playlist";
-import { toastSendReady } from "@/components/send-banner";
-import { Button } from "@/components/ui/button";
 import rawIndex from "@/data/music-index.json";
 import { readMusicIndex, type MusicSong } from "@/lib/music-index";
-import { musicPlaylistUpload, musicYotoSavePlan, type MusicPlaylistTrack } from "@/lib/youtube-playlist";
-import { yotoFetch } from "@/lib/yoto-session";
-import { uploadForPlaylist } from "@/lib/yoto-send";
-import { yotoPlaylistUrl } from "@/lib/yoto-playlist";
 
 function songMessage(code: string | undefined, found: string | null | undefined): string {
   if (code === "missingtitle") return "Bulbapedia does not have a page for this song.";
@@ -32,20 +26,7 @@ async function lookupYoutubeId(page: string): Promise<string | null> {
   }
 }
 
-async function messageOf(response: Response, fallback: string): Promise<string> {
-  const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-  return payload?.error?.trim() || fallback;
-}
-
-export function MusicPanel({
-  connected = false,
-  onConnect,
-  voiceId,
-}: {
-  connected?: boolean;
-  onConnect?: () => void;
-  voiceId?: string;
-}) {
+export function MusicPanel() {
   const loaded = useMemo(() => readMusicIndex(rawIndex), []);
   const { index, error } = loaded;
   const songsByPage = useMemo(() => new Map(index.songs.map((song) => [song.page, song])), [index.songs]);
@@ -54,12 +35,6 @@ export function MusicPanel({
   const [query, setQuery] = useState("");
   const [albumPage, setAlbumPage] = useState(index.albums[0]?.page ?? "");
   const [songPage, setSongPage] = useState("");
-  const [note, setNote] = useState("");
-  const [failed, setFailed] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [playlistHref, setPlaylistHref] = useState<string | undefined>();
-  const [mp3Id, setMp3Id] = useState("");
   const [found, setFound] = useState<Record<string, string | null>>({});
   const foundRef = useRef(found);
   const playlist = useMusicPlaylist();
@@ -142,100 +117,6 @@ export function MusicPanel({
       cancelled = true;
     };
   }, [album?.page, album?.songs, playingPage, song?.page, songsByPage]);
-
-  async function playMp3(item: MusicSong, youtubeId: string) {
-    if (!youtubeId || busy || saving) return;
-    setBusy(true);
-    setFailed(false);
-    setNote(`Saving ${item.title} as an MP3…`);
-    try {
-      const response = await fetch("/api/music/mp3", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ page: item.page, upload: false }),
-      });
-      if (!response.ok) throw new Error(await messageOf(response, "That song could not be saved as an MP3."));
-      setMp3Id(youtubeId);
-      setNote("");
-    } catch (caught) {
-      setFailed(true);
-      setNote(caught instanceof Error ? caught.message : "That song could not be saved as an MP3.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function saveToYoto() {
-    const plan = musicYotoSavePlan({
-      connected,
-      count: playlist.songs.length,
-      title: "Pokémon music",
-    });
-    if (!plan.ok) {
-      setFailed(true);
-      setNote(plan.message);
-      if (plan.connect) onConnect?.();
-      return;
-    }
-    if (busy || saving) return;
-    setSaving(true);
-    setFailed(false);
-    setPlaylistHref(undefined);
-    try {
-      const finished: MusicPlaylistTrack[] = [];
-      for (const item of playlist.songs) {
-        setNote(`Saving ${item.title} as an MP3…`);
-        const response = await yotoFetch("/api/music/mp3", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ page: item.page, upload: true }),
-        });
-        if (!response.ok) throw new Error(await messageOf(response, "That audio could not be saved as an MP3."));
-        const payload = (await response.json()) as { tracks?: MusicPlaylistTrack[] };
-        const track = payload.tracks?.[0];
-        if (!track?.trackUrl?.startsWith("yoto:#")) throw new Error(`${item.title} is not a finished MP3.`);
-        finished.push({
-          title: item.title,
-          youtubeId: track.youtubeId || item.youtubeId,
-          trackUrl: track.trackUrl,
-          duration: track.duration,
-          fileSize: track.fileSize,
-          channels: track.channels,
-        });
-      }
-      setNote("Sending the playlist…");
-      const upload = uploadForPlaylist(musicPlaylistUpload(plan.title, finished, voiceId), undefined);
-      const response = await yotoFetch("/api/yoto/job", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(upload),
-      });
-      const payload = (await response.json().catch(() => null)) as {
-        error?: string;
-        status?: string;
-        result?: { cardId?: string };
-      } | null;
-      if (!response.ok || payload?.status !== "completed" || !payload.result?.cardId) {
-        throw new Error(payload?.error || "Yoto did not accept this playlist.");
-      }
-      setFailed(false);
-      setNote(`${plan.title} is in your Yoto library.`);
-      setPlaylistHref(yotoPlaylistUrl(payload.result.cardId));
-      toastSendReady(plan.title);
-    } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "The playlist was not sent.";
-      if (/connect yoto/i.test(message)) {
-        setFailed(true);
-        setNote("Connect Yoto before saving this playlist.");
-        onConnect?.();
-      } else {
-        setFailed(true);
-        setNote(message);
-      }
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return (
     <div className="grid min-w-0 gap-4">
@@ -387,20 +268,6 @@ export function MusicPanel({
               .
             </p>
           ) : null}
-          {song && !playingSong && playerSong.youtubeId ? (
-            <Button
-              type="button"
-              variant="outline"
-              className="mt-3 h-11 px-4"
-              disabled={busy}
-              onClick={() => void playMp3(song, playerSong.youtubeId || "")}
-            >
-              {busy && note.startsWith("Saving") && note.includes(song.title) ? "Saving the MP3…" : "Play MP3"}
-            </Button>
-          ) : null}
-          {song && mp3Id && mp3Id === playerSong.youtubeId ? (
-            <audio className="mt-3 w-full" controls autoPlay src={`/api/music/mp3/${mp3Id}`} />
-          ) : null}
           {playerSong.url ? (
             <p className="mt-2 text-sm leading-6">
               <a className="font-bold underline decoration-poke-red decoration-2" href={playerSong.url} target="_blank" rel="noreferrer">
@@ -412,17 +279,7 @@ export function MusicPanel({
           <SongLyrics page={playerSong.page} />
         </div>
       ) : null}
-      {note ? (
-        <p role="status" className={`text-sm leading-6 ${failed ? "text-poke-red" : ""}`}>
-          {note}
-        </p>
-      ) : null}
-      <MusicPlaylistSection
-        playlist={playlist}
-        saving={saving}
-        playlistHref={playlistHref}
-        onSave={() => void saveToYoto()}
-      />
+      <MusicPlaylistSection playlist={playlist} />
     </div>
   );
 }

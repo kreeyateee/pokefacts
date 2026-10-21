@@ -7,6 +7,7 @@ import path from "node:path";
 import { describe, it } from "node:test";
 
 import { finishFactUpload, prepareFactTrack } from "./yoto-fact-audio";
+import { YOUTUBE_MP3_PUBLIC } from "./youtube-mp3-site";
 import { musicPlaylistUpload } from "./youtube-playlist";
 import { contentCreateBody, uploadForPlaylist } from "./yoto-send";
 
@@ -18,20 +19,26 @@ function mp3(): Buffer {
 }
 
 describe("music playlist uses the Pokémon upload", () => {
-  it("calls prepareFactTrack and the shared job builder", () => {
+  it("keeps YouTube to MP3 off the public site and leaves the downloader in the repo", () => {
     const route = readFileSync(new URL("../app/api/music/mp3/route.ts", import.meta.url), "utf8");
+    const stream = readFileSync(new URL("../app/api/music/mp3/[youtubeId]/route.ts", import.meta.url), "utf8");
     const panel = readFileSync(new URL("../components/music-panel.tsx", import.meta.url), "utf8");
+    const playlist = readFileSync(new URL("../components/music-playlist.tsx", import.meta.url), "utf8");
     const trackRoute = readFileSync(new URL("../app/api/yoto/track/route.ts", import.meta.url), "utf8");
     const jobRoute = readFileSync(new URL("../app/api/yoto/job/route.ts", import.meta.url), "utf8");
     const helper = finishFactUpload.toString();
 
+    assert.equal(YOUTUBE_MP3_PUBLIC, false);
+    assert.match(route, /YOUTUBE_MP3_PUBLIC/);
+    assert.match(stream, /YOUTUBE_MP3_PUBLIC/);
+    assert.equal(panel.includes("/api/music/mp3"), false);
+    assert.equal(panel.includes("Play MP3"), false);
+    assert.equal(playlist.includes("Save to Yoto"), false);
     assert.equal(route.includes("uploadPlainMp3"), false);
     assert.match(route, /finishFactUpload\(token, song\.bytes, song\.title\)/);
     assert.match(helper, /prepareFactTrack\(/);
     assert.equal(prepareFactTrack.name, "prepareFactTrack");
     assert.match(trackRoute, /prepareFactTrack\(token, body\)/);
-    assert.match(panel, /uploadForPlaylist\(musicPlaylistUpload/);
-    assert.match(panel, /\/api\/yoto\/job/);
     assert.match(jobRoute, /contentCreateBody\(content\)/);
   });
 

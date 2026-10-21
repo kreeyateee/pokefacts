@@ -3,6 +3,7 @@ import { readMusicIndex } from "@/lib/music-index";
 import { bearerToken, jsonError } from "@/lib/yoto-proxy";
 import { finishFactUpload } from "@/lib/yoto-fact-audio";
 import { downloadYoutubeMp3s, ensureYoutubeMp3, type ParsedMp3 } from "@/lib/youtube-mp3";
+import { YOUTUBE_MP3_DISABLED_MESSAGE, YOUTUBE_MP3_PUBLIC } from "@/lib/youtube-mp3-site";
 import { youtubeIdForSong } from "@/lib/youtube-search";
 import { YOTO_TRACK_LIMIT } from "@/lib/kid-cards";
 
@@ -37,6 +38,8 @@ function publicTrack(song: {
 }
 
 export async function POST(request: Request) {
+  if (!YOUTUBE_MP3_PUBLIC) return jsonError(YOUTUBE_MP3_DISABLED_MESSAGE, 410);
+
   let body: TrackBody;
   try {
     body = (await request.json()) as TrackBody;

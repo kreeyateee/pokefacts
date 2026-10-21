@@ -1568,7 +1568,7 @@ export function Studio({
             job={job}
           />
         ) : view === "music" ? (
-          <MusicPanel connected={Boolean(session)} onConnect={() => setConnectOpen(true)} voiceId={voiceId} />
+          <MusicPanel />
         ) : card && chapter ? (
           <div className="grid min-w-0 gap-6 md:grid-cols-[17.5rem_minmax(0,1fr)]">
             <section className="order-1 min-w-0 md:col-span-2" aria-labelledby="playlist-heading">

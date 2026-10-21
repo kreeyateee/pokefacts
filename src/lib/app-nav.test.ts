@@ -45,6 +45,7 @@ describe("app navigation", () => {
     );
     assert.equal(pageHeading({ view: "catalogue", kind: "meet" }).title, "Pokédex Cards");
     assert.equal(pageHeading({ view: "music", kind: "meet" }).title, "Music");
+    assert.equal(pageHeading({ view: "music", kind: "meet" }).blurb, "Play songs from the games as YouTube videos.");
     assert.equal(pageHeading({ view: "cards", kind: "guess" }).title, "Who's That Pokémon Cards");
     assert.equal(pageHeading({ view: "cards", kind: "mega", libraryTitle: "Mega Evolutions" }).title, "Mega Evolutions");
     assert.equal(pageHeading({ view: "cards", kind: "meet" }).title, "Fact Cards");
