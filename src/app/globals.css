@@ -138,6 +138,11 @@
   body {
     @apply bg-background text-foreground;
   }
+  [data-slot="dialog-overlay"],
+  [data-slot="sheet-overlay"] {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
   button,
   a,
   summary,
@@ -1088,8 +1093,10 @@
   .pk-studio-panel,
   .pk-sticker-ghost,
   [data-slot="dialog-overlay"],
-  [data-slot="dialog-content"] {
+  [data-slot="dialog-content"],
+  [data-slot="sheet-overlay"] {
     animation: none;
+    transition: none;
   }
 
   .pk-tab,

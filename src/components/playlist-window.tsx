@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -121,14 +122,14 @@ export function PlaylistWindow({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[min(42rem,calc(100%-2rem))] w-full max-w-[calc(100%-2rem)] flex-col gap-3 overflow-hidden sm:max-w-3xl">
-        <DialogHeader className="pr-8">
+      <DialogContent className="gap-3 overflow-hidden sm:max-w-3xl">
+        <DialogHeader>
           <DialogTitle className="font-display text-2xl">Playlist</DialogTitle>
           <DialogDescription>
             Drag a card onto another place. Earlier and Later move one card. The buttons below order the whole list.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex shrink-0 flex-wrap gap-2">
           <button
             type="button"
             className="pk-pill px-3 text-xs disabled:opacity-40"
@@ -159,7 +160,7 @@ export function PlaylistWindow({
             {nameError}
           </p>
         ) : null}
-        <div className="min-h-0 flex-1 overflow-auto pr-1">
+        <DialogBody className="pr-1">
           {ids.length === 0 ? (
             <p className="pk-soft px-4 py-6 text-sm text-muted-foreground">
               Tick Pokémon in the catalogue, including their evolutions, and they appear here in that order.
@@ -229,7 +230,7 @@ export function PlaylistWindow({
               })}
             </ul>
           )}
-        </div>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );
