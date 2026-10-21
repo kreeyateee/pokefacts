@@ -220,7 +220,7 @@ async function uploadPixels(
     if (!id) return;
     media[id] = await uploadIcon(id);
     finished += 1;
-    onProgress?.(finished, species.length);
+    onProgress?.(finished, pictures.length);
   });
   return media;
 }
