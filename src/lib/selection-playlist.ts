@@ -11,7 +11,7 @@ import {
   type KidTrack,
 } from "@/lib/kid-cards";
 import { pronounce } from "@/lib/pronounce";
-import { spokenWiki } from "@/lib/spoken-wiki";
+import { spokenFact } from "@/lib/spoken-wiki";
 import type { PlaylistUpload } from "@/lib/yoto-send";
 
 /** Who's That Pokémon uses two tracks, so 50 species fill the 100-track card. */
@@ -100,15 +100,15 @@ function evolutionSpeech(species: SelectionSpecies): string {
   return parts.join(" ");
 }
 
-/** Name, then the first two Biology paragraphs. No height or weight lecture. */
+/** Name, then the first two Biology paragraphs. A missing wiki read uses the Pokédex line. */
 export function factsSpeech(species: SelectionSpecies): string {
-  return spokenWiki(species.name, species.biology);
+  return spokenFact(species.name, species.biology, species.info);
 }
 
 /** Biology, then height, weight, type, ability, and evolution. Capped so it is not a wiki dump. */
 export function advancedSpeech(species: SelectionSpecies, units: MeasureUnits = "metric"): string {
   const name = species.name.replace(/\s+/g, " ").trim();
-  const biology = spokenWiki(name, species.biology);
+  const biology = spokenFact(name, species.biology, species.info);
   const weight = weightForUnits(species.weightLabel, units);
   const height = heightForUnits(species.heightLabel, units);
   const extra = [

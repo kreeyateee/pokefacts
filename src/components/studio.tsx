@@ -42,6 +42,7 @@ import {
 } from "@/lib/kid-cards";
 import { artworkSrc } from "@/lib/page-artwork";
 import { pronounce } from "@/lib/pronounce";
+import { spokenDexLine, statusWithDexNote, WIKI_DEX_NOTE } from "@/lib/spoken-wiki";
 import { selectionUpload } from "@/lib/selection-playlist";
 import { APP_NAME, DONATE_URL, SOURCE_URL } from "@/lib/site";
 import { defaultPlayback, readPlayback, type PlaybackSettings } from "@/lib/playback-settings";
@@ -208,22 +209,40 @@ async function uploadPixels(
   return media;
 }
 
-async function speciesSpeech(id: number, name: string): Promise<string> {
+function nameOnlySpeech(name: string, speech: string): boolean {
+  const clean = speech.replace(/\s+/g, " ").trim();
+  const title = name.replace(/\s+/g, " ").trim();
+  return !clean || clean === title || clean === `${title}.`;
+}
+
+function chapterDexText(chapter: { title: string; tracks: Array<{ text?: string }> }): string {
+  const raw = chapter.tracks[0]?.text ?? "";
+  const body = raw.startsWith(POKEDEX_HOWTO) ? raw.slice(POKEDEX_HOWTO.length) : raw;
+  const text = body.replace(/\s+/g, " ").trim();
+  return nameOnlySpeech(chapter.title, text) ? "" : text;
+}
+
+function playlistDexNote(card: { chapters: Array<{ articleNotice?: string }> }): string {
+  return card.chapters.some((chapter) => chapter.articleNotice) ? WIKI_DEX_NOTE : "";
+}
+
+async function speciesSpeech(id: number, name: string): Promise<{ speech: string; notice: string }> {
   try {
     const response = await fetch(`/api/catalogue/${id}/biology`);
-    const payload = (await response.json()) as { speech?: string };
-    const speech = payload.speech?.replace(/\s+/g, " ").trim();
-    if (speech) return speech;
+    const payload = (await response.json()) as { speech?: string; notice?: string };
+    const speech = payload.speech?.replace(/\s+/g, " ").trim() ?? "";
+    const notice = payload.notice?.replace(/\s+/g, " ").trim() ?? "";
+    if (!nameOnlySpeech(name, speech)) return { speech, notice };
   } catch {
-    // The name is still safe to say. Weight and height stay off the track.
+    // The chapter still has the catalogue line. A name alone is not the track.
   }
-  return `${name}.`;
+  return { speech: "", notice: WIKI_DEX_NOTE };
 }
 
 async function speechesFor(
   card: KidCard,
-  onProgress?: (done: number, total: number) => void,
-): Promise<Record<number, string>> {
+  onProgress?: (done: number, total: number, notice: string) => void,
+): Promise<{ speech: Record<number, string>; notice: string }> {
   const ids: number[] = [];
   const names = new Map<number, string>();
   for (const chapter of card.chapters) {
@@ -232,20 +251,24 @@ async function speechesFor(
     ids.push(chapter.dexId);
   }
   const map: Record<number, string> = {};
+  let notice = "";
   let finished = 0;
   await mapPool(ids, async (id) => {
     if (!id) return;
-    map[id] = await speciesSpeech(id, names.get(id) ?? "This Pokémon");
+    const reading = await speciesSpeech(id, names.get(id) ?? "This Pokémon");
+    if (reading.speech) map[id] = reading.speech;
+    if (reading.notice) notice = reading.notice;
     finished += 1;
-    onProgress?.(finished, ids.length);
+    onProgress?.(finished, ids.length, notice);
   });
-  return map;
+  return { speech: map, notice };
 }
 
 type FormReading = {
   speech: string;
   url: string;
   status: "ready" | "missing" | "unavailable";
+  notice: string;
 };
 
 async function formReading(formId: number): Promise<FormReading> {
@@ -253,17 +276,37 @@ async function formReading(formId: number): Promise<FormReading> {
     const response = await fetch(`/api/forms/${formId}`);
     const payload = (await response.json()) as {
       speech?: string;
+      name?: string;
+      speciesId?: number;
+      notice?: string;
       article?: { url?: string; status?: string };
     };
     const status = payload.article?.status;
     const safe = status === "ready" || status === "missing" || status === "unavailable" ? status : "unavailable";
+    const name = payload.name?.replace(/\s+/g, " ").trim() ?? "";
+    let speech = payload.speech?.replace(/\s+/g, " ").trim() ?? "";
+    let notice = payload.notice?.replace(/\s+/g, " ").trim() ?? "";
+    if (nameOnlySpeech(name, speech) && payload.speciesId) {
+      try {
+        const entryResponse = await fetch(`/api/catalogue/${payload.speciesId}`);
+        const entryPayload = (await entryResponse.json()) as { entry?: { info?: string } };
+        const info = entryPayload.entry?.info?.replace(/\s+/g, " ").trim() ?? "";
+        if (info) {
+          speech = spokenDexLine(name || "This Pokémon", info);
+          notice = notice || WIKI_DEX_NOTE;
+        }
+      } catch {
+        notice = notice || WIKI_DEX_NOTE;
+      }
+    }
     return {
-      speech: payload.speech?.replace(/\s+/g, " ").trim() ?? "",
+      speech,
       url: payload.article?.url ?? "",
       status: safe,
+      notice,
     };
   } catch {
-    return { speech: "", url: "", status: "unavailable" };
+    return { speech: "", url: "", status: "unavailable", notice: WIKI_DEX_NOTE };
   }
 }
 
@@ -288,6 +331,7 @@ function withFormReading(card: KidCard, formId: number, reading: FormReading): K
         ...chapter,
         articleUrl: reading.url || chapter.articleUrl,
         articleStatus: reading.status,
+        articleNotice: reading.notice || undefined,
         tracks: chapter.tracks.map((track) => ({
           ...track,
           text,
@@ -432,7 +476,9 @@ export function Studio({
     legendary: legendary[0]?.id ?? "legendary",
     mythical: mythical[0]?.id ?? "mythical",
   });
-  const [factSpeech, setFactSpeech] = useState<{ id: number; speech: string; url: string } | null>(null);
+  const [factSpeech, setFactSpeech] = useState<{ id: number; speech: string; url: string; notice: string } | null>(
+    null,
+  );
   const [view, setView] = useState<"cards" | "catalogue" | "setup" | "music">("cards");
   const [playback, setPlayback] = useState<PlaybackSettings>(defaultPlayback);
   const [kind, setKind] = useState<KidCardKind>("meet");
@@ -511,27 +557,43 @@ export function Studio({
     };
   }, []);
 
+  const factFallback = chapter ? chapterDexText(chapter) : "";
+
   useEffect(() => {
     if (!readsSpeciesBiology(kind) || !chapter?.dexId) return;
     const id = chapter.dexId;
     const name = chapter.title;
+    const fallback = factFallback;
     const controller = new AbortController();
     void fetch(`/api/catalogue/${id}/biology`, { signal: controller.signal })
       .then(async (response) => {
-        const payload = (await response.json()) as { speech?: string; biology?: { url?: string } };
+        const payload = (await response.json()) as {
+          speech?: string;
+          notice?: string;
+          biology?: { url?: string };
+        };
         if (controller.signal.aborted) return;
+        const speech = payload.speech?.replace(/\s+/g, " ").trim() ?? "";
+        const notice = payload.notice?.replace(/\s+/g, " ").trim() ?? "";
+        const failed = nameOnlySpeech(name, speech);
         setFactSpeech({
           id,
-          speech: payload.speech?.replace(/\s+/g, " ").trim() || `${name}.`,
-          url: payload.biology?.url ?? "",
+          speech: failed ? fallback || `${name}.` : speech,
+          url: failed ? "" : (payload.biology?.url ?? ""),
+          notice: failed ? notice || WIKI_DEX_NOTE : notice,
         });
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
-        setFactSpeech({ id, speech: `${name}.`, url: "" });
+        setFactSpeech({
+          id,
+          speech: fallback || `${name}.`,
+          url: "",
+          notice: WIKI_DEX_NOTE,
+        });
       });
     return () => controller.abort();
-  }, [kind, chapter?.dexId, chapter?.title]);
+  }, [kind, chapter?.dexId, chapter?.title, factFallback]);
 
   function stopClip() {
     const audio = clipRef.current;
@@ -586,7 +648,9 @@ export function Studio({
       const readings = await mapPool(pending, async (chapter) => {
         const reading = chapter.formId ? await formReading(chapter.formId) : null;
         finished += 1;
-        onProgress?.(`${label}, description ${finished} of ${pending.length}`);
+        onProgress?.(
+          statusWithDexNote(`${label}, description ${finished} of ${pending.length}`, reading?.notice ?? ""),
+        );
         return { formId: chapter.formId, reading };
       });
       for (const item of readings) {
@@ -1084,8 +1148,12 @@ export function Studio({
     if (!(await connectedSession())) {
       throw new Error("Connect Yoto before building a playlist.");
     }
+    const dexNote = playlistDexNote(playlist);
     setSending(true);
-    setJob({ status: "sending", detail: `Sending ${playlist.libraryTitle} to Yoto…` });
+    setJob({
+      status: "sending",
+      detail: statusWithDexNote(`Sending ${playlist.libraryTitle} to Yoto…`, dexNote),
+    });
     try {
       const chosenId = validYotoCardId(targetPlaylist);
       if (chosenId) {
@@ -1108,9 +1176,12 @@ export function Studio({
       const tracks = countSpokenTracks(playlist.chapters);
       setJob({
         status: "completed",
-        detail: chosenId
-          ? `${updatedTitle ?? "The playlist"} was updated.`
-          : `${playlist.libraryTitle} is in your Yoto library.`,
+        detail: statusWithDexNote(
+          chosenId
+            ? `${updatedTitle ?? "The playlist"} was updated.`
+            : `${playlist.libraryTitle} is in your Yoto library.`,
+          dexNote,
+        ),
         done: tracks,
         total: tracks,
       });
@@ -1145,29 +1216,31 @@ export function Studio({
         if (adding > free) throw new SendFailure(freeSlotMessage(free, adding), false);
       }
       const formKind = isFormPlaylistKind(card.kind);
-      const spokenCard = formKind
-        ? card
-        : card.kind === "guess"
-          ? card
-          : applySpeciesSpeech(
-              card,
-              await speechesFor(card, (done, total) => {
-                setJob({
-                  status: "sending",
-                  detail: `${card.libraryTitle}, description ${done} of ${total}`,
-                  done,
-                  total,
-                });
-              }),
-            );
+      let dexNote = "";
+      let spokenCard = card;
+      if (!formKind && card.kind !== "guess") {
+        const readings = await speechesFor(card, (done, total, notice) => {
+          if (notice) dexNote = notice;
+          setJob({
+            status: "sending",
+            detail: statusWithDexNote(`${card.libraryTitle}, description ${done} of ${total}`, notice),
+            done,
+            total,
+          });
+        });
+        if (readings.notice) dexNote = readings.notice;
+        spokenCard = applySpeciesSpeech(card, readings.speech);
+      }
       if (isFormPlaylistKind(card.kind)) {
         await ensureFormProse(card.kind, (detail) => {
+          if (detail.includes(WIKI_DEX_NOTE)) dexNote = WIKI_DEX_NOTE;
           setJob({ status: "sending", detail });
         });
       }
       const readyForm = isFormPlaylistKind(card.kind)
         ? (activePlaylist(playlistsRef.current, card.kind, card.id) ?? spokenCard)
         : spokenCard;
+      if (!dexNote) dexNote = playlistDexNote(readyForm);
       const base = randomGuess
         ? await (async () => {
             const icons = await uploadGuessIcons(card);
@@ -1184,9 +1257,12 @@ export function Studio({
       const tracks = countSpokenTracks(card.chapters);
       setJob({
         status: "completed",
-        detail: chosenId
-          ? `${updatedTitle ?? "The playlist"} was updated.`
-          : `${card.rangeLabel} is in your Yoto library.`,
+        detail: statusWithDexNote(
+          chosenId
+            ? `${updatedTitle ?? "The playlist"} was updated.`
+            : `${card.rangeLabel} is in your Yoto library.`,
+          dexNote,
+        ),
         done: tracks,
         total: tracks,
       });
@@ -1212,23 +1288,24 @@ export function Studio({
     try {
       for (const playlist of playlists) forgetCard(playlist.id);
       const createdTitles: string[] = [];
+      let dexNote = "";
       for (let index = 0; index < playlists.length; index += 1) {
         const playlist = playlists[index];
         if (!playlist) continue;
         const headline = bulkProgressLabel(index + 1, playlists.length);
         setJob({ status: "sending", detail: headline, done: index, total: playlists.length });
         try {
-          const spoken = applySpeciesSpeech(
-            playlist,
-            await speechesFor(playlist, (done, total) => {
-              setJob({
-                status: "sending",
-                detail: `${playlist.libraryTitle}, description ${done} of ${total}`,
-                done,
-                total,
-              });
-            }),
-          );
+          const readings = await speechesFor(playlist, (done, total, notice) => {
+            if (notice) dexNote = notice;
+            setJob({
+              status: "sending",
+              detail: statusWithDexNote(`${playlist.libraryTitle}, description ${done} of ${total}`, notice),
+              done,
+              total,
+            });
+          });
+          if (readings.notice) dexNote = readings.notice;
+          const spoken = applySpeciesSpeech(playlist, readings.speech);
           const pixels = await uploadPixels(spoken, (done, total) => {
             setJob({
               status: "sending",
@@ -1258,7 +1335,10 @@ export function Studio({
       }
       setJob({
         status: "completed",
-        detail: `All ${playlists.length} Pokefacts playlists are in your Yoto library.`,
+        detail: statusWithDexNote(
+          `All ${playlists.length} Pokefacts playlists are in your Yoto library.`,
+          dexNote,
+        ),
         done: playlists.length,
         total: playlists.length,
       });
@@ -1712,7 +1792,14 @@ export function Studio({
                 <div className="mt-6 max-w-prose space-y-3 text-base leading-7">
                   {readsSpeciesBiology(kind) && chapter.dexId ? (
                     factReading ? (
-                      <p>{factReading.speech}</p>
+                      <>
+                        {factReading.notice ? (
+                          <p className="text-sm text-muted-foreground" role="status">
+                            {factReading.notice}
+                          </p>
+                        ) : null}
+                        <p>{factReading.speech}</p>
+                      </>
                     ) : (
                       <p className="text-sm text-muted-foreground">Opening the description…</p>
                     )
@@ -1724,7 +1811,14 @@ export function Studio({
                         No separate description was found. The selected voice says the name.
                       </p>
                     ) : (
-                      <p>{formSpokenText(chapter)}</p>
+                      <>
+                        {chapter.articleNotice ? (
+                          <p className="text-sm text-muted-foreground" role="status">
+                            {chapter.articleNotice}
+                          </p>
+                        ) : null}
+                        <p>{formSpokenText(chapter)}</p>
+                      </>
                     )
                   ) : (
                     visibleTracks?.map((track) =>
@@ -1743,10 +1837,13 @@ export function Studio({
                     )
                   )}
                 </div>
-                {readsSpeciesBiology(kind) && factReading?.url ? <WikiCredit url={factReading.url} /> : null}
+                {readsSpeciesBiology(kind) && factReading?.url && !factReading.notice ? (
+                  <WikiCredit url={factReading.url} />
+                ) : null}
                 {formMode &&
                 chapter.articleUrl &&
                 chapter.articleStatus &&
+                !chapter.articleNotice &&
                 !formSpeechIsNameOnly(chapter.title, formSpokenText(chapter)) ? (
                   <WikiCredit url={chapter.articleUrl} />
                 ) : null}
@@ -1831,8 +1928,11 @@ export function Studio({
                             dexId = fresh?.tracks[0]?.lead === "cry" ? fresh.dexId : undefined;
                           } else if (chapter.dexId && readsSpeciesBiology(kind)) {
                             const prefix = chapter.tracks[0]?.text.startsWith(POKEDEX_HOWTO) ? POKEDEX_HOWTO : "";
-                            const speech =
-                              factReading?.speech ?? (await speciesSpeech(chapter.dexId, chapter.title));
+                            const shown =
+                              factReading && !nameOnlySpeech(chapter.title, factReading.speech)
+                                ? factReading.speech
+                                : (await speciesSpeech(chapter.dexId, chapter.title)).speech;
+                            const speech = shown || chapterDexText(chapter) || `${chapter.title}.`;
                             line = pronounce(`${prefix}${speech}`.replace(/\s+/g, " ").trim());
                             dexId = chapter.tracks.some((track) => track.lead === "cry") ? chapter.dexId : undefined;
                           } else {

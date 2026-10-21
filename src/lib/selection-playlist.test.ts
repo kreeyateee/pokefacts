@@ -95,6 +95,25 @@ describe("catalogue selection playlists", () => {
     assert.equal(whos.card.chapters[0]?.tracks.length, 2);
   });
 
+  it("uses the Pokédex line when biology is missing and keeps the clue name-free", () => {
+    const pikachu = species(25, "Pikachu");
+    pikachu.biology = [];
+    const facts = selectionPlaylist([pikachu], "facts");
+    const text = facts.card.chapters[0]?.tracks[0]?.text ?? "";
+    assert.match(text, /^Pikachu\./);
+    assert.match(text, /keeps electricity in its cheeks/);
+    assert.notEqual(text, "Pikachu.");
+    const advanced = advancedSpeech(pikachu);
+    assert.match(advanced, /keeps electricity in its cheeks/);
+    assert.match(advanced, /weighs/i);
+    const whos = selectionPlaylist([pikachu], "whos-that");
+    const clue = whos.card.chapters[0]?.tracks[0]?.text ?? "";
+    assert.doesNotMatch(clue, /Pikachu/i);
+    const withWiki = species(25, "Pikachu");
+    assert.equal(factsSpeech(withWiki), spokenWiki("Pikachu", withWiki.biology));
+    assert.equal(factsSpeech(withWiki).includes("keeps electricity in its cheeks"), false);
+  });
+
   it("merges the cry in front of both the Who's That clue and the answer", () => {
     const pikachu = species(25, "Pikachu");
     const built = selectionPlaylist([pikachu], "whos-that", "My Pokémon");
