@@ -60,7 +60,4 @@ async function loadArtwork(id: number, fetchImpl: typeof fetch, cacheDir: string
   throw new Error(`The picture for number ${id} could not be downloaded (HTTP ${lastStatus}).`);
 }
 
-/** Full official artwork saved with the app. The page picture, not the 16×16 Yoto icon. */
-export function artworkSrc(id: number): string {
-  return `/artwork/${id}.webp`;
-}
+export { artworkSrc } from "@/lib/artwork-src";

@@ -40,7 +40,7 @@ import {
   type KidCard,
   type KidCardKind,
 } from "@/lib/kid-cards";
-import { artworkSrc } from "@/lib/artwork";
+import { artworkSrc } from "@/lib/artwork-src";
 import { pronounce } from "@/lib/pronounce";
 import { selectionUpload } from "@/lib/selection-playlist";
 import { APP_NAME, DONATE_URL, SOURCE_URL } from "@/lib/site";

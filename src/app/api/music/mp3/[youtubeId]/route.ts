@@ -2,8 +2,6 @@ import { jsonError } from "@/lib/yoto-proxy";
 import { isYoutubeVideoId } from "@/lib/youtube-link";
 import { readCachedMp3 } from "@/lib/youtube-mp3";
 
-export const dynamic = "force-dynamic";
-
 export async function GET(
   _request: Request,
   ctx: { params: Promise<{ youtubeId: string }> },

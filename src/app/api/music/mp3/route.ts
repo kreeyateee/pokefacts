@@ -5,7 +5,6 @@ import { uploadPlainMp3 } from "@/lib/yoto-fact-audio";
 import { downloadYoutubeMp3s, ensureYoutubeMp3, type ParsedMp3 } from "@/lib/youtube-mp3";
 import { YOTO_TRACK_LIMIT } from "@/lib/kid-cards";
 
-export const dynamic = "force-dynamic";
 export const maxDuration = 900;
 
 type TrackBody = {
