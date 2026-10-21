@@ -16,6 +16,7 @@ import type {
   CataloguePage,
 } from "@/lib/catalogue-types";
 import { heightForUnits, weightForUnits, type MeasureUnits } from "@/lib/format";
+import { statusWithDexNote } from "@/lib/spoken-wiki";
 import type { KidCard } from "@/lib/kid-cards";
 import { PICKER_VOICES } from "@/lib/piper-voice";
 import {
@@ -424,18 +425,23 @@ export function Catalogue({
     setBuildProgress({ done: 0, total: picked.length });
     try {
       const rows: SelectionSpecies[] = [];
+      let dexNote = "";
       for (let index = 0; index < picked.length; index += 1) {
         const id = picked[index];
         if (!id) continue;
         setBuildProgress({ done: index + 1, total: picked.length });
-        setBuildMessage(`Reading ${index + 1} of ${picked.length}…`);
+        setBuildMessage(statusWithDexNote(`Reading ${index + 1} of ${picked.length}…`, dexNote));
         const entryResponse = await fetch(`/api/catalogue/${id}`);
         const entryPayload = (await entryResponse.json()) as { entry?: CatalogueEntry; error?: string };
         if (!entryResponse.ok || !entryPayload.entry) {
           throw new Error(entryPayload.error || "That entry could not be opened.");
         }
         const biologyResponse = await fetch(`/api/catalogue/${id}/biology`);
-        const biologyPayload = (await biologyResponse.json()) as { biology?: { blocks?: BiologyBlock[] } };
+        const biologyPayload = (await biologyResponse.json()) as {
+          biology?: { blocks?: BiologyBlock[] };
+          notice?: string;
+        };
+        if (playlistKind !== "whos-that" && biologyPayload.notice) dexNote = biologyPayload.notice;
         const entry = entryPayload.entry;
         rows.push({
           id: entry.id,
@@ -469,11 +475,16 @@ export function Catalogue({
         setBuildMessage("Connect Yoto, then build the playlist again.");
         return;
       }
-      setBuildMessage(`Sending ${built.title} to Yoto…`);
+      if (dexNote && built.card.kind !== "guess") {
+        for (const chapter of built.card.chapters) {
+          if (chapter.dexId) chapter.articleNotice = dexNote;
+        }
+      }
+      setBuildMessage(statusWithDexNote(`Sending ${built.title} to Yoto…`, dexNote));
       setBuildProgress(null);
       await onSendSelection(built.card);
       setBuildProgress({ done: rows.length, total: rows.length });
-      setBuildMessage(`${built.title} is in your Yoto library.`);
+      setBuildMessage(statusWithDexNote(`${built.title} is in your Yoto library.`, dexNote));
     } catch (error: unknown) {
       setBuildFailed(true);
       setBuildMessage(error instanceof Error ? error.message : "The playlist was not sent.");

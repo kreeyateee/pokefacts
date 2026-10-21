@@ -1,7 +1,7 @@
 import { listSpecialForms, getCatalogueEntry } from "@/lib/catalogue-db";
 import { bulbapediaArticleUrl } from "@/lib/bulbapedia";
 import { loadFormSpeech } from "@/lib/form-prose";
-import { spokenWiki } from "@/lib/spoken-wiki";
+import { spokenDexLine, WIKI_DEX_NOTE } from "@/lib/spoken-wiki";
 import type { BiologyView } from "@/lib/catalogue-types";
 
 export async function GET(
@@ -22,22 +22,26 @@ export async function GET(
     formId: number;
     name: string;
     speech: string;
+    notice: string;
     article: BiologyView;
   }> = [];
   for (const form of forms) {
     try {
-      const { speech, article } = await loadFormSpeech(form);
+      const { speech, article, notice } = await loadFormSpeech(form);
       articles.push({
         formId: form.formId,
         name: form.formName,
         speech,
+        notice,
         article,
       });
     } catch {
+      const info = entry.info.trim();
       articles.push({
         formId: form.formId,
         name: form.formName,
-        speech: spokenWiki(form.formName, []),
+        speech: spokenDexLine(form.formName, info),
+        notice: info ? WIKI_DEX_NOTE : "",
         article: {
           status: "unavailable",
           url: bulbapediaArticleUrl(form.speciesName),

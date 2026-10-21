@@ -56,6 +56,8 @@ export type KidChapter = {
   articleUrl?: string;
   /** Set once that form's article has been read. */
   articleStatus?: "ready" | "missing" | "unavailable";
+  /** Shown when the Pokédex line replaced a Bulbapedia read that did not finish. Not spoken. */
+  articleNotice?: string;
   /** Sprite shown on the page. */
   sprite?: string;
   /** Merged cry and reading, when that file has been recorded. */

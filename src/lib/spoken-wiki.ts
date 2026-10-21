@@ -75,6 +75,35 @@ export function spokenWiki(name: string, blocks: BiologyBlock[]): string {
   return `${title}. ${prose}`.replace(/\s+/g, " ").trim();
 }
 
+/** Send status when Bulbapedia did not answer and the catalogue Pokédex line is spoken instead. */
+export const WIKI_DEX_NOTE = "Bulbapedia did not load. The Pokédex line is used instead.";
+
+/** Name, then one catalogue Pokédex sentence. An empty line stays the name alone. */
+export function spokenDexLine(name: string, dexLine: string): string {
+  const line = dexLine.replace(/\s+/g, " ").trim();
+  if (!line) return spokenWiki(name, []);
+  return spokenWiki(name, [{ kind: "paragraph", text: line }]);
+}
+
+/**
+ * Wiki lead when Bulbapedia has one.
+ * Otherwise the catalogue Pokédex sentence, so a fact is not the name alone.
+ */
+export function spokenFact(name: string, blocks: BiologyBlock[], dexLine = ""): string {
+  if (capProse(leadParagraphs(blocks))) return spokenWiki(name, blocks);
+  return spokenDexLine(name, dexLine);
+}
+
+/** Keep an existing send status line and add the Pokédex fallback note once. */
+export function statusWithDexNote(detail: string, notice: string): string {
+  const note = notice.replace(/\s+/g, " ").trim();
+  const base = detail.replace(/\s+/g, " ").trim();
+  if (!note) return base;
+  if (!base) return note;
+  if (base.includes(note)) return base;
+  return `${base} ${note}`;
+}
+
 /**
  * A one-line "it can Mega Evolve" note is not a description.
  * Real form prose is a paragraph about the form itself.
