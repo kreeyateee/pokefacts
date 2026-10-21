@@ -11,17 +11,17 @@ import {
   PRINT_DPI,
   SHEET_PREVIEW_DPI,
   READABLE_LIST_PT,
+  arrangeTiles,
   backMode,
   bringToFront,
   cardPixelSize,
   clampRotation,
-  clampScale,
-  clampSticker,
+  clampTileScale,
   coverListsNames,
   freshCover,
   isNumberRun,
   nameListPlan,
-  openSpot,
+  nearestTileIndex,
   pagePixelSize,
   paperId,
   playlistDetail,
@@ -31,11 +31,14 @@ import {
   stickerFilename,
   stickerStorageKey,
   stickerStyle,
+  tileGrid,
+  tileLayout,
   topStickerAt,
   type CoverDraft,
   type PaperId,
   type PlacedSticker,
   type StickerShape,
+  type TileLayout,
 } from "@/lib/sticker-layout";
 import { decorationArt } from "@/lib/sticker-decor";
 import { paintCard, paintSheet, type CardPaint } from "@/lib/sticker-paint";
@@ -59,6 +62,12 @@ const SHAPE_LABELS: { id: StickerShape; label: string }[] = [
   { id: "hex", label: "Hex" },
   { id: "star", label: "Star" },
   { id: "diamond", label: "Diamond" },
+];
+const PATTERN_LABELS: { id: TileLayout; label: string }[] = [
+  { id: "square", label: "Square" },
+  { id: "rectangle", label: "Rectangle" },
+  { id: "circle", label: "Circle" },
+  { id: "hex", label: "Hex" },
 ];
 
 function paintingUrl(value: unknown): string {
@@ -179,7 +188,9 @@ function loadDraft(cardId: string, fresh: CoverDraft, keys: ReadonlySet<string>)
       backText: typeof parsed.backText === "string" ? parsed.backText : fresh.backText,
       backMode: backMode(parsed.backMode),
       paper: paperId(parsed.paper),
-      stickers,
+      pattern: tileLayout(parsed.pattern),
+      tileScale: clampTileScale(parsed.tileScale),
+      stickers: arrangeTiles(stickers, tileLayout(parsed.pattern), clampTileScale(parsed.tileScale)),
       painting: paintingUrl(parsed.painting),
     };
   } catch {
@@ -226,14 +237,37 @@ function trackPointer(
   return stop;
 }
 
+function swapTile(
+  current: CoverDraft,
+  id: string,
+  direction: "left" | "right" | "up" | "down",
+): CoverDraft {
+  const index = current.stickers.findIndex((sticker) => sticker.id === id);
+  if (index < 0) return current;
+  const columns = Math.max(1, tileGrid(current.pattern, current.stickers.length).columns);
+  const delta = direction === "left" ? -1 : direction === "right" ? 1 : direction === "up" ? -columns : columns;
+  const target = index + delta;
+  if (target < 0 || target >= current.stickers.length) return current;
+  const next = current.stickers.slice();
+  const from = next[index];
+  const to = next[target];
+  if (!from || !to) return current;
+  next[index] = to;
+  next[target] = from;
+  return { ...current, stickers: arrangeTiles(next, current.pattern, current.tileScale) };
+}
+
 function downloadBytes(bytes: Uint8Array, filename: string) {
   const blob = new Blob([Uint8Array.from(bytes)], { type: "application/pdf" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
   link.download = filename;
+  link.rel = "noopener";
+  document.body.appendChild(link);
   link.click();
-  URL.revokeObjectURL(url);
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
 export function StickerStudio({
@@ -286,6 +320,7 @@ export function StickerStudio({
   const closeRef = useRef<() => void>(() => {});
   const draftRef = useRef(draft);
   const draftCard = useRef(focus.id);
+  const storageReady = useRef(false);
   const dragCleanup = useRef<(() => void) | null>(null);
   const suppressClick = useRef(false);
   const pastRef = useRef<{ draft: CoverDraft; selected: string | null }[]>([]);
@@ -304,6 +339,7 @@ export function StickerStudio({
   const [drawSerial, setDrawSerial] = useState(0);
   const paintCanvas = useRef<HTMLCanvasElement | null>(null);
   const paintReady = useRef(false);
+  const paintedFor = useRef<string | null>(null);
   const paintCache = useRef(new Map<string, CanvasImageSource>());
   const paintLoading = useRef(new Set<string>());
   const drawingRef = useRef(false);
@@ -494,10 +530,13 @@ export function StickerStudio({
   }, []);
 
   useEffect(() => {
-    if (draftCard.current === focusId) return;
     const next = roster.find((item) => item.id === focusId);
     if (!next) return;
+    // The first client render still has the server draft. Read this card once window exists,
+    // otherwise a saved cover is replaced by the suggestion.
+    if (storageReady.current && draftCard.current === focusId) return;
     draftCard.current = next.id;
+    storageReady.current = true;
     const nextMons = monsFor(next);
     setDraft(loadDraft(next.id, suggestedCover(next), new Set(nextMons.map((mon) => mon.key))));
   }, [focusId, roster]);
@@ -509,6 +548,7 @@ export function StickerStudio({
 
   useEffect(() => {
     return () => {
+      if (!storageReady.current) return;
       try {
         localStorage.setItem(stickerStorageKey(draftCard.current), JSON.stringify(draftRef.current));
       } catch {
@@ -518,6 +558,7 @@ export function StickerStudio({
   }, []);
 
   useEffect(() => {
+    if (!storageReady.current) return;
     const id = focus.id;
     const snapshot = draft;
     const timer = window.setTimeout(() => {
@@ -615,27 +656,20 @@ export function StickerStudio({
         removeRef.current();
         return;
       }
-      const nudge =
+      const direction =
         event.key === "ArrowLeft"
-          ? { x: -0.02, y: 0 }
+          ? "left"
           : event.key === "ArrowRight"
-            ? { x: 0.02, y: 0 }
+            ? "right"
             : event.key === "ArrowUp"
-              ? { x: 0, y: -0.02 }
+              ? "up"
               : event.key === "ArrowDown"
-                ? { x: 0, y: 0.02 }
+                ? "down"
                 : null;
-      if (!nudge) return;
+      if (!direction) return;
       event.preventDefault();
       pushRef.current();
-      setDraft((current) => ({
-        ...current,
-        stickers: current.stickers.map((sticker) => {
-          if (sticker.id !== selected) return sticker;
-          const next = clampSticker({ x: sticker.x + nudge.x, y: sticker.y + nudge.y }, sticker.scale, sticker.rotation);
-          return { ...sticker, ...next };
-        }),
-      }));
+      setDraft((current) => swapTile(current, selected, direction));
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -647,9 +681,14 @@ export function StickerStudio({
     setSelected(id);
     setDraft((current) => {
       const style = stickerStyle(current.stickers.length);
-      const spot = clampSticker(at ?? openSpot(current.stickers), 0.3, style.rotation);
-      const sticker: PlacedSticker = { id, key, x: spot.x, y: spot.y, scale: 0.3, ...style };
-      return { ...current, stickers: [...current.stickers, sticker] };
+      const sticker: PlacedSticker = { id, key, x: 0.5, y: 0.5, scale: 0.3, ...style };
+      const next = [...current.stickers, sticker];
+      if (at && next.length > 1) {
+        const index = nearestTileIndex(next.length, current.pattern, at.x, at.y);
+        next.pop();
+        next.splice(Math.min(index, next.length), 0, sticker);
+      }
+      return { ...current, stickers: arrangeTiles(next, current.pattern, current.tileScale) };
     });
   }
 
@@ -707,14 +746,22 @@ export function StickerStudio({
       paintCanvas.current = surface;
     }
     const surface = paintCanvas.current;
-    if (!paintReady.current) {
+    const url = draftRef.current.painting;
+    if (!paintReady.current || paintedFor.current !== url) {
       const ctx = surface.getContext("2d");
-      const saved = draftRef.current.painting ? paintCache.current.get(draftRef.current.painting) : null;
-      if (ctx) {
-        ctx.clearRect(0, 0, surface.width, surface.height);
-        if (saved) ctx.drawImage(saved, 0, 0, surface.width, surface.height);
+      const saved = url ? paintCache.current.get(url) : null;
+      if (url && !saved) {
+        paintReady.current = false;
+        paintedFor.current = null;
+        cachePainting(url);
+      } else {
+        if (ctx) {
+          ctx.clearRect(0, 0, surface.width, surface.height);
+          if (saved) ctx.drawImage(saved, 0, 0, surface.width, surface.height);
+        }
+        paintReady.current = true;
+        paintedFor.current = url;
       }
-      paintReady.current = true;
     }
     return surface;
   }
@@ -770,11 +817,11 @@ export function StickerStudio({
     pushHistory();
     setDraft((current) => ({
       ...current,
-      stickers: current.stickers.map((sticker) => {
-        if (sticker.id !== id) return sticker;
-        const next = { ...sticker, ...patch };
-        return { ...next, ...clampSticker(next, next.scale, next.rotation) };
-      }),
+      stickers: arrangeTiles(
+        current.stickers.map((sticker) => (sticker.id === id ? { ...sticker, ...patch } : sticker)),
+        current.pattern,
+        current.tileScale,
+      ),
     }));
   }
 
@@ -820,7 +867,7 @@ export function StickerStudio({
       (move) => {
         const canvas = frontRef.current;
         if (!canvas) return;
-        const next = clampSticker(pointOn(canvas, move), hit.scale, hit.rotation);
+        const next = pointOn(canvas, move);
         setDraft((current) => ({
           ...current,
           stickers: current.stickers.map((sticker) =>
@@ -828,20 +875,48 @@ export function StickerStudio({
           ),
         }));
       },
-      () => undefined,
+      (up) => {
+        const canvas = frontRef.current;
+        if (!canvas) return;
+        const point = pointOn(canvas, up);
+        setDraft((current) => {
+          const index = current.stickers.findIndex((sticker) => sticker.id === hit.id);
+          if (index < 0) return current;
+          const target = nearestTileIndex(current.stickers.length, current.pattern, point.x, point.y);
+          const next = current.stickers.slice();
+          const item = next[index];
+          const other = next[target];
+          if (!item || !other || target === index) {
+            return { ...current, stickers: arrangeTiles(next, current.pattern, current.tileScale) };
+          }
+          next[index] = other;
+          next[target] = item;
+          return { ...current, stickers: arrangeTiles(next, current.pattern, current.tileScale) };
+        });
+      },
     );
   }
 
   function resize(delta: number) {
-    if (!selected) return;
+    const before = draftRef.current;
+    if (before.stickers.length === 0) return;
+    const tileScale = clampTileScale(before.tileScale + delta);
+    if (tileScale === before.tileScale) return;
     pushHistory();
     setDraft((current) => ({
       ...current,
-      stickers: current.stickers.map((sticker) => {
-        if (sticker.id !== selected) return sticker;
-        const scale = clampScale(sticker.scale + delta);
-        return { ...sticker, ...clampSticker(sticker, scale, sticker.rotation), scale };
-      }),
+      tileScale,
+      stickers: arrangeTiles(current.stickers, current.pattern, tileScale),
+    }));
+  }
+
+  function setPattern(pattern: TileLayout) {
+    if (draftRef.current.pattern === pattern) return;
+    pushHistory();
+    setDraft((current) => ({
+      ...current,
+      pattern,
+      stickers: arrangeTiles(current.stickers, pattern, current.tileScale),
     }));
   }
 
@@ -905,7 +980,14 @@ export function StickerStudio({
   function useSuggestedPictures() {
     pushHistory();
     setSelected(null);
-    setDraft((current) => ({ ...current, stickers: fresh.stickers.map((sticker) => ({ ...sticker })) }));
+    setDraft((current) => ({
+      ...current,
+      stickers: arrangeTiles(
+        fresh.stickers.map((sticker) => ({ ...sticker })),
+        current.pattern,
+        current.tileScale,
+      ),
+    }));
   }
 
   function startAgain() {
@@ -928,7 +1010,11 @@ export function StickerStudio({
     setSelected(null);
     setDraft((current) => ({
       ...current,
-      stickers: current.stickers.filter((sticker) => sticker.id !== id),
+      stickers: arrangeTiles(
+        current.stickers.filter((sticker) => sticker.id !== id),
+        current.pattern,
+        current.tileScale,
+      ),
     }));
   }
   removeRef.current = removeSelected;
@@ -1011,7 +1097,8 @@ export function StickerStudio({
               </label>
             ) : null}
             <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-              Tap a picture, a Poké Ball, or a berry. Draw on the card, then move the pictures around.
+              Pick a tile pattern, then tap a Pokémon, a Poké Ball, or a berry. Each one fills the next tile.
+              Drag a sticker to swap its place in the pattern.
             </p>
           </div>
           <Button type="button" variant="outline" className="h-10 shrink-0 px-4" onClick={close}>
@@ -1091,7 +1178,26 @@ export function StickerStudio({
           </div>
 
           <div className="order-1 lg:order-2">
-            <p className="pk-kicker">Front</p>
+            <p className="pk-kicker">Pattern</p>
+            <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Tile pattern">
+              {PATTERN_LABELS.map((pattern) => (
+                <button
+                  key={pattern.id}
+                  type="button"
+                  className="pk-chip"
+                  aria-pressed={draft.pattern === pattern.id}
+                  onClick={() => setPattern(pattern.id)}
+                >
+                  {pattern.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              {draft.stickers.length === 0
+                ? "This pattern is empty. Tap a Pokémon to place the first tile."
+                : `${draft.stickers.length} tiles in a ${draft.pattern} pattern.`}
+            </p>
+            <p className="pk-kicker mt-4">Front</p>
             <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Card tools">
               <button type="button" className="pk-chip" aria-pressed={tool === "move"} onClick={() => setTool("move")}>
                 Move
@@ -1148,7 +1254,7 @@ export function StickerStudio({
               aria-label={
                 tool === "draw"
                   ? "Card front. Draw on the painting."
-                  : `Card front. Drag a ${hideNames ? "riddle" : "Pokémon"} to move it.`
+                  : `Card front. ${draft.stickers.length === 0 ? "The pattern is empty." : `Drag a tile to swap it in the ${draft.pattern} pattern.`}`
               }
               className="mx-auto mt-2 h-auto w-full max-w-96 touch-none shadow-[4px_4px_0_#16324f]"
               style={{ borderRadius: "5.9% / 3.7%" }}
@@ -1167,10 +1273,12 @@ export function StickerStudio({
               ) : null}
               <p className="text-sm leading-6">
                 {tool === "draw"
-                  ? "Draw on the card. Move lets you drag the pictures again."
-                  : selectedMon
-                    ? `${selectedMon.name} is selected. Drag it on the card.`
-                    : "Tap a picture, then drag it on the card."}
+                  ? "Draw on the card. Move lets you swap tiles in the pattern again."
+                  : draft.stickers.length === 0
+                    ? "Tap a picture to fill the first tile."
+                    : selectedMon
+                      ? `${selectedMon.name} is selected. Drag it onto another tile to swap.`
+                      : "Tap a picture to add a tile, or drag a tile to swap it."}
               </p>
             </div>
             {selectedSticker ? (
@@ -1224,10 +1332,22 @@ export function StickerStudio({
               <Button type="button" variant="outline" className="h-10 px-4" disabled={!canRedo} onClick={redo}>
                 Redo
               </Button>
-              <Button type="button" variant="outline" className="h-10 px-4" disabled={!selected} onClick={() => resize(0.04)}>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 px-4"
+                disabled={draft.stickers.length === 0 || draft.tileScale >= 1.4}
+                onClick={() => resize(0.08)}
+              >
                 Bigger
               </Button>
-              <Button type="button" variant="outline" className="h-10 px-4" disabled={!selected} onClick={() => resize(-0.04)}>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 px-4"
+                disabled={draft.stickers.length === 0 || draft.tileScale <= 0.7}
+                onClick={() => resize(-0.08)}
+              >
                 Smaller
               </Button>
               <Button

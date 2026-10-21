@@ -203,7 +203,7 @@ export function Catalogue({
   const [loadingList, setLoadingList] = useState(true);
   const [selected, setSelected] = useState(1);
   const [entry, setEntry] = useState<CatalogueEntry | null>(null);
-  const [entryError, setEntryError] = useState("");
+  const [entryError, setEntryError] = useState<{ id: number; message: string } | null>(null);
   const [biology, setBiology] = useState<BiologyView | null>(null);
   const [biologyFor, setBiologyFor] = useState(0);
   const [formNotes, setFormNotes] = useState<
@@ -233,6 +233,7 @@ export function Catalogue({
       void fetch(`/api/catalogue?${params.toString()}`, { signal: controller.signal })
         .then(async (response) => {
           const payload = (await response.json()) as CataloguePage & { error?: string };
+          if (controller.signal.aborted) return;
           if (!response.ok) throw new Error(payload.error || "The catalogue could not be opened.");
           setList(payload);
           setListError("");
@@ -244,7 +245,7 @@ export function Catalogue({
           });
         })
         .catch((error: unknown) => {
-          if (error instanceof DOMException && error.name === "AbortError") return;
+          if (controller.signal.aborted) return;
           setListError(error instanceof Error ? error.message : "The catalogue could not be opened.");
         })
         .finally(() => {
@@ -262,15 +263,19 @@ export function Catalogue({
     void fetch(`/api/catalogue/${selected}`, { signal: controller.signal })
       .then(async (response) => {
         const payload = (await response.json()) as { entry?: CatalogueEntry; error?: string };
-        if (!response.ok || !payload.entry) {
+        if (controller.signal.aborted) return;
+        if (!response.ok || !payload.entry || payload.entry.id !== selected) {
           throw new Error(payload.error || "That entry could not be opened.");
         }
         setEntry(payload.entry);
-        setEntryError("");
+        setEntryError(null);
       })
       .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-        setEntryError(error instanceof Error ? error.message : "That entry could not be opened.");
+        if (controller.signal.aborted) return;
+        setEntryError({
+          id: selected,
+          message: error instanceof Error ? error.message : "That entry could not be opened.",
+        });
       });
     return () => controller.abort();
   }, [selected]);
@@ -282,14 +287,15 @@ export function Catalogue({
     void fetch(`/api/catalogue/${selected}/biology`, { signal: controller.signal })
       .then(async (response) => {
         const payload = (await response.json()) as { biology?: BiologyView; error?: string };
+        if (controller.signal.aborted) return;
         if (!response.ok || !payload.biology) {
           throw new Error(payload.error || "Biology could not be loaded.");
         }
         setBiology(payload.biology);
         setBiologyFor(selected);
       })
-      .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
+      .catch(() => {
+        if (controller.signal.aborted) return;
         setBiology({ status: "unavailable", url: "", blocks: [] });
         setBiologyFor(selected);
       });
@@ -366,20 +372,24 @@ export function Catalogue({
     if (type) params.set("type", type);
     if (generation) params.set("generation", String(generation));
     params.set("ids", "1");
-    const response = await fetch(`/api/catalogue?${params.toString()}`);
-    const payload = (await response.json()) as { ids?: number[]; error?: string };
-    if (!response.ok || !payload.ids) {
-      setBuildMessage(payload.error || "Those matches could not be selected.");
-      return;
-    }
-    setPicked((current) => {
-      const next = [...current];
-      for (const id of payload.ids ?? []) {
-        if (!next.includes(id)) next.push(id);
+    try {
+      const response = await fetch(`/api/catalogue?${params.toString()}`);
+      const payload = (await response.json()) as { ids?: number[]; error?: string };
+      if (!response.ok || !payload.ids) {
+        setBuildMessage(payload.error || "Those matches could not be selected.");
+        return;
       }
-      return next;
-    });
-    setBuildMessage("");
+      setPicked((current) => {
+        const next = [...current];
+        for (const id of payload.ids ?? []) {
+          if (!next.includes(id)) next.push(id);
+        }
+        return next;
+      });
+      setBuildMessage("");
+    } catch (error: unknown) {
+      setBuildMessage(error instanceof Error ? error.message : "Those matches could not be selected.");
+    }
   }
 
   async function printStickers() {
@@ -503,7 +513,7 @@ export function Catalogue({
 
   return (
     <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-      <section className={`${showList ? "flex" : "hidden lg:flex"} min-w-0 flex-col self-start`}>
+      <section className="flex min-w-0 flex-col self-start">
         <label className="order-1 grid gap-1 text-sm" htmlFor="catalogue-search">
           Search
           <input
@@ -741,7 +751,7 @@ export function Catalogue({
             {listError}
           </p>
         ) : null}
-        <ul className="order-2 mt-2 grid max-h-[55dvh] gap-2 overflow-auto overscroll-y-contain pr-1 lg:order-3 lg:max-h-[70dvh]">
+        <ul className={`order-2 mt-2 grid max-h-[55dvh] gap-2 overflow-auto overscroll-y-contain pr-1 lg:order-3 lg:max-h-[70dvh] ${showList ? "" : "hidden lg:grid"}`}>
           {loadingList && !list ? <li className="text-sm text-muted-foreground">Loading entries…</li> : null}
           {list?.items.length === 0 ? (
             <li className="pk-card px-3 py-4 text-sm text-muted-foreground">
@@ -792,7 +802,7 @@ export function Catalogue({
             );
           })}
         </ul>
-        <div className="order-2 mt-3 flex items-center justify-between gap-2 text-sm lg:order-3">
+        <div className={`order-2 mt-3 flex items-center justify-between gap-2 text-sm lg:order-3 ${showList ? "" : "hidden lg:flex"}`}>
           <button
             type="button"
             className="pk-pill disabled:opacity-40"
@@ -825,12 +835,12 @@ export function Catalogue({
             Back to the list
           </button>
         )}
-        {entryError ? (
+        {entryError?.id === selected ? (
           <p className="text-sm pk-danger" role="alert">
-            {entryError}
+            {entryError.message}
           </p>
         ) : null}
-        {entry?.id !== selected && !entryError ? (
+        {entry?.id !== selected && entryError?.id !== selected ? (
           <p className="text-sm text-muted-foreground">Opening the entry…</p>
         ) : null}
         {entry && entry.id === selected ? (
@@ -981,11 +991,10 @@ export function Catalogue({
                   {entry.forms.map((form) => (
                     <li key={form.id} className="pk-soft px-3 py-2 text-sm font-normal">
                       <img
-                        src={artworkSrc(form.id)}
+                        src={artworkApi("form", form.id)}
                         alt=""
                         width={112}
                         height={112}
-                        data-fallback={artworkApi("form", form.id)}
                         className="mb-2 h-28 w-28 object-contain"
                         onError={hideBrokenPicture}
                       />
@@ -1009,7 +1018,7 @@ export function Catalogue({
                             )}
                             <p className="mt-2 text-xs leading-5 pk-quiet">
                               From{" "}
-                              <a className="underline" href={note.article.url} rel="noreferrer">
+                              <a className="underline" href={note.article.url} target="_blank" rel="noreferrer">
                                 Bulbapedia
                               </a>
                               . This description is used under CC BY-NC-SA 2.5.
@@ -1144,7 +1153,7 @@ function BiologyPanel({ biology }: { biology: BiologyView | null }) {
       {biology?.status === "ready" ? (
         <>
           <p className="mt-2 text-xs leading-5 pk-quiet">
-            From <a className="underline" href={biology.url} rel="noreferrer">Bulbapedia</a>. This section is used under CC BY-NC-SA 2.5.
+            From <a className="underline" href={biology.url} target="_blank" rel="noreferrer">Bulbapedia</a>. This section is used under CC BY-NC-SA 2.5.
           </p>
           <div className="mt-3 max-w-prose">
             {biology.blocks.map((block, index) => {

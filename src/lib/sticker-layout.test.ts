@@ -2,12 +2,16 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  arrangeTiles,
   clampRotation,
   defaultStickers,
   isDecorationKey,
+  nearestTileIndex,
   sanitizeStickers,
   stickerHits,
   stickerStyle,
+  tileCells,
+  tileGrid,
 } from "./sticker-layout";
 
 describe("sticker looks", () => {
@@ -53,5 +57,49 @@ describe("sticker looks", () => {
     assert.ok(Math.abs(clampRotation(Math.PI * 2)) < 0.001);
     assert.equal(isDecorationKey("deco:oran"), true);
     assert.equal(isDecorationKey("bulba"), false);
+  });
+});
+
+describe("sticker tiles", () => {
+  it("leaves an empty pattern empty", () => {
+    assert.deepEqual(tileCells("square", 0), []);
+    assert.deepEqual(arrangeTiles([], "hex"), []);
+    assert.equal(nearestTileIndex(0, "circle", 0.5, 0.5), 0);
+  });
+
+  it("fills a square grid and a wider rectangle", () => {
+    const square = tileGrid("square", 4);
+    const rectangle = tileGrid("rectangle", 4);
+    assert.deepEqual(square, { columns: 2, rows: 2 });
+    assert.equal(rectangle.columns, 3);
+    assert.equal(rectangle.rows, 2);
+    const squareCells = tileCells("square", 4);
+    assert.equal(squareCells.length, 4);
+    assert.ok((squareCells[0]?.x ?? 1) < (squareCells[1]?.x ?? 0));
+    assert.ok((squareCells[0]?.y ?? 1) < (squareCells[2]?.y ?? 0));
+    const placed = defaultStickers(["a", "b", "c", "d"]);
+    const tiled = arrangeTiles(placed, "rectangle");
+    assert.deepEqual(
+      tiled.map((sticker) => sticker.key),
+      ["a", "b", "c", "d"],
+    );
+    assert.notEqual(tiled[0]?.x, placed[0]?.x);
+  });
+
+  it("offsets the next hex row and rings a circle", () => {
+    const hex = tileCells("hex", 6);
+    const columns = tileGrid("hex", 6).columns;
+    assert.ok(columns >= 2);
+    assert.ok((hex[columns]?.x ?? 0) > (hex[0]?.x ?? 1));
+    const circle = tileCells("circle", 6);
+    assert.equal(circle.length, 6);
+    const centerX = circle.reduce((sum, cell) => sum + cell.x, 0) / circle.length;
+    const centerY = circle.reduce((sum, cell) => sum + cell.y, 0) / circle.length;
+    const distances = circle.map((cell) => Math.hypot(cell.x - centerX, cell.y - centerY));
+    const nearest = Math.min(...distances);
+    const farthest = Math.max(...distances);
+    assert.ok(farthest - nearest < 0.08);
+    const hit = nearestTileIndex(6, "circle", circle[2]?.x ?? 0, circle[2]?.y ?? 0);
+    assert.equal(hit, 2);
   });
 });

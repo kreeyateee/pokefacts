@@ -348,7 +348,7 @@ function WikiCredit({ url }: { url: string }) {
   return (
     <p className="pk-quiet mt-4 text-xs leading-5">
       From{" "}
-      <a className="underline" href={url} rel="noreferrer">
+      <a className="underline" href={url} target="_blank" rel="noreferrer">
         Bulbapedia
       </a>
       . This description is used under CC BY-NC-SA 2.5.
@@ -602,7 +602,7 @@ export function Studio({
         });
       })
       .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
+        if (controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) return;
         setFactSpeech({
           id,
           speech: fallback || `${name}.`,
