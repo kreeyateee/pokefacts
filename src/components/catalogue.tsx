@@ -5,9 +5,11 @@ import { useEffect, useState } from "react";
 import { PlaylistWindow } from "@/components/playlist-window";
 import { StatusBar } from "@/components/status-bar";
 import { StickerStudio } from "@/components/sticker-studio";
+import { YotoScreen } from "@/components/yoto-screen";
 import { Button } from "@/components/ui/button";
 import { artworkSrc } from "@/lib/page-artwork";
 import { artworkSrc as artworkApi } from "@/lib/artwork-path";
+import { yotoPixelSrc } from "@/lib/yoto-screen";
 import type {
   BiologyBlock,
   BiologyView,
@@ -503,6 +505,7 @@ export function Catalogue({
   const statusDone = sendJob ? sendJob.done : buildProgress?.done;
   const statusTotal = sendJob ? sendJob.total : buildProgress?.total;
   const statusFailed = sendJob ? sendJob.status === "failed" : buildFailed;
+  const entryYoto = entry && entry.id === selected ? yotoPixelSrc({ dexId: entry.id }) : undefined;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
@@ -823,15 +826,18 @@ export function Catalogue({
         {entry && entry.id === selected ? (
           <div key={entry.id} className="pk-swap">
             <div className="pk-hero">
-              <img
-                src={artworkSrc(entry.id)}
-                alt=""
-                width={176}
-                height={176}
-                className="pk-art pk-art-entry"
-                data-fallback={artworkApi("species", entry.id)}
-                onError={hideBrokenPicture}
-              />
+              <div className="pk-hero-pics">
+                <img
+                  src={artworkSrc(entry.id)}
+                  alt=""
+                  width={176}
+                  height={176}
+                  className="pk-art pk-art-entry"
+                  data-fallback={artworkApi("species", entry.id)}
+                  onError={hideBrokenPicture}
+                />
+                {entryYoto ? <YotoScreen src={entryYoto} /> : null}
+              </div>
               <div className="pk-entry-name min-w-0">
                 <div className="flex items-center justify-between gap-3">
                   <p className="pk-kicker">

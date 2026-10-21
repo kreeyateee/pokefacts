@@ -13,6 +13,7 @@ import { CardOptionsDialog } from "@/components/card-options-dialog";
 import { ConnectDialog } from "@/components/connect-dialog";
 import { MusicPanel } from "@/components/music-panel";
 import { MysterySilhouette } from "@/components/mystery-silhouette";
+import { YotoScreen } from "@/components/yoto-screen";
 import { StickerStudio } from "@/components/sticker-studio";
 import { Button } from "@/components/ui/button";
 import {
@@ -57,6 +58,7 @@ import {
 } from "@/lib/kid-cards";
 import { artworkSrc as artworkApi } from "@/lib/artwork-path";
 import { artworkSrc } from "@/lib/page-artwork";
+import { yotoPixelSrc } from "@/lib/yoto-screen";
 import { riddleParts } from "@/lib/dex-facts";
 import { pronounce } from "@/lib/pronounce";
 import { spokenDexLine, statusWithDexNote, WIKI_DEX_NOTE } from "@/lib/spoken-wiki";
@@ -1498,10 +1500,15 @@ export function Studio({
   const portrait = mysteryId
     ? artworkSrc(mysteryId)
     : guessing && chapter?.dexId
-      ? `/pixels/${chapter.dexId}.png`
-      : guessing
-        ? undefined
-        : chapter?.sprite;
+      ? artworkSrc(chapter.dexId)
+      : chapter?.sprite;
+  const yotoIcon = chapter
+    ? yotoPixelSrc({
+        formId: chapter.formId,
+        dexId: chapter.dexId,
+        shadow: guessing && !revealed,
+      })
+    : undefined;
 
   const heading = pageHeading({
     view,
@@ -1659,6 +1666,7 @@ export function Studio({
                 {listed.map((item) => {
                   const selected = item.key === chapter.key;
                   const label = guessing ? `Riddle ${chapterNumber(item)}` : item.title;
+                  const thumb = !guessing ? yotoPixelSrc({ formId: item.formId, dexId: item.dexId }) : undefined;
                   return (
                     <button
                       key={item.key}
@@ -1667,7 +1675,9 @@ export function Studio({
                       aria-current={selected ? "true" : undefined}
                       className="pk-choice flex w-44 shrink-0 items-center gap-2 px-2.5 py-2 text-left text-sm md:w-auto md:shrink"
                     >
-                      {!guessing && item.sprite ? (
+                      {thumb ? (
+                        <YotoScreen src={thumb} size="thumb" />
+                      ) : !guessing && item.sprite ? (
                         <img
                           src={item.sprite}
                           alt=""
@@ -1695,25 +1705,28 @@ export function Studio({
                     : `Number ${chapterNumber(chapter)}`}
                 </p>
                 <div className="pk-hero">
-                  {portrait && mysteryId ? (
-                    <div className="pk-silhouette">
-                      <MysterySilhouette src={portrait} fallback={artworkApi("species", mysteryId)} />
-                    </div>
-                  ) : portrait ? (
-                    <img
-                      src={portrait}
-                      alt={chapter.title}
-                      width={guessing ? 96 : 176}
-                      height={guessing ? 96 : 176}
-                      data-fallback={pictureFallback({
-                        formId: chapter.formId,
-                        dexId: chapter.dexId,
-                        sprite: portrait,
-                      })}
-                      onError={hideBrokenPicture}
-                      className={guessing ? "pk-sprite" : "pk-art"}
-                    />
-                  ) : null}
+                  <div className="pk-hero-pics">
+                    {portrait && mysteryId ? (
+                      <div className="pk-silhouette">
+                        <MysterySilhouette src={portrait} fallback={artworkApi("species", mysteryId)} />
+                      </div>
+                    ) : portrait ? (
+                      <img
+                        src={portrait}
+                        alt={chapter.title}
+                        width={176}
+                        height={176}
+                        data-fallback={pictureFallback({
+                          formId: chapter.formId,
+                          dexId: chapter.dexId,
+                          sprite: portrait,
+                        })}
+                        onError={hideBrokenPicture}
+                        className="pk-art"
+                      />
+                    ) : null}
+                    {yotoIcon ? <YotoScreen src={yotoIcon} /> : null}
+                  </div>
                   <h2 className="font-display text-4xl leading-tight sm:text-5xl">
                     {guessing && !revealed ? `Riddle ${chapter.overlay}` : chapter.title}
                   </h2>
