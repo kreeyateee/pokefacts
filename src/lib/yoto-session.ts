@@ -47,11 +47,18 @@ export async function createPkce(): Promise<{
 }
 
 /** The hosted site. Home computers keep the loopback callback in local-origin.json. */
-export const PUBLIC_APP_HOST = "pokefacts.duckdns.org";
+export const PUBLIC_APP_HOST = "pokefacts.online";
+
+/** Public HTTPS hosts that may start a Yoto login. DuckDNS stays valid during the move. */
+export const PUBLIC_APP_HOSTS = [
+  PUBLIC_APP_HOST,
+  "www.pokefacts.online",
+  "pokefacts.duckdns.org",
+] as const;
 
 /**
  * Yoto must return to the site that started the login.
- * The home address stays the loopback callback. Only the public HTTPS host uses its own.
+ * The home address stays the loopback callback. Only a public HTTPS host uses its own.
  */
 export function callbackForOrigin(origin: string): string {
   let url: URL;
@@ -60,7 +67,8 @@ export function callbackForOrigin(origin: string): string {
   } catch {
     return YOTO_REDIRECT_URI;
   }
-  if (url.protocol === "https:" && url.hostname === PUBLIC_APP_HOST && url.port === "") {
+  const publicHost = PUBLIC_APP_HOSTS.some((host) => host === url.hostname);
+  if (url.protocol === "https:" && publicHost && url.port === "") {
     return `${url.origin}/callback`;
   }
   return YOTO_REDIRECT_URI;

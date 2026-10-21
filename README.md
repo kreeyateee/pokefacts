@@ -2,7 +2,7 @@
 
 Pokefacts makes Pokémon cards for a Yoto player. The cards go into your Yoto library. You then link each one to a blank Make Your Own card.
 
-Open it here: https://pokefacts.duckdns.org/
+Open it here: https://pokefacts.online/
 
 You can also run it on your own computer. That path is below. The first time on your own computer takes a while. You install two free programs, leave a window open, and connect your own Yoto account. After that, starting it again is one line.
 
@@ -148,7 +148,7 @@ http://127.0.0.1:3847/callback
 On the website it is:
 
 ```
-https://pokefacts.duckdns.org/callback
+https://pokefacts.online/callback
 ```
 
 The page has a **Copy** button for the address that matches the site you have open.
@@ -228,7 +228,7 @@ Then open `http://127.0.0.1:3847` in your browser. You do not need to install No
 
 **The window says ffmpeg is missing.** Do the ffmpeg step again, close the window, open a new one in the folder, and type `npm start`.
 
-**Yoto sends you back to an error.** The callback address on the Yoto dashboard has to match the site you are using. On your own computer that is `http://127.0.0.1:3847/callback`. On the website that is `https://pokefacts.duckdns.org/callback`. Fix it there, then click **Continue to Yoto** again.
+**Yoto sends you back to an error.** The callback address on the Yoto dashboard has to match the site you are using. On your own computer that is `http://127.0.0.1:3847/callback`. On the website that is `https://pokefacts.online/callback`. Fix it there, then click **Continue to Yoto** again.
 
 ## Where the words and pictures come from
 
