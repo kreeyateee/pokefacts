@@ -181,6 +181,7 @@ export function Catalogue({
   onPlaylistTarget,
   units = "metric",
   job = null,
+  sending = false,
 }: {
   onSendSelection?: (card: KidCard) => Promise<void>;
   onPrepareSend?: (confirmLabel: string, newTitle: string, run: () => void | Promise<void>) => void;
@@ -192,6 +193,7 @@ export function Catalogue({
   onVoiceId?: (voiceId: string) => void;
   units?: MeasureUnits;
   job?: { status: string; detail: string; done?: number; total?: number } | null;
+  sending?: boolean;
 } = {}) {
   const [query, setQuery] = useState("");
   const [type, setType] = useState("");
@@ -714,7 +716,7 @@ export function Catalogue({
           <Button
             type="button"
             className="mt-3 h-11 w-full"
-            disabled={picked.length === 0 || building}
+            disabled={picked.length === 0 || building || sending}
             onClick={() => {
               const title =
                 playlistTitle.trim() ||
@@ -730,7 +732,7 @@ export function Catalogue({
               void buildPlaylist();
             }}
           >
-            {building ? "Sending…" : "Send this pick"}
+            {building || sending ? "Recording in the background…" : "Send this pick"}
           </Button>
           {picked.length > speciesLimit ? (
             <p className="mt-2 text-xs leading-5 text-muted-foreground">

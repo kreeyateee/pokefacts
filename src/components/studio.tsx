@@ -7,8 +7,8 @@ import { AppHeader } from "@/components/app-header";
 import { AppNav } from "@/components/app-nav";
 import { Catalogue } from "@/components/catalogue";
 import { PlaybackPanel } from "@/components/playback-panel";
+import { SendBanner, toastSendAllReady, toastSendReady, toastSendStarted } from "@/components/send-banner";
 import { SetupGuide } from "@/components/setup-guide";
-import { StatusBar } from "@/components/status-bar";
 import { CardOptionsDialog } from "@/components/card-options-dialog";
 import { ConnectDialog } from "@/components/connect-dialog";
 import { MusicPanel } from "@/components/music-panel";
@@ -549,6 +549,7 @@ export function Studio({
   const clipUrl = useRef<string | null>(null);
   const hearAbort = useRef<AbortController | null>(null);
   const speakingRef = useRef(false);
+  const sendingRef = useRef(false);
 
   const cardId = kind === "meet" ? factsId : guessId;
   const playlistCard =
@@ -669,7 +670,6 @@ export function Studio({
       setPlaylistId((current) => ({ ...current, [playlistKind]: next.id }));
     }
     setChapterKey(playableChapters(next)[0]?.key ?? "start");
-    setJob(null);
   }
 
   function rememberFormLists(nextKind: FormPlaylistKind, next: KidCard[]) {
@@ -719,7 +719,6 @@ export function Studio({
     setRevealed(false);
     if (view !== "cards" || nextKind !== kind) {
       setQuery("");
-      setJob(null);
     }
     setView("cards");
     setKind(nextKind);
@@ -727,7 +726,6 @@ export function Studio({
     if (isFormPlaylistKind(nextKind) || isSpeciesPlaylistKind(nextKind)) {
       const next = activePlaylist(playlistsRef.current, nextKind, playlistId[nextKind]);
       setChapterKey(next ? (playableChapters(next)[0]?.key ?? "start") : "start");
-      setJob(null);
       if (isFormPlaylistKind(nextKind)) void ensureFormProse(nextKind);
       return;
     }
@@ -785,7 +783,6 @@ export function Studio({
     setFactsId(RANDOM_POKEDEX_ID);
     setRandomCard(next);
     setChapterKey(next.chapters[0]?.key ?? "start");
-    setJob(null);
   }
 
   function shuffleGuess() {
@@ -798,7 +795,6 @@ export function Studio({
     setGuessId(RANDOM_GUESS_ID);
     setGuessCard(next);
     setChapterKey(next.chapters[0]?.key ?? "start");
-    setJob(null);
   }
 
   function chooseChapter(key: string) {
@@ -973,6 +969,11 @@ export function Studio({
       setLibrary([]);
       setLibraryNote(failure.message);
     }
+  }
+
+  function markSending(next: boolean) {
+    sendingRef.current = next;
+    setSending(next);
   }
 
   function reportFailure(message: string) {
@@ -1234,11 +1235,15 @@ export function Studio({
   }
 
   async function sendSelection(playlist: KidCard): Promise<void> {
+    if (sendingRef.current) {
+      throw new Error("Another playlist is still recording in the background.");
+    }
     if (!(await connectedSession())) {
       throw new Error("Connect Yoto before building a playlist.");
     }
     const dexNote = playlistDexNote(playlist);
-    setSending(true);
+    markSending(true);
+    toastSendStarted(playlist.libraryTitle);
     setJob({
       status: "sending",
       detail: statusWithDexNote(`Sending ${playlist.libraryTitle} to Yoto…`, dexNote),
@@ -1274,26 +1279,23 @@ export function Studio({
         done: tracks,
         total: tracks,
       });
-      toast.success(
-        chosenId
-          ? `${updatedTitle ?? "The playlist"} was updated.`
-          : `${playlist.libraryTitle} is ready to link to its own blank card.`,
-      );
+      toastSendReady(chosenId ? (updatedTitle ?? "The playlist") : playlist.libraryTitle, Boolean(chosenId));
       void loadLibrary();
     } catch (error) {
       const failure = asSendFailure(error, "The recording stopped.");
       reportFailure(failure.message);
       throw failure;
     } finally {
-      setSending(false);
+      markSending(false);
     }
   }
 
   async function send() {
-    if (!card) return;
+    if (!card || sendingRef.current) return;
     if (!(await connectedSession())) return;
-    setSending(true);
+    markSending(true);
     setBulkActive(false);
+    toastSendStarted(card.libraryTitle);
     setJob({ status: "sending", detail: `Sending ${card.rangeLabel} to Yoto…` });
     try {
       const chosenId = validYotoCardId(targetPlaylist);
@@ -1355,25 +1357,23 @@ export function Studio({
         done: tracks,
         total: tracks,
       });
-      toast.success(
-        chosenId
-          ? `${updatedTitle ?? "The playlist"} was updated.`
-          : `${card.libraryTitle} is ready to link to its own blank card.`,
-      );
+      toastSendReady(chosenId ? (updatedTitle ?? "The playlist") : card.libraryTitle, Boolean(chosenId));
       void loadLibrary();
     } catch (error) {
       const failure = asSendFailure(error, "The recording stopped.");
       reportFailure(failure.message);
     } finally {
-      setSending(false);
+      markSending(false);
     }
   }
 
   async function sendAllFacts() {
+    if (sendingRef.current) return;
     if (!(await connectedSession())) return;
     const playlists = factsPlaylists;
-    setSending(true);
+    markSending(true);
     setBulkActive(true);
+    toastSendStarted("All Pokefacts playlists");
     try {
       for (const playlist of playlists) forgetCard(playlist.id);
       const createdTitles: string[] = [];
@@ -1431,12 +1431,12 @@ export function Studio({
         done: playlists.length,
         total: playlists.length,
       });
-      toast.success(`All ${playlists.length} Pokefacts playlists are ready to link.`);
+      toastSendAllReady(playlists.length);
     } catch (error) {
       const failure = asSendFailure(error, "The recording stopped.");
       reportFailure(failure.message);
     } finally {
-      setSending(false);
+      markSending(false);
       setBulkActive(false);
     }
   }
@@ -1488,7 +1488,7 @@ export function Studio({
     : "";
 
   return (
-    <div className="pk-page">
+    <div className={job ? "pk-page pk-page-docked" : "pk-page"}>
       <AppHeader
         title={heading.title}
         blurb={heading.blurb}
@@ -1522,9 +1522,12 @@ export function Studio({
           <SetupGuide onConnect={() => setConnectOpen(true)} onHome={goHome} />
         ) : view === "catalogue" ? (
           <Catalogue
+            sending={sending}
             onSendSelection={sendSelection}
             onPrepareSend={(confirmLabel, newTitle, run) => askCardOptions(confirmLabel, newTitle, run)}
-            onBuildStart={() => setJob(null)}
+            onBuildStart={() => {
+              if (!sendingRef.current) setJob(null);
+            }}
             playlists={library}
             playlistTarget={targetPlaylist}
             onPlaylistTarget={setTargetPlaylist}
@@ -1844,7 +1847,9 @@ export function Studio({
                 Make this card
               </h3>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                On the player: {card.childDoes} In the Yoto app, look for{" "}
+                Send opens the voice and playlist choices first. Hear a sample there, then confirm. Recording
+                continues in the background — a cheer pops up when it is ready, with a Buy me a coffee link. On
+                the player: {card.childDoes} In the Yoto app, look for{" "}
                 <span className="font-bold text-ink">{card.libraryTitle}</span>.
                 {randomGuess
                   ? " Send uploads a shadow of each 16×16 pixel for the clue, then the real pixel for the answer."
@@ -1853,10 +1858,6 @@ export function Studio({
                     : speciesSet
                       ? " The Yoto icon is the 16×16 pixel."
                       : ""}
-              </p>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                Send opens the voice and playlist choices first. Hear a sample there, then confirm. Recording
-                continues in the background after that. The cry plays first on the card.
               </p>
               <label className="mt-3 grid gap-1 text-sm" htmlFor="yoto-playlist">
                 Where it goes
@@ -1904,7 +1905,7 @@ export function Studio({
                   }
                 >
                   {sending && !bulkActive
-                    ? "Recording…"
+                    ? "Recording in the background…"
                     : randomGuess
                       ? "Send these 50 riddles"
                       : randomFacts
@@ -1929,7 +1930,7 @@ export function Studio({
                     }
                   }
                     {sending && bulkActive
-                      ? "Recording…"
+                      ? "Recording in the background…"
                       : `Send all ${factsPlaylists.length} playlists`}
                   </Button>
                 ) : null}
@@ -1939,14 +1940,6 @@ export function Studio({
                   Send all records every Pokefacts playlist, so all 1,025 Pokémon are covered. Each playlist stays at
                   100 tracks or fewer.
                 </p>
-              ) : null}
-              {job ? (
-                <StatusBar
-                  label={job.detail}
-                  done={job.done}
-                  total={job.total}
-                  failed={job.status === "failed"}
-                />
               ) : null}
               <div className="mt-4">
                 <p className="text-sm font-bold">
@@ -1981,6 +1974,7 @@ export function Studio({
         .
       </footer>
 
+      <SendBanner job={job} onDismiss={() => setJob(null)} />
       {stickersOpen && card ? (
         <StickerStudio key={card.id} card={card} cards={rangeCards} onClose={() => setStickersOpen(false)} />
       ) : null}
