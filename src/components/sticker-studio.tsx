@@ -1195,7 +1195,7 @@ export function StickerStudio({
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
               {draft.stickers.length === 0
                 ? "This pattern is empty. Tap a Pokémon to place the first tile."
-                : `${draft.stickers.length} tiles in a ${draft.pattern} pattern.`}
+                : `${draft.stickers.length} ${draft.stickers.length === 1 ? "tile" : "tiles"} in a ${draft.pattern} pattern.`}
             </p>
             <p className="pk-kicker mt-4">Front</p>
             <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Card tools">
