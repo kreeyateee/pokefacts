@@ -550,6 +550,12 @@ export function Studio({
   const hearAbort = useRef<AbortController | null>(null);
   const speakingRef = useRef(false);
   const sendingRef = useRef(false);
+  const voiceIdRef = useRef(voiceId);
+  const targetPlaylistRef = useRef(targetPlaylist);
+  const playbackRef = useRef(playback);
+  voiceIdRef.current = voiceId;
+  targetPlaylistRef.current = targetPlaylist;
+  playbackRef.current = playback;
 
   const cardId = kind === "meet" ? factsId : guessId;
   const playlistCard =
@@ -820,7 +826,7 @@ export function Studio({
     const controller = new AbortController();
     hearAbort.current = controller;
     try {
-      const piper = isPiperVoice(voiceId);
+      const piper = isPiperVoice(voiceIdRef.current);
       if (!piper && !(await connectedSession())) {
         if (controller.signal.aborted) return;
         speakingRef.current = false;
@@ -833,7 +839,9 @@ export function Studio({
         method: "POST",
         signal: controller.signal,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(demoHearBody({ text: script, voiceId, dexId, title, mix: playback })),
+        body: JSON.stringify(
+          demoHearBody({ text: script, voiceId: voiceIdRef.current, dexId, title, mix: playbackRef.current }),
+        ),
       });
       if (controller.signal.aborted) return;
       const type = response.headers.get("content-type") ?? "";
@@ -1129,11 +1137,11 @@ export function Studio({
                 title: job.title,
                 dexId: job.dexId,
                 name: job.name,
-                voiceId,
+                voiceId: voiceIdRef.current,
                 speechJobId,
                 speechCardId,
                 uploadId,
-                mix: playback,
+                mix: playbackRef.current,
               }),
             ),
           });
@@ -1254,7 +1262,7 @@ export function Studio({
       detail: statusWithDexNote(`Sending ${playlist.libraryTitle} to Yoto…`, dexNote),
     });
     try {
-      const chosenId = validYotoCardId(targetPlaylist);
+      const chosenId = validYotoCardId(targetPlaylistRef.current);
       if (chosenId) {
         const response = await yotoFetch(`/api/yoto/card?id=${encodeURIComponent(chosenId)}`);
         const summary = (await readApi(response, "Could not read that playlist.")) as { tracks?: number };
@@ -1267,7 +1275,7 @@ export function Studio({
       const prepared = selectionUpload(playlist, pixels, {
         title: playlist.libraryTitle,
         shadowById: icons?.shadow,
-        voiceId,
+        voiceId: voiceIdRef.current,
       });
       const upload = uploadForPlaylist(prepared, chosenId);
       await sendPrepared(playlist, upload, playlist.libraryTitle);
@@ -1303,7 +1311,7 @@ export function Studio({
     toastSendStarted(card.libraryTitle);
     setJob({ status: "sending", detail: `Sending ${card.rangeLabel} to Yoto…` });
     try {
-      const chosenId = validYotoCardId(targetPlaylist);
+      const chosenId = validYotoCardId(targetPlaylistRef.current);
       if (chosenId) {
         const response = await yotoFetch(`/api/yoto/card?id=${encodeURIComponent(chosenId)}`);
         const summary = (await readApi(response, "Could not read that playlist.")) as { tracks?: number };
@@ -1340,14 +1348,14 @@ export function Studio({
       const base = randomGuess
         ? await (async () => {
             const icons = await uploadGuessIcons(card);
-            return guessUpload(card, icons.real, icons.shadow, undefined, voiceId);
+            return guessUpload(card, icons.real, icons.shadow, undefined, voiceIdRef.current);
           })()
         : formKind
-          ? formPlaylistUpload(readyForm, await uploadPixels(readyForm), undefined, voiceId)
+          ? formPlaylistUpload(readyForm, await uploadPixels(readyForm), undefined, voiceIdRef.current)
           : randomFacts
-            ? pokedexUpload(spokenCard, await uploadPixels(spokenCard), undefined, voiceId)
-            : factsPlaylistUpload(spokenCard, await uploadPixels(spokenCard), undefined, voiceId);
-      const upload = uploadForPlaylist({ ...base, voiceId }, chosenId);
+            ? pokedexUpload(spokenCard, await uploadPixels(spokenCard), undefined, voiceIdRef.current)
+            : factsPlaylistUpload(spokenCard, await uploadPixels(spokenCard), undefined, voiceIdRef.current);
+      const upload = uploadForPlaylist({ ...base, voiceId: voiceIdRef.current }, chosenId);
       await sendPrepared(card, upload, card.libraryTitle);
       const updatedTitle = library.find((item) => item.cardId === chosenId)?.title;
       const tracks = countSpokenTracks(card.chapters);
@@ -1408,7 +1416,7 @@ export function Studio({
               total,
             });
           });
-          const upload = factsBulkUpload(spoken, pixels, voiceId);
+          const upload = factsBulkUpload(spoken, pixels, voiceIdRef.current);
           delete upload.content.cardId;
           await sendPrepared(playlist, upload, headline);
           createdTitles.push(playlist.libraryTitle);
