@@ -111,8 +111,9 @@ export function ConnectDialog({
           </li>
           <li>
             <span className="font-medium text-foreground">3. Grant the field guide.</span>{" "}
-            Login asks for user:content:manage, user:content:view, family:library:view, offline_access, and profile.
-            That is permission to create and view Make Your Own content, view your library, stay signed in, and read your name.
+            Login asks for user:content:manage, user:content:view, user:icons:manage, family:library:view, offline_access, and profile.
+            That is permission to create and view Make Your Own content, upload a 16×16 icon, view your library, stay signed in, and read your name.
+            If you already connected, reconnect. A refresh keeps the old login and will not add user:icons:manage.
           </li>
         </ol>
         <form

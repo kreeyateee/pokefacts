@@ -79,8 +79,9 @@ export function voiceOrLily(id?: string): string {
 /**
  * The content gateway checks these strings literally. `user:content:manage`
  * is documented as including `user:content:view`, and reading the scratch
- * recording also requires `family:library:view`. A refresh keeps the old
- * grant, so a token minted before these were listed has to be replaced.
+ * recording also requires `family:library:view`. `user:icons:manage` covers
+ * a 16×16 icon upload. A refresh keeps the old grant, so a token minted
+ * before these were listed has to be replaced: reconnect Yoto.
  */
 export const YOTO_SCOPES =
-  "user:content:manage user:content:view family:library:view offline_access profile";
+  "user:content:manage user:content:view user:icons:manage family:library:view offline_access profile";

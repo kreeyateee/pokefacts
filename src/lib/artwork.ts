@@ -60,4 +60,4 @@ async function loadArtwork(id: number, fetchImpl: typeof fetch, cacheDir: string
   throw new Error(`The picture for number ${id} could not be downloaded (HTTP ${lastStatus}).`);
 }
 
-export { artworkSrc } from "@/lib/artwork-src";
+export { artworkSrc } from "./page-artwork";

@@ -627,11 +627,12 @@ async function openUpload(
   label: string,
   audio: Buffer,
   fetchImpl: typeof fetch,
+  timeoutMs = 20_000,
 ): Promise<string> {
   const uploadUrl = new URL("https://api.yotoplay.com/media/transcode/audio/uploadUrl");
   uploadUrl.searchParams.set("sha256", sha256(audio));
   uploadUrl.searchParams.set("filename", `pokefacts-${label}.mp3`);
-  const created = await yoto(token, uploadUrl.toString(), undefined, fetchImpl, 20_000);
+  const created = await yoto(token, uploadUrl.toString(), undefined, fetchImpl, timeoutMs);
   const createdBody = (await readJson(created)) as {
     upload?: { uploadId?: string; uploadUrl?: string | null };
   } | null;
@@ -644,7 +645,7 @@ async function openUpload(
       method: "PUT",
       headers: { "Content-Type": "audio/mpeg" },
       body: new Uint8Array(audio),
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!put.ok) throw new Error("Yoto did not store this track.");
   }
@@ -657,9 +658,10 @@ async function pollUpload(
   label: string,
   fetchImpl: typeof fetch,
   maxPolls: number,
+  waitMs = 400,
 ): Promise<UploadedAudio | undefined> {
   for (let attempt = 0; attempt < maxPolls; attempt += 1) {
-    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 400));
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
     const statusUrl = `https://api.yotoplay.com/media/upload/${encodeURIComponent(uploadId)}/transcoded?loudnorm=false`;
     const status = await yoto(token, statusUrl, undefined, fetchImpl, 15_000);
     const body = (await readJson(status)) as {
@@ -710,6 +712,25 @@ export async function uploadPlainMp3(
     fileSize: uploaded.fileSize ?? audio.length,
     channels: uploaded.channels ?? "mono",
   };
+}
+
+/**
+ * The media upload prepareFactTrack uses after a file is already a Yoto MP3.
+ * Local music calls this directly. It does not record speech or attach a cry.
+ */
+export async function uploadTrackAudio(
+  token: string,
+  label: string,
+  audio: Buffer,
+  fetchImpl: typeof fetch = fetch,
+): Promise<UploadedAudio> {
+  const safe = label.replace(/[^\w-]/g, "").slice(0, 40) || "track";
+  const uploadId = await openUpload(token, safe, audio, fetchImpl, 120_000);
+  const uploaded = await pollUpload(token, uploadId, safe, fetchImpl, 90, 1_000);
+  if (!uploaded?.trackUrl.startsWith("yoto:#")) {
+    throw new Error(`Yoto is still transcoding track ${safe}.`);
+  }
+  return uploaded;
 }
 
 function clipReason(text: string): string {

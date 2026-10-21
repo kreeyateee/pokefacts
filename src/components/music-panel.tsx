@@ -3,12 +3,14 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { MusicPlaylistSection, useMusicPlaylist } from "@/components/music-playlist";
 import { Button } from "@/components/ui/button";
+import { WebaooFiles } from "@/components/webaoo-files";
 import rawIndex from "@/data/music-index.json";
 import { YOTO_TRACK_LIMIT } from "@/lib/kid-cards";
 import { readMusicIndex, type MusicSong } from "@/lib/music-index";
-import { musicPlaylistTitle, musicPlaylistUpload, type MusicPlaylistTrack } from "@/lib/music-playlist";
 import { youtubeTarget } from "@/lib/youtube-link";
+import { musicPlaylistTitle, musicPlaylistUpload, type MusicPlaylistTrack } from "@/lib/youtube-playlist";
 import { uploadForPlaylist } from "@/lib/yoto-send";
 import { yotoFetch } from "@/lib/yoto-session";
 
@@ -28,11 +30,15 @@ async function messageOf(response: Response, fallback: string): Promise<string> 
 
 export function MusicPanel({
   playlists = [],
+  libraryNote = "",
+  onConnect,
   playlistTarget = "",
   onPlaylistTarget,
   voiceId,
 }: {
   playlists?: Array<{ cardId: string; title: string }>;
+  libraryNote?: string;
+  onConnect?: () => void;
   playlistTarget?: string;
   onPlaylistTarget?: (id: string) => void;
   voiceId?: string;
@@ -53,6 +59,7 @@ export function MusicPanel({
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [mp3Id, setMp3Id] = useState("");
+  const playlist = useMusicPlaylist();
 
   const needle = query.trim().toLowerCase();
   const visibleAlbums = index.albums.filter((album) => {
@@ -82,25 +89,6 @@ export function MusicPanel({
       return [...current, page];
     });
     setFailed(false);
-  }
-
-  function addAlbum() {
-    const pages = visibleSongs.filter((item) => item.youtubeId).map((item) => item.page);
-    const missing = visibleSongs.length - pages.length;
-    setPicked((current) => {
-      const next = [...current];
-      for (const page of pages) {
-        if (next.length + links.length >= YOTO_TRACK_LIMIT) break;
-        if (!next.includes(page)) next.push(page);
-      }
-      return next;
-    });
-    setFailed(missing > 0);
-    setNote(
-      missing > 0
-        ? "Some songs on this album have no YouTube video, so they were left off the playlist."
-        : "",
-    );
   }
 
   function addLink() {
@@ -216,7 +204,8 @@ export function MusicPanel({
   }
 
   return (
-    <div className="grid min-w-0 gap-4">
+    <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,26rem)] lg:items-start">
+      <div className="order-2 grid min-w-0 gap-4 lg:order-1">
       {error ? <p className="pk-card px-4 py-3 text-sm leading-6">{error}</p> : null}
       {blocked.length > 0 ? (
         <p className="text-sm leading-6 text-ink">
@@ -266,17 +255,7 @@ export function MusicPanel({
           )}
         </section>
         <section className="grid min-w-0 content-start gap-3" aria-label="Songs">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-xl text-ink">Songs</h2>
-            <button
-              type="button"
-              className="text-sm font-bold text-poke-red underline decoration-poke-yellow decoration-2 disabled:opacity-40"
-              disabled={!album || visibleSongs.every((item) => !item.youtubeId) || busy}
-              onClick={addAlbum}
-            >
-              Add this album
-            </button>
-          </div>
+          <h2 className="text-xl text-ink">Songs</h2>
           {!album ? null : visibleSongs.length === 0 ? (
             <p className="text-sm leading-6">
               {gapByPage.has(album.page)
@@ -291,17 +270,13 @@ export function MusicPanel({
                 const selected = item.page === song?.page;
                 const checked = picked.includes(item.page);
                 return (
-                  <div key={item.page} className="flex min-w-0 items-start gap-2">
+                  <div key={item.page} className="flex min-w-0 items-stretch gap-2">
                     <input
                       type="checkbox"
                       className="mt-3"
                       checked={checked}
-                      disabled={
-                        !item.youtubeId ||
-                        busy ||
-                        (!checked && picked.length + links.length >= YOTO_TRACK_LIMIT)
-                      }
-                      aria-label={`Add ${item.title} to the playlist`}
+                      disabled={!item.youtubeId || busy || (!checked && queued >= YOTO_TRACK_LIMIT)}
+                      aria-label={`Add ${item.title} to the Yoto playlist`}
                       onChange={() => toggleSong(item.page)}
                     />
                     <button
@@ -312,11 +287,32 @@ export function MusicPanel({
                     >
                       {item.title}
                     </button>
+                    <button
+                      type="button"
+                      className="pk-pill min-h-11 self-center"
+                      aria-label={`Add ${item.title} to My playlist`}
+                      onClick={() => {
+                        setSongPage(item.page);
+                        playlist.addSong({
+                          page: item.page,
+                          title: item.title,
+                          album: album.title,
+                          youtubeId: item.youtubeId,
+                        });
+                      }}
+                    >
+                      Add
+                    </button>
                   </div>
                 );
               })}
             </div>
           )}
+          {playlist.notice ? (
+            <p role="status" className="text-sm leading-6">
+              {playlist.notice}
+            </p>
+          ) : null}
           {song ? (
             <div id="music-player" className="pk-card min-w-0 p-3">
               <p className="text-lg font-bold break-words text-ink">{song.title}</p>
@@ -336,26 +332,30 @@ export function MusicPanel({
                   ) : (
                     <p className="mt-2 text-sm leading-6">Play MP3 downloads the YouTube audio and keeps it as an MP3.</p>
                   )}
-                  <iframe
-                    className="pk-music-frame mt-3"
-                    title={song.title}
-                    src={`https://www.youtube-nocookie.com/embed/${song.youtubeId}`}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    loading="lazy"
-                  />
-                  <p className="mt-3 text-sm leading-6">
-                    If the player stays blank,{" "}
-                    <a
-                      className="font-bold underline decoration-poke-red decoration-2"
-                      href={`https://www.youtube.com/watch?v=${song.youtubeId}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      open this video on YouTube
-                    </a>
-                    .
-                  </p>
+                  {playlist.playing ? null : (
+                    <>
+                      <iframe
+                        className="pk-music-frame mt-3"
+                        title={song.title}
+                        src={`https://www.youtube-nocookie.com/embed/${song.youtubeId}`}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        loading="lazy"
+                      />
+                      <p className="mt-3 text-sm leading-6">
+                        If the player stays blank,{" "}
+                        <a
+                          className="font-bold underline decoration-poke-red decoration-2"
+                          href={`https://www.youtube.com/watch?v=${song.youtubeId}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          open this video on YouTube
+                        </a>
+                        .
+                      </p>
+                    </>
+                  )}
                 </>
               ) : (
                 <p className="mt-2 text-sm leading-6">{playerNote}</p>
@@ -369,10 +369,15 @@ export function MusicPanel({
           ) : null}
         </section>
       </div>
-      <section className="pk-card grid min-w-0 gap-3 p-4" aria-label="Playlist">
-        <h2 className="text-xl text-ink">Playlist</h2>
+      {note ? (
+        <p role="status" className={`text-sm leading-6 ${failed ? "text-poke-red" : ""}`}>
+          {note}
+        </p>
+      ) : null}
+      <section className="pk-card grid min-w-0 gap-3 p-4" aria-label="Yoto playlist">
+        <h2 className="text-xl text-ink">Yoto playlist</h2>
         <p className="text-sm leading-6">
-          Tick songs, or paste a YouTube video or playlist. Each file is parsed as an MP3 before it is added.
+          Tick songs, or paste a YouTube video or playlist. Each file is saved as a plain MP3 before it is added.
         </p>
         <p className="text-sm font-bold">
           {queued === 1 ? "1 item on this playlist" : `${queued} items on this playlist`}
@@ -460,8 +465,10 @@ export function MusicPanel({
         <Button type="button" className="h-11 w-full" disabled={busy || queued === 0} onClick={() => void addToPlaylist()}>
           {busy && note === "Sending the playlist…" ? "Sending…" : "Add to Yoto playlist"}
         </Button>
-        {note ? <p className={`text-sm leading-6 ${failed ? "text-poke-red" : ""}`}>{note}</p> : null}
       </section>
+      <MusicPlaylistSection playlist={playlist} />
+      </div>
+      <WebaooFiles playlists={playlists} libraryNote={libraryNote} onConnect={onConnect} />
     </div>
   );
 }

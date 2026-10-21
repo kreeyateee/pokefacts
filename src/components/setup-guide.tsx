@@ -77,6 +77,7 @@ export function SetupGuide({ onConnect }: { onConnect: () => void }) {
               {scope}
             </code>
           ))}
+          If you already connected, reconnect. A refresh keeps the previous grant, so user:icons:manage is missing until you sign in again.
         </li>
         <li>
           <span className="font-bold">7. Connect Yoto.</span> Paste the client ID and sign in. Leave the instruction

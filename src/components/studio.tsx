@@ -40,7 +40,7 @@ import {
   type KidCard,
   type KidCardKind,
 } from "@/lib/kid-cards";
-import { artworkSrc } from "@/lib/artwork-src";
+import { artworkSrc } from "@/lib/page-artwork";
 import { pronounce } from "@/lib/pronounce";
 import { selectionUpload } from "@/lib/selection-playlist";
 import { APP_NAME, DONATE_URL, SOURCE_URL } from "@/lib/site";
@@ -1345,7 +1345,7 @@ export function Studio({
               : view === "catalogue"
               ? "Every species from Kanto to Paldea. The Pokédex line is from the games, with the type, size, abilities, evolution, and stats."
               : view === "music"
-                ? "Albums and songs from Bulbapedia. Save the YouTube audio as an MP3 and add it to a Yoto playlist."
+                ? "Albums and songs from Bulbapedia. Play a list here, or save the YouTube audio as an MP3 on a Yoto playlist."
               : guessing
                 ? "Fifty riddles, drawn at random. You hear the cry, then the clues. The picture stays a shadow until the answer."
                 : formMode
@@ -1495,6 +1495,8 @@ export function Studio({
         ) : view === "music" ? (
           <MusicPanel
             playlists={library}
+            libraryNote={libraryNote}
+            onConnect={() => setConnectOpen(true)}
             playlistTarget={targetPlaylist}
             onPlaylistTarget={setTargetPlaylist}
             voiceId={voiceId}
