@@ -1,5 +1,5 @@
 import { execFile, spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
@@ -49,51 +49,6 @@ export type YtdlpLaunch = {
   python: boolean;
   deno: string | null;
 };
-
-const PROXY_SCHEMES = /^(https?|socks4|socks5h?):\/\//i;
-
-export function youtubeProxyFile(root = process.cwd()): string {
-  return path.join(root, "data", "youtube-proxy.txt");
-}
-
-export function youtubeCookiesFile(root = process.cwd()): string {
-  return path.join(root, "data", "youtube-cookies.txt");
-}
-
-/** A proxy URL from the environment or data/youtube-proxy.txt. Other schemes are ignored. */
-export function youtubeProxyValue(
-  root: string,
-  exists: (file: string) => boolean,
-  env: NodeJS.ProcessEnv,
-): string | null {
-  const fromEnv = env.YOUTUBE_PROXY?.trim() ?? "";
-  let fromFile = "";
-  const file = youtubeProxyFile(root);
-  if (!fromEnv && exists(file)) {
-    try {
-      fromFile = readFileSync(file, "utf8").trim();
-    } catch {
-      fromFile = "";
-    }
-  }
-  const raw = fromEnv || fromFile;
-  if (!raw || /\s/.test(raw) || !PROXY_SCHEMES.test(raw)) return null;
-  return raw;
-}
-
-/** Extra yt-dlp args when a proxy or a Netscape cookies file is configured. */
-export function youtubeAccessArgs(input: {
-  root: string;
-  exists: (file: string) => boolean;
-  env: NodeJS.ProcessEnv;
-}): string[] {
-  const args: string[] = [];
-  const proxy = youtubeProxyValue(input.root, input.exists, input.env);
-  if (proxy) args.push("--proxy", proxy);
-  const cookies = youtubeCookiesFile(input.root);
-  if (input.exists(cookies)) args.push("--cookies", cookies);
-  return args;
-}
 
 /** Deno binary packaged for this app. yt-dlp does not search PATH for it. */
 export function packagedDenoPath(root = process.cwd()): string {
@@ -165,13 +120,12 @@ export function ytdlpLaunch(input?: {
   const python = input && "python" in input ? (input.python ?? null) : detectPython();
   const env = { ...(input?.baseEnv ?? process.env) };
   const runtime = attachDeno([], root, exists, env);
-  const launchArgs = [...runtime.args, ...youtubeAccessArgs({ root, exists, env })];
   if (packaged && python) {
     const current = env.PYTHONPATH ?? "";
     env.PYTHONPATH = current ? `${vendor}${path.delimiter}${current}` : vendor;
     return {
       command: python.command,
-      args: [...python.prefix, "-m", "yt_dlp", ...launchArgs],
+      args: [...python.prefix, "-m", "yt_dlp", ...runtime.args],
       env,
       packaged: true,
       python: true,
@@ -180,17 +134,17 @@ export function ytdlpLaunch(input?: {
   }
   const fromEnv = (input && "envCommand" in input ? input.envCommand : env.YT_DLP)?.trim();
   if (fromEnv && exists(fromEnv)) {
-    return { command: fromEnv, args: launchArgs, env, packaged, python: Boolean(python), deno: runtime.deno };
+    return { command: fromEnv, args: runtime.args, env, packaged, python: Boolean(python), deno: runtime.deno };
   }
   const homeBin =
     input?.homeBin ??
     path.join(homedir(), ".local", "bin", process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp");
   if (exists(homeBin)) {
-    return { command: homeBin, args: launchArgs, env, packaged, python: Boolean(python), deno: runtime.deno };
+    return { command: homeBin, args: runtime.args, env, packaged, python: Boolean(python), deno: runtime.deno };
   }
   return {
     command: process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp",
-    args: launchArgs,
+    args: runtime.args,
     env,
     packaged,
     python: Boolean(python),
@@ -363,6 +317,16 @@ export async function parseDownloadedAudio(bytes: Buffer): Promise<Buffer> {
   } catch {
     return transcodeToYotoMp3(bytes);
   }
+}
+
+/** Audio the browser already fetched. This does not contact YouTube. */
+export async function mp3FromUploadedAudio(bytes: Buffer, youtubeId: string, title: string): Promise<ParsedMp3> {
+  if (!isYoutubeVideoId(youtubeId)) throw new Error("That YouTube video id does not look right.");
+  const ready = await parseDownloadedAudio(bytes);
+  const parsed = await plainMp3(ready);
+  const name = cleanSongTitle(title);
+  if (!parsed) throw new Error(`${name} did not come out as an MP3.`);
+  return { ...parsed, youtubeId, title: name, bytes: ready };
 }
 
 function cacheFile(cacheDir: string, youtubeId: string): string {

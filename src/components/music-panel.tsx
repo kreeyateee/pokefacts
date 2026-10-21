@@ -6,6 +6,11 @@ import { SongLyrics } from "@/components/song-lyrics";
 import { MusicPlaylistEmbed, MusicPlaylistSection, useMusicPlaylist } from "@/components/music-playlist";
 import { Button } from "@/components/ui/button";
 import rawIndex from "@/data/music-index.json";
+import {
+  CLIENT_YOUTUBE_OFFLINE,
+  fetchClientYoutube,
+  isClientApp,
+} from "@/lib/client-youtube";
 import { readMusicIndex, type MusicSong } from "@/lib/music-index";
 import { musicPlaylistUpload, musicYotoSavePlan, type MusicPlaylistTrack } from "@/lib/youtube-playlist";
 import { yotoFetch } from "@/lib/yoto-session";
@@ -20,14 +25,33 @@ function songMessage(code: string | undefined, found: string | null | undefined)
 }
 
 async function lookupYoutubeId(page: string): Promise<string | null> {
-  try {
-    const response = await fetch(`/api/music/youtube?page=${encodeURIComponent(page)}`);
-    const payload = (await response.json().catch(() => null)) as { youtubeId?: unknown } | null;
-    const id = payload?.youtubeId;
-    return response.ok && typeof id === "string" && /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
-  } catch {
-    return null;
-  }
+  const response = await fetchClientYoutube(
+    window.location.origin,
+    `/api/music/youtube?page=${encodeURIComponent(page)}`,
+  );
+  const payload = (await response.json().catch(() => null)) as { youtubeId?: unknown; error?: string } | null;
+  if (!response.ok) throw new Error(payload?.error?.trim() || "That song could not be found on YouTube.");
+  const id = payload?.youtubeId;
+  return typeof id === "string" && /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
+}
+
+async function downloadFromClient(page: string): Promise<MusicPlaylistTrack> {
+  const response = await fetchClientYoutube(window.location.origin, "/api/music/mp3", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ page, upload: false }),
+  });
+  if (!response.ok) throw new Error(await messageOf(response, "That song could not be saved as an MP3."));
+  const payload = (await response.json()) as { tracks?: MusicPlaylistTrack[] };
+  const track = payload.tracks?.[0];
+  if (!track?.youtubeId) throw new Error("That song could not be saved as an MP3.");
+  return track;
+}
+
+async function clientMp3Blob(youtubeId: string): Promise<Blob> {
+  const response = await fetchClientYoutube(window.location.origin, `/api/music/mp3/${youtubeId}`);
+  if (!response.ok) throw new Error(await messageOf(response, "That MP3 has not been downloaded yet."));
+  return response.blob();
 }
 
 async function messageOf(response: Response, fallback: string): Promise<string> {
@@ -57,6 +81,8 @@ export function MusicPanel({
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [mp3Id, setMp3Id] = useState("");
+  const [mp3Src, setMp3Src] = useState("");
+  const mp3SrcRef = useRef("");
   const [found, setFound] = useState<Record<string, string | null>>({});
   const foundRef = useRef(found);
   const playlist = useMusicPlaylist();
@@ -129,7 +155,15 @@ export function MusicPanel({
     void (async () => {
       for (const page of pages) {
         if (cancelled || foundRef.current[page] !== undefined) continue;
-        const id = await lookupYoutubeId(page);
+        let id: string | null;
+        try {
+          id = await lookupYoutubeId(page);
+        } catch (caught) {
+          if (cancelled) return;
+          setFailed(true);
+          setNote(caught instanceof Error ? caught.message : CLIENT_YOUTUBE_OFFLINE);
+          return;
+        }
         if (cancelled) return;
         foundRef.current = { ...foundRef.current, [page]: id };
         setFound(foundRef.current);
@@ -140,19 +174,39 @@ export function MusicPanel({
     };
   }, [album?.page, album?.songs, playingPage, song?.page, songsByPage]);
 
+  function replaceMp3Src(next: string) {
+    if (mp3SrcRef.current.startsWith("blob:")) URL.revokeObjectURL(mp3SrcRef.current);
+    mp3SrcRef.current = next;
+    setMp3Src(next);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (mp3SrcRef.current.startsWith("blob:")) URL.revokeObjectURL(mp3SrcRef.current);
+    };
+  }, []);
+
   async function playMp3(item: MusicSong, youtubeId: string) {
     if (!youtubeId || busy || saving) return;
     setBusy(true);
     setFailed(false);
     setNote(`Saving ${item.title} as an MP3…`);
     try {
-      const response = await fetch("/api/music/mp3", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ page: item.page, upload: false }),
-      });
-      if (!response.ok) throw new Error(await messageOf(response, "That song could not be saved as an MP3."));
-      setMp3Id(youtubeId);
+      if (isClientApp(window.location.origin)) {
+        const response = await fetch("/api/music/mp3", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ page: item.page, upload: false }),
+        });
+        if (!response.ok) throw new Error(await messageOf(response, "That song could not be saved as an MP3."));
+        replaceMp3Src(`/api/music/mp3/${youtubeId}`);
+        setMp3Id(youtubeId);
+      } else {
+        const saved = await downloadFromClient(item.page);
+        const blob = await clientMp3Blob(saved.youtubeId);
+        replaceMp3Src(URL.createObjectURL(blob));
+        setMp3Id(saved.youtubeId);
+      }
       setNote("");
     } catch (caught) {
       setFailed(true);
@@ -181,11 +235,22 @@ export function MusicPanel({
       const finished: MusicPlaylistTrack[] = [];
       for (const item of playlist.songs) {
         setNote(`Saving ${item.title} as an MP3…`);
-        const response = await yotoFetch("/api/music/mp3", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ page: item.page, upload: true }),
-        });
+        const response = isClientApp(window.location.origin)
+          ? await yotoFetch("/api/music/mp3", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ page: item.page, upload: true }),
+            })
+          : await (async () => {
+              const saved = await downloadFromClient(item.page);
+              const blob = await clientMp3Blob(saved.youtubeId);
+              const form = new FormData();
+              form.set("audio", new File([blob], `${saved.youtubeId}.mp3`, { type: blob.type || "audio/mpeg" }));
+              form.set("youtubeId", saved.youtubeId);
+              form.set("title", item.title);
+              form.set("upload", "true");
+              return yotoFetch("/api/music/mp3", { method: "POST", body: form });
+            })();
         if (!response.ok) throw new Error(await messageOf(response, "That audio could not be saved as an MP3."));
         const payload = (await response.json()) as { tracks?: MusicPlaylistTrack[] };
         const track = payload.tracks?.[0];
@@ -393,7 +458,7 @@ export function MusicPanel({
             </Button>
           ) : null}
           {song && mp3Id && mp3Id === playerSong.youtubeId ? (
-            <audio className="mt-3 w-full" controls autoPlay src={`/api/music/mp3/${mp3Id}`} />
+            <audio className="mt-3 w-full" controls autoPlay src={mp3Src} />
           ) : null}
           {playerSong.url ? (
             <p className="mt-2 text-sm leading-6">
