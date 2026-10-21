@@ -13,8 +13,9 @@ import {
   wikiSections,
   type WikiSection,
 } from "@/lib/bulbapedia";
+import { getCatalogueEntry } from "@/lib/catalogue-db";
 import type { BiologyBlock, BiologyView, CatalogueFormRef } from "@/lib/catalogue-types";
-import { formProse, spokenForm, spokenWiki } from "@/lib/spoken-wiki";
+import { formProse, spokenDexLine, spokenForm, spokenWiki, WIKI_DEX_NOTE } from "@/lib/spoken-wiki";
 
 /**
  * Form descriptions, separate from species Biology.
@@ -39,6 +40,8 @@ type CacheRow = {
   blocks: BiologyBlock[];
   fetchedAt: string;
   revision: number;
+  /** True when a finished read had no form prose. A timeout must not set this. */
+  settled?: boolean;
 };
 
 type LoadOptions = {
@@ -46,6 +49,9 @@ type LoadOptions = {
   cacheFile?: string;
   biologyCacheFile?: string;
   sleep?: (ms: number) => Promise<void>;
+  timeoutMs?: number;
+  /** Catalogue Pokédex sentence. When omitted, the species row in the catalogue is used. */
+  dexLine?: string;
 };
 
 function norm(value: string): string {
@@ -74,6 +80,7 @@ function sameForm(formName: string, line: string): boolean {
 export function formWikiTitle(name: string): string {
   return name
     .trim()
+    .replace(/\s+\([^)]*\)$/, "")
     .replace(/[\u2018\u2019\u02bc]/g, "'")
     .replace(/\s+/g, "_");
 }
@@ -247,6 +254,17 @@ function usableRow(row: unknown, form: CatalogueFormRef): CacheRow | null {
   if (candidate.formName !== form.formName) return null;
   if (candidate.status !== "ready" && candidate.status !== "missing") return null;
   if (!Array.isArray(candidate.blocks)) return null;
+  if (candidate.status === "missing" && candidate.settled !== true) return null;
+  return candidate;
+}
+
+/** Saved form prose from any revision, used when the live read fails. */
+function proseFormRow(row: unknown, form: CatalogueFormRef): CacheRow | null {
+  if (!row || typeof row !== "object") return null;
+  const candidate = row as CacheRow;
+  if (candidate.formName !== form.formName) return null;
+  if (candidate.status !== "ready") return null;
+  if (!Array.isArray(candidate.blocks) || !formProse(candidate.blocks)) return null;
   return candidate;
 }
 
@@ -370,42 +388,73 @@ async function remember(
     blocks,
     fetchedAt: new Date().toISOString(),
     revision: CACHE_REVISION,
+    settled: status === "missing",
   };
   await storeRow(file, form.formId, row).catch(() => undefined);
   return row;
 }
 
+function catalogueDex(speciesId: number, override?: string): string {
+  const given = override?.replace(/\s+/g, " ").trim() ?? "";
+  if (given) return given;
+  try {
+    return getCatalogueEntry(speciesId)?.info?.replace(/\s+/g, " ").trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+async function savedFormProse(form: CatalogueFormRef, options: LoadOptions): Promise<BiologyView | null> {
+  const file = options.cacheFile ?? CACHE_FILE;
+  const row = proseFormRow((await readCache(file))[String(form.formId)], form);
+  return row ? viewFromRow(row) : null;
+}
+
 /**
  * What Lily says for a Mega Evolution or Gigantamax form.
- * Form prose wins. A missing page uses the species Biology, and does not fail the track.
+ * Form prose wins. A missing page uses the species Biology.
+ * A failed wiki read uses cached prose, then the catalogue Pokédex sentence.
  */
 export async function loadFormSpeech(
   form: CatalogueFormRef,
   options: LoadOptions = {},
-): Promise<{ speech: string; article: BiologyView }> {
+): Promise<{ speech: string; article: BiologyView; notice: string }> {
   let article: BiologyView;
+  let failed = false;
   try {
     article = await loadFormProse(form, options);
   } catch {
-    article = { status: "unavailable", url: "", blocks: [] };
+    failed = true;
+    article = (await savedFormProse(form, options)) ?? { status: "unavailable", url: "", blocks: [] };
   }
   if (formProse(article.blocks)) {
-    return { speech: spokenWiki(form.formName, article.blocks), article };
+    return { speech: spokenWiki(form.formName, article.blocks), article, notice: "" };
   }
   try {
     const biology = await loadBiology(form.speciesName, form.speciesId, {
       fetchImpl: options.fetchImpl,
       cacheFile: options.biologyCacheFile,
       sleep: options.sleep,
+      timeoutMs: options.timeoutMs,
     });
-    return {
-      speech: spokenForm(form.formName, article.blocks, form.speciesName, biology.blocks),
-      article: {
-        ...article,
-        url: biology.status === "ready" && biology.url ? biology.url : article.url,
-      },
-    };
+    const speech = spokenForm(form.formName, article.blocks, form.speciesName, biology.blocks);
+    if (speech !== spokenWiki(form.formName, [])) {
+      return {
+        speech,
+        article: {
+          ...article,
+          url: biology.status === "ready" && biology.url ? biology.url : article.url,
+        },
+        notice: "",
+      };
+    }
   } catch {
-    return { speech: spokenWiki(form.formName, []), article };
+    failed = true;
   }
+  const dex = catalogueDex(form.speciesId, options.dexLine);
+  return {
+    speech: spokenDexLine(form.formName, dex),
+    article,
+    notice: failed && dex ? WIKI_DEX_NOTE : "",
+  };
 }

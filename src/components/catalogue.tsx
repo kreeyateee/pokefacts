@@ -2,12 +2,23 @@
 
 import { useEffect, useState } from "react";
 
+import { PlaylistWindow } from "@/components/playlist-window";
 import { StatusBar } from "@/components/status-bar";
 import { StickerStudio } from "@/components/sticker-studio";
 import { Button } from "@/components/ui/button";
-import type { BiologyBlock, BiologyView, CatalogueEntry, CataloguePage } from "@/lib/catalogue-types";
+import { artworkSrc } from "@/lib/page-artwork";
+import { artworkSrc as artworkApi } from "@/lib/artwork-path";
+import type {
+  BiologyBlock,
+  BiologyView,
+  CatalogueEntry,
+  CatalogueLineMember,
+  CataloguePage,
+} from "@/lib/catalogue-types";
 import { heightForUnits, weightForUnits, type MeasureUnits } from "@/lib/format";
+import { statusWithDexNote } from "@/lib/spoken-wiki";
 import type { KidCard } from "@/lib/kid-cards";
+import { PICKER_VOICES } from "@/lib/piper-voice";
 import {
   selectionPlaylist,
   selectionSpeciesLimit,
@@ -90,8 +101,24 @@ function multiplierLabel(multiplier: number): string {
   return `×${multiplier}`;
 }
 
-function spriteSrc(id: number): string {
-  return `/sprites/${id}.png`;
+function hideBrokenPicture(event: { currentTarget: HTMLImageElement }): void {
+  const image = event.currentTarget;
+  const fallback = image.dataset.fallback;
+  if (fallback && image.dataset.tried !== "1" && image.getAttribute("src") !== fallback) {
+    image.dataset.tried = "1";
+    image.src = fallback;
+    return;
+  }
+  image.style.display = "none";
+}
+
+function lineDetail(member: CatalogueLineMember): string {
+  const method = member.method.trim();
+  if (member.stage > 1) {
+    return method ? `From ${member.fromName}, ${method}.` : `From ${member.fromName}.`;
+  }
+  if (!method) return "";
+  return `${method.charAt(0).toUpperCase()}${method.slice(1)}.`;
 }
 
 function statFill(name: string): string {
@@ -121,7 +148,7 @@ function TypeChips({ types }: { types: string[] }) {
 function Fact({ label, children }: { label: string; children: string }) {
   if (!children) return null;
   return (
-    <div className="grid grid-cols-[9rem_minmax(0,1fr)] gap-2 border-b border-ink/15 py-2 text-sm">
+    <div className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-2 border-b border-ink/15 py-2 text-sm">
       <span className="font-bold text-poke-red">{label}</span>
       <span>{children}</span>
     </div>
@@ -132,7 +159,7 @@ const PLAYLIST_KINDS: Array<{ id: SelectionKind; label: string; detail: string }
   {
     id: "whos-that",
     label: "Who's That Pokémon",
-    detail: "Cry, four clues, then the cry again and the name. Two tracks each, so 50 Pokémon fit.",
+    detail: "Cry, three clues, then the cry again and the name. Two tracks each, so 50 Pokémon fit.",
   },
   {
     id: "facts",
@@ -152,6 +179,8 @@ export function Catalogue({
   playlists = [],
   playlistTarget = "",
   onPlaylistTarget,
+  voiceId = "",
+  onVoiceId,
   units = "metric",
   job = null,
 }: {
@@ -160,6 +189,8 @@ export function Catalogue({
   playlists?: Array<{ cardId: string; title: string }>;
   playlistTarget?: string;
   onPlaylistTarget?: (cardId: string) => void;
+  voiceId?: string;
+  onVoiceId?: (voiceId: string) => void;
   units?: MeasureUnits;
   job?: { status: string; detail: string; done?: number; total?: number } | null;
 } = {}) {
@@ -188,6 +219,7 @@ export function Catalogue({
   const [building, setBuilding] = useState(false);
   const [stickerBusy, setStickerBusy] = useState(false);
   const [stickerCards, setStickerCards] = useState<KidCard[] | null>(null);
+  const [playlistOpen, setPlaylistOpen] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -289,16 +321,11 @@ export function Catalogue({
         return ability.info ? `${name}. ${ability.info}` : name;
       })
       .join(" ") ?? "";
-  const evolutionText = [
-    entry?.evolvesFrom ? `Grows from ${entry.evolvesFrom.name}.` : "",
-    ...(entry?.evolutions.map((evolution) =>
-      evolution.method
-        ? `Becomes ${evolution.name} ${evolution.method}.`
-        : `Becomes ${evolution.name}.`,
-    ) ?? []),
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const growsFrom = entry?.evolvesFrom ? `Grows from ${entry.evolvesFrom.name}.` : "";
+  const lineMembers = [...(entry?.line.evolutions ?? []), ...(entry?.line.subevolutions ?? [])];
+  const lineIds = lineMembers.map((member) => member.id);
+  const lineAllPicked = lineIds.length > 0 && lineIds.every((id) => picked.includes(id));
+  const evolutionText = lineMembers.length > 0 ? growsFrom : growsFrom || "It does not evolve.";
   const pages = list ? Math.max(1, Math.ceil(list.total / list.pageSize)) : 1;
   const pageIds = list?.items.map((item) => item.id) ?? [];
   const pageAll = pageIds.length > 0 && pageIds.every((id) => picked.includes(id));
@@ -306,6 +333,18 @@ export function Catalogue({
 
   function togglePick(id: number) {
     setPicked((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
+    setBuildMessage("");
+  }
+
+  function toggleLine() {
+    setPicked((current) => {
+      if (lineAllPicked) return current.filter((id) => !lineIds.includes(id));
+      const next = [...current];
+      for (const id of lineIds) {
+        if (!next.includes(id)) next.push(id);
+      }
+      return next;
+    });
     setBuildMessage("");
   }
 
@@ -386,18 +425,23 @@ export function Catalogue({
     setBuildProgress({ done: 0, total: picked.length });
     try {
       const rows: SelectionSpecies[] = [];
+      let dexNote = "";
       for (let index = 0; index < picked.length; index += 1) {
         const id = picked[index];
         if (!id) continue;
         setBuildProgress({ done: index + 1, total: picked.length });
-        setBuildMessage(`Reading ${index + 1} of ${picked.length}…`);
+        setBuildMessage(statusWithDexNote(`Reading ${index + 1} of ${picked.length}…`, dexNote));
         const entryResponse = await fetch(`/api/catalogue/${id}`);
         const entryPayload = (await entryResponse.json()) as { entry?: CatalogueEntry; error?: string };
         if (!entryResponse.ok || !entryPayload.entry) {
           throw new Error(entryPayload.error || "That entry could not be opened.");
         }
         const biologyResponse = await fetch(`/api/catalogue/${id}/biology`);
-        const biologyPayload = (await biologyResponse.json()) as { biology?: { blocks?: BiologyBlock[] } };
+        const biologyPayload = (await biologyResponse.json()) as {
+          biology?: { blocks?: BiologyBlock[] };
+          notice?: string;
+        };
+        if (playlistKind !== "whos-that" && biologyPayload.notice) dexNote = biologyPayload.notice;
         const entry = entryPayload.entry;
         rows.push({
           id: entry.id,
@@ -431,11 +475,16 @@ export function Catalogue({
         setBuildMessage("Connect Yoto, then build the playlist again.");
         return;
       }
-      setBuildMessage(`Sending ${built.title} to Yoto…`);
+      if (dexNote && built.card.kind !== "guess") {
+        for (const chapter of built.card.chapters) {
+          if (chapter.dexId) chapter.articleNotice = dexNote;
+        }
+      }
+      setBuildMessage(statusWithDexNote(`Sending ${built.title} to Yoto…`, dexNote));
       setBuildProgress(null);
       await onSendSelection(built.card);
       setBuildProgress({ done: rows.length, total: rows.length });
-      setBuildMessage(`${built.title} is in your Yoto library.`);
+      setBuildMessage(statusWithDexNote(`${built.title} is in your Yoto library.`, dexNote));
     } catch (error: unknown) {
       setBuildFailed(true);
       setBuildMessage(error instanceof Error ? error.message : "The playlist was not sent.");
@@ -451,9 +500,9 @@ export function Catalogue({
   const statusFailed = sendJob ? sendJob.status === "failed" : buildFailed;
 
   return (
-    <div className="grid items-start gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
-      <section className={`${showList ? "block" : "hidden lg:block"} self-start`}>
-        <label className="grid gap-1 text-sm" htmlFor="catalogue-search">
+    <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+      <section className={`${showList ? "flex" : "hidden lg:flex"} min-w-0 flex-col self-start`}>
+        <label className="order-1 grid gap-1 text-sm" htmlFor="catalogue-search">
           Search
           <input
             id="catalogue-search"
@@ -466,14 +515,14 @@ export function Catalogue({
             className="pk-field"
           />
         </label>
-        <div className="mt-3 grid grid-cols-2 gap-1.5">
+        <div className="pk-scroll order-1 mt-3 flex flex-nowrap gap-1.5 overflow-x-auto pb-1">
           <button
             type="button"
             onClick={() => {
               setType("");
               setPage(1);
             }}
-            className="pk-pill px-3 text-xs"
+            className="pk-pill shrink-0 px-3 text-xs"
             aria-pressed={type === ""}
           >
             All types
@@ -486,7 +535,7 @@ export function Catalogue({
                 setType(name);
                 setPage(1);
               }}
-              className={`rounded-full border-2 border-[#16324f] px-2.5 py-1 text-xs font-bold ${
+              className={`inline-flex min-h-11 items-center rounded-full border-2 border-[#16324f] px-3 text-xs font-bold ${
                 type === name ? "ring-2 ring-white ring-offset-2 ring-offset-[#16324f]" : ""
               } ${chipClass(name)}`}
             >
@@ -494,7 +543,7 @@ export function Catalogue({
             </button>
           ))}
         </div>
-        <label className="mt-3 grid gap-1 text-sm" htmlFor="catalogue-region">
+        <label className="order-1 mt-3 grid gap-1 text-sm" htmlFor="catalogue-region">
           Region
           <select
             id="catalogue-region"
@@ -513,13 +562,21 @@ export function Catalogue({
             ))}
           </select>
         </label>
-        <div className="pk-card mt-4 px-3 py-3">
+        <div className="pk-card order-3 mt-4 px-3 py-3 lg:order-2">
           <p className="text-sm font-medium">
             {picked.length.toLocaleString("en-GB")} Pokémon picked
           </p>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            Playlist order is the order you tick them. Select all on this page checks only the list below.
+            Ticking adds a Pokémon at the end. Open the playlist to drag the cards into order. Select all on this page checks only the list below.
           </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-3 h-11 w-full"
+            onClick={() => setPlaylistOpen(true)}
+          >
+            Open playlist
+          </Button>
           <label className="mt-2 flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -590,9 +647,30 @@ export function Catalogue({
             className="pk-field"
           />
           </label>
-          <p className="mt-3 text-xs leading-5 pk-quiet">The voice in Settings reads every track on this playlist.</p>
+          {onVoiceId ? (
+            <label className="mt-3 grid gap-1 text-sm" htmlFor="catalogue-voice">
+              Voice
+              <select
+                id="catalogue-voice"
+                aria-label="Voice"
+                className="pk-field"
+                value={voiceId}
+                disabled={building}
+                onChange={(event) => onVoiceId(event.target.value)}
+              >
+                {PICKER_VOICES.map((voice) => (
+                  <option key={voice.id} value={voice.id}>
+                    {voice.name} — {voice.note}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {onVoiceId ? (
+            <p className="mt-1 text-xs leading-5 pk-quiet">This voice reads every track on the playlist.</p>
+          ) : null}
           <label className="mt-3 grid gap-1 text-sm" htmlFor="catalogue-playlist">
-            Add to a Yoto playlist
+            Where it goes
             <select
               id="catalogue-playlist"
               aria-label="Yoto playlist"
@@ -600,18 +678,18 @@ export function Catalogue({
               value={playlistTarget}
               onChange={(event) => onPlaylistTarget?.(event.target.value)}
             >
-              <option value="">New playlist</option>
+              <option value="">Make a new playlist</option>
               {playlists.map((item) => (
                 <option key={item.cardId} value={item.cardId}>
-                  {item.title}
+                  Add to {item.title}
                 </option>
               ))}
             </select>
           </label>
           <p className="mt-1 text-xs leading-5 pk-quiet">
             {playlistTarget
-              ? "Build adds these tracks onto that playlist. Tracks already on it stay."
-              : "New playlist creates a card and does not replace one you already have."}
+              ? "Adds these tracks at the end. Tracks already on that playlist stay."
+              : "Makes a new playlist. Playlists you already have stay as they are."}
           </p>
           <Button
             type="button"
@@ -651,17 +729,17 @@ export function Catalogue({
             />
           ) : null}
         </div>
-        <p className="mt-3 text-xs pk-quiet">
+        <p className="order-2 mt-3 text-xs pk-quiet lg:order-3">
           {list
             ? `${list.total.toLocaleString("en-GB")} of ${list.species.toLocaleString("en-GB")} species`
             : "Opening the catalogue…"}
         </p>
         {listError ? (
-          <p className="mt-3 text-sm pk-danger" role="alert">
+          <p className="order-2 mt-3 text-sm pk-danger lg:order-3" role="alert">
             {listError}
           </p>
         ) : null}
-        <ul className="mt-2 grid max-h-[70vh] gap-2 overflow-auto pr-1">
+        <ul className="order-2 mt-2 grid max-h-[55dvh] gap-2 overflow-auto overscroll-y-contain pr-1 lg:order-3 lg:max-h-[70dvh]">
           {loadingList && !list ? <li className="text-sm text-muted-foreground">Loading entries…</li> : null}
           {list?.items.length === 0 ? (
             <li className="pk-card px-3 py-4 text-sm text-muted-foreground">
@@ -672,7 +750,7 @@ export function Catalogue({
             const active = item.id === selected;
             return (
               <li key={item.id} className="flex items-stretch gap-1">
-                <label className={`flex items-center rounded-xl border-[3px] border-ink px-2 shadow-[2px_2px_0_var(--ink)] ${active ? "bg-poke-yellow" : "bg-white"}`}>
+                <label className={`flex min-h-12 min-w-12 items-center justify-center rounded-xl border-[3px] border-ink px-2 shadow-[2px_2px_0_var(--ink)] ${active ? "bg-poke-yellow" : "bg-white"}`}>
                   <input
                     type="checkbox"
                     checked={picked.includes(item.id)}
@@ -690,11 +768,13 @@ export function Catalogue({
                   className="pk-choice flex w-full items-center gap-2 px-3 py-2"
                 >
                   <img
-                    src={spriteSrc(item.id)}
+                    src={artworkSrc(item.id)}
                     alt=""
-                    width={40}
-                    height={40}
-                    className="h-10 w-10 shrink-0 object-contain [image-rendering:pixelated]"
+                    width={44}
+                    height={44}
+                    data-fallback={artworkApi("species", item.id)}
+                    onError={hideBrokenPicture}
+                    className="pk-artwork-thumb"
                   />
                   <span className="min-w-0">
                     <span className="block">
@@ -710,7 +790,7 @@ export function Catalogue({
             );
           })}
         </ul>
-        <div className="mt-3 flex items-center justify-between gap-2 text-sm">
+        <div className="order-2 mt-3 flex items-center justify-between gap-2 text-sm lg:order-3">
           <button
             type="button"
             className="pk-pill disabled:opacity-40"
@@ -733,14 +813,16 @@ export function Catalogue({
         </div>
       </section>
 
-      <article className={`pk-card pk-dex self-start px-5 py-6 sm:px-8 sm:py-8 ${showList ? "hidden lg:block" : "block"}`}>
-        <button
-          type="button"
-          className="mb-4 text-sm text-muted-foreground underline lg:hidden"
-          onClick={() => setShowList(true)}
-        >
-          Back to the list
-        </button>
+      <article className={`pk-card pk-dex min-w-0 self-start px-4 py-6 sm:px-8 sm:py-8 ${showList ? "hidden lg:block" : "block"}`}>
+        {entry && entry.id === selected ? null : (
+          <button
+            type="button"
+            className="mb-4 inline-flex min-h-11 items-center text-sm font-bold text-poke-red underline lg:hidden"
+            onClick={() => setShowList(true)}
+          >
+            Back to the list
+          </button>
+        )}
         {entryError ? (
           <p className="text-sm pk-danger" role="alert">
             {entryError}
@@ -750,26 +832,84 @@ export function Catalogue({
           <p className="text-sm text-muted-foreground">Opening the entry…</p>
         ) : null}
         {entry && entry.id === selected ? (
-          <>
-            <p className="pk-kicker">
-              {numberLabel(entry.id)} · {entry.region}
-            </p>
-            <div className="mt-3 flex items-end gap-4">
+          <div key={entry.id} className="pk-swap">
+            <div className="pk-hero">
               <img
-                src={spriteSrc(entry.id)}
+                src={artworkSrc(entry.id)}
                 alt=""
-                width={96}
-                height={96}
-                className="pk-sprite"
+                width={176}
+                height={176}
+                className="pk-art pk-art-entry"
+                data-fallback={artworkApi("species", entry.id)}
+                onError={hideBrokenPicture}
               />
-              <div>
-                <h2 className="font-display text-4xl leading-tight sm:text-5xl">{entry.name}</h2>
-                <p className="mt-1 text-sm text-muted-foreground">The {entry.genus}</p>
+              <div className="pk-entry-name min-w-0">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="pk-kicker">
+                    {numberLabel(entry.id)} · {entry.region}
+                  </p>
+                  <button
+                    type="button"
+                    className="inline-flex min-h-11 shrink-0 items-center text-sm font-bold text-poke-red underline lg:hidden"
+                    onClick={() => setShowList(true)}
+                  >
+                    Back to the list
+                  </button>
+                </div>
+                <h2 className="font-display text-3xl leading-tight sm:text-5xl">{entry.name}</h2>
+              </div>
+              <div className="pk-entry-meta min-w-0">
+                <p className="text-sm text-muted-foreground">The {entry.genus}</p>
                 <div className="mt-2">
                   <TypeChips types={entry.types} />
                 </div>
+                <label className="mt-3 flex items-center gap-2 text-sm font-bold">
+                  <input
+                    type="checkbox"
+                    checked={picked.includes(entry.id)}
+                    onChange={() => togglePick(entry.id)}
+                  />
+                  Add {entry.name} to the playlist
+                </label>
               </div>
             </div>
+            {lineMembers.length > 0 ? (
+              <section className="mt-6" aria-label="Evolutions">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="pk-kicker">Evolutions</h3>
+                  <button
+                    type="button"
+                    className="text-sm font-bold text-poke-red underline decoration-poke-yellow decoration-2"
+                    onClick={toggleLine}
+                  >
+                    {lineAllPicked ? "Untick all evolutions" : "Tick all evolutions"}
+                  </button>
+                </div>
+                <EvolutionPicks
+                  members={entry.line.evolutions}
+                  picked={picked}
+                  onToggle={togglePick}
+                  onOpen={(id) => {
+                    setSelected(id);
+                    setShowList(false);
+                  }}
+                />
+                {entry.line.subevolutions.length > 0 ? (
+                  <>
+                    <h3 className="mt-4 pk-kicker">Subevolutions</h3>
+                    <EvolutionPicks
+                      members={entry.line.subevolutions}
+                      picked={picked}
+                      onToggle={togglePick}
+                      onOpen={(id) => {
+                        setSelected(id);
+                        setShowList(false);
+                      }}
+                    />
+                  </>
+                ) : null}
+              </section>
+            ) : null}
             <p className="mt-6 max-w-prose text-base leading-7 text-foreground">{entry.info}</p>
             {entry.infoVersion ? (
               <p className="mt-2 text-xs pk-quiet">Pokédex line from {entry.infoVersion}.</p>
@@ -789,7 +929,7 @@ export function Catalogue({
             </div>
             <div className="mt-4">
               <Fact label="Ability">{abilityText}</Fact>
-              <Fact label="Evolution">{evolutionText || "It does not evolve."}</Fact>
+              <Fact label="Evolution">{evolutionText}</Fact>
               <Fact label="Habitat">{entry.habitat ? habitatLabel(entry.habitat) : "Not recorded"}</Fact>
               <Fact label="Gender">{entry.gender.replace(/\.$/, "")}</Fact>
               <Fact label="Egg groups">{entry.eggGroups.join(", ")}</Fact>
@@ -818,7 +958,7 @@ export function Catalogue({
             <h3 className="mt-6 pk-kicker">Base stats</h3>
             <ul className="mt-2 grid gap-1.5">
               {entry.stats.map((stat) => (
-                <li key={stat.name} className="grid grid-cols-[9rem_minmax(0,1fr)_2.5rem] items-center gap-2 text-sm">
+                <li key={stat.name} className="grid grid-cols-[minmax(0,7.5rem)_minmax(0,1fr)_2.5rem] items-center gap-2 text-sm">
                   <span>{stat.name}</span>
                   <span className="h-3 overflow-hidden rounded-full border-2 border-ink bg-white">
                     <span
@@ -838,6 +978,15 @@ export function Catalogue({
                 <ul className="mt-2 grid gap-2 sm:grid-cols-2">
                   {entry.forms.map((form) => (
                     <li key={form.id} className="pk-soft px-3 py-2 text-sm font-normal">
+                      <img
+                        src={artworkSrc(form.id)}
+                        alt=""
+                        width={112}
+                        height={112}
+                        data-fallback={artworkApi("form", form.id)}
+                        className="mb-2 h-28 w-28 object-contain"
+                        onError={hideBrokenPicture}
+                      />
                       <p className="font-medium">{form.name}</p>
                       <div className="mt-1">
                         <TypeChips types={form.types} />
@@ -870,7 +1019,7 @@ export function Catalogue({
                 </ul>
               </>
             ) : null}
-            <div className="mt-6 flex flex-wrap gap-2">
+            <div className="mt-6 flex gap-2">
               <button
                 type="button"
                 className="pk-pill text-sm disabled:opacity-40"
@@ -894,7 +1043,7 @@ export function Catalogue({
                 Next number
               </button>
             </div>
-          </>
+          </div>
         ) : null}
       </article>
       {stickerCards?.[0] ? (
@@ -905,7 +1054,72 @@ export function Catalogue({
           onClose={() => setStickerCards(null)}
         />
       ) : null}
+      <PlaylistWindow
+        open={playlistOpen}
+        onOpenChange={setPlaylistOpen}
+        ids={picked}
+        onChange={(next) => {
+          setPicked(next);
+          setBuildMessage("");
+        }}
+      />
     </div>
+  );
+}
+
+function EvolutionPicks({
+  members,
+  picked,
+  onToggle,
+  onOpen,
+}: {
+  members: CatalogueLineMember[];
+  picked: readonly number[];
+  onToggle: (id: number) => void;
+  onOpen: (id: number) => void;
+}) {
+  if (members.length === 0) return null;
+  return (
+    <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+      {members.map((member) => {
+        const on = picked.includes(member.id);
+        return (
+          <li
+            key={member.id}
+            className={`flex items-center gap-2 rounded-xl border-[3px] border-ink px-2 py-2 shadow-[2px_2px_0_var(--ink)] ${
+              on ? "bg-poke-yellow" : "bg-white"
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={on}
+              aria-label={`Pick ${member.name}`}
+              onChange={() => onToggle(member.id)}
+            />
+            <button
+              type="button"
+              className="flex min-w-0 flex-1 items-center gap-2 text-left"
+              onClick={() => onOpen(member.id)}
+            >
+              <img
+                src={spriteSrc(member.id)}
+                alt=""
+                width={48}
+                height={48}
+                className="pk-artwork-thumb"
+              />
+              <span className="min-w-0">
+                <span className="block">
+                  <span className="mr-2 text-xs tabular-nums opacity-70">{numberLabel(member.id)}</span>
+                  <span className="font-medium">{member.name}</span>
+                </span>
+                <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{lineDetail(member)}</span>
+              </span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

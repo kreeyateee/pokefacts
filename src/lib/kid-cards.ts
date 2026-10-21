@@ -1,3 +1,4 @@
+import { artworkSrc } from "@/lib/page-artwork";
 import type { BiologyBlock } from "@/lib/catalogue-types";
 import { dexBlurb, guessSpoken, pickDexEntry, type MonSheet } from "@/lib/dex-facts";
 import { pronounce } from "@/lib/pronounce";
@@ -55,6 +56,8 @@ export type KidChapter = {
   articleUrl?: string;
   /** Set once that form's article has been read. */
   articleStatus?: "ready" | "missing" | "unavailable";
+  /** Shown when the Pokédex line replaced a Bulbapedia read that did not finish. Not spoken. */
+  articleNotice?: string;
   /** Sprite shown on the page. */
   sprite?: string;
   /** Merged cry and reading, when that file has been recorded. */
@@ -62,7 +65,27 @@ export type KidChapter = {
   tracks: KidTrack[];
 };
 
-export type KidCardKind = "meet" | "guess" | "mega" | "gmax";
+export type KidCardKind =
+  | "meet"
+  | "guess"
+  | "mega"
+  | "gmax"
+  | "alola"
+  | "hisui"
+  | "legendary"
+  | "mythical";
+
+export type FormPlaylistKind = "mega" | "gmax" | "alola" | "hisui";
+
+export type SpeciesPlaylistKind = "legendary" | "mythical";
+
+export function isFormPlaylistKind(kind: string): kind is FormPlaylistKind {
+  return kind === "mega" || kind === "gmax" || kind === "alola" || kind === "hisui";
+}
+
+export function isSpeciesPlaylistKind(kind: string): kind is SpeciesPlaylistKind {
+  return kind === "legendary" || kind === "mythical";
+}
 
 export type KidCard = {
   /** `meet-1` … `meet-11`, or `guess-1` … `guess-21`. */
@@ -171,6 +194,10 @@ export function bulkProgressLabel(index: number, total: number): string {
 export function rangeLabel(kind: KidCardKind, first: number, last: number, index = 1): string {
   if (kind === "mega") return "Mega Evolutions";
   if (kind === "gmax") return "Gigantamax";
+  if (kind === "alola") return "Alolan forms";
+  if (kind === "hisui") return "Hisuian forms";
+  if (kind === "legendary") return "Legendary Pokémon";
+  if (kind === "mythical") return "Mythical Pokémon";
   const span = first === last ? String(first) : `${first}-${last}`;
   if (kind === "meet") return `${pokefactsTitle(index)} (${span})`;
   return `Guess Who ${span}`;
@@ -209,7 +236,7 @@ function factChapter(sheet: MonSheet): KidChapter {
       ),
     ],
     {
-      sprite: `/sprites/${sheet.id}.png`,
+      sprite: artworkSrc(sheet.id),
       clip: CRY_CLIPS.has(sheet.id) ? `/facts/${sheet.id}.mp3` : undefined,
       dexId: sheet.id,
     },
@@ -239,8 +266,8 @@ function intro(kind: KidCardKind, index: number, first: number, last: number, fi
   const span = first === last ? String(first) : `${first}-${last}`;
   const text =
     kind === "meet"
-      ? `This card is Pokefacts ${index}, numbers ${span}. Turn the wheel, or press the arrows, until you see a picture. Then press play. You will hear the cry, then the name, then a short description. The star is this track. Number ${first} is ${firstName}. Each playlist links to its own card.`
-      : `Guess Who. Numbers ${span}. Turn the wheel until you see a dark picture. Then press play. You hear four clues. Shout the name before the count ends. The next track tells you the answer. Start at number ${first}. Each playlist links to its own card.`;
+      ? `Pokefacts ${index}. Turn the wheel until you see a picture, then press play. You hear the cry, then the name. Number ${first} is ${firstName}.`
+      : `Guess Who, numbers ${span}. Turn the wheel until you see a dark picture, then press play. You hear three short clues. Say the name before the count ends. The next track says the answer.`;
   return picture("start", "Start here", "Go", "a star", "★", I.star, [
     talk("how", kind === "meet" ? "How to play" : "How to play Guess Who", text, I.star, "Go"),
   ]);
@@ -271,8 +298,8 @@ function buildGroup(sheets: MonSheet[], kind: KidCardKind, size: number): KidCar
           : "Three short clues. Call the name before the count ends.",
       childDoes:
         kind === "meet"
-          ? "Turn to a picture and press play. You hear the cry, then the name, then a short description."
-          : "Pick a number and press play. Three short clues, then a count of three. The next track tells you the name.",
+          ? "Turn the wheel until you see a picture, then press play. You hear the cry, then the name."
+          : "Turn the wheel until you see a dark picture, then press play. Three short clues. The next track says the name.",
       chapters,
     };
   });
@@ -349,7 +376,7 @@ export function factPoolFromCards(cards: KidCard[]): KidChapter[] {
 }
 
 export const POKEDEX_HOWTO =
-  "One hundred Pokémon, drawn at random. Turn the wheel, or press the arrows, until you see a picture. Then press play. You hear the cry, then the name, then a short description. ";
+  "One hundred Pokémon, drawn at random. Turn the wheel until you see a picture, then press play. ";
 
 /**
  * One playlist of 100 Pokémon. The how-to sits on the first track so the
@@ -376,7 +403,7 @@ export function randomPokedexCard(
     });
     return {
       ...chapter,
-      sprite: `/pixels/${chapter.dexId}.png`,
+      sprite: chapter.dexId ? artworkSrc(chapter.dexId) : chapter.sprite,
       tracks,
     };
   });
@@ -520,7 +547,7 @@ export function randomGuessCard(pool: KidChapter[], random: () => number = Math.
     libraryTitle: "Guess Who",
     blurb: "Fifty riddles drawn at random. The cry, then the clue. The cry again, then the answer.",
     childDoes:
-      "Pick a dark picture and press play. You hear the cry, then four clues, then a count of three. The answer plays the cry again, then the name.",
+      "Pick a dark picture and press play. You hear the cry, then three short clues, then a count of three. The answer plays the cry again, then the name.",
     chapters,
   };
 }
@@ -578,7 +605,7 @@ export function chaptersForCries(card: KidCard): Array<{ key: string; dexId: num
  * Guess Who is left as it is. The random how-to stays on the first track.
  */
 export function applySpeciesSpeech(card: KidCard, speechByDexId: Record<number, string>): KidCard {
-  if (card.kind !== "meet") return card;
+  if (card.kind !== "meet" && card.kind !== "legendary" && card.kind !== "mythical") return card;
   return {
     ...card,
     chapters: card.chapters.map((chapter) => {
@@ -606,9 +633,8 @@ export type FormPlaylistEntry = {
   url?: string;
 };
 
-/** Every species first, then extra forms, stopping at the 100-track card. */
-export function fitFormTracks<T extends { speciesId: number }>(forms: readonly T[], limit = YOTO_TRACK_LIMIT): T[] {
-  if (forms.length <= limit) return forms.slice();
+/** One form per species, then the extra forms. Used once a list passes the track cap. */
+function rankForms<T extends { speciesId: number }>(forms: readonly T[]): T[] {
   const seen = new Set<number>();
   const primary: T[] = [];
   const extra: T[] = [];
@@ -619,47 +645,139 @@ export function fitFormTracks<T extends { speciesId: number }>(forms: readonly T
       primary.push(form);
     }
   }
-  return [...primary, ...extra].slice(0, limit);
+  return [...primary, ...extra];
+}
+
+/** Every species first, then extra forms, stopping at the 100-track card. */
+export function fitFormTracks<T extends { speciesId: number }>(forms: readonly T[], limit = YOTO_TRACK_LIMIT): T[] {
+  if (forms.length <= limit) return forms.slice();
+  return rankForms(forms).slice(0, limit);
 }
 
 export const MEGA_PLAYLIST_ID = "mega-evolutions";
 export const GMAX_PLAYLIST_ID = "gigantamax";
+export const ALOLA_PLAYLIST_ID = "alolan-forms";
+export const HISUI_PLAYLIST_ID = "hisuian-forms";
+export const LEGENDARY_PLAYLIST_ID = "legendary";
+export const MYTHICAL_PLAYLIST_ID = "mythical";
 
-/** One cry-first track per form. The icon is the species pixel. */
-export function formPlaylist(kind: "mega" | "gmax", forms: readonly FormPlaylistEntry[]): KidCard {
-  const title = kind === "mega" ? "Mega Evolutions" : "Gigantamax";
-  const used = new Set<string>();
-  const chapters = fitFormTracks(forms).map((form) => {
-    const text = spokenWiki(form.formName, form.blocks ?? []);
-    const icon = `/pixels/${form.speciesId}.png`;
-    let overlay = String(form.speciesId);
-    while (used.has(overlay)) overlay = `${overlay}b`;
-    used.add(overlay);
-    const chapter = picture(
-      `form-${form.formId}`,
-      form.formName,
-      overlay,
-      "this Pokémon",
-      overlay,
-      icon,
-      [talk("entry", form.formName, text, icon, overlay, undefined, "cry")],
-      { sprite: icon, dexId: form.speciesId },
-    );
-    chapter.formId = form.formId;
-    if (form.url) chapter.articleUrl = form.url;
-    return chapter;
-  });
+const FORM_PLAYLIST_META: Record<FormPlaylistKind, { title: string; id: string }> = {
+  mega: { title: "Mega Evolutions", id: MEGA_PLAYLIST_ID },
+  gmax: { title: "Gigantamax", id: GMAX_PLAYLIST_ID },
+  alola: { title: "Alolan forms", id: ALOLA_PLAYLIST_ID },
+  hisui: { title: "Hisuian forms", id: HISUI_PLAYLIST_ID },
+};
+
+const SPECIES_PLAYLIST_META: Record<SpeciesPlaylistKind, { title: string; id: string }> = {
+  legendary: { title: "Legendary Pokémon", id: LEGENDARY_PLAYLIST_ID },
+  mythical: { title: "Mythical Pokémon", id: MYTHICAL_PLAYLIST_ID },
+};
+
+const FORM_CHILD_DOES =
+  "Turn to a picture and press play. You hear the cry, then the name, then the description.";
+const SPECIES_CHILD_DOES =
+  "Turn to a picture and press play. You hear the cry, then the name, then a short description.";
+
+function splitPlaylistCopy(title: string, index: number, total: number, first: number, last: number, baseId: string) {
+  if (total <= 1) {
+    return { id: baseId, rangeLabel: title, libraryTitle: title, splitBlurb: "" };
+  }
+  const span = first === last ? String(first) : `${first}-${last}`;
   return {
-    id: kind === "mega" ? MEGA_PLAYLIST_ID : GMAX_PLAYLIST_ID,
-    kind,
-    title,
-    rangeLabel: title,
-    libraryTitle: title,
-    blurb: "The cry, then Lily reads the form.",
-    childDoes:
-      "Turn to a picture and press play. You hear the cry, then the name, then the description.",
-    chapters,
+    id: `${baseId}-${index}`,
+    rangeLabel: `${title} ${index} (${span})`,
+    libraryTitle: `${title} ${index}`,
+    splitBlurb: `Yoto holds ${YOTO_TRACK_LIMIT} tracks, so ${title} are split into ${total} playlists.`,
   };
+}
+
+function formChapter(form: FormPlaylistEntry, used: Set<string>): KidChapter {
+  const text = spokenWiki(form.formName, form.blocks ?? []);
+  const icon = `/pixels/${form.speciesId}.png`;
+  let overlay = String(form.speciesId);
+  while (used.has(overlay)) overlay = `${overlay}b`;
+  used.add(overlay);
+  const chapter = picture(
+    `form-${form.formId}`,
+    form.formName,
+    overlay,
+    "this Pokémon",
+    overlay,
+    icon,
+    [talk("entry", form.formName, text, icon, overlay, undefined, "cry")],
+    { sprite: artworkSrc(form.formId), dexId: form.speciesId },
+  );
+  chapter.formId = form.formId;
+  if (form.url) chapter.articleUrl = form.url;
+  return chapter;
+}
+
+/**
+ * Cry-first form playlists. A list past 100 tracks is split the way Facts is,
+ * after putting one form per species first.
+ */
+export function formPlaylists(kind: FormPlaylistKind, forms: readonly FormPlaylistEntry[]): KidCard[] {
+  const meta = FORM_PLAYLIST_META[kind];
+  const ordered = forms.length <= YOTO_TRACK_LIMIT ? forms.slice() : rankForms(forms);
+  const slices = ordered.length === 0 ? [[]] : chunk(ordered, YOTO_TRACK_LIMIT);
+  const groups = slices.map((group) => fitFormTracks(group));
+  return groups.map((group, index) => {
+    const used = new Set<string>();
+    const chapters = group.map((form) => formChapter(form, used));
+    const first = chapters[0]?.dexId ?? 0;
+    const last = chapters[chapters.length - 1]?.dexId ?? first;
+    const names = splitPlaylistCopy(meta.title, index + 1, groups.length, first, last, meta.id);
+    return {
+      id: names.id,
+      kind,
+      title: meta.title,
+      rangeLabel: names.rangeLabel,
+      libraryTitle: names.libraryTitle,
+      blurb: names.splitBlurb || "The cry, then Lily reads the form.",
+      childDoes: FORM_CHILD_DOES,
+      chapters,
+    };
+  });
+}
+
+/** The first form playlist. Mega and Gigantamax stay on one card today. */
+export function formPlaylist(kind: FormPlaylistKind, forms: readonly FormPlaylistEntry[]): KidCard {
+  const card = formPlaylists(kind, forms)[0];
+  if (!card) throw new Error(`Missing ${kind} playlist`);
+  return card;
+}
+
+/** Facts-style chapter with the species 16×16 pixel as the Yoto icon. */
+function speciesPlaylistChapter(sheet: MonSheet): KidChapter {
+  const chapter = factChapter(sheet);
+  const icon = `/pixels/${sheet.id}.png`;
+  return {
+    ...chapter,
+    icon,
+    tracks: chapter.tracks.map((track) => ({ ...track, icon })),
+  };
+}
+
+/** Cry-first species playlists. More than 100 tracks are split into further cards. */
+export function speciesPlaylists(kind: SpeciesPlaylistKind, sheets: readonly MonSheet[]): KidCard[] {
+  const meta = SPECIES_PLAYLIST_META[kind];
+  const slices = sheets.length === 0 ? [[]] : chunk(sheets.slice(), YOTO_TRACK_LIMIT);
+  return slices.map((group, index) => {
+    const chapters = group.map((sheet) => speciesPlaylistChapter(sheet));
+    const first = chapters[0]?.dexId ?? 0;
+    const last = chapters[chapters.length - 1]?.dexId ?? first;
+    const names = splitPlaylistCopy(meta.title, index + 1, slices.length, first, last, meta.id);
+    return {
+      id: names.id,
+      kind,
+      title: meta.title,
+      rangeLabel: names.rangeLabel,
+      libraryTitle: names.libraryTitle,
+      blurb: names.splitBlurb || "The cry, then the name, then a short description.",
+      childDoes: SPECIES_CHILD_DOES,
+      chapters,
+    };
+  });
 }
 
 /** Same upload shape as Pokefacts. The Yoto title is the playlist name, with no stale card id. */
@@ -670,7 +788,7 @@ export function formPlaylistUpload(
   voiceId: string = LILY_VOICE_ID,
 ) {
   const spoken = chosenVoice(voiceId);
-  const title = card.kind === "gmax" ? "Gigantamax" : "Mega Evolutions";
+  const title = card.libraryTitle;
   const usable = cardId && /^[A-Za-z0-9]{5}$/.test(cardId) ? cardId : undefined;
   const content = buildKidCard(applyUploadedPixels(withVoice(card, spoken), mediaById), usable);
   content.title = title;

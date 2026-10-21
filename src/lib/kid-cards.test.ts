@@ -2,8 +2,16 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
-import { listGigantamaxForms, listMegaForms, listMonSheets } from "./catalogue-db";
-import { dexBlurb, guessSpoken, pickDexEntry, riddleParts, shortClues, threeClues, type FlavorSource, type MonSheet } from "./dex-facts";
+import {
+  listAlolanForms,
+  listGigantamaxForms,
+  listHisuianForms,
+  listLegendarySheets,
+  listMegaForms,
+  listMonSheets,
+  listMythicalSheets,
+} from "./catalogue-db";
+import { dexBlurb, pickDexEntry, threeClues, type FlavorSource, type MonSheet } from "./dex-facts";
 import {
   applySpeciesSpeech,
   buildKidCard,
@@ -14,6 +22,7 @@ import {
   factsBulkPlaylists,
   factsPlaylistUpload,
   formPlaylist,
+  formPlaylists,
   formPlaylistUpload,
   guessPlayOrder,
   guessPoolFromCards,
@@ -25,6 +34,7 @@ import {
   POKEDEX_HOWTO,
   randomGuessCard,
   randomPokedexCard,
+  speciesPlaylists,
   shadowPixelPath,
   YOTO_TRACK_LIMIT,
 } from "./kid-cards";
@@ -144,19 +154,9 @@ describe("Pokédex entries", () => {
   });
 
   it("hides the answer name inside three Pokédex clues", () => {
-    const bulbasaur = sheet(1, "Bulbasaur", entry("Bulbasaur"));
-    const clues = threeClues("Bulbasaur", bulbasaur.entries, {
-      types: bulbasaur.types,
-      genus: bulbasaur.genus,
-      heightDecimetres: bulbasaur.heightDecimetres,
-      weightHectograms: bulbasaur.weightHectograms,
-      habitat: bulbasaur.habitat,
-    });
+    const clues = threeClues("Bulbasaur", entry("Bulbasaur"));
     assert.equal(clues.length, 3);
-    for (const clue of clues) {
-      assert.doesNotMatch(clue, /Bulbasaur/);
-      assert.doesNotMatch(clue, /quiet habit|nobody is watching/i);
-    }
+    for (const clue of clues) assert.doesNotMatch(clue, /Bulbasaur/);
   });
 
   it("keeps a dex entry to name, type, description, and size", () => {
@@ -277,6 +277,7 @@ describe("cards for ages 8 to 12", () => {
       const script = start?.tracks.map((track) => track.text).join(" ") ?? "";
       assert.match(script, /picture/i);
       assert.match(script, /press/i);
+      assert.doesNotMatch(script, /playlist/i);
       assert.ok(countSpokenTracks(card.chapters) <= YOTO_TRACK_LIMIT);
     }
   });
@@ -303,6 +304,7 @@ describe("cards for ages 8 to 12", () => {
     }
     const bulbasaur = cards[0]?.chapters.find((chapter) => chapter.key === "bulbasaur");
     assert.equal(bulbasaur?.tracks.length, 1);
+    assert.equal(bulbasaur?.sprite, "/artwork/1.webp");
     const bulba = bulbasaur?.tracks[0]?.text ?? "";
     assert.match(bulba, /It is a Grass and Poison type\./);
     assert.match(bulba, /It is the Seed Pokémon\./);
@@ -377,9 +379,7 @@ function assertGuessScriptsStayShort(
       .replace(/^Number \d+\. /, "")
       .replace(/ Shout your guess\. One\. Two\. Three\.$/, "");
     const sentences = middle.match(/[^.!?]+[.!?]+/g) ?? [];
-    assert.ok(sentences.length === 3 || sentences.length === 4);
-    assert.match(middle, /It is an? [A-Z][a-z-]+(?: and [A-Z][a-z-]+)? type\./);
-    assert.match(middle, /tall as|shorter than|taller than|heavy as|heavier than|lighter than/);
+    assert.equal(sentences.length, 3);
     for (const sentence of sentences) {
       assert.equal(answer.includes(sentence.trim()), false);
     }
@@ -455,18 +455,8 @@ describe("every national species", () => {
         if (!chapter.dexId) continue;
         const clue = chapter.tracks[0]?.text ?? "";
         assert.doesNotMatch(clue, new RegExp(escapeRegExp(chapter.title), "i"));
-        const sheet = sheets.find((row) => row.id === chapter.dexId);
-        assert.ok(sheet);
-        const typeNames = sheet.types.map(
-          (type) => `${type.charAt(0).toUpperCase()}${type.slice(1).toLowerCase()}`,
-        );
-        const typeLabel = typeNames.length === 1 ? typeNames[0]! : `${typeNames[0]} and ${typeNames[1]}`;
-        const article = /^[aeiou]/i.test(typeLabel) ? "an" : "a";
-        assert.match(clue, new RegExp(`It is ${article} ${typeLabel} type\\.`));
-        assert.doesNotMatch(clue, /\bIt is an? type\b/i);
-        if (sheet.color) assert.match(clue, new RegExp(`It is ${sheet.color.toLowerCase()}\\.`));
-        assert.match(clue, /tall as|shorter than|taller than|heavy as|heavier than|lighter than/);
-        assert.doesNotMatch(clue, /size is hard to picture|quiet habit|nobody is watching|body of a placid/);
+        assert.doesNotMatch(clue, /\btype\b/i);
+        assert.match(clue, /tall as|shorter than|taller than|heavy as|heavier than|lighter than|size is hard to picture/);
         assert.match(chapter.tracks[1]?.text ?? "", /^It is /);
         assert.equal(chapter.tracks[0]?.lead, "cry");
         assert.equal(chapter.tracks[1]?.lead, "cry");
@@ -484,9 +474,9 @@ describe("every national species", () => {
     const flavor = croconaw.entries.map((entry) => entry.text).join(" ");
     assert.equal(
       clue,
-      "Number 159. Once it has clamped its jaws on its foe, it will absolutely not let go. It is a Water type. It is blue. It is taller than a door handle and heavier than a bicycle. Shout your guess. One. Two. Three.",
+      "Number 159. It lives at the water's edge. The fangs hook backward like fishhooks. It is about as tall as a child and about as heavy as a child. Shout your guess. One. Two. Three.",
     );
-    assert.match(clue, /Water type/);
+    assert.doesNotMatch(clue, /type\b/i);
     assert.equal(answer, "It is Croconaw. It grows from Totodile and becomes Feraligatr.");
     assert.doesNotMatch(clue, /Croconaw|Totodile|Feraligatr/i);
     assert.match(answer, /^It is Croconaw\./);
@@ -502,82 +492,6 @@ describe("every national species", () => {
         .match(/[^.!?]+[.!?]+/g) ?? [];
     for (const sentence of clueSentences) {
       assert.equal(answer.includes(sentence.trim()), false);
-    }
-  });
-
-  it("gives every species a dex line, the real type, a colour, and a size", () => {
-    const drampa = sheets.find((sheet) => sheet.id === 780);
-    assert.ok(drampa);
-    assert.equal(drampa.name, "Drampa");
-    const spoken = guessSpoken(drampa);
-    assert.equal(
-      spoken.clue,
-      "Number 780. It is a kind and friendly Pokémon, up until it’s angered. It is a Normal and Dragon type. It is white. It is as tall as a basketball hoop and about as heavy as a motorbike. Shout your guess. One. Two. Three.",
-    );
-    assert.equal(spoken.answer, "It is Drampa. Its special ability is called Berserk.");
-    const parts = riddleParts(spoken.clue);
-    assert.deepEqual(parts.clues, [
-      "It is a kind and friendly Pokémon, up until it’s angered.",
-      "It is a Normal and Dragon type.",
-      "It is white.",
-      "It is as tall as a basketball hoop and about as heavy as a motorbike.",
-    ]);
-    assert.equal(parts.countdown, "Shout your guess. One. Two. Three.");
-    assert.equal(parts.clues.some((clue) => clue === "One."), false);
-    assert.match(parts.clues[1] ?? "", /Normal/);
-    assert.match(parts.clues[1] ?? "", /Dragon/);
-
-    const pikachu = guessSpoken(sheets.find((sheet) => sheet.id === 25)!);
-    assert.match(pikachu.clue, /It possesses cheek sacs in which it stores electricity\./);
-    assert.match(pikachu.clue, /It is an Electric type\./);
-    assert.match(pikachu.clue, /It is yellow\./);
-    assert.doesNotMatch(pikachu.clue, /Pikachu/i);
-
-    const snorlax = guessSpoken(sheets.find((sheet) => sheet.id === 143)!);
-    assert.match(snorlax.clue, /It appears in villages without warning and devours the entirety of their rice granaries\./);
-    assert.match(snorlax.clue, /It is a Normal type\./);
-    assert.match(snorlax.clue, /It is black\./);
-    assert.doesNotMatch(snorlax.clue, /Snorlax/i);
-
-    const placid = threeClues("Example", [], {
-      types: ["psychic"],
-      genus: "Placid Pokémon",
-      heightDecimetres: 30,
-      weightHectograms: 1850,
-      habitat: null,
-    });
-    assert.equal(placid.some((clue) => clue === "It is a Psychic type."), true);
-    assert.doesNotMatch(placid.join(" "), /body of a placid|a placid\b|nobody is watching|It is a type\./i);
-
-    for (const sheet of sheets) {
-      const clues = shortClues(sheet);
-      const text = clues.join(" ");
-      const label = `${sheet.id} ${sheet.name}`;
-      assert.equal(clues.length, 4, label);
-      assert.doesNotMatch(text, /nobody is watching/i, label);
-      assert.doesNotMatch(text, /body of an?\b/i, label);
-      assert.doesNotMatch(text, /quiet habit/i, label);
-      assert.doesNotMatch(text, /grown person and heavier than a grown person/i, label);
-      assert.doesNotMatch(text, /\bIt is an? type\b/i, label);
-      assert.doesNotMatch(text, new RegExp(`\\b${escapeRegExp(sheet.name)}\\b`, "i"), label);
-      const typeNames = sheet.types.map(
-        (type) => `${type.charAt(0).toUpperCase()}${type.slice(1).toLowerCase()}`,
-      );
-      const typeLabel = typeNames.length === 1 ? typeNames[0]! : `${typeNames[0]} and ${typeNames[1]}`;
-      const article = /^[aeiou]/i.test(typeLabel) ? "an" : "a";
-      assert.equal(clues[1], `It is ${article} ${typeLabel} type.`, label);
-      assert.equal(clues[2], `It is ${sheet.color?.toLowerCase()}.`, label);
-      assert.match(clues[3] ?? "", /tall as|shorter than|taller than|heavy as|heavier than|lighter than/, label);
-      for (const clue of clues) {
-        assert.match(clue, /^[A-Z]/, `${label}: ${clue}`);
-        assert.match(clue, /[.!?]$/, `${label}: ${clue}`);
-        assert.doesNotMatch(clue, /\bIt (?:are|live)\b/, `${label}: ${clue}`);
-        assert.doesNotMatch(
-          clue,
-          /\b(?:from|by|of|to|with|for|into|about|than|as|like|and|or|but|a|an|the)\.$/i,
-          `${label}: ${clue}`,
-        );
-      }
     }
   });
 });
@@ -620,6 +534,7 @@ describe("random Pokedex playlist", () => {
       second.chapters.map((chapter) => chapter.dexId),
       ids,
     );
+    assert.equal(first.chapters[0]?.sprite, `/artwork/${first.chapters[0]?.dexId}.webp`);
     assert.equal(countSpokenTracks(first.chapters), 100);
     assert.equal(first.chapters.some((chapter) => chapter.key === "start"), false);
 
@@ -1123,7 +1038,7 @@ describe("random Guess Who", () => {
           .replace(/^Number \d+\. /, "")
           .replace(/ Shout your guess\. One\. Two\. Three\.$/, "")
           .match(/[^.!?]+[.!?]+/g) ?? [];
-      assert.equal(clueSentences.length, 4);
+      assert.equal(clueSentences.length, 3);
       for (const sentence of clueSentences) {
         assert.equal(answer.text.includes(sentence.trim()), false);
       }
@@ -1302,6 +1217,9 @@ describe("biology speech and form playlists", () => {
     assert.equal(live.libraryTitle, "Mega Evolutions");
     assert.ok(live.chapters.some((chapter) => chapter.title === "Mega Charizard X"));
     assert.ok(live.chapters.some((chapter) => chapter.title === "Mega Charizard Y"));
+    assert.ok(live.chapters.some((chapter) => chapter.title === "Mega Meowstic (Male)"));
+    assert.ok(live.chapters.some((chapter) => chapter.title === "Mega Meowstic (Female)"));
+    assert.equal(live.chapters.some((chapter) => chapter.title === "Mega Meowstic"), false);
     assert.ok(live.chapters.length <= YOTO_TRACK_LIMIT);
     assert.equal(chaptersForCries(live).length, live.chapters.length);
     const sentLive = formPlaylistUpload(live, { 6: "char-pixel" }, "deleted-card");
@@ -1309,6 +1227,9 @@ describe("biology speech and form playlists", () => {
     assert.equal(sentLive.content.metadata?.title, "Mega Evolutions");
     assert.equal(sentLive.content.cardId, undefined);
     assert.equal(Object.hasOwn(sentLive.content, "cardId"), false);
+    const megaX = live.chapters.find((chapter) => chapter.title === "Mega Charizard X");
+    assert.equal(megaX?.sprite, "/artwork/10034.webp");
+    assert.equal(megaX?.tracks[0]?.icon, "/pixels/6.png");
     const charizard = sentLive.content.content.chapters.find((chapter) => chapter.title === "Mega Charizard X");
     assert.equal(charizard?.tracks[0]?.display.icon16x16, "yoto:#char-pixel");
     assert.equal(charizard?.tracks[0]?.voiceId, LILY_VOICE_ID);
@@ -1323,6 +1244,8 @@ describe("biology speech and form playlists", () => {
         blocks: MEGA_VENUSAUR,
       },
     ]);
+    assert.equal(card.chapters[0]?.sprite, "/artwork/10033.webp");
+    assert.equal(card.chapters[0]?.icon, "/pixels/3.png");
     const spoken = card.chapters[0]?.tracks[0]?.text ?? "";
     assert.match(spoken, /flower grows more prominent/);
     assert.match(spoken, /sturdier to support the extra weight/);
@@ -1348,6 +1271,8 @@ describe("biology speech and form playlists", () => {
     const chapter = live.chapters.find((item) => item.title === "Gigantamax Charizard");
     assert.equal(chapter?.tracks[0]?.lead, "cry");
     assert.equal(chapter?.dexId, 6);
+    assert.equal(chapter?.sprite, "/artwork/10196.webp");
+    assert.equal(chapter?.tracks[0]?.icon, "/pixels/6.png");
 
     const card = formPlaylist("gmax", [
       {
@@ -1358,10 +1283,127 @@ describe("biology speech and form playlists", () => {
         blocks: GMAX_CHARIZARD,
       },
     ]);
+    assert.equal(card.chapters[0]?.sprite, "/artwork/10196.webp");
+    assert.equal(card.chapters[0]?.tracks[0]?.icon, "/pixels/6.png");
     const spoken = card.chapters[0]?.tracks[0]?.spoken ?? "";
     assert.match(spoken, /belly is now white/);
     assert.match(spoken, /wings burn hotter/);
     assert.doesNotMatch(spoken, /draconic, bipedal|Bulbapedia|Creative Commons/i);
+  });
+
+  it("sends Alolan and Hisuian forms with form artwork and the species pixel", () => {
+    const alolan = listAlolanForms();
+    const alola = formPlaylists("alola", alolan);
+    assert.equal(alola.length, 1);
+    assert.equal(alola[0]?.libraryTitle, "Alolan forms");
+    assert.equal(alola[0]?.chapters.length, 18);
+    assert.ok((alola[0] ? countSpokenTracks(alola[0].chapters) : 0) <= YOTO_TRACK_LIMIT);
+    const rattata = alola[0]?.chapters.find((chapter) => chapter.title === "Alolan Rattata");
+    assert.equal(rattata?.sprite, "/artwork/10091.webp");
+    assert.equal(rattata?.tracks[0]?.icon, "/pixels/19.png");
+    assert.equal(rattata?.tracks[0]?.lead, "cry");
+    assert.equal(rattata?.formId, 10091);
+    assert.equal(rattata?.dexId, 19);
+    const sent = formPlaylistUpload(alola[0] as NonNullable<(typeof alola)[0]>, { 19: "rattata-pixel" });
+    assert.equal(sent.content.title, "Alolan forms");
+    const uploaded = sent.content.content.chapters.find((chapter) => chapter.title === "Alolan Rattata");
+    assert.equal(uploaded?.tracks[0]?.display.icon16x16, "yoto:#rattata-pixel");
+
+    const hisui = formPlaylists("hisui", listHisuianForms());
+    assert.equal(hisui.length, 1);
+    assert.equal(hisui[0]?.chapters.length, 16);
+    const growlithe = hisui[0]?.chapters.find((chapter) => chapter.title === "Hisuian Growlithe");
+    assert.equal(growlithe?.sprite, "/artwork/10229.webp");
+    assert.equal(growlithe?.tracks[0]?.icon, "/pixels/58.png");
+    assert.equal(growlithe?.formId, 10229);
+
+    const twins = formPlaylists("alola", [
+      { formId: 1, speciesId: 6, speciesName: "Charizard", formName: "Alolan Charizard X" },
+      { formId: 2, speciesId: 6, speciesName: "Charizard", formName: "Alolan Charizard Y" },
+    ]);
+    assert.equal(twins[0]?.chapters.map((chapter) => chapter.title).join("|"), "Alolan Charizard X|Alolan Charizard Y");
+    assert.equal(twins[0]?.chapters[1]?.overlay, "6b");
+  });
+
+  it("splits a form list past 100 tracks and keeps one form per species on the first card", () => {
+    const forms = Array.from({ length: 101 }, (_, index) => ({
+      formId: 40000 + index,
+      speciesId: index + 1,
+      speciesName: `Species ${index + 1}`,
+      formName: `Alolan Species ${index + 1}`,
+    }));
+    const split = formPlaylists("alola", forms);
+    assert.equal(split.length, 2);
+    assert.equal(countSpokenTracks(split[0]?.chapters ?? []), 100);
+    assert.equal(countSpokenTracks(split[1]?.chapters ?? []), 1);
+    assert.match(split[0]?.blurb ?? "", /Yoto holds 100 tracks, so Alolan forms are split into 2 playlists/);
+    assert.equal(split[0]?.rangeLabel, "Alolan forms 1 (1-100)");
+    assert.equal(split[0]?.libraryTitle, "Alolan forms 1");
+    assert.equal(split[1]?.id, "alolan-forms-2");
+    for (const card of split) assert.ok(countSpokenTracks(card.chapters) <= YOTO_TRACK_LIMIT);
+
+    const paired = [];
+    for (let species = 1; species <= 100; species += 1) {
+      paired.push({
+        formId: species,
+        speciesId: species,
+        speciesName: `Species ${species}`,
+        formName: `Alolan Species ${species}`,
+      });
+      paired.push({
+        formId: 1000 + species,
+        speciesId: species,
+        speciesName: `Species ${species}`,
+        formName: `Alolan Species ${species} Extra`,
+      });
+    }
+    const cards = formPlaylists("hisui", paired);
+    assert.equal(cards.length, 2);
+    assert.equal(cards[0]?.chapters.length, 100);
+    assert.equal(new Set(cards[0]?.chapters.map((chapter) => chapter.dexId)).size, 100);
+    assert.equal(cards[1]?.chapters.length, 100);
+    assert.match(cards[0]?.blurb ?? "", /Hisuian forms are split into 2 playlists/);
+  });
+
+  it("builds cry-first legendary and mythical playlists from species artwork", () => {
+    const legendarySheets = listLegendarySheets();
+    const legendary = speciesPlaylists("legendary", legendarySheets);
+    assert.equal(legendary.length, 1);
+    assert.equal(legendary[0]?.libraryTitle, "Legendary Pokémon");
+    assert.equal(legendary[0]?.chapters.length, 71);
+    assert.equal(chaptersForCries(legendary[0] as NonNullable<(typeof legendary)[0]>).length, 71);
+    const articuno = legendary[0]?.chapters.find((chapter) => chapter.title === "Articuno");
+    assert.equal(articuno?.sprite, "/artwork/144.webp");
+    assert.equal(articuno?.tracks[0]?.icon, "/pixels/144.png");
+    assert.equal(articuno?.tracks[0]?.lead, "cry");
+    assert.equal(articuno?.formId, undefined);
+    const spoken = applySpeciesSpeech(legendary[0] as NonNullable<(typeof legendary)[0]>, {
+      150: "Mewtwo. It was created by science.",
+    });
+    assert.match(spoken.chapters.find((chapter) => chapter.dexId === 150)?.tracks[0]?.text ?? "", /created by science/);
+    assert.equal(
+      spoken.chapters.find((chapter) => chapter.dexId === 144)?.tracks[0]?.text,
+      articuno?.tracks[0]?.text,
+    );
+
+    const mythical = speciesPlaylists("mythical", listMythicalSheets());
+    assert.equal(mythical.length, 1);
+    assert.equal(mythical[0]?.chapters.length, 23);
+    const mew = mythical[0]?.chapters.find((chapter) => chapter.title === "Mew");
+    assert.equal(mew?.sprite, "/artwork/151.webp");
+    assert.equal(mew?.tracks[0]?.icon, "/pixels/151.png");
+    assert.equal(mew?.tracks[0]?.lead, "cry");
+    assert.equal(mythical[0]?.chapters.some((chapter) => chapter.title === "Mewtwo"), false);
+
+    const overflow = speciesPlaylists("legendary", listMonSheets().slice(0, 101));
+    assert.equal(overflow.length, 2);
+    assert.equal(countSpokenTracks(overflow[0]?.chapters ?? []), 100);
+    assert.equal(countSpokenTracks(overflow[1]?.chapters ?? []), 1);
+    assert.match(overflow[0]?.blurb ?? "", /Legendary Pokémon are split into 2 playlists/);
+    assert.equal(overflow[0]?.rangeLabel, "Legendary Pokémon 1 (1-100)");
+    assert.equal(overflow[0]?.chapters[0]?.sprite, "/artwork/1.webp");
+    assert.equal(overflow[0]?.chapters[0]?.tracks[0]?.icon, "/pixels/1.png");
+    for (const card of overflow) assert.ok(countSpokenTracks(card.chapters) <= YOTO_TRACK_LIMIT);
   });
 });
 

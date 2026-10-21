@@ -8,6 +8,7 @@ import { PlaybackPanel } from "@/components/playback-panel";
 import { SetupGuide } from "@/components/setup-guide";
 import { StatusBar } from "@/components/status-bar";
 import { ConnectDialog } from "@/components/connect-dialog";
+import { MusicPanel } from "@/components/music-panel";
 import { StickerStudio } from "@/components/sticker-studio";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,8 +18,12 @@ import {
   factsBulkPlaylists,
   factsPlaylistUpload,
   formPlaylist,
+  formPlaylists,
   formPlaylistUpload,
   guessPoolFromCards,
+  isFormPlaylistKind,
+  isSpeciesPlaylistKind,
+  speciesPlaylists,
   guessUpload,
   mulberry32,
   countSpokenTracks,
@@ -31,12 +36,13 @@ import {
   randomPokedexCard,
   trackSpeech,
   YOTO_TRACK_LIMIT,
+  type FormPlaylistKind,
   type KidCard,
   type KidCardKind,
 } from "@/lib/kid-cards";
-import { CONNECT_FOR_VOICE, NATIONAL_DEX_TOTAL } from "@/lib/fact-build";
-import { riddleParts } from "@/lib/dex-facts";
+import { artworkSrc } from "@/lib/page-artwork";
 import { pronounce } from "@/lib/pronounce";
+import { spokenDexLine, statusWithDexNote, WIKI_DEX_NOTE } from "@/lib/spoken-wiki";
 import { selectionUpload } from "@/lib/selection-playlist";
 import { APP_NAME, DONATE_URL, SOURCE_URL } from "@/lib/site";
 import { defaultPlayback, readPlayback, type PlaybackSettings } from "@/lib/playback-settings";
@@ -49,7 +55,7 @@ import {
   statusErrorText,
   validYotoCardId,
 } from "@/lib/yoto-error";
-import { isPiperVoice } from "@/lib/piper-voice";
+import { isPiperVoice, PICKER_VOICES } from "@/lib/piper-voice";
 import {
   afterRejectedPlaylist,
   applyFinishedAudio,
@@ -60,7 +66,6 @@ import {
   libraryPlaylists,
   mapPool,
   renderJobs,
-  TRACK_POOL_SIZE,
   uploadForPlaylist,
   type FinishedAudio,
   type PlaylistUpload,
@@ -135,7 +140,8 @@ function jobOf(data: unknown): {
   status?: string;
   progress?: unknown;
   error?: string;
-  result?: { cardId?: string; title?: string };
+  cardId?: string;
+  result?: { cardId?: string; contentId?: string; title?: string; card?: { cardId?: string } };
 } | null {
   if (!data || typeof data !== "object") return null;
   const row = data as { job?: { jobId?: string; status?: string } };
@@ -203,22 +209,40 @@ async function uploadPixels(
   return media;
 }
 
-async function speciesSpeech(id: number, name: string): Promise<string> {
+function nameOnlySpeech(name: string, speech: string): boolean {
+  const clean = speech.replace(/\s+/g, " ").trim();
+  const title = name.replace(/\s+/g, " ").trim();
+  return !clean || clean === title || clean === `${title}.`;
+}
+
+function chapterDexText(chapter: { title: string; tracks: Array<{ text?: string }> }): string {
+  const raw = chapter.tracks[0]?.text ?? "";
+  const body = raw.startsWith(POKEDEX_HOWTO) ? raw.slice(POKEDEX_HOWTO.length) : raw;
+  const text = body.replace(/\s+/g, " ").trim();
+  return nameOnlySpeech(chapter.title, text) ? "" : text;
+}
+
+function playlistDexNote(card: { chapters: Array<{ articleNotice?: string }> }): string {
+  return card.chapters.some((chapter) => chapter.articleNotice) ? WIKI_DEX_NOTE : "";
+}
+
+async function speciesSpeech(id: number, name: string): Promise<{ speech: string; notice: string }> {
   try {
     const response = await fetch(`/api/catalogue/${id}/biology`);
-    const payload = (await response.json()) as { speech?: string };
-    const speech = payload.speech?.replace(/\s+/g, " ").trim();
-    if (speech) return speech;
+    const payload = (await response.json()) as { speech?: string; notice?: string };
+    const speech = payload.speech?.replace(/\s+/g, " ").trim() ?? "";
+    const notice = payload.notice?.replace(/\s+/g, " ").trim() ?? "";
+    if (!nameOnlySpeech(name, speech)) return { speech, notice };
   } catch {
-    // The name is still safe to say. Weight and height stay off the track.
+    // The chapter still has the catalogue line. A name alone is not the track.
   }
-  return `${name}.`;
+  return { speech: "", notice: WIKI_DEX_NOTE };
 }
 
 async function speechesFor(
   card: KidCard,
-  onProgress?: (done: number, total: number) => void,
-): Promise<Record<number, string>> {
+  onProgress?: (done: number, total: number, notice: string) => void,
+): Promise<{ speech: Record<number, string>; notice: string }> {
   const ids: number[] = [];
   const names = new Map<number, string>();
   for (const chapter of card.chapters) {
@@ -227,20 +251,24 @@ async function speechesFor(
     ids.push(chapter.dexId);
   }
   const map: Record<number, string> = {};
+  let notice = "";
   let finished = 0;
   await mapPool(ids, async (id) => {
     if (!id) return;
-    map[id] = await speciesSpeech(id, names.get(id) ?? "This Pokémon");
+    const reading = await speciesSpeech(id, names.get(id) ?? "This Pokémon");
+    if (reading.speech) map[id] = reading.speech;
+    if (reading.notice) notice = reading.notice;
     finished += 1;
-    onProgress?.(finished, ids.length);
+    onProgress?.(finished, ids.length, notice);
   });
-  return map;
+  return { speech: map, notice };
 }
 
 type FormReading = {
   speech: string;
   url: string;
   status: "ready" | "missing" | "unavailable";
+  notice: string;
 };
 
 async function formReading(formId: number): Promise<FormReading> {
@@ -248,17 +276,37 @@ async function formReading(formId: number): Promise<FormReading> {
     const response = await fetch(`/api/forms/${formId}`);
     const payload = (await response.json()) as {
       speech?: string;
+      name?: string;
+      speciesId?: number;
+      notice?: string;
       article?: { url?: string; status?: string };
     };
     const status = payload.article?.status;
     const safe = status === "ready" || status === "missing" || status === "unavailable" ? status : "unavailable";
+    const name = payload.name?.replace(/\s+/g, " ").trim() ?? "";
+    let speech = payload.speech?.replace(/\s+/g, " ").trim() ?? "";
+    let notice = payload.notice?.replace(/\s+/g, " ").trim() ?? "";
+    if (nameOnlySpeech(name, speech) && payload.speciesId) {
+      try {
+        const entryResponse = await fetch(`/api/catalogue/${payload.speciesId}`);
+        const entryPayload = (await entryResponse.json()) as { entry?: { info?: string } };
+        const info = entryPayload.entry?.info?.replace(/\s+/g, " ").trim() ?? "";
+        if (info) {
+          speech = spokenDexLine(name || "This Pokémon", info);
+          notice = notice || WIKI_DEX_NOTE;
+        }
+      } catch {
+        notice = notice || WIKI_DEX_NOTE;
+      }
+    }
     return {
-      speech: payload.speech?.replace(/\s+/g, " ").trim() ?? "",
+      speech,
       url: payload.article?.url ?? "",
       status: safe,
+      notice,
     };
   } catch {
-    return { speech: "", url: "", status: "unavailable" };
+    return { speech: "", url: "", status: "unavailable", notice: WIKI_DEX_NOTE };
   }
 }
 
@@ -283,6 +331,7 @@ function withFormReading(card: KidCard, formId: number, reading: FormReading): K
         ...chapter,
         articleUrl: reading.url || chapter.articleUrl,
         articleStatus: reading.status,
+        articleNotice: reading.notice || undefined,
         tracks: chapter.tracks.map((track) => ({
           ...track,
           text,
@@ -324,37 +373,16 @@ async function uploadGuessIcons(card: KidCard): Promise<{
   return { real, shadow };
 }
 
-function spokenSentences(text: string): string[] {
-  const safe = text.replace(/\b(Mr|Mrs|Ms|Dr|Sr)\./g, "$1\u0000");
-  return safe
-    .split(/(?<=[.!?])\s+(?=[A-Z])/)
-    .map((line) => line.replace(/\u0000/g, ".").trim())
-    .filter(Boolean);
-}
-
 function entryLines(text: string, title: string): string[] {
-  return spokenSentences(text).filter(
-    (line) => line.length > 0 && line !== `${title}.` && !/^It is number \d+\.$/.test(line),
-  );
-}
-
-function RiddleScript({ text }: { text: string }) {
-  const parts = riddleParts(text);
-  return (
-    <div className="mt-5 grid gap-3">
-      <ol className="grid gap-2" aria-label="Clues">
-        {parts.clues.map((clue, index) => (
-          <li key={clue} className="pk-clue">
-            <span className="pk-clue-num" aria-hidden="true">
-              {index + 1}
-            </span>
-            <span>{clue}</span>
-          </li>
-        ))}
-      </ol>
-      {parts.countdown ? <p className="pk-countdown">{parts.countdown}</p> : null}
-    </div>
-  );
+  return text
+    .split(/(?<=[.!?])\s+(?=[A-Z])/)
+    .map((line) => line.trim())
+    .filter(
+      (line) =>
+        line.length > 0 &&
+        line !== `${title}.` &&
+        !/^It is number \d+\.$/.test(line),
+    );
 }
 
 function isMeasure(line: string): boolean {
@@ -365,14 +393,63 @@ function firstCard(cards: KidCard[], kind: KidCardKind): KidCard | undefined {
   return cards.find((card) => card.kind === kind);
 }
 
+/** Species number on the page. A repeated form keeps a unique Yoto overlay such as 678b. */
+function chapterNumber(item: { overlay: string; dexId?: number }): string {
+  return item.dexId ? String(item.dexId) : item.overlay;
+}
+
+function hideBrokenPicture(event: { currentTarget: HTMLImageElement }): void {
+  const image = event.currentTarget;
+  const fallback = image.dataset.fallback;
+  if (fallback && image.dataset.tried !== "1" && image.getAttribute("src") !== fallback) {
+    image.dataset.tried = "1";
+    image.src = fallback;
+    return;
+  }
+  image.style.display = "none";
+}
+
+function revealChoice(nav: HTMLElement) {
+  const selected = nav.querySelector<HTMLElement>('[aria-current="true"]');
+  if (!selected) return;
+  const navRect = nav.getBoundingClientRect();
+  const itemRect = selected.getBoundingClientRect();
+  const vertical = window.matchMedia("(min-width: 768px)").matches;
+  if (vertical) {
+    if (itemRect.top >= navRect.top && itemRect.bottom <= navRect.bottom) return;
+    nav.scrollTop += itemRect.top - navRect.top - (nav.clientHeight - selected.clientHeight) / 2;
+    return;
+  }
+  if (itemRect.left >= navRect.left && itemRect.right <= navRect.right) return;
+  nav.scrollLeft += itemRect.left - navRect.left - (nav.clientWidth - selected.clientWidth) / 2;
+}
+
+type PlaylistMap = Record<FormPlaylistKind | "legendary" | "mythical", KidCard[]>;
+
+function readsSpeciesBiology(kind: KidCardKind): boolean {
+  return kind === "meet" || kind === "legendary" || kind === "mythical";
+}
+
+function activePlaylist(lists: PlaylistMap, kind: keyof PlaylistMap, id: string): KidCard | undefined {
+  return lists[kind].find((item) => item.id === id) ?? lists[kind][0];
+}
+
 export function Studio({
   cards,
   mega = formPlaylist("mega", []),
   gmax = formPlaylist("gmax", []),
+  alola = formPlaylists("alola", []),
+  hisui = formPlaylists("hisui", []),
+  legendary = speciesPlaylists("legendary", []),
+  mythical = speciesPlaylists("mythical", []),
 }: {
   cards: KidCard[];
   mega?: KidCard;
   gmax?: KidCard;
+  alola?: KidCard[];
+  hisui?: KidCard[];
+  legendary?: KidCard[];
+  mythical?: KidCard[];
 }) {
   const factsCards = cards.filter((card) => card.kind === "meet");
   const factPool = factPoolFromCards(cards);
@@ -380,13 +457,29 @@ export function Studio({
   const factsPlaylists = factsBulkPlaylists(cards);
   const [randomCard, setRandomCard] = useState(() => randomPokedexCard(factPool, mulberry32(20261018)));
   const [guessCard, setGuessCard] = useState(() => randomGuessCard(guessPool, mulberry32(20261018)));
-  const [megaCard, setMegaCard] = useState(mega);
-  const [gmaxCard, setGmaxCard] = useState(gmax);
-  const megaRef = useRef(mega);
-  const gmaxRef = useRef(gmax);
-  const formLoad = useRef<Partial<Record<"mega" | "gmax", Promise<void>>>>({});
-  const [factSpeech, setFactSpeech] = useState<{ id: number; speech: string; url: string } | null>(null);
-  const [view, setView] = useState<"cards" | "catalogue" | "setup">("cards");
+  const initialPlaylists: PlaylistMap = {
+    mega: [mega],
+    gmax: [gmax],
+    alola,
+    hisui,
+    legendary,
+    mythical,
+  };
+  const [playlists, setPlaylists] = useState(initialPlaylists);
+  const playlistsRef = useRef(initialPlaylists);
+  const formLoad = useRef<Partial<Record<FormPlaylistKind, Promise<void>>>>({});
+  const [playlistId, setPlaylistId] = useState<Record<keyof PlaylistMap, string>>({
+    mega: mega.id,
+    gmax: gmax.id,
+    alola: alola[0]?.id ?? "alolan-forms",
+    hisui: hisui[0]?.id ?? "hisuian-forms",
+    legendary: legendary[0]?.id ?? "legendary",
+    mythical: mythical[0]?.id ?? "mythical",
+  });
+  const [factSpeech, setFactSpeech] = useState<{ id: number; speech: string; url: string; notice: string } | null>(
+    null,
+  );
+  const [view, setView] = useState<"cards" | "catalogue" | "setup" | "music">("cards");
   const [playback, setPlayback] = useState<PlaybackSettings>(defaultPlayback);
   const [kind, setKind] = useState<KidCardKind>("meet");
   const [factsId, setFactsId] = useState(RANDOM_POKEDEX_ID);
@@ -403,44 +496,49 @@ export function Studio({
   const [speaking, setSpeaking] = useState(false);
   const [hearError, setHearError] = useState("");
   const [sending, setSending] = useState(false);
-  const [localBuilding, setLocalBuilding] = useState(false);
-  const [localLabel, setLocalLabel] = useState("");
-  const [localDone, setLocalDone] = useState(0);
-  const [localFailures, setLocalFailures] = useState<Array<{ id: number; name: string; error: string }>>([]);
-  const [localFailed, setLocalFailed] = useState(false);
   const [bulkActive, setBulkActive] = useState(false);
   const [job, setJob] = useState<JobView | null>(null);
   const [stickersOpen, setStickersOpen] = useState(false);
   const [ready, setReady] = useState(false);
+  const choiceListRef = useRef<HTMLElement | null>(null);
   const clipRef = useRef<HTMLAudioElement | null>(null);
   const clipUrl = useRef<string | null>(null);
   const hearAbort = useRef<AbortController | null>(null);
-  const localAbort = useRef<AbortController | null>(null);
   const speakingRef = useRef(false);
 
   const cardId = kind === "meet" ? factsId : guessId;
+  const playlistCard =
+    isFormPlaylistKind(kind) || isSpeciesPlaylistKind(kind)
+      ? activePlaylist(playlists, kind, playlistId[kind])
+      : undefined;
   const card =
-    kind === "mega"
-      ? megaCard
-      : kind === "gmax"
-        ? gmaxCard
-        : cardId === RANDOM_POKEDEX_ID
-          ? randomCard
-          : cardId === RANDOM_GUESS_ID
-            ? guessCard
-            : (cards.find((item) => item.id === cardId) ?? cards.find((item) => item.kind === kind));
+    playlistCard ??
+    (cardId === RANDOM_POKEDEX_ID
+      ? randomCard
+      : cardId === RANDOM_GUESS_ID
+        ? guessCard
+        : (cards.find((item) => item.id === cardId) ?? cards.find((item) => item.kind === kind)));
   const randomFacts = card?.id === RANDOM_POKEDEX_ID;
   const randomGuess = card?.id === RANDOM_GUESS_ID;
   const chapter =
     card?.chapters.find((item) => item.key === chapterKey) ??
     (card ? playableChapters(card)[0] : undefined);
   const rangeCards =
-    kind === "mega" ? [megaCard] : kind === "gmax" ? [gmaxCard] : kind === "meet" ? [randomCard, ...factsCards] : [guessCard];
+    isFormPlaylistKind(kind) || isSpeciesPlaylistKind(kind)
+      ? playlists[kind]
+      : kind === "meet"
+        ? [randomCard, ...factsCards]
+        : [guessCard];
   const listed = (card ? playableChapters(card) : []).filter((item) => {
     const needle = query.trim().toLowerCase();
     if (!needle) return true;
     if (card?.kind === "guess") return item.overlay.includes(needle);
-    return item.title.toLowerCase().includes(needle) || item.overlay === needle;
+    const number = chapterNumber(item);
+    return (
+      item.title.toLowerCase().includes(needle) ||
+      number === needle ||
+      item.overlay.toLowerCase() === needle
+    );
   });
 
   useEffect(() => {
@@ -459,27 +557,43 @@ export function Studio({
     };
   }, []);
 
+  const factFallback = chapter ? chapterDexText(chapter) : "";
+
   useEffect(() => {
-    if (kind !== "meet" || !chapter?.dexId) return;
+    if (!readsSpeciesBiology(kind) || !chapter?.dexId) return;
     const id = chapter.dexId;
     const name = chapter.title;
+    const fallback = factFallback;
     const controller = new AbortController();
     void fetch(`/api/catalogue/${id}/biology`, { signal: controller.signal })
       .then(async (response) => {
-        const payload = (await response.json()) as { speech?: string; biology?: { url?: string } };
+        const payload = (await response.json()) as {
+          speech?: string;
+          notice?: string;
+          biology?: { url?: string };
+        };
         if (controller.signal.aborted) return;
+        const speech = payload.speech?.replace(/\s+/g, " ").trim() ?? "";
+        const notice = payload.notice?.replace(/\s+/g, " ").trim() ?? "";
+        const failed = nameOnlySpeech(name, speech);
         setFactSpeech({
           id,
-          speech: payload.speech?.replace(/\s+/g, " ").trim() || `${name}.`,
-          url: payload.biology?.url ?? "",
+          speech: failed ? fallback || `${name}.` : speech,
+          url: failed ? "" : (payload.biology?.url ?? ""),
+          notice: failed ? notice || WIKI_DEX_NOTE : notice,
         });
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
-        setFactSpeech({ id, speech: `${name}.`, url: "" });
+        setFactSpeech({
+          id,
+          speech: fallback || `${name}.`,
+          url: "",
+          notice: WIKI_DEX_NOTE,
+        });
       });
     return () => controller.abort();
-  }, [kind, chapter?.dexId, chapter?.title]);
+  }, [kind, chapter?.dexId, chapter?.title, factFallback]);
 
   function stopClip() {
     const audio = clipRef.current;
@@ -505,42 +619,51 @@ export function Studio({
     setKind(next.kind);
     if (next.kind === "meet") setFactsId(next.id);
     else if (next.kind === "guess") setGuessId(next.id);
+    else if (isFormPlaylistKind(next.kind) || isSpeciesPlaylistKind(next.kind)) {
+      const playlistKind = next.kind;
+      setPlaylistId((current) => ({ ...current, [playlistKind]: next.id }));
+    }
     setChapterKey(playableChapters(next)[0]?.key ?? "start");
     setJob(null);
   }
 
-  function rememberForm(nextKind: "mega" | "gmax", next: KidCard) {
-    if (nextKind === "mega") {
-      megaRef.current = next;
-      setMegaCard(next);
-    } else {
-      gmaxRef.current = next;
-      setGmaxCard(next);
-    }
+  function rememberFormLists(nextKind: FormPlaylistKind, next: KidCard[]) {
+    const updated = { ...playlistsRef.current, [nextKind]: next };
+    playlistsRef.current = updated;
+    setPlaylists(updated);
   }
 
   function ensureFormProse(
-    nextKind: "mega" | "gmax",
+    nextKind: FormPlaylistKind,
     onProgress?: (detail: string) => void,
   ): Promise<void> {
     const existing = formLoad.current[nextKind];
     if (existing) return existing;
     const job = (async () => {
-      const source = nextKind === "mega" ? megaRef.current : gmaxRef.current;
+      const source = playlistsRef.current[nextKind];
       let current = source;
-      const pending = current.chapters.filter((chapter) => chapter.formId && !chapter.articleStatus);
+      const pending = current.flatMap((card) => card.chapters.filter((chapter) => chapter.formId && !chapter.articleStatus));
       let finished = 0;
+      const label = current.find((card) => card.chapters.length > 0)?.title ?? "Forms";
       const readings = await mapPool(pending, async (chapter) => {
         const reading = chapter.formId ? await formReading(chapter.formId) : null;
         finished += 1;
-        onProgress?.(`${current.libraryTitle}, description ${finished} of ${pending.length}`);
+        onProgress?.(
+          statusWithDexNote(`${label}, description ${finished} of ${pending.length}`, reading?.notice ?? ""),
+        );
         return { formId: chapter.formId, reading };
       });
       for (const item of readings) {
-        if (!item.formId || !item.reading) continue;
-        current = withFormReading(current, item.formId, item.reading);
+        const formId = item.formId;
+        const reading = item.reading;
+        if (!formId || !reading) continue;
+        current = current.map((card) =>
+          card.chapters.some((chapter) => chapter.formId === formId)
+            ? withFormReading(card, formId, reading)
+            : card,
+        );
       }
-      if (readings.length > 0) rememberForm(nextKind, current);
+      if (readings.length > 0) rememberFormLists(nextKind, current);
     })();
     formLoad.current[nextKind] = job;
     return job;
@@ -549,13 +672,17 @@ export function Studio({
   function showKind(nextKind: KidCardKind) {
     stopDemo();
     setRevealed(false);
+    if (view !== "cards" || nextKind !== kind) {
+      setQuery("");
+      setJob(null);
+    }
     setView("cards");
     setKind(nextKind);
-    if (nextKind === "mega" || nextKind === "gmax") {
-      const next = nextKind === "mega" ? megaRef.current : gmaxRef.current;
-      setChapterKey(playableChapters(next)[0]?.key ?? "start");
+    if (isFormPlaylistKind(nextKind) || isSpeciesPlaylistKind(nextKind)) {
+      const next = activePlaylist(playlistsRef.current, nextKind, playlistId[nextKind]);
+      setChapterKey(next ? (playableChapters(next)[0]?.key ?? "start") : "start");
       setJob(null);
-      void ensureFormProse(nextKind);
+      if (isFormPlaylistKind(nextKind)) void ensureFormProse(nextKind);
       return;
     }
     const id = nextKind === "meet" ? factsId : guessId;
@@ -602,6 +729,12 @@ export function Studio({
     setRevealed(false);
     setChapterKey(key);
   }
+
+  useEffect(() => {
+    const nav = choiceListRef.current;
+    if (!nav) return;
+    revealChoice(nav);
+  }, [chapter?.key, card?.id, query, kind, view]);
 
   async function requestDemo(text: string, title: string, dexId?: number) {
     const script = text.replace(/\s+/g, " ").trim();
@@ -876,12 +1009,20 @@ export function Studio({
     }
   }
 
-  async function discardScratch(cardId: string) {
+  function scratchCardId(job: {
+    cardId?: string;
+    result?: { cardId?: string; contentId?: string; card?: { cardId?: string } };
+  }): string | undefined {
+    const id = job.result?.cardId || job.result?.contentId || job.result?.card?.cardId || job.cardId;
+    return id && /^[\w-]{4,80}$/.test(id) ? id : undefined;
+  }
+
+  async function discardScratch(cardIds: string[]) {
     try {
       await yotoFetch("/api/yoto/track", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ discardCardId: cardId }),
+        body: JSON.stringify({ discardCardIds: cardIds, sweepScratch: true }),
       });
     } catch {
       // A leftover scratch card is not the playlist.
@@ -945,7 +1086,7 @@ export function Studio({
           if (payload.phase === "speech" && payload.speechJobId) {
             speechJobId = payload.speechJobId;
             const finished = await pollJob(payload.speechJobId, job.progress, mark);
-            const cardId = finished.result?.cardId;
+            const cardId = scratchCardId(finished);
             if (!cardId) throw new SendFailure("The voice did not return a recording.", false);
             speechCardId = cardId;
             scratch.add(cardId);
@@ -991,7 +1132,7 @@ export function Studio({
       });
       return audio;
     } finally {
-      await mapPool([...scratch], (cardId) => discardScratch(cardId));
+      await discardScratch([...scratch]);
     }
   }
 
@@ -1007,8 +1148,12 @@ export function Studio({
     if (!(await connectedSession())) {
       throw new Error("Connect Yoto before building a playlist.");
     }
+    const dexNote = playlistDexNote(playlist);
     setSending(true);
-    setJob({ status: "sending", detail: `Sending ${playlist.libraryTitle} to Yoto…` });
+    setJob({
+      status: "sending",
+      detail: statusWithDexNote(`Sending ${playlist.libraryTitle} to Yoto…`, dexNote),
+    });
     try {
       const chosenId = validYotoCardId(targetPlaylist);
       if (chosenId) {
@@ -1031,9 +1176,12 @@ export function Studio({
       const tracks = countSpokenTracks(playlist.chapters);
       setJob({
         status: "completed",
-        detail: chosenId
-          ? `${updatedTitle ?? "The playlist"} was updated.`
-          : `${playlist.libraryTitle} is in your Yoto library.`,
+        detail: statusWithDexNote(
+          chosenId
+            ? `${updatedTitle ?? "The playlist"} was updated.`
+            : `${playlist.libraryTitle} is in your Yoto library.`,
+          dexNote,
+        ),
         done: tracks,
         total: tracks,
       });
@@ -1067,28 +1215,32 @@ export function Studio({
         const free = YOTO_TRACK_LIMIT - (summary.tracks ?? 0);
         if (adding > free) throw new SendFailure(freeSlotMessage(free, adding), false);
       }
-      const formKind = card.kind === "mega" || card.kind === "gmax";
-      const spokenCard = formKind
-        ? card
-        : card.kind === "guess"
-          ? card
-          : applySpeciesSpeech(
-              card,
-              await speechesFor(card, (done, total) => {
-                setJob({
-                  status: "sending",
-                  detail: `${card.libraryTitle}, description ${done} of ${total}`,
-                  done,
-                  total,
-                });
-              }),
-            );
-      if (card.kind === "mega" || card.kind === "gmax") {
+      const formKind = isFormPlaylistKind(card.kind);
+      let dexNote = "";
+      let spokenCard = card;
+      if (!formKind && card.kind !== "guess") {
+        const readings = await speechesFor(card, (done, total, notice) => {
+          if (notice) dexNote = notice;
+          setJob({
+            status: "sending",
+            detail: statusWithDexNote(`${card.libraryTitle}, description ${done} of ${total}`, notice),
+            done,
+            total,
+          });
+        });
+        if (readings.notice) dexNote = readings.notice;
+        spokenCard = applySpeciesSpeech(card, readings.speech);
+      }
+      if (isFormPlaylistKind(card.kind)) {
         await ensureFormProse(card.kind, (detail) => {
+          if (detail.includes(WIKI_DEX_NOTE)) dexNote = WIKI_DEX_NOTE;
           setJob({ status: "sending", detail });
         });
       }
-      const readyForm = card.kind === "mega" ? megaRef.current : card.kind === "gmax" ? gmaxRef.current : spokenCard;
+      const readyForm = isFormPlaylistKind(card.kind)
+        ? (activePlaylist(playlistsRef.current, card.kind, card.id) ?? spokenCard)
+        : spokenCard;
+      if (!dexNote) dexNote = playlistDexNote(readyForm);
       const base = randomGuess
         ? await (async () => {
             const icons = await uploadGuessIcons(card);
@@ -1105,9 +1257,12 @@ export function Studio({
       const tracks = countSpokenTracks(card.chapters);
       setJob({
         status: "completed",
-        detail: chosenId
-          ? `${updatedTitle ?? "The playlist"} was updated.`
-          : `${card.rangeLabel} is in your Yoto library.`,
+        detail: statusWithDexNote(
+          chosenId
+            ? `${updatedTitle ?? "The playlist"} was updated.`
+            : `${card.rangeLabel} is in your Yoto library.`,
+          dexNote,
+        ),
         done: tracks,
         total: tracks,
       });
@@ -1133,23 +1288,24 @@ export function Studio({
     try {
       for (const playlist of playlists) forgetCard(playlist.id);
       const createdTitles: string[] = [];
+      let dexNote = "";
       for (let index = 0; index < playlists.length; index += 1) {
         const playlist = playlists[index];
         if (!playlist) continue;
         const headline = bulkProgressLabel(index + 1, playlists.length);
         setJob({ status: "sending", detail: headline, done: index, total: playlists.length });
         try {
-          const spoken = applySpeciesSpeech(
-            playlist,
-            await speechesFor(playlist, (done, total) => {
-              setJob({
-                status: "sending",
-                detail: `${playlist.libraryTitle}, description ${done} of ${total}`,
-                done,
-                total,
-              });
-            }),
-          );
+          const readings = await speechesFor(playlist, (done, total, notice) => {
+            if (notice) dexNote = notice;
+            setJob({
+              status: "sending",
+              detail: statusWithDexNote(`${playlist.libraryTitle}, description ${done} of ${total}`, notice),
+              done,
+              total,
+            });
+          });
+          if (readings.notice) dexNote = readings.notice;
+          const spoken = applySpeciesSpeech(playlist, readings.speech);
           const pixels = await uploadPixels(spoken, (done, total) => {
             setJob({
               status: "sending",
@@ -1179,7 +1335,10 @@ export function Studio({
       }
       setJob({
         status: "completed",
-        detail: `All ${playlists.length} Pokefacts playlists are in your Yoto library.`,
+        detail: statusWithDexNote(
+          `All ${playlists.length} Pokefacts playlists are in your Yoto library.`,
+          dexNote,
+        ),
         done: playlists.length,
         total: playlists.length,
       });
@@ -1193,115 +1352,6 @@ export function Studio({
     }
   }
 
-  async function buildAllLocalFacts() {
-    if (localBuilding) {
-      localAbort.current?.abort();
-      return;
-    }
-    if (!isPiperVoice(voiceId)) {
-      const live = await ensureSession();
-      if (!live) {
-        setConnectOpen(true);
-        setLocalFailed(true);
-        setLocalLabel(CONNECT_FOR_VOICE);
-        setLocalDone(0);
-        setLocalFailures([]);
-        return;
-      }
-    }
-    const names = new Map<number, string>();
-    for (const chapter of factPoolFromCards(cards)) {
-      if (chapter.dexId) names.set(chapter.dexId, chapter.title);
-    }
-    const ids = Array.from({ length: NATIONAL_DEX_TOTAL }, (_, index) => index + 1);
-    const controller = new AbortController();
-    localAbort.current = controller;
-    setLocalBuilding(true);
-    setLocalFailed(false);
-    setLocalFailures([]);
-    setLocalDone(0);
-    setLocalLabel(`0 of ${NATIONAL_DEX_TOTAL.toLocaleString("en-GB")}.`);
-    const failures: Array<{ id: number; name: string; error: string }> = [];
-    const inflight = new Map<number, string>();
-    let done = 0;
-    let stopped = false;
-    const paint = () => {
-      const current = [...inflight.values()];
-      const failureNote = failures.length > 0 ? ` ${failures.length} could not be built.` : "";
-      const building = current.length > 0 ? ` Building ${current.join(", ")}.` : "";
-      setLocalDone(done);
-      setLocalLabel(`${done.toLocaleString("en-GB")} of ${NATIONAL_DEX_TOTAL.toLocaleString("en-GB")}.${building}${failureNote}`);
-      setLocalFailures(failures.slice());
-    };
-    try {
-      await mapPool(ids, async (id) => {
-        if (controller.signal.aborted || stopped) return;
-        const name = names.get(id) ?? `Number ${id}`;
-        inflight.set(id, name);
-        paint();
-        try {
-          const headers: Record<string, string> = { "Content-Type": "application/json" };
-          if (!isPiperVoice(voiceId)) {
-            const live = await ensureSession();
-            if (!live) throw new Error(CONNECT_FOR_VOICE);
-            headers.Authorization = `Bearer ${live.accessToken}`;
-          }
-          const response = await fetch("/api/facts/local", {
-            method: "POST",
-            headers,
-            body: JSON.stringify({
-              dexId: id,
-              voiceId,
-              cryVolume: playback.cryVolume,
-              voiceVolume: playback.voiceVolume,
-              pauseSeconds: playback.pauseSeconds,
-            }),
-            signal: controller.signal,
-          });
-          const payload = (await response.json().catch(() => null)) as { error?: string; status?: string } | null;
-          if (response.status === 401 || payload?.error === CONNECT_FOR_VOICE) {
-            stopped = true;
-            controller.abort();
-            setLocalFailed(true);
-            setConnectOpen(true);
-            setLocalLabel(CONNECT_FOR_VOICE);
-            return;
-          }
-          if (!response.ok) throw new Error(payload?.error || "This fact was not built.");
-          done += 1;
-        } catch (error) {
-          if (controller.signal.aborted || stopped) return;
-          const message = error instanceof Error ? error.message : "This fact was not built.";
-          if (message === CONNECT_FOR_VOICE) {
-            stopped = true;
-            controller.abort();
-            setLocalFailed(true);
-            setConnectOpen(true);
-            setLocalLabel(CONNECT_FOR_VOICE);
-            return;
-          }
-          failures.push({ id, name, error: message });
-        } finally {
-          inflight.delete(id);
-          if (!stopped) paint();
-        }
-      });
-      if (controller.signal.aborted && !stopped) {
-        setLocalLabel(
-          `Stopped at ${done.toLocaleString("en-GB")} of ${NATIONAL_DEX_TOTAL.toLocaleString("en-GB")}. Finished tracks stay on this PC.`,
-        );
-      } else if (!stopped) {
-        const failureNote = failures.length > 0 ? ` ${failures.length} could not be built.` : "";
-        setLocalLabel(
-          `${done.toLocaleString("en-GB")} of ${NATIONAL_DEX_TOTAL.toLocaleString("en-GB")}.${failureNote} Start again to continue the rest.`,
-        );
-      }
-    } finally {
-      setLocalBuilding(false);
-      localAbort.current = null;
-    }
-  }
-
   function disconnect() {
     writeSession(null);
     setSession(null);
@@ -1312,9 +1362,11 @@ export function Studio({
   }
 
   const guessing = card?.kind === "guess";
-  const formMode = card?.kind === "mega" || card?.kind === "gmax";
+  const formMode = card ? isFormPlaylistKind(card.kind) : false;
+  const speciesSet = card ? isSpeciesPlaylistKind(card.kind) : false;
+  const splitSet = (formMode || speciesSet) && rangeCards.length > 1;
   const factReading =
-    kind === "meet" && chapter?.dexId && factSpeech?.id === chapter.dexId ? factSpeech : null;
+    readsSpeciesBiology(kind) && chapter?.dexId && factSpeech?.id === chapter.dexId ? factSpeech : null;
   const visibleTracks =
     guessing && !revealed ? chapter?.tracks.slice(0, 1) : chapter?.tracks;
   const source = visibleTracks?.find((track) => track.source)?.source;
@@ -1329,7 +1381,7 @@ export function Studio({
 
   return (
     <div className="pk-page">
-      <header className="mx-auto w-full max-w-5xl px-4 pt-6 pb-2 sm:px-6">
+      <header className="mx-auto w-full min-w-0 max-w-5xl px-4 pt-6 pb-2 sm:px-6">
         <div className="pk-banner">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <a className="pk-wordmark" href={DONATE_URL} target="_blank" rel="noreferrer">
@@ -1349,37 +1401,48 @@ export function Studio({
                 </button>
               ) : (
                 <button type="button" className="pk-banner-btn" onClick={() => setConnectOpen(true)}>
-                  Put this on a Yoto card
+                  Connect Yoto
                 </button>
               )}
             </div>
           </div>
-          <h1 className="mt-4 text-3xl font-bold tracking-tight text-white sm:text-4xl">
+          <h1 className="mt-3 text-2xl font-bold tracking-tight text-white sm:mt-4 sm:text-4xl">
             {view === "setup"
               ? "Set up Pokefacts"
               : view === "catalogue"
               ? "Reference catalogue"
+              : view === "music"
+                ? "Pokémon music"
               : guessing
                 ? "Guess Who"
-                : formMode
+                : formMode || speciesSet
                   ? card?.libraryTitle
                   : "Pokémon facts"}
           </h1>
           <p className="mt-1 max-w-xl text-sm leading-6 text-white/90">
             {view === "setup"
-              ? "Node, ffmpeg, and a public Yoto app. Then the playlists appear under Make Your Own."
+              ? "Connect Yoto, send a playlist, then link it to a blank card in the Yoto app."
               : view === "catalogue"
               ? "Every species from Kanto to Paldea. The Pokédex line is from the games, with the type, size, abilities, evolution, and stats."
+              : view === "music"
+                ? "Albums and songs from Bulbapedia. Play a list here, or save the YouTube audio as an MP3 on a Yoto playlist."
               : guessing
                 ? "Fifty riddles, drawn at random. You hear the cry, then the clues. The picture stays a shadow until the answer."
                 : formMode
                   ? "The cry, then the selected voice reads that form."
+                  : speciesSet
+                    ? "The cry, then the selected voice reads the name and a short description."
                   : randomFacts
                     ? "One hundred Pokémon, drawn at random. You hear the cry, then the selected voice reads the name and a short description."
                     : "The cry, then the name, then a short description."}
           </p>
         </div>
-        <div className="mt-5 flex gap-2 overflow-x-auto pb-2" role="tablist" aria-label="Play mode">
+      </header>
+      <div
+        className="pk-tabs mx-auto flex w-full min-w-0 max-w-5xl flex-wrap content-start gap-x-2 gap-y-3 px-4 sm:px-6"
+        role="tablist"
+        aria-label="Play mode"
+      >
           <button
             type="button"
             role="tab"
@@ -1388,7 +1451,7 @@ export function Studio({
               stopDemo();
               setView("catalogue");
             }}
-            className="pk-tab shrink-0"
+            className="pk-tab"
           >
             Catalogue
           </button>
@@ -1397,7 +1460,7 @@ export function Studio({
             role="tab"
             aria-selected={view === "cards" && kind === "meet"}
             onClick={() => showKind("meet")}
-            className="pk-tab shrink-0"
+            className="pk-tab"
           >
             Facts
           </button>
@@ -1406,7 +1469,7 @@ export function Studio({
             role="tab"
             aria-selected={view === "cards" && kind === "guess"}
             onClick={() => showKind("guess")}
-            className="pk-tab shrink-0"
+            className="pk-tab"
           >
             Guess Who
           </button>
@@ -1415,7 +1478,7 @@ export function Studio({
             role="tab"
             aria-selected={view === "cards" && kind === "mega"}
             onClick={() => showKind("mega")}
-            className="pk-tab shrink-0"
+            className="pk-tab"
           >
             Mega Evolutions
           </button>
@@ -1424,9 +1487,57 @@ export function Studio({
             role="tab"
             aria-selected={view === "cards" && kind === "gmax"}
             onClick={() => showKind("gmax")}
-            className="pk-tab shrink-0"
+            className="pk-tab"
           >
             Gigantamax
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "cards" && kind === "alola"}
+            onClick={() => showKind("alola")}
+            className="pk-tab"
+          >
+            Alolan forms
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "cards" && kind === "hisui"}
+            onClick={() => showKind("hisui")}
+            className="pk-tab"
+          >
+            Hisuian forms
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "cards" && kind === "legendary"}
+            onClick={() => showKind("legendary")}
+            className="pk-tab"
+          >
+            Legendary Pokémon
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "cards" && kind === "mythical"}
+            onClick={() => showKind("mythical")}
+            className="pk-tab"
+          >
+            Mythical Pokémon
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "music"}
+            onClick={() => {
+              stopDemo();
+              setView("music");
+            }}
+            className="pk-tab"
+          >
+            Music
           </button>
           <button
             type="button"
@@ -1436,20 +1547,17 @@ export function Studio({
               stopDemo();
               setView("setup");
             }}
-            className="pk-tab shrink-0"
+            className="pk-tab"
           >
             Setup
           </button>
-        </div>
-        <PlaybackPanel
-          settings={playback}
-          onChange={setPlayback}
-          voiceId={voiceId}
-          onVoiceId={(id) => setVoiceId(writeVoiceId(localStorage, id))}
-        />
-      </header>
+      </div>
+      <div className="mx-auto w-full min-w-0 max-w-5xl px-4 sm:px-6">
+        <PlaybackPanel settings={playback} onChange={setPlayback} />
+      </div>
 
-      <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6">
+      <main className="mx-auto w-full min-w-0 max-w-5xl px-4 py-6 sm:px-6">
+        <div key={view === "cards" ? `${view}-${kind}` : view} className="pk-view">
         {view === "setup" ? (
           <SetupGuide onConnect={() => setConnectOpen(true)} />
         ) : view === "catalogue" ? (
@@ -1459,29 +1567,28 @@ export function Studio({
             playlists={library}
             playlistTarget={targetPlaylist}
             onPlaylistTarget={setTargetPlaylist}
+            voiceId={voiceId}
+            onVoiceId={(id) => setVoiceId(writeVoiceId(localStorage, id))}
             units={playback.units}
             job={job}
           />
+        ) : view === "music" ? (
+          <MusicPanel
+            playlists={library}
+            libraryNote={libraryNote}
+            onConnect={() => setConnectOpen(true)}
+            playlistTarget={targetPlaylist}
+            onPlaylistTarget={setTargetPlaylist}
+            voiceId={voiceId}
+          />
         ) : card && chapter ? (
-          <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
-            <div className="lg:col-span-2">
-              <div className="pk-card px-4 py-4 sm:px-5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button type="button" variant="outline" className="h-10 px-4" onClick={() => setStickersOpen(true)}>
-                    Print stickers
-                  </Button>
-                  {randomFacts ? (
-                    <Button type="button" variant="outline" className="h-10 px-4" onClick={shufflePokedex}>
-                      Shuffle
-                    </Button>
-                  ) : null}
-                  {randomGuess ? (
-                    <Button type="button" variant="outline" className="h-10 px-4" onClick={shuffleGuess}>
-                      Shuffle
-                    </Button>
-                  ) : null}
-                </div>
-                <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
+          <div className="grid min-w-0 gap-6 md:grid-cols-[17.5rem_minmax(0,1fr)]">
+            <div className="order-3 min-w-0 md:order-1 md:col-span-2">
+              <div className="flex flex-wrap items-center gap-3">
+                <Button type="button" variant="outline" className="h-11 px-4" onClick={() => setStickersOpen(true)}>
+                  Print stickers
+                </Button>
+                <p className="text-sm leading-6 text-muted-foreground">
                   {randomGuess ? (
                     <>
                       This playlist is the{" "}
@@ -1495,11 +1602,24 @@ export function Studio({
                       <span className="font-bold text-ink">100 Pokémon on this page</span>.
                       Shuffle draws a new hundred. Send uses this list, not a new draw.
                     </>
+                  ) : splitSet ? (
+                    <>
+                      This playlist is{" "}
+                      <span className="font-bold text-ink">{card.rangeLabel}</span>. {card.blurb}
+                    </>
                   ) : formMode ? (
                     <>
                       This playlist is{" "}
                       <span className="font-bold text-ink">{card.libraryTitle}</span>. One
-                      track for each form. The picture is that species&apos; 16×16 pixel.
+                      track for each form. The picture is that form&apos;s full artwork.
+                      The Yoto card still uses the species&apos; 16×16 pixel.
+                    </>
+                  ) : speciesSet ? (
+                    <>
+                      This playlist is{" "}
+                      <span className="font-bold text-ink">{card.libraryTitle}</span>. One
+                      track for each Pokémon. The picture is the full artwork. The Yoto icon is
+                      the 16×16 pixel.
                     </>
                   ) : (
                     <>
@@ -1509,67 +1629,53 @@ export function Studio({
                     </>
                   )}
                 </p>
-                {kind === "meet" ? (
-                  <div className="mt-4 border-t-2 border-[#16324f]/15 pt-4">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-11 px-4"
-                        disabled={!ready || sending}
-                        onClick={() => void buildAllLocalFacts()}
-                      >
-                        {localBuilding ? "Stop building facts" : "Build all facts on this PC"}
-                      </Button>
-                      <Button
-                        type="button"
-                        className="h-11 px-4"
-                        disabled={sending || !ready || localBuilding}
-                        onClick={() => void sendAllFacts()}
-                      >
-                        {sending && bulkActive
-                          ? "Recording…"
-                          : `Send all ${factsPlaylists.length} Pokefacts playlists`}
-                      </Button>
-                    </div>
-                    <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-                      Build saves all 1,025 facts on this computer: the cry, then the voice and volumes in Settings.
-                      It does not create a Yoto playlist. Stop whenever you like. Start again and finished tracks are skipped.
-                      Send uses those mixes, then uploads the playlists.
-                    </p>
-                    {localLabel ? (
-                      <StatusBar
-                        label={localLabel}
-                        done={localDone}
-                        total={NATIONAL_DEX_TOTAL}
-                        failed={localFailed}
-                      />
-                    ) : null}
-                    {localFailures.length > 0 ? (
-                      <ul className="mt-2 grid gap-1 text-sm leading-6 pk-danger" role="alert">
-                        {localFailures.slice(0, 8).map((item) => (
-                          <li key={item.id}>
-                            {item.name}: {item.error}
-                          </li>
-                        ))}
-                        {localFailures.length > 8 ? <li>{localFailures.length - 8} more failed.</li> : null}
-                      </ul>
-                    ) : null}
-                  </div>
+                {randomFacts ? (
+                  <Button type="button" variant="outline" className="h-10 px-4" onClick={shufflePokedex}>
+                    Shuffle
+                  </Button>
                 ) : null}
-                {job ? (
-                  <StatusBar
-                    label={job.detail}
-                    done={job.done}
-                    total={job.total}
-                    failed={job.status === "failed"}
-                  />
+                {randomGuess ? (
+                  <Button type="button" variant="outline" className="h-10 px-4" onClick={shuffleGuess}>
+                    Shuffle
+                  </Button>
                 ) : null}
               </div>
+              {kind === "meet" ? (
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <Button
+                    type="button"
+                    className="h-11 px-4"
+                    disabled={sending || !ready}
+                    onClick={() => void sendAllFacts()}
+                  >
+                    {sending && bulkActive
+                      ? "Recording…"
+                      : `Send all ${factsPlaylists.length} Pokefacts playlists`}
+                  </Button>
+                  <p className="max-w-xl text-sm leading-6 text-muted-foreground">
+                    Sends every Pokefacts playlist, one after another, so all 1,025 Pokémon are covered.
+                    Each playlist stays at 100 tracks or fewer. The voice you pick reads every track.
+                  </p>
+                </div>
+              ) : null}
+              {job ? (
+                <StatusBar
+                  label={job.detail}
+                  done={job.done}
+                  total={job.total}
+                  failed={job.status === "failed"}
+                />
+              ) : null}
               <div
-                className="mt-3 flex gap-2 overflow-x-auto pb-1"
+                className="pk-scroll mt-3 flex gap-2 overflow-x-auto pb-1"
                 role="listbox"
-                aria-label={guessing ? "Guess Who playlists" : "Facts playlists"}
+                aria-label={
+                  guessing
+                    ? "Guess Who playlists"
+                    : formMode || speciesSet
+                      ? `${card.title} playlists`
+                      : "Facts playlists"
+                }
               >
                 {rangeCards.map((item) => {
                   const selected = item.id === card.id;
@@ -1589,7 +1695,7 @@ export function Studio({
               </div>
             </div>
 
-            <div className="grid content-start gap-2 self-start">
+            <div className="order-2 grid min-w-0 content-start gap-2 self-start md:order-2">
               <label className="grid gap-1 text-sm" htmlFor="picker">
                 {guessing ? "Riddle on this card" : "Pokémon on this card"}
                 <input
@@ -1602,75 +1708,101 @@ export function Studio({
               </label>
               <select
                 aria-label={guessing ? "Choose a riddle" : "Choose a Pokémon"}
-                className="pk-field lg:hidden"
-                value={chapter.key}
+                className="pk-field md:hidden"
+                value={listed.some((item) => item.key === chapter.key) ? chapter.key : ""}
                 onChange={(event) => {
-                  const next = playableChapters(card).find((item) => item.key === event.target.value);
+                  const next = listed.find((item) => item.key === event.target.value);
                   if (next) chooseChapter(next.key);
                 }}
               >
-                {playableChapters(card).map((item) => (
+                {listed.length === 0 ? <option value="">Nothing matches</option> : null}
+                {listed.some((item) => item.key === chapter.key) ? null : listed.length > 0 ? (
+                  <option value="">Choose a match</option>
+                ) : null}
+                {listed.map((item) => (
                   <option key={item.key} value={item.key}>
-                    {guessing ? `Riddle ${item.overlay}` : `${item.overlay}. ${item.title}`}
+                    {guessing ? `Riddle ${chapterNumber(item)}` : `${chapterNumber(item)}. ${item.title}`}
                   </option>
                 ))}
               </select>
               <nav
+                ref={choiceListRef}
                 aria-label={guessing ? "Riddles" : "Pokémon"}
-                className="pk-card grid max-h-[40dvh] content-start grid-cols-3 gap-1 overflow-y-auto p-2 md:max-h-[70dvh] lg:grid-cols-1 lg:p-2"
+                className="pk-scroll flex gap-2 overflow-x-auto pb-1 md:grid md:max-h-[70dvh] md:content-start md:grid-cols-1 md:overflow-x-hidden md:overflow-y-auto"
               >
+                {listed.length === 0 ? (
+                  <p className="px-1 py-3 text-sm text-muted-foreground">Nothing matches that search.</p>
+                ) : null}
                 {listed.map((item) => {
                   const selected = item.key === chapter.key;
-                  const label = guessing ? `Riddle ${item.overlay}` : item.title;
+                  const label = guessing ? `Riddle ${chapterNumber(item)}` : item.title;
                   return (
                     <button
                       key={item.key}
                       type="button"
                       onClick={() => chooseChapter(item.key)}
                       aria-current={selected ? "true" : undefined}
-                      aria-label={guessing ? `Riddle ${item.overlay}` : undefined}
-                      className={`pk-choice whitespace-nowrap px-2.5 py-2.5 text-sm ${guessing ? "text-center lg:text-left" : ""}`}
+                      className="pk-choice flex w-44 shrink-0 items-center gap-2 px-2.5 py-2 text-left text-sm md:w-auto md:shrink"
                     >
-                      {guessing ? item.overlay : label}
+                      {!guessing && item.sprite ? (
+                        <img
+                          src={item.sprite}
+                          alt=""
+                          width={44}
+                          height={44}
+                          data-fallback={item.dexId && item.sprite !== artworkSrc(item.dexId) ? artworkSrc(item.dexId) : undefined}
+                          onError={hideBrokenPicture}
+                          className="pk-artwork-thumb"
+                        />
+                      ) : null}
+                      <span className="min-w-0">{label}</span>
                     </button>
                   );
                 })}
               </nav>
             </div>
 
-            <div className="min-w-0">
-              <article className="pk-card pk-dex px-5 py-6 sm:px-8 sm:py-8">
+            <div className="order-1 min-w-0 md:order-3">
+              <article className="pk-card pk-dex px-4 py-6 sm:px-8 sm:py-8">
+                <div key={chapter.key} className="pk-swap">
                 <p className="pk-kicker">
                   {guessing
                     ? revealed
                       ? "Answer"
                       : "Clues"
-                    : `Number ${chapter.overlay}`}
+                    : `Number ${chapterNumber(chapter)}`}
                 </p>
-                <div className="mt-3 flex items-center gap-4">
+                <div className="pk-hero">
                   {portrait ? (
                     <img
                       src={portrait}
-                      alt={guessing && !revealed ? "Shadow of the Pokémon" : chapter.title}
-                      width={96}
-                      height={96}
-                      className="pk-sprite"
+                      alt={guessing && !revealed ? "" : chapter.title}
+                      width={guessing ? 96 : 176}
+                      height={guessing ? 96 : 176}
+                      data-fallback={
+                        !guessing && chapter.dexId && portrait !== artworkSrc(chapter.dexId)
+                          ? artworkSrc(chapter.dexId)
+                          : undefined
+                      }
+                      onError={hideBrokenPicture}
+                      className={guessing ? "pk-sprite" : "pk-art"}
                     />
                   ) : null}
-                  <div className="min-w-0">
-                    <h2 className="font-display text-4xl leading-none sm:text-5xl">
-                      {guessing && !revealed ? `Riddle ${chapter.overlay}` : chapter.title}
-                    </h2>
-                    {guessing && !revealed ? (
-                      <p className="mt-2 text-sm font-bold text-muted-foreground">Number {chapter.overlay}</p>
-                    ) : null}
-                  </div>
+                  <h2 className="font-display text-4xl leading-tight sm:text-5xl">
+                    {guessing && !revealed ? `Riddle ${chapter.overlay}` : chapter.title}
+                  </h2>
                 </div>
-                {guessing && !revealed ? <RiddleScript text={chapter.tracks[0]?.text ?? ""} /> : (
                 <div className="mt-6 max-w-prose space-y-3 text-base leading-7">
-                  {kind === "meet" && chapter.dexId ? (
+                  {readsSpeciesBiology(kind) && chapter.dexId ? (
                     factReading ? (
-                      <p>{factReading.speech}</p>
+                      <>
+                        {factReading.notice ? (
+                          <p className="text-sm text-muted-foreground" role="status">
+                            {factReading.notice}
+                          </p>
+                        ) : null}
+                        <p>{factReading.speech}</p>
+                      </>
                     ) : (
                       <p className="text-sm text-muted-foreground">Opening the description…</p>
                     )
@@ -1682,10 +1814,17 @@ export function Studio({
                         No separate description was found. The selected voice says the name.
                       </p>
                     ) : (
-                      <p>{formSpokenText(chapter)}</p>
+                      <>
+                        {chapter.articleNotice ? (
+                          <p className="text-sm text-muted-foreground" role="status">
+                            {chapter.articleNotice}
+                          </p>
+                        ) : null}
+                        <p>{formSpokenText(chapter)}</p>
+                      </>
                     )
                   ) : (
-                    (guessing && revealed ? chapter.tracks.slice(1) : visibleTracks)?.map((track) =>
+                    visibleTracks?.map((track) =>
                       entryLines(track.text, chapter.title).map((line) =>
                         isMeasure(line) ? (
                           <p
@@ -1701,39 +1840,55 @@ export function Studio({
                     )
                   )}
                 </div>
-                )}
-                {kind === "meet" && factReading?.url ? <WikiCredit url={factReading.url} /> : null}
+                {readsSpeciesBiology(kind) && factReading?.url && !factReading.notice ? (
+                  <WikiCredit url={factReading.url} />
+                ) : null}
                 {formMode &&
                 chapter.articleUrl &&
                 chapter.articleStatus &&
+                !chapter.articleNotice &&
                 !formSpeechIsNameOnly(chapter.title, formSpokenText(chapter)) ? (
                   <WikiCredit url={chapter.articleUrl} />
                 ) : null}
                 {source && guessing ? (
                   <p className="pk-quiet mt-4 text-xs">Pokédex, {source}</p>
                 ) : null}
-                {guessing && !revealed ? (
-                  <section className="pk-howto mt-5" aria-labelledby="guess-howto">
-                    <h3 id="guess-howto">How to play</h3>
-                    <p className="mt-1 text-sm leading-6">
-                      Your child listens to the cry, then the four clues, and looks at the shadow. They shout a guess
-                      before the count of three. Press I guessed. The answer plays the cry again and says the name. The
-                      clues never say the name.
-                    </p>
-                  </section>
-                ) : chapter.dexId ? (
+                {chapter.dexId ? (
                   <p className="pk-quiet mt-4 text-xs leading-5">
                     {guessing
                       ? "Hear plays the cry, then the words. The clue never says the name. The answer does. The Yoto card plays that same order."
                       : "Hear plays the cry, then the reading. The Yoto card plays that same order."}
                   </p>
                 ) : null}
+                </div>
+                <label className="mt-6 grid max-w-sm gap-1 text-sm" htmlFor="voice">
+                  Voice
+                  <select
+                    id="voice"
+                    aria-label="Voice"
+                    className="pk-field"
+                    value={voiceId}
+                    onChange={(event) => setVoiceId(writeVoiceId(localStorage, event.target.value))}
+                  >
+                    {PICKER_VOICES.map((voice) => (
+                      <option key={voice.id} value={voice.id}>
+                        {voice.name} — {voice.note}
+                      </option>
+                    ))}
+                  </select>
+                  {isPiperVoice(voiceId) ? (
+                    <p className="mt-2 text-xs leading-5 pk-quiet">
+                      Cori, British. Piper reads on this computer, so Hear works before you connect Yoto. Send still
+                      needs a Yoto login.
+                    </p>
+                  ) : null}
+                </label>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {guessing ? (
                     <>
                       <Button
                         type="button"
-                        variant={revealed ? "outline" : "default"}
+                        variant="outline"
                         className="h-11 px-4"
                         onClick={() => {
                           const track = revealed ? chapter.tracks[1] : chapter.tracks[0];
@@ -1752,7 +1907,7 @@ export function Studio({
                           Another riddle
                         </Button>
                       ) : (
-                        <Button type="button" variant="outline" className="h-11 px-4" onClick={revealAnswer}>
+                        <Button type="button" className="h-11 px-4" onClick={revealAnswer}>
                           I guessed
                         </Button>
                       )}
@@ -1765,19 +1920,22 @@ export function Studio({
                         void hearScript(async () => {
                           let line = "";
                           let dexId = chapter.dexId;
-                          if (formMode && chapter.formId) {
+                          if (formMode && chapter.formId && isFormPlaylistKind(card.kind)) {
                             if (!chapter.articleStatus) {
-                              await ensureFormProse(card.kind === "gmax" ? "gmax" : "mega");
+                              await ensureFormProse(card.kind);
                             }
-                            const fresh = (card.kind === "gmax" ? gmaxRef : megaRef).current.chapters.find(
-                              (item) => item.key === chapter.key,
-                            );
+                            const fresh = playlistsRef.current[card.kind]
+                              .flatMap((item) => item.chapters)
+                              .find((item) => item.key === chapter.key);
                             line = fresh?.tracks[0] ? trackSpeech(fresh.tracks[0]) : "";
                             dexId = fresh?.tracks[0]?.lead === "cry" ? fresh.dexId : undefined;
-                          } else if (chapter.dexId && kind === "meet") {
+                          } else if (chapter.dexId && readsSpeciesBiology(kind)) {
                             const prefix = chapter.tracks[0]?.text.startsWith(POKEDEX_HOWTO) ? POKEDEX_HOWTO : "";
-                            const speech =
-                              factReading?.speech ?? (await speciesSpeech(chapter.dexId, chapter.title));
+                            const shown =
+                              factReading && !nameOnlySpeech(chapter.title, factReading.speech)
+                                ? factReading.speech
+                                : (await speciesSpeech(chapter.dexId, chapter.title)).speech;
+                            const speech = shown || chapterDexText(chapter) || `${chapter.title}.`;
                             line = pronounce(`${prefix}${speech}`.replace(/\s+/g, " ").trim());
                             dexId = chapter.tracks.some((track) => track.lead === "cry") ? chapter.dexId : undefined;
                           } else {
@@ -1801,27 +1959,28 @@ export function Studio({
                 <audio ref={clipRef} controls className="mt-4 w-full max-w-md" preload="none" />
               </article>
 
-              <details className="pk-card mt-4 px-5 py-4">
-                <summary className="cursor-pointer text-sm font-medium">
-                  Put {card.rangeLabel} on a Yoto card
-                </summary>
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                  {card.childDoes}{" "}
+              <section className="pk-card mt-4 px-5 py-4" aria-labelledby="yoto-send-heading">
+                <h3 id="yoto-send-heading" className="font-display text-2xl">
+                  Send to Yoto
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  On the player: {card.childDoes} In the Yoto app, look for{" "}
+                  <span className="font-bold text-ink">{card.libraryTitle}</span>.
                   {randomGuess
-                    ? "Send uploads a shadow of each 16×16 pixel for the clue, then the real pixel for the answer. The selected voice is recorded locally, the cry is mixed in front of the clue and again in front of the answer, and that file is what gets uploaded."
+                    ? " Send uploads a shadow of each 16×16 pixel for the clue, then the real pixel for the answer."
                     : formMode
-                      ? "Send records the selected voice locally, mixes that Pokémon’s cry in front, then uploads that one file. The picture is the species 16×16 pixel. The credit stays on this page."
-                      : randomFacts
-                        ? "Send records the selected voice locally, mixes that Pokémon’s cry in front, then uploads the merged MP3. The how-to is in the playlist description and at the start of the first track."
-                        : `This send is only ${card.rangeLabel}. Each fact is the cry, then the selected voice. The button above sends every Pokefacts playlist, one after another.`}
+                      ? " The picture on the card is the species 16×16 pixel."
+                      : speciesSet
+                        ? " The Yoto icon is the 16×16 pixel."
+                        : ""}
                 </p>
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
                   {isPiperVoice(voiceId)
-                    ? "Send uses the Piper voice in Settings. The cry is mixed in front, then that MP3 is uploaded."
-                    : "Send uses the voice in Settings. Yoto Labs turns the script into an MP3 in that voice."}
+                    ? "Piper reads on this computer. The cry plays first, then that recording is uploaded."
+                    : "The voice you picked reads every track. The cry plays first."}
                 </p>
                 <label className="mt-3 grid gap-1 text-sm" htmlFor="yoto-playlist">
-                  Add to a Yoto playlist
+                  Where it goes
                   <select
                     id="yoto-playlist"
                     aria-label="Yoto playlist"
@@ -1829,10 +1988,10 @@ export function Studio({
                     value={targetPlaylist}
                     onChange={(event) => setTargetPlaylist(event.target.value)}
                   >
-                    <option value="">New playlist</option>
+                    <option value="">Make a new playlist</option>
                     {library.map((item) => (
                       <option key={item.cardId} value={item.cardId}>
-                        {item.title}
+                        Add to {item.title}
                       </option>
                     ))}
                   </select>
@@ -1844,8 +2003,8 @@ export function Studio({
                 ) : (
                   <p className="mt-2 text-xs leading-5 text-muted-foreground">
                     {targetPlaylist
-                      ? "Send adds these tracks onto that playlist. Tracks already on it stay."
-                      : "New playlist creates a card and does not replace one you already have."}
+                      ? "Adds these tracks at the end. Tracks already on that playlist stay."
+                      : `Makes a new playlist named ${card.libraryTitle}. Playlists you already have stay as they are.`}
                   </p>
                 )}
                 <Button
@@ -1857,10 +2016,10 @@ export function Studio({
                   {sending && !bulkActive
                     ? "Recording…"
                     : randomGuess
-                      ? "Send these 50 riddles to Yoto"
+                      ? "Send these 50 riddles"
                       : randomFacts
-                        ? "Send these 100 to Yoto"
-                        : `Send ${card.rangeLabel} to Yoto`}
+                        ? "Send these 100"
+                        : `Send ${card.rangeLabel}`}
                 </Button>
                 {job ? (
                   <StatusBar
@@ -1870,29 +2029,25 @@ export function Studio({
                     failed={job.status === "failed"}
                   />
                 ) : null}
-                {job?.status === "completed" ? (
-                  <ol className="mt-3 grid list-decimal gap-2 pl-4 text-sm leading-6">
-                    <li>Open the Yoto app and go to Make Your Own.</li>
-                    <li>Find {card.libraryTitle}.</li>
-                    <li>Choose Link to a card.</li>
-                    <li>Put a blank Make Your Own card in the player when it asks.</li>
-                    <li>Hand that card to your child. Send the next playlist to a different blank card.</li>
-                  </ol>
-                ) : (
-                  <p className="pk-quiet mt-3 text-xs leading-5">
-                    {randomGuess
-                      ? "These 50 riddles go on one card. Each track is the cry, then the selected voice. The clue never says the name. The answer does. The clue icon is the shadow. The answer icon is the real 16×16 pixel."
-                      : formMode
-                        ? `${card.libraryTitle} goes on one card. Each track is the cry, then the selected voice, with the species 16×16 pixel.`
-                        : randomFacts
-                          ? "These 100 Pokémon go on one card, in the selected voice, each with its 16×16 picture. Send all Pokefacts playlists when you want every species."
-                          : `${card.rangeLabel} links to its own card. Send all Pokefacts playlists to cover every species, one card at a time.`}
+                <div className="mt-4">
+                  <p className="text-sm font-bold">
+                    {job?.status === "completed" ? "Ready to link" : "After it finishes"}
                   </p>
-                )}
-              </details>
+                  <ol className="mt-2 grid list-decimal gap-2 pl-4 text-sm leading-6">
+                    <li>Open the Yoto app and go to Make Your Own.</li>
+                    <li>
+                      Find <span className="font-bold">{card.libraryTitle}</span>.
+                    </li>
+                    <li>Choose Link to a card.</li>
+                    <li>Hold a blank Make Your Own card to the player.</li>
+                    <li>The next playlist needs a different blank card.</li>
+                  </ol>
+                </div>
+              </section>
             </div>
           </div>
         ) : null}
+        </div>
       </main>
 
       <footer className="mx-auto w-full max-w-5xl px-4 pb-8 text-xs leading-5 font-bold text-ink sm:px-6">

@@ -41,13 +41,21 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# YouTube audio saved as plain MP3s for a music playlist
+/data/music-mp3
+/data/music-lyrics
+
 # cries downloaded while recording a card
 /data/cries
 /data/speech
 /data/rendered
+/data/demo
 
 # Piper binary and British voice model. Tens of megabytes. Downloaded once.
 /data/piper
 
 # Bulbapedia Biology text fetched while browsing the catalogue
 /data/bulbapedia
+
+# Official artwork fetched for the Pokédex, Mega Evolutions, and Gigantamax
+/data/artwork

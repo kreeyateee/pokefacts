@@ -2,7 +2,7 @@
 
 Pokefacts makes Pokémon cards for a Yoto player. The cards go into your Yoto library. You then link each one to a blank Make Your Own card.
 
-Demo here: https://pokefacts.duckdns.org/ - It will run better on a local PC. 
+Open it here: https://pokefacts.duckdns.org/
 
 You can also run it on your own computer. That path is below. The first time on your own computer takes a while. You install two free programs, leave a window open, and connect your own Yoto account. After that, starting it again is one line.
 
@@ -15,7 +15,7 @@ This is a fan project. It is not made by Nintendo, Game Freak, Creatures, or Yot
 - **Facts.** A short reading for all 1,025 Pokémon. The full set is 11 playlists, Pokefacts 1 through Pokefacts 11. There is also a random card of 100. Shuffle draws a new hundred. Send uses the hundred on the page.
 - **Guess Who.** Fifty riddles on one card. The clue plays the cry and does not say the name. Its picture is a shadow. The next track plays the cry and says the name. Its picture is the real one.
 - **Catalogue.** Look up any Pokémon from Kanto to Paldea. Tick the ones you want, in the order you want them, and build your own playlist. Facts reads the name and the first two biology paragraphs. Advanced facts also reads the size, the type, the ability, and how it evolves. Who's That Pokémon uses two tracks for each Pokémon, so 50 fit on a card.
-- **Mega Evolutions and Gigantamax.** One track for each form. The picture is that species' 16×16 pixel.
+- **Mega Evolutions and Gigantamax.** One track for each form. The page shows that form's full picture. The Yoto icon stays the species 16×16 pixel.
 - **Voices.** Lily, George, Brian, and Adam are Yoto voices. Piper — Pokédex sounds like a device reading a Pokédex entry. The first time you pick Piper, Pokefacts downloads that voice. Hear plays on the page before you send anything. Send uses the voice you picked.
 - **Stickers.** Print a front and a back at real Yoto card size, on A4 or US Letter. The front is a cover you arrange by dragging the Pokémon around. The back is the playlist, or a short note when the names will not fit. Cut on the corner marks and stick the pieces on a blank card. Print at 100% or Actual size. Do not choose Fit to page. A long catalogue pick becomes more than one card, and each row on the page is a different card. Save PDF keeps the file on your computer.
 
@@ -191,7 +191,7 @@ A Yoto playlist holds 100 tracks. Who's That Pokémon uses two tracks each, so 5
 
 **Print stickers** is on the Facts, Guess Who, Mega Evolutions, and Gigantamax cards, and on a Catalogue pick.
 
-The front is the cover. Drag a Pokémon onto it, or click one to add it, then move it around the picture. The back is the playlist. When the names will not fit at a readable size, the back is a note instead. Guess Who leaves the names off the back.
+The front is a painting you can draw on, with an eraser and a clear. Tap a picture, a Poké Ball, or a berry, then give that sticker its own shape, colour, and turn. Undo steps back. Printing is a separate step: check the sheet, save the PDF, then print at 100% size and cut on the corner marks. When the names will not fit at a readable size, the back is a note instead. Guess Who leaves the names off the back.
 
 Choose A4 or US Letter. Save PDF stores the file on your computer. Print it at 100% or Actual size. Do not choose Fit to page. Cut on the corner marks. The left sticker is the front. The right sticker is the back.
 

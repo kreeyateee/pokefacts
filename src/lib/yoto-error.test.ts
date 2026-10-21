@@ -82,6 +82,7 @@ describe("Yoto errors", () => {
     for (const scope of [
       "user:content:manage",
       "user:content:view",
+      "user:icons:manage",
       "family:library:view",
       "offline_access",
       "profile",

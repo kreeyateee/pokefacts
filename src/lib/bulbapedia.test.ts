@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
@@ -13,10 +13,12 @@ import {
   biologyBlocks,
   bulbapediaArticleUrl,
   loadBiology,
+  loadFactSpeech,
   wikiPageTitle,
+  WIKI_TIMEOUT_TRIES,
 } from "./bulbapedia";
 import { formWikiTitle, loadFormProse, loadFormSpeech, pickFormSection } from "./form-prose";
-import { leadParagraphs, spokenForm, spokenWiki } from "./spoken-wiki";
+import { leadParagraphs, spokenFact, spokenForm, spokenWiki, statusWithDexNote, WIKI_DEX_NOTE } from "./spoken-wiki";
 import type { BiologyBlock } from "./catalogue-types";
 
 const HTML = `
@@ -376,6 +378,14 @@ describe("Bulbapedia biology", () => {
       "8",
     );
     assert.equal(formWikiTitle("Mega Charizard X"), "Mega_Charizard_X");
+    assert.equal(formWikiTitle("Mega Meowstic (Male)"), "Mega_Meowstic");
+    assert.equal(
+      pickFormSection(
+        [{ index: "4", line: "Mega Meowstic", anchor: "Mega_Meowstic" }],
+        "Mega Meowstic (Male)",
+      )?.index,
+      "4",
+    );
   });
 
   it("reads Mega Venusaur from its section and Gigantamax Charizard from its section", async () => {
@@ -708,6 +718,281 @@ describe("Bulbapedia biology", () => {
       assert.match(spoken.speech, /body is much stronger/);
       assert.equal(spoken.speech.startsWith("Mega Pidgeot."), true);
       assert.doesNotMatch(spoken.speech, /avian Pokémon|windstorms|base stats|\[1\]|Bulbapedia/i);
+      assert.equal(spoken.notice, "");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("adds the Pokédex note to a send status once", () => {
+    assert.equal(statusWithDexNote("Pokefacts 1, description 1 of 2", ""), "Pokefacts 1, description 1 of 2");
+    const noted = statusWithDexNote("Pokefacts 1, description 1 of 2", WIKI_DEX_NOTE);
+    assert.match(noted, /description 1 of 2/);
+    assert.match(noted, /Pokédex line is used instead/);
+    assert.equal(statusWithDexNote(noted, WIKI_DEX_NOTE), noted);
+    const wiki = spokenFact("Bulbasaur", [{ kind: "paragraph", text: "One. The bulb is the lead." }], "Dex sentence only.");
+    assert.match(wiki, /bulb is the lead/);
+    assert.doesNotMatch(wiki, /Dex sentence only/);
+    assert.equal(spokenFact("Bulbasaur", [], "Dex sentence only."), "Bulbasaur. Dex sentence only.");
+  });
+
+  it("keeps a wiki lead ahead of the catalogue Pokédex line", async () => {
+    const entry = getCatalogueEntry(1);
+    assert.ok(entry);
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-wiki-wins-"));
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.searchParams.get("prop") === "sections") {
+        return jsonResponse({
+          parse: { sections: [{ toclevel: 1, line: "Biology", index: "1", anchor: "Biology" }] },
+        });
+      }
+      return jsonResponse({ parse: { text: HTML } });
+    }) as typeof fetch;
+    try {
+      const fact = await loadFactSpeech(entry.name, entry.id, entry.info, {
+        fetchImpl,
+        cacheFile: path.join(dir, "biology.json"),
+        sleep: async () => undefined,
+        timeoutMs: 30,
+      });
+      assert.equal(fact.biology.status, "ready");
+      assert.match(fact.speech, /quadrupedal amphibian/);
+      assert.equal(fact.speech.includes(entry.info), false);
+      assert.equal(fact.notice, "");
+      assert.notEqual(fact.speech, "Bulbasaur.");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("speaks the catalogue line when a wiki read hangs and does not cache the timeout", async () => {
+    const entry = getCatalogueEntry(1);
+    assert.ok(entry);
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-wiki-hang-"));
+    const cacheFile = path.join(dir, "biology.json");
+    const calls = { n: 0 };
+    const fetchImpl = (() => {
+      calls.n += 1;
+      return new Promise<Response>(() => undefined);
+    }) as typeof fetch;
+    try {
+      const fact = await loadFactSpeech(entry.name, entry.id, entry.info, {
+        fetchImpl,
+        cacheFile,
+        sleep: async () => undefined,
+        timeoutMs: 20,
+      });
+      assert.equal(calls.n, WIKI_TIMEOUT_TRIES);
+      assert.match(fact.speech, /^Bulbasaur\./);
+      assert.ok(fact.speech.includes(entry.info));
+      assert.notEqual(fact.speech, "Bulbasaur.");
+      assert.equal(fact.notice, WIKI_DEX_NOTE);
+      assert.equal(fact.biology.status, "unavailable");
+      assert.deepEqual(fact.biology.blocks, []);
+      await assert.rejects(readFile(cacheFile, "utf8"));
+      await loadFactSpeech(entry.name, entry.id, entry.info, {
+        fetchImpl,
+        cacheFile,
+        sleep: async () => undefined,
+        timeoutMs: 20,
+      });
+      assert.equal(calls.n, WIKI_TIMEOUT_TRIES * 2);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not store an aborted wiki body as a missing page", async () => {
+    const entry = getCatalogueEntry(1);
+    assert.ok(entry);
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-wiki-abort-"));
+    const cacheFile = path.join(dir, "biology.json");
+    const calls = { n: 0 };
+    const fetchImpl = (async () => {
+      calls.n += 1;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => {
+          throw Object.assign(new Error("The operation was aborted."), { name: "AbortError" });
+        },
+      } as unknown as Response;
+    }) as typeof fetch;
+    try {
+      const fact = await loadFactSpeech(entry.name, entry.id, entry.info, {
+        fetchImpl,
+        cacheFile,
+        sleep: async () => undefined,
+        timeoutMs: 50,
+      });
+      assert.equal(calls.n, WIKI_TIMEOUT_TRIES);
+      assert.ok(fact.speech.includes(entry.info));
+      assert.notEqual(fact.speech, `${entry.name}.`);
+      await assert.rejects(readFile(cacheFile, "utf8"));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("uses cached prose when the live read times out", async () => {
+    const entry = getCatalogueEntry(1);
+    assert.ok(entry);
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-wiki-disk-"));
+    const cacheFile = path.join(dir, "biology.json");
+    await writeFile(
+      cacheFile,
+      JSON.stringify({
+        "1": {
+          name: "Bulbasaur",
+          page: "Bulbasaur_(Pokémon)",
+          url: "https://bulbapedia.bulbagarden.net/wiki/Bulbasaur_(Pokémon)",
+          status: "ready",
+          blocks: [{ kind: "paragraph", text: "Cached bulb prose stays on the track." }],
+          fetchedAt: "2020-01-01T00:00:00.000Z",
+          revision: 1,
+        },
+      }),
+    );
+    const calls = { n: 0 };
+    const fetchImpl = (() => {
+      calls.n += 1;
+      return new Promise<Response>(() => undefined);
+    }) as typeof fetch;
+    try {
+      const fact = await loadFactSpeech(entry.name, entry.id, entry.info, {
+        fetchImpl,
+        cacheFile,
+        sleep: async () => undefined,
+        timeoutMs: 20,
+      });
+      assert.equal(calls.n, WIKI_TIMEOUT_TRIES);
+      assert.match(fact.speech, /Cached bulb prose stays on the track/);
+      assert.equal(fact.speech.includes(entry.info), false);
+      assert.equal(fact.notice, "");
+      assert.notEqual(fact.speech, "Bulbasaur.");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("fetches again when a missing row was stored by an aborted read", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-wiki-unset-"));
+    const cacheFile = path.join(dir, "biology.json");
+    await writeFile(
+      cacheFile,
+      JSON.stringify({
+        "1": {
+          name: "Bulbasaur",
+          page: "Bulbasaur_(Pokémon)",
+          url: "https://bulbapedia.bulbagarden.net/wiki/Bulbasaur_(Pokémon)",
+          status: "missing",
+          blocks: [],
+          fetchedAt: "2024-01-01T00:00:00.000Z",
+          revision: 2,
+        },
+      }),
+    );
+    let calls = 0;
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      calls += 1;
+      const url = new URL(String(input));
+      if (url.searchParams.get("prop") === "sections") {
+        return jsonResponse({
+          parse: { sections: [{ toclevel: 1, line: "Biology", index: "1", anchor: "Biology" }] },
+        });
+      }
+      return jsonResponse({ parse: { text: HTML } });
+    }) as typeof fetch;
+    try {
+      const fact = await loadFactSpeech("Bulbasaur", 1, "While it is young, it uses the nutrients.", {
+        fetchImpl,
+        cacheFile,
+        sleep: async () => undefined,
+        timeoutMs: 30,
+      });
+      assert.equal(calls, 2);
+      assert.match(fact.speech, /quadrupedal amphibian/);
+      assert.equal(fact.speech.includes("uses the nutrients"), false);
+      assert.equal(fact.notice, "");
+      const saved = JSON.parse(await readFile(cacheFile, "utf8")) as Record<string, { status?: string }>;
+      assert.equal(saved["1"]?.status, "ready");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("speaks the species Pokédex line when a form read hangs", async () => {
+    const pidgeot = getCatalogueEntry(18);
+    assert.ok(pidgeot?.info);
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-form-hang-"));
+    const calls = { n: 0 };
+    const fetchImpl = (() => {
+      calls.n += 1;
+      return new Promise<Response>(() => undefined);
+    }) as typeof fetch;
+    try {
+      const spoken = await loadFormSpeech(
+        { formId: 10073, speciesId: 18, speciesName: "Pidgeot", formName: "Mega Pidgeot" },
+        {
+          fetchImpl,
+          cacheFile: path.join(dir, "forms.json"),
+          biologyCacheFile: path.join(dir, "biology.json"),
+          sleep: async () => undefined,
+          timeoutMs: 20,
+        },
+      );
+      assert.equal(calls.n, WIKI_TIMEOUT_TRIES * 2);
+      assert.match(spoken.speech, /^Mega Pidgeot\./);
+      assert.ok(spoken.speech.includes(pidgeot.info));
+      assert.notEqual(spoken.speech, "Mega Pidgeot.");
+      assert.equal(spoken.notice, WIKI_DEX_NOTE);
+      await assert.rejects(readFile(path.join(dir, "forms.json"), "utf8"));
+      await assert.rejects(readFile(path.join(dir, "biology.json"), "utf8"));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("uses cached form prose when the live form read times out", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-form-disk-"));
+    const cacheFile = path.join(dir, "forms.json");
+    await writeFile(
+      cacheFile,
+      JSON.stringify({
+        "10073": {
+          formId: 10073,
+          formName: "Mega Pidgeot",
+          speciesName: "Pidgeot",
+          page: "Pidgeot_(Pokémon)",
+          url: "https://bulbapedia.bulbagarden.net/wiki/Pidgeot_(Pokémon)#Forms",
+          status: "ready",
+          blocks: [{ kind: "paragraph", text: "Cached Mega Pidgeot prose about the long wings stays on the track." }],
+          fetchedAt: "2020-01-01T00:00:00.000Z",
+          revision: 9,
+        },
+      }),
+    );
+    const calls = { n: 0 };
+    const fetchImpl = (() => {
+      calls.n += 1;
+      return new Promise<Response>(() => undefined);
+    }) as typeof fetch;
+    try {
+      const spoken = await loadFormSpeech(
+        { formId: 10073, speciesId: 18, speciesName: "Pidgeot", formName: "Mega Pidgeot" },
+        {
+          fetchImpl,
+          cacheFile,
+          biologyCacheFile: path.join(dir, "biology.json"),
+          sleep: async () => undefined,
+          timeoutMs: 20,
+        },
+      );
+      assert.equal(calls.n, WIKI_TIMEOUT_TRIES);
+      assert.match(spoken.speech, /Cached Mega Pidgeot prose about the long wings/);
+      assert.equal(spoken.notice, "");
+      assert.match(spoken.speech, /^Mega Pidgeot\./);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

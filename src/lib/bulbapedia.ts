@@ -1,8 +1,8 @@
-import https from "node:https";
 import path from "node:path";
 
 import type { BiologyBlock, BiologyView } from "@/lib/catalogue-types";
 import { readJsonObject, updateJsonObject } from "@/lib/json-cache";
+import { spokenDexLine, spokenFact, WIKI_DEX_NOTE } from "@/lib/spoken-wiki";
 
 export type { BiologyBlock, BiologyView };
 
@@ -28,7 +28,18 @@ type CacheRow = {
   blocks: BiologyBlock[];
   fetchedAt: string;
   revision: number;
+  /**
+   * True only after a finished read found no Biology prose.
+   * An aborted body used to be stored as missing without this flag. Those rows are fetched again.
+   */
+  settled?: boolean;
 };
+
+/** One Bulbapedia read. A hung socket is aborted here so the request cannot wait forever. */
+const WIKI_TIMEOUT_MS = 20_000;
+
+/** Timed-out reads are tried again this many times, including the first attempt. */
+export const WIKI_TIMEOUT_TRIES = 3;
 
 export type WikiSection = {
   toclevel?: number;
@@ -124,12 +135,7 @@ function shouldSkip(openTag: string, name: string): boolean {
     name === "div" &&
     (classes.includes("mw-references-wrap") ||
       classes.includes("navbox") ||
-      classes.includes("noprint") ||
-      classes.includes("thumb") ||
-      classes.includes("thumbinner") ||
-      classes.includes("thumbcaption") ||
-      classes.includes("gallery") ||
-      classes.includes("mw-file-description"))
+      classes.includes("noprint"))
   ) {
     return true;
   }
@@ -256,6 +262,11 @@ async function readCache(file: string): Promise<Record<string, CacheRow>> {
   return (await readJsonObject(file)) as Record<string, CacheRow>;
 }
 
+function blockText(block: BiologyBlock): string {
+  if (block.kind === "list") return block.items.join(" ");
+  return block.text;
+}
+
 function usableRow(row: unknown, name: string): CacheRow | null {
   if (!row || typeof row !== "object") return null;
   const candidate = row as CacheRow;
@@ -263,6 +274,19 @@ function usableRow(row: unknown, name: string): CacheRow | null {
   if (candidate.name !== name) return null;
   if (candidate.status !== "ready" && candidate.status !== "missing") return null;
   if (!Array.isArray(candidate.blocks)) return null;
+  // A timeout used to be saved as missing. Only a finished empty read may stay cached.
+  if (candidate.status === "missing" && candidate.settled !== true) return null;
+  return candidate;
+}
+
+/** Prose already on disk, including an older revision, for when the live read fails. */
+function proseRow(row: unknown, name: string): CacheRow | null {
+  if (!row || typeof row !== "object") return null;
+  const candidate = row as CacheRow;
+  if (candidate.name !== name) return null;
+  if (candidate.status !== "ready") return null;
+  if (!Array.isArray(candidate.blocks)) return null;
+  if (!candidate.blocks.some((block) => blockText(block).trim())) return null;
   return candidate;
 }
 
@@ -278,13 +302,88 @@ type LoadOptions = {
   fetchImpl?: typeof fetch;
   cacheFile?: string;
   sleep?: (ms: number) => Promise<void>;
+  timeoutMs?: number;
 };
+
+type WikiPayload = { error?: { code?: string; info?: string; lag?: number } } | null;
+
+function isTimedOut(error: unknown): boolean {
+  if (!error || (typeof error !== "object" && typeof error !== "string")) return false;
+  if (typeof error === "string") return /abort|timeout/i.test(error);
+  const named = error as { name?: unknown; code?: unknown; message?: unknown };
+  const name = typeof named.name === "string" ? named.name : "";
+  if (name === "TimeoutError" || name === "AbortError") return true;
+  const code = named.code;
+  if (code === "timeout" || code === "ABORT_ERR" || code === "ETIMEDOUT" || code === 20) return true;
+  const message = typeof named.message === "string" ? named.message : "";
+  return /abort|timeout/i.test(message);
+}
+
+function timedOutError(): WikiError {
+  return wikiError("timeout", "Bulbapedia timed out.");
+}
+
+/**
+ * Read one API response. A hang is raced against the timeout, including a fetch
+ * that ignores the abort signal. An aborted body is a timeout, not an empty page.
+ */
+async function readWiki(
+  url: URL,
+  fetchImpl: typeof fetch,
+  timeoutMs: number,
+): Promise<{ response: Response; payload: unknown }> {
+  const controller = new AbortController();
+  let settled = false;
+  let rejectTimeout: ((error: Error) => void) | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    rejectTimeout = reject;
+  });
+  const timer = setTimeout(() => {
+    if (settled) return;
+    controller.abort();
+    rejectTimeout?.(timedOutError());
+  }, timeoutMs);
+  const request = fetchImpl(url, {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": BULBAPEDIA_USER_AGENT,
+    },
+    cache: "no-store",
+    signal: controller.signal,
+  }).then(
+    async (response) => {
+      try {
+        const payload = await response.json();
+        return { response, payload };
+      } catch (error) {
+        if (isTimedOut(error) || controller.signal.aborted) throw timedOutError();
+        return { response, payload: null };
+      }
+    },
+    (error: unknown) => {
+      if (isTimedOut(error) || controller.signal.aborted) throw timedOutError();
+      throw error;
+    },
+  );
+  try {
+    return await Promise.race([request, timeout]);
+  } catch (error) {
+    if (isTimedOut(error) || controller.signal.aborted) throw timedOutError();
+    throw error;
+  } finally {
+    settled = true;
+    clearTimeout(timer);
+    void request.catch(() => undefined);
+  }
+}
 
 async function wikiRequest(
   params: Record<string, string>,
   fetchImpl: typeof fetch,
   sleep: (ms: number) => Promise<void>,
+  timeoutMs: number,
   attempt = 0,
+  timeouts = 0,
 ): Promise<unknown> {
   const url = new URL(BULBAPEDIA_API);
   url.searchParams.set("action", "parse");
@@ -292,22 +391,24 @@ async function wikiRequest(
   url.searchParams.set("formatversion", "2");
   url.searchParams.set("maxlag", "5");
   for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
-  const response = await fetchImpl(url, {
-    headers: {
-      Accept: "application/json",
-      "User-Agent": BULBAPEDIA_USER_AGENT,
-    },
-    cache: "no-store",
-    signal: AbortSignal.timeout(20_000),
-  });
-  const payload = (await response.json().catch(() => null)) as {
-    error?: { code?: string; info?: string; lag?: number };
-  } | null;
+  let response: Response;
+  let payload: WikiPayload;
+  try {
+    const read = await readWiki(url, fetchImpl, timeoutMs);
+    response = read.response;
+    payload = (read.payload ?? null) as WikiPayload;
+  } catch (error) {
+    if (wikiFailureCode(error) === "timeout" && timeouts + 1 < WIKI_TIMEOUT_TRIES) {
+      await sleep(200);
+      return wikiRequest(params, fetchImpl, sleep, timeoutMs, attempt, timeouts + 1);
+    }
+    throw error;
+  }
   const code = payload?.error?.code;
   if (code === "maxlag" && attempt < 1) {
     const lag = Math.min(10, Math.max(1, Number(payload?.error?.lag) || 5));
     await sleep(lag * 1000);
-    return wikiRequest(params, fetchImpl, sleep, attempt + 1);
+    return wikiRequest(params, fetchImpl, sleep, timeoutMs, attempt + 1, timeouts);
   }
   if (!response.ok || payload?.error) {
     throw wikiError(code ?? `http-${response.status}`, payload?.error?.info || "Bulbapedia did not answer.");
@@ -333,47 +434,16 @@ function sectionsOf(payload: unknown): WikiSection[] {
 
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-/**
- * Bulbapedia sits behind Cloudflare. Node's global fetch is challenged and comes back 403,
- * so a fact would be left with no description. The household https client is allowed through.
- */
-function bulbapediaFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-  const headers: Record<string, string> = {};
-  new Headers(init?.headers).forEach((value, key) => {
-    headers[key] = value;
-  });
-  return new Promise((resolve, reject) => {
-    const req = https.get(url, { headers }, (res) => {
-      const chunks: Buffer[] = [];
-      res.on("data", (chunk: Buffer) => chunks.push(chunk));
-      res.on("end", () => {
-        const status = res.statusCode ?? 0;
-        resolve(
-          new Response(Buffer.concat(chunks), {
-            status,
-            headers: { "content-type": String(res.headers["content-type"] ?? "application/json") },
-          }),
-        );
-      });
-    });
-    req.on("error", reject);
-    const signal = init?.signal;
-    if (!signal) return;
-    const abort = () => req.destroy(signal.reason instanceof Error ? signal.reason : new Error("aborted"));
-    if (signal.aborted) {
-      abort();
-      return;
-    }
-    signal.addEventListener("abort", abort, { once: true });
-  });
-}
-
 export async function bulbapediaParse(
   params: Record<string, string>,
-  options: { fetchImpl?: typeof fetch; sleep?: (ms: number) => Promise<void> } = {},
+  options: { fetchImpl?: typeof fetch; sleep?: (ms: number) => Promise<void>; timeoutMs?: number } = {},
 ): Promise<unknown> {
-  return wikiRequest(params, options.fetchImpl ?? bulbapediaFetch, options.sleep ?? defaultSleep);
+  return wikiRequest(
+    params,
+    options.fetchImpl ?? fetch,
+    options.sleep ?? defaultSleep,
+    options.timeoutMs ?? WIKI_TIMEOUT_MS,
+  );
 }
 
 export function wikiSections(payload: unknown): WikiSection[] {
@@ -394,61 +464,69 @@ export function wikiFailureCode(error: unknown): string {
   return typeof code === "string" ? code : "";
 }
 
+function missingRow(name: string, page: string, url: string): CacheRow {
+  return {
+    name,
+    page,
+    url,
+    status: "missing",
+    blocks: [],
+    fetchedAt: new Date().toISOString(),
+    revision: CACHE_REVISION,
+    settled: true,
+  };
+}
+
 /**
- * Biology for one species. A cache hit does not call Bulbapedia.
+ * Biology for one species. A finished cache hit does not call Bulbapedia.
  * A missing page or a page with no Biology heading is cached as missing.
- * A network or maxlag failure is not cached, so the next view can try again.
+ * A network, maxlag, or timeout failure is not cached, so the next view can try again.
+ * A timed-out read is tried a few times. If it still fails, prose already on disk is used.
  */
 export async function loadBiology(name: string, id: number, options: LoadOptions = {}): Promise<BiologyView> {
   const cacheFile = options.cacheFile ?? CACHE_FILE;
-  const fetchImpl = options.fetchImpl ?? bulbapediaFetch;
+  const fetchImpl = options.fetchImpl ?? fetch;
   const sleep = options.sleep ?? defaultSleep;
-  const cached = usableRow((await readCache(cacheFile))[String(id)], name);
+  const timeoutMs = options.timeoutMs ?? WIKI_TIMEOUT_MS;
+  const raw = (await readCache(cacheFile))[String(id)];
+  const cached = usableRow(raw, name);
   if (cached) return viewFromRow(cached);
 
   const page = wikiPageTitle(name);
   const url = bulbapediaArticleUrl(name);
+  const ask = (params: Record<string, string>) => wikiRequest(params, fetchImpl, sleep, timeoutMs);
+  const recover = async (error: unknown): Promise<BiologyView> => {
+    const disk = proseRow(raw, name) ?? proseRow((await readCache(cacheFile))[String(id)], name);
+    if (disk) return viewFromRow(disk);
+    throw error;
+  };
+
   let listed: unknown;
   try {
-    listed = await wikiRequest({ page, prop: "sections" }, fetchImpl, sleep);
+    listed = await ask({ page, prop: "sections" });
   } catch (error) {
-    const code = error instanceof Error ? (error as WikiError).code : "";
+    const code = wikiFailureCode(error);
     if (code === "missingtitle") {
-      const row: CacheRow = {
-        name,
-        page,
-        url,
-        status: "missing",
-        blocks: [],
-        fetchedAt: new Date().toISOString(),
-        revision: CACHE_REVISION,
-      };
+      const row = missingRow(name, page, url);
       await storeRow(cacheFile, id, row).catch(() => undefined);
       return viewFromRow(row);
     }
-    throw error;
+    return recover(error);
   }
 
   const section = biologySection(sectionsOf(listed));
   if (!section || section.index === undefined || section.index === null || String(section.index) === "") {
-    const row: CacheRow = {
-      name,
-      page,
-      url,
-      status: "missing",
-      blocks: [],
-      fetchedAt: new Date().toISOString(),
-      revision: CACHE_REVISION,
-    };
+    const row = missingRow(name, page, url);
     await storeRow(cacheFile, id, row).catch(() => undefined);
     return viewFromRow(row);
   }
 
-  const parsed = await wikiRequest(
-    { page, prop: "text", section: String(section.index) },
-    fetchImpl,
-    sleep,
-  );
+  let parsed: unknown;
+  try {
+    parsed = await ask({ page, prop: "text", section: String(section.index) });
+  } catch (error) {
+    return recover(error);
+  }
   const blocks = biologyBlocks(sectionText(parsed));
   const row: CacheRow = {
     name,
@@ -458,7 +536,46 @@ export async function loadBiology(name: string, id: number, options: LoadOptions
     blocks,
     fetchedAt: new Date().toISOString(),
     revision: CACHE_REVISION,
+    settled: blocks.length === 0,
   };
   await storeRow(cacheFile, id, row).catch(() => undefined);
   return viewFromRow(row);
+}
+
+export type FactSpeech = {
+  biology: BiologyView;
+  speech: string;
+  /** Set when the live wiki read failed and the catalogue Pokédex line was spoken. */
+  notice: string;
+};
+
+/**
+ * Spoken fact for one species.
+ * A wiki lead wins. A failed read uses cached wiki prose, then the catalogue Pokédex sentence.
+ */
+export async function loadFactSpeech(
+  name: string,
+  id: number,
+  dexLine: string,
+  options: LoadOptions = {},
+): Promise<FactSpeech> {
+  const dex = dexLine.replace(/\s+/g, " ").trim();
+  try {
+    const biology = await loadBiology(name, id, options);
+    return {
+      biology,
+      speech: spokenFact(name, biology.blocks, dex),
+      notice: "",
+    };
+  } catch {
+    return {
+      biology: {
+        status: "unavailable",
+        url: bulbapediaArticleUrl(name),
+        blocks: [],
+      },
+      speech: spokenDexLine(name, dex),
+      notice: dex ? WIKI_DEX_NOTE : "",
+    };
+  }
 }

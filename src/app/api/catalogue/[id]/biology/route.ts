@@ -1,6 +1,6 @@
-import { bulbapediaArticleUrl, loadBiology } from "@/lib/bulbapedia";
+import { bulbapediaArticleUrl, loadFactSpeech } from "@/lib/bulbapedia";
 import { getCatalogueEntry } from "@/lib/catalogue-db";
-import { spokenWiki } from "@/lib/spoken-wiki";
+import { spokenDexLine, WIKI_DEX_NOTE } from "@/lib/spoken-wiki";
 
 export async function GET(
   _request: Request,
@@ -11,23 +11,22 @@ export async function GET(
   if (!Number.isInteger(id) || id < 1) {
     return Response.json({ error: "That number is not in the catalogue." }, { status: 404 });
   }
-  let name = "";
+  const entry = getCatalogueEntry(id);
+  if (!entry) {
+    return Response.json({ error: "That Pokémon is not in the catalogue." }, { status: 404 });
+  }
   try {
-    const entry = getCatalogueEntry(id);
-    if (!entry) {
-      return Response.json({ error: "That Pokémon is not in the catalogue." }, { status: 404 });
-    }
-    name = entry.name;
-    const biology = await loadBiology(entry.name, entry.id);
-    return Response.json({ biology, speech: spokenWiki(entry.name, biology.blocks) });
+    const fact = await loadFactSpeech(entry.name, entry.id, entry.info);
+    return Response.json({ biology: fact.biology, speech: fact.speech, notice: fact.notice });
   } catch {
     return Response.json({
       biology: {
         status: "unavailable",
-        url: name ? bulbapediaArticleUrl(name) : "",
+        url: bulbapediaArticleUrl(entry.name),
         blocks: [],
       },
-      speech: name ? spokenWiki(name, []) : "",
+      speech: spokenDexLine(entry.name, entry.info),
+      notice: entry.info.trim() ? WIKI_DEX_NOTE : "",
     });
   }
 }

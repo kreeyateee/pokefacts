@@ -27,12 +27,20 @@ export function audioContainer(bytes: Buffer): "ogg" | "mp3" | null {
   return null;
 }
 
-/** Ogg, MP3, or a Piper WAV. Cries stay on audioContainer so a WAV is not treated as a cry. */
-export function inputContainer(bytes: Buffer): "ogg" | "mp3" | "wav" | null {
+/** Ogg, MP3, M4A, or a Piper WAV. Cries stay on audioContainer so a WAV is not treated as a cry. */
+export function inputContainer(bytes: Buffer): "ogg" | "mp3" | "wav" | "m4a" | null {
   if (bytes.length >= 12 && bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WAVE") {
     return "wav";
   }
+  if (isM4a(bytes)) return "m4a";
   return audioContainer(bytes);
+}
+
+/** ISO BMFF audio the user already has. ffmpeg reads it as mp4 and encodeYotoMp3 writes the Yoto MP3. */
+function isM4a(bytes: Buffer): boolean {
+  if (bytes.length < 12 || bytes.toString("ascii", 4, 8) !== "ftyp") return false;
+  const brand = bytes.toString("ascii", 8, 12);
+  return brand === "M4A " || brand === "M4B " || brand === "mp41" || brand === "mp42" || brand === "isom" || brand === "dash";
 }
 
 /** Cry gain and the silence after it. The rendered-file cache key includes both, plus voice gain. */
@@ -108,7 +116,9 @@ function run(command: string, args: string[]): Promise<void> {
 /** Tell ffmpeg the real container. A `.ogg` path makes Windows open MP3 cries as Ogg. */
 function formatArgs(bytes: Buffer): string[] {
   const container = inputContainer(bytes);
-  return container ? ["-f", container] : [];
+  if (!container) return [];
+  if (container === "m4a") return ["-f", "mp4"];
+  return ["-f", container];
 }
 
 function inputArgs(bytes: Buffer, file: string): string[] {
@@ -188,6 +198,20 @@ function assertCryDecodable(info: ClipInfo): void {
   }
 }
 
+/** True when the bytes are the plain MP3 Yoto accepts, not a VBR file wearing an .mp3 name. */
+export function isPlainYotoMp3(bytes: Buffer, info: ClipInfo): boolean {
+  if (bytes.length >= 3 && bytes.subarray(0, 3).toString("ascii") === "ID3") return false;
+  if (info.otherStreams > 0 || info.audioStreams !== 1) return false;
+  return (
+    info.codec === "mp3" &&
+    info.sampleRate === 44100 &&
+    info.channels === 1 &&
+    info.bitRate >= 120_000 &&
+    info.bitRate <= 140_000 &&
+    info.duration >= MIN_MERGED_SECONDS
+  );
+}
+
 function assertYotoMp3(bytes: Buffer, info: ClipInfo): void {
   const summary = clipSummary(info);
   if (bytes.length >= 3 && bytes.subarray(0, 3).toString("ascii") === "ID3") {
@@ -196,15 +220,36 @@ function assertYotoMp3(bytes: Buffer, info: ClipInfo): void {
   if (info.otherStreams > 0 || info.audioStreams !== 1) {
     throw new Error(`ffprobe: the merged file is not a single audio stream (${summary}).`);
   }
-  const plain =
-    info.codec === "mp3" &&
-    info.sampleRate === 44100 &&
-    info.channels === 1 &&
-    info.bitRate >= 120_000 &&
-    info.bitRate <= 140_000 &&
-    info.duration >= MIN_MERGED_SECONDS;
-  if (!plain) {
+  if (!isPlainYotoMp3(bytes, info)) {
     throw new Error(`ffprobe: the merged file is not a plain 44.1 kHz mono 128 kb/s MP3 (${summary}).`);
+  }
+}
+
+/** Convert one audio file to the plain MP3. `ffmpegFormat` is the real container, such as webm or mp4. */
+export async function transcodeToYotoMp3(bytes: Buffer, ffmpegFormat?: string): Promise<Buffer> {
+  if (ffmpegFormat && !/^[a-z0-9_]+$/.test(ffmpegFormat)) {
+    throw new Error("That audio format cannot be converted.");
+  }
+  const dir = await mkdtemp(path.join(tmpdir(), "champdex-yoto-mp3-"));
+  const inPath = path.join(dir, `in.${ffmpegFormat || "bin"}`);
+  const outPath = path.join(dir, "out.mp3");
+  try {
+    await writeFile(inPath, bytes);
+    await run(ffmpegCommand(), [
+      "-y",
+      "-loglevel",
+      "error",
+      ...(ffmpegFormat ? ["-f", ffmpegFormat] : []),
+      "-i",
+      inPath,
+      ...YOTO_MP3_ARGS,
+      outPath,
+    ]);
+    const mp3 = await readFile(outPath);
+    assertYotoMp3(mp3, await describeClip(mp3, "out.mp3"));
+    return mp3;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
   }
 }
 

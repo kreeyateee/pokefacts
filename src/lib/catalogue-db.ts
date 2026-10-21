@@ -5,6 +5,8 @@ import type {
   CatalogueEntry,
   CatalogueForm,
   CatalogueFormRef,
+  CatalogueLine,
+  CatalogueLineMember,
   CatalogueListItem,
   CataloguePage,
 } from "@/lib/catalogue-types";
@@ -32,6 +34,21 @@ export function kilogramsLabel(hectograms: number): string {
 
 export function centimetresLabel(decimetres: number): string {
   return `${decimetres * 10} centimetres`;
+}
+
+/**
+ * PokéAPI stores one English name for each of these pairs.
+ * The pictures are different: male and female Mega Meowstic, and
+ * Zygarde's Power Construct 10% forme beside the ordinary 10% forme.
+ */
+const DISTINCT_FORM_NAMES: Record<number, string> = {
+  10314: "Mega Meowstic (Male)",
+  10326: "Mega Meowstic (Female)",
+  10118: "10% Zygarde (Power Construct)",
+};
+
+function formDisplayName(id: number, name: string): string {
+  return DISTINCT_FORM_NAMES[id] ?? name;
 }
 
 function meta(key: string): number {
@@ -140,6 +157,89 @@ export function catalogueMatchIds(input: SearchInput = {}): number[] {
     .prepare(`SELECT s.id FROM species s ${where} ORDER BY s.id`)
     .all(...params) as Array<{ id: number }>;
   return rows.map((row) => row.id);
+}
+
+type EvolutionEdge = { id: number; name: string; method: string };
+
+let evolutionEdges: Map<number, EvolutionEdge[]> | null = null;
+
+function evolutionEdgesFrom(fromId: number): EvolutionEdge[] {
+  if (!evolutionEdges) {
+    const rows = db()
+      .prepare(
+        `SELECT e.from_id, e.into_id AS id, s.name, e.method
+         FROM evolutions e
+         JOIN species s ON s.id = e.into_id
+         ORDER BY e.into_id, e.method`,
+      )
+      .all() as Array<{ from_id: number; id: number; name: string; method: string }>;
+    const graph = new Map<number, EvolutionEdge[]>();
+    for (const row of rows) {
+      const list = graph.get(row.from_id) ?? [];
+      list.push({ id: row.id, name: row.name, method: row.method });
+      graph.set(row.from_id, list);
+    }
+    evolutionEdges = graph;
+  }
+  return evolutionEdges.get(fromId) ?? [];
+}
+
+function methodPhrase(methods: readonly string[]): string {
+  const unique = methods.map((method) => method.trim()).filter(Boolean);
+  if (unique.length === 0) return "";
+  if (unique.length === 1) return unique[0] ?? "";
+  if (unique.length === 2) return `${unique[0]}, or ${unique[1]}`;
+  return `${unique[0]}, or ${unique[1]}, or another way`;
+}
+
+/**
+ * Evolutions of this species, then the evolutions of those (subevolutions), and so on.
+ * A species reached by more than one method appears once. The walk does not go back to a pre-evolution.
+ */
+export function evolutionLine(speciesId: number): CatalogueLine {
+  const empty: CatalogueLine = { evolutions: [], subevolutions: [] };
+  if (!Number.isInteger(speciesId) || speciesId < 1) return empty;
+  const start = db().prepare("SELECT name FROM species WHERE id = ?").get(speciesId) as
+    | { name: string }
+    | undefined;
+  if (!start) return empty;
+
+  const queue: Array<{ id: number; name: string; stage: number }> = [
+    { id: speciesId, name: start.name, stage: 0 },
+  ];
+  const seen = new Set<number>([speciesId]);
+  const members: CatalogueLineMember[] = [];
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) break;
+    const grouped = new Map<number, { name: string; methods: string[] }>();
+    for (const edge of evolutionEdgesFrom(current.id)) {
+      const item = grouped.get(edge.id) ?? { name: edge.name, methods: [] };
+      if (edge.method && !item.methods.includes(edge.method)) item.methods.push(edge.method);
+      grouped.set(edge.id, item);
+    }
+    const next = [...grouped.entries()].sort((a, b) => a[0] - b[0]);
+    for (const [id, info] of next) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const stage = current.stage + 1;
+      members.push({
+        id,
+        name: info.name,
+        method: methodPhrase(info.methods),
+        stage,
+        fromId: current.id,
+        fromName: current.name,
+      });
+      queue.push({ id, name: info.name, stage });
+    }
+  }
+
+  return {
+    evolutions: members.filter((member) => member.stage === 1),
+    subevolutions: members.filter((member) => member.stage > 1),
+  };
 }
 
 /** Names for a catalogue pick, in the order the ids were given. Unknown ids are skipped. */
@@ -273,7 +373,7 @@ export function getCatalogueEntry(id: number): CatalogueEntry | null {
 
   const otherForms: CatalogueForm[] = forms.map((form) => ({
     id: form.id,
-    name: form.name,
+    name: formDisplayName(form.id, form.name),
     isDefault: false,
     isMega: form.is_mega === 1,
     isBattleOnly: form.is_battle_only === 1,
@@ -316,6 +416,7 @@ export function getCatalogueEntry(id: number): CatalogueEntry | null {
     eggGroups: eggs.map((egg) => (egg.egg_group === "Undiscovered" ? "No egg group" : egg.egg_group)),
     evolvesFrom: from ?? null,
     evolutions,
+    line: evolutionLine(id),
     weak: packed("weak"),
     resist: packed("resist"),
     immune: packed("immune"),
@@ -332,7 +433,7 @@ export function getCatalogueEntry(id: number): CatalogueEntry | null {
 export function listMonSheets(): MonSheet[] {
   const species = db()
     .prepare(
-      `SELECT id, slug, name, genus, habitat, color, shape, height_dm, weight_hg, info, info_version, evolves_from_id
+      `SELECT id, slug, name, genus, habitat, height_dm, weight_hg, info, info_version, evolves_from_id
        FROM species
        ORDER BY id`,
     )
@@ -342,8 +443,6 @@ export function listMonSheets(): MonSheet[] {
     name: string;
     genus: string;
     habitat: string | null;
-    color: string | null;
-    shape: string | null;
     height_dm: number;
     weight_hg: number;
     info: string;
@@ -416,8 +515,6 @@ export function listMonSheets(): MonSheet[] {
       evolvesFrom: row.evolves_from_id ? (nameById.get(row.evolves_from_id) ?? null) : null,
       evolvesInto,
       habitat: row.habitat ? habitatSpeech(row.habitat) : null,
-      color: row.color,
-      shape: row.shape,
       entries: row.info ? [{ text: row.info, version: row.info_version }] : [],
     };
   });
@@ -435,7 +532,7 @@ function mapFormRef(row: FormRefRow): CatalogueFormRef {
     formId: row.id,
     speciesId: row.species_id,
     speciesName: row.species_name,
-    formName: row.form_name,
+    formName: formDisplayName(row.id, row.form_name),
   };
 }
 
@@ -460,10 +557,49 @@ export function listGigantamaxForms(): CatalogueFormRef[] {
   return queryFormRefs("f.name LIKE 'Gigantamax %'");
 }
 
+/** Non-default forms whose names start with Alolan. Totem and cap costumes stay out. */
+export function listAlolanForms(): CatalogueFormRef[] {
+  return queryFormRefs("f.is_default = 0 AND f.name LIKE 'Alolan %'");
+}
+
+/** Non-default forms whose names start with Hisuian. */
+export function listHisuianForms(): CatalogueFormRef[] {
+  return queryFormRefs("f.is_default = 0 AND f.name LIKE 'Hisuian %'");
+}
+
+function sheetsWhere(column: "is_legendary" | "is_mythical"): MonSheet[] {
+  const ids = new Set(
+    (db().prepare(`SELECT id FROM species WHERE ${column} = 1 ORDER BY id`).all() as Array<{ id: number }>).map(
+      (row) => row.id,
+    ),
+  );
+  return listMonSheets().filter((sheet) => ids.has(sheet.id));
+}
+
+/** Species flagged legendary. Mythical species are a separate list. */
+export function listLegendarySheets(): MonSheet[] {
+  return sheetsWhere("is_legendary");
+}
+
+/** Species flagged mythical. */
+export function listMythicalSheets(): MonSheet[] {
+  return sheetsWhere("is_mythical");
+}
+
 export function listSpecialForms(speciesId: number): CatalogueFormRef[] {
   return queryFormRefs("(f.is_mega = 1 OR f.name LIKE 'Gigantamax %') AND f.species_id = ?", speciesId);
 }
 
 export function getSpecialForm(formId: number): CatalogueFormRef | null {
   return queryFormRefs("(f.is_mega = 1 OR f.name LIKE 'Gigantamax %') AND f.id = ?", formId)[0] ?? null;
+}
+
+/** A Mega, Gigantamax, Alolan, or Hisuian form, for the form-reading route. */
+export function getPlaylistForm(formId: number): CatalogueFormRef | null {
+  return (
+    queryFormRefs(
+      `(f.is_mega = 1 OR f.name LIKE 'Gigantamax %' OR ((f.name LIKE 'Alolan %' OR f.name LIKE 'Hisuian %') AND f.is_default = 0)) AND f.id = ?`,
+      formId,
+    )[0] ?? null
+  );
 }

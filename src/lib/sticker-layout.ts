@@ -41,12 +41,32 @@ export type SheetLayout = {
   slots: SheetSlot[];
 };
 
+export const STICKER_SHAPES = ["circle", "round", "hex", "star", "diamond"] as const;
+export type StickerShape = (typeof STICKER_SHAPES)[number];
+
+export const STICKER_COLORS = ["#ffcb05", "#e10600", "#2a75bb", "#7ac74c", "#f95587", "#ff8c42", "#9b5de5", "#fffdf6", "#16324f"] as const;
+
+export const DECORATION_KEYS = [
+  "deco:poke",
+  "deco:great",
+  "deco:ultra",
+  "deco:cheri",
+  "deco:pecha",
+  "deco:oran",
+  "deco:sitrus",
+  "deco:rawst",
+  "deco:pamtre",
+] as const;
+
 export type PlacedSticker = {
   id: string;
   key: string;
   x: number;
   y: number;
   scale: number;
+  rotation: number;
+  shape: StickerShape;
+  color: string;
 };
 
 export type BackMode = "auto" | "names" | "note";
@@ -58,6 +78,7 @@ export type CoverDraft = {
   backMode: BackMode;
   paper: PaperId;
   stickers: PlacedSticker[];
+  painting: string;
 };
 
 const SPOTS = [
@@ -182,21 +203,62 @@ export function clampScale(scale: number): number {
   return Math.min(0.56, Math.max(0.16, scale));
 }
 
-export function clampSticker(point: { x: number; y: number }, scale = 0.3): { x: number; y: number } {
-  const halfW = Math.min(0.45, Math.max(0, scale) / 2);
-  const halfH = Math.min(0.45, Math.max(0, scale) / (2 * ASPECT));
-  const clamp = (value: number, half: number) => {
+export function isDecorationKey(key: string): boolean {
+  return (DECORATION_KEYS as readonly string[]).includes(key);
+}
+
+export function stickerShape(value: unknown, index = 0): StickerShape {
+  return STICKER_SHAPES.find((shape) => shape === value) ?? STICKER_SHAPES[index % STICKER_SHAPES.length] ?? "circle";
+}
+
+export function stickerColor(value: unknown, index = 0): string {
+  if (typeof value === "string" && STICKER_COLORS.some((color) => color === value.toLowerCase())) return value.toLowerCase();
+  return STICKER_COLORS[index % STICKER_COLORS.length] ?? "#ffcb05";
+}
+
+export function clampRotation(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  const turn = Math.PI * 2;
+  const wrapped = value - Math.floor(value / turn) * turn;
+  return wrapped > Math.PI ? wrapped - turn : wrapped;
+}
+
+export function stickerStyle(index: number): { shape: StickerShape; color: string; rotation: number } {
+  return { shape: stickerShape(undefined, index), color: stickerColor(undefined, index), rotation: 0 };
+}
+
+export function clampSticker(
+  point: { x: number; y: number },
+  scale = 0.3,
+  rotation = 0,
+): { x: number; y: number } {
+  const rot = clampRotation(rotation);
+  const half = Math.max(0, scale) / 2;
+  const extent = half * (Math.abs(Math.cos(rot)) + Math.abs(Math.sin(rot)));
+  const halfW = Math.min(0.46, extent);
+  const halfH = Math.min(0.46, extent / ASPECT);
+  const clamp = (value: number, halfEdge: number) => {
     if (!Number.isFinite(value)) return 0.5;
-    const inset = Math.min(0.46, half + 0.02);
+    const inset = Math.min(0.47, halfEdge + 0.02);
     return Math.min(1 - inset, Math.max(inset, value));
   };
   return { x: clamp(point.x, halfW), y: clamp(point.y, halfH) };
 }
 
-export function stickerHits(sticker: { x: number; y: number; scale: number }, x: number, y: number): boolean {
-  const halfW = sticker.scale / 2;
-  const halfH = sticker.scale / (2 * ASPECT);
-  return Math.abs(x - sticker.x) <= halfW && Math.abs(y - sticker.y) <= halfH;
+export function stickerHits(
+  sticker: { x: number; y: number; scale: number; rotation?: number },
+  x: number,
+  y: number,
+): boolean {
+  const rot = sticker.rotation ?? 0;
+  const dx = x - sticker.x;
+  const dy = (y - sticker.y) * ASPECT;
+  const cos = Math.cos(-rot);
+  const sin = Math.sin(-rot);
+  const lx = dx * cos - dy * sin;
+  const ly = dx * sin + dy * cos;
+  const half = sticker.scale / 2;
+  return Math.abs(lx) <= half && Math.abs(ly) <= half;
 }
 
 export function topStickerAt(stickers: readonly PlacedSticker[], x: number, y: number): PlacedSticker | null {
@@ -253,7 +315,7 @@ function spreadKeys(keys: readonly string[], count: number): string[] {
 export function defaultStickers(keys: readonly string[]): PlacedSticker[] {
   return spreadKeys(keys, SPOTS.length).map((key, index) => {
     const spot = SPOTS[index] ?? SPOTS[0];
-    return { id: `cover-${key}`, key, x: spot.x, y: spot.y, scale: spot.scale };
+    return { id: `cover-${key}`, key, x: spot.x, y: spot.y, scale: spot.scale, ...stickerStyle(index) };
   });
 }
 
@@ -336,6 +398,7 @@ export function freshCover(input: {
     backMode: "auto",
     paper: "a4",
     stickers: defaultStickers(input.keys),
+    painting: "",
   };
 }
 
@@ -353,10 +416,22 @@ export function sanitizeStickers(value: unknown, keys: ReadonlySet<string>): Pla
   for (const item of value) {
     if (!item || typeof item !== "object") continue;
     const row = item as Partial<PlacedSticker>;
-    if (typeof row.id !== "string" || typeof row.key !== "string" || !keys.has(row.key)) continue;
+    if (typeof row.id !== "string" || typeof row.key !== "string") continue;
+    if (!keys.has(row.key) && !isDecorationKey(row.key)) continue;
     if (typeof row.x !== "number" || typeof row.y !== "number" || typeof row.scale !== "number") continue;
-    const spot = clampSticker({ x: row.x, y: row.y }, row.scale);
-    stickers.push({ id: row.id, key: row.key, x: spot.x, y: spot.y, scale: clampScale(row.scale) });
+    const scale = clampScale(row.scale);
+    const rotation = clampRotation(row.rotation);
+    const spot = clampSticker({ x: row.x, y: row.y }, scale, rotation);
+    stickers.push({
+      id: row.id,
+      key: row.key,
+      x: spot.x,
+      y: spot.y,
+      scale,
+      rotation,
+      shape: stickerShape(row.shape, stickers.length),
+      color: stickerColor(row.color, stickers.length),
+    });
   }
   return stickers;
 }
