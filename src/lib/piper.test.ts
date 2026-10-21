@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -9,10 +10,10 @@ import { POST as postJob } from "../app/api/yoto/job/route";
 import { cryUrl, inputContainer } from "./cry-audio";
 import { ffmpegCommand } from "./ffmpeg-bin";
 import { factsPlaylistUpload, LILY_VOICE_ID } from "./kid-cards";
-import { piperSpeechCommand, type PiperCommand } from "./piper";
-import { PIPER_MODEL_NAME, PIPER_VOICE_ID } from "./piper-voice";
+import { piperReleaseArchive, piperSpeechCommand, PIPER_POKEDEX_ARGS, type PiperCommand } from "./piper";
+import { PIPER_MODEL_NAME, PIPER_SYNTH_ID, PIPER_VOICE_ID, piperCacheToken } from "./piper-voice";
 import { demoHearBody, factTrackBody, writeVoiceId } from "./voice-choice";
-import { prepareFactTrack } from "./yoto-fact-audio";
+import { prepareFactTrack, renderedCacheKey } from "./yoto-fact-audio";
 import { prepareDemoAudio } from "./yoto-demo";
 
 function sine(file: string, frequency: number, format: "mp3" | "wav"): Promise<void> {
@@ -95,10 +96,38 @@ describe("Piper Pokédex voice", () => {
       path.join("data", "piper", "voices", "en_GB-cori-high.onnx"),
       "--output_file",
       path.join("data", "piper", "sample.wav"),
+      ...PIPER_POKEDEX_ARGS,
     ]);
+    assert.equal(spec.args.includes("--length_scale"), true);
     assert.equal(spec.input, "Bulbasaur is a small quadruped.");
     assert.equal(JSON.stringify(spec).includes("elevenlabs"), false);
     assert.equal(JSON.stringify(spec).includes(LILY_VOICE_ID), false);
+    assert.equal(piperCacheToken(PIPER_VOICE_ID), PIPER_SYNTH_ID);
+    assert.equal(piperCacheToken(LILY_VOICE_ID), "");
+  });
+
+  it("downloads the Linux x86_64 Piper binary on Oracle Pokefacts", () => {
+    const archive = piperReleaseArchive("linux", "x64");
+    assert.equal(archive?.name, "piper_linux_x86_64.tar.gz");
+    assert.match(archive?.url ?? "", /piper_linux_x86_64\.tar\.gz$/);
+    assert.equal(piperReleaseArchive("linux", "arm64")?.name, "piper_linux_aarch64.tar.gz");
+    assert.equal(piperReleaseArchive("win32", "x64")?.name, "piper_windows_amd64.zip");
+    assert.equal(piperReleaseArchive("linux", "ia32"), null);
+  });
+
+  it("misses old Piper mixes after the Pokédex cadence change and leaves Lily keys alone", () => {
+    const text = "Bulbasaur. A strange seed was planted on its back at birth.";
+    const lily = renderedCacheKey(text, 1, LILY_VOICE_ID);
+    const piper = renderedCacheKey(text, 1, PIPER_VOICE_ID);
+    const oldLily = createHash("sha256")
+      .update(Buffer.from(`${LILY_VOICE_ID}\nvolume=4\npad=0.35\n1\n${text}`))
+      .digest("hex");
+    const oldPiper = createHash("sha256")
+      .update(Buffer.from(`${PIPER_VOICE_ID}\nvolume=4\npad=0.35\n1\n${text}`))
+      .digest("hex");
+    assert.equal(lily, oldLily);
+    assert.notEqual(piper, oldPiper);
+    assert.notEqual(piper, lily);
   });
 
   it("records with a local piper invocation and does not send an ElevenLabs voice id", async () => {

@@ -13,7 +13,7 @@ import {
 } from "@/lib/cry-audio";
 import { clampMix, isDefaultMix, mixCacheToken, type MixSettings } from "@/lib/playback-settings";
 import { synthesizePiper, type PiperSynthOptions } from "@/lib/piper";
-import { chosenVoice, isPiperVoice } from "@/lib/piper-voice";
+import { chosenVoice, isPiperVoice, piperCacheToken } from "@/lib/piper-voice";
 import { RECONNECT_YOTO, reconnectMessage, yotoErrorText } from "@/lib/yoto-error";
 
 export type FactCryRequest = {
@@ -363,7 +363,16 @@ export function renderedCacheKey(
   mix?: Partial<MixSettings> | null,
 ): string {
   const line = text.replace(/\s+/g, " ").trim();
-  return sha256(Buffer.from(`${chosenVoice(voiceId)}\n${mixCacheToken(mix)}\n${dexId ?? 0}\n${line}`));
+  const voice = chosenVoice(voiceId);
+  const synth = piperCacheToken(voice);
+  const mixToken = mixCacheToken(mix);
+  return sha256(
+    Buffer.from(
+      synth
+        ? `${voice}\n${synth}\n${mixToken}\n${dexId ?? 0}\n${line}`
+        : `${voice}\n${mixToken}\n${dexId ?? 0}\n${line}`,
+    ),
+  );
 }
 
 function legacyRenderedKey(text: string, dexId: number | undefined, voiceId: string): string {
@@ -372,7 +381,8 @@ function legacyRenderedKey(text: string, dexId: number | undefined, voiceId: str
 }
 
 function speechKey(text: string, voiceId: string): string {
-  return sha256(Buffer.from(`${voiceId}\n${text}`));
+  const synth = piperCacheToken(voiceId);
+  return sha256(Buffer.from(synth ? `${voiceId}\n${synth}\n${text}` : `${voiceId}\n${text}`));
 }
 
 async function writeBytesAtomic(file: string, bytes: Buffer): Promise<void> {

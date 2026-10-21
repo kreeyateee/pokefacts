@@ -88,7 +88,7 @@ brew install ffmpeg
 
 Wait until the typing line comes back.
 
-Pokefacts can also read with Piper, a voice that sounds like a device reading a Pokédex entry. The voice in the list is **Piper — Pokédex** (Cori, British English). The first time you pick it, Pokefacts downloads the official Piper program and that voice into `data/piper` on this computer. Those files are large, so they are not part of the download of Pokefacts itself. Hear works before you connect Yoto. Send still needs a Yoto login.
+Pokefacts can also read with Piper, a voice that sounds like a device reading a Pokédex entry. The voice in the list is **Piper — Pokédex** (Cori, British English). The first time you pick it, Pokefacts downloads the official Piper program for this computer — Windows or Linux — and that voice into `data/piper`. Those files are large, so they are not part of the download of Pokefacts itself. Hear works before you connect Yoto. Send still needs a Yoto login. The public site reads Piper on the server, not in your browser.
 
 You can download Piper ahead of time. In the Pokefacts folder, type:
 

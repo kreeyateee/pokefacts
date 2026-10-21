@@ -1840,7 +1840,7 @@ export function Studio({
               </p>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
                 {isPiperVoice(voiceId)
-                  ? "Piper reads on this computer. The cry plays first, then that recording is uploaded."
+                  ? "Piper reads here. The cry plays first, then that recording is uploaded."
                   : "The voice you picked reads every track. The cry plays first."}
               </p>
               <label className="mt-3 grid gap-1 text-sm" htmlFor="yoto-playlist">

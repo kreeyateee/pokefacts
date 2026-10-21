@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -14,7 +14,53 @@ import { PIPER_MODEL_NAME } from "@/lib/piper-voice";
 export const PIPER_DIR = path.join(process.cwd(), "data", "piper");
 
 const RELEASE = "2023.11.14-2";
-const WINDOWS_ZIP = `https://github.com/rhasspy/piper/releases/download/${RELEASE}/piper_windows_amd64.zip`;
+const RELEASE_BASE = `https://github.com/rhasspy/piper/releases/download/${RELEASE}`;
+
+export type PiperArchive = {
+  url: string;
+  name: string;
+};
+
+/**
+ * Official Piper build for this OS. Oracle Pokefacts is Linux x86_64.
+ * A missing row means this computer cannot download a binary.
+ */
+export function piperReleaseArchive(
+  platform: NodeJS.Platform = process.platform,
+  arch: string = process.arch,
+): PiperArchive | null {
+  if (platform === "win32" && (arch === "x64" || arch === "arm64")) {
+    return { url: `${RELEASE_BASE}/piper_windows_amd64.zip`, name: "piper_windows_amd64.zip" };
+  }
+  if (platform === "linux" && arch === "x64") {
+    return { url: `${RELEASE_BASE}/piper_linux_x86_64.tar.gz`, name: "piper_linux_x86_64.tar.gz" };
+  }
+  if (platform === "linux" && arch === "arm64") {
+    return { url: `${RELEASE_BASE}/piper_linux_aarch64.tar.gz`, name: "piper_linux_aarch64.tar.gz" };
+  }
+  if (platform === "darwin" && arch === "arm64") {
+    return { url: `${RELEASE_BASE}/piper_macos_aarch64.tar.gz`, name: "piper_macos_aarch64.tar.gz" };
+  }
+  if (platform === "darwin" && arch === "x64") {
+    return { url: `${RELEASE_BASE}/piper_macos_x64.tar.gz`, name: "piper_macos_x64.tar.gz" };
+  }
+  return null;
+}
+
+/**
+ * Slightly slower, more even timing than Piper's conversational defaults.
+ * That is the handheld Pokédex cadence on a 1-OCPU host.
+ */
+export const PIPER_POKEDEX_ARGS = [
+  "--length_scale",
+  "1.12",
+  "--noise_scale",
+  "0.333",
+  "--noise_w",
+  "0.4",
+  "--sentence_silence",
+  "0.35",
+] as const;
 
 const VOICE_FILES = [
   {
@@ -82,7 +128,7 @@ export function piperSpeechCommand(input: {
   const model = input.model || defaultPiperModel();
   return {
     command,
-    args: ["--model", model, "--output_file", input.output],
+    args: ["--model", model, "--output_file", input.output, ...PIPER_POKEDEX_ARGS],
     input: input.text,
     cwd: path.dirname(command),
     output: input.output,
@@ -165,14 +211,16 @@ async function installedModel(): Promise<{ model: string; modelName: string } | 
 async function installBinary(): Promise<string> {
   const existing = await findExe(PIPER_DIR);
   if (existing) return existing;
-  if (process.platform !== "win32") throw new Error(MISSING);
-  const zip = path.join(PIPER_DIR, "piper_windows_amd64.zip");
-  if (!(await fileAtLeast(zip, 1_000_000))) await downloadTo(WINDOWS_ZIP, zip);
+  const archive = piperReleaseArchive();
+  if (!archive) throw new Error(MISSING);
+  const packed = path.join(PIPER_DIR, archive.name);
+  if (!(await fileAtLeast(packed, 1_000_000))) await downloadTo(archive.url, packed);
   const runtime = path.join(PIPER_DIR, "runtime");
   await mkdir(runtime, { recursive: true });
-  await runFile("tar", ["-xf", zip, "-C", runtime]);
+  await runFile("tar", ["-xf", packed, "-C", runtime]);
   const exe = await findExe(runtime);
   if (!exe) throw new Error(MISSING);
+  if (process.platform !== "win32") await chmod(exe, 0o755);
   return exe;
 }
 
@@ -202,7 +250,7 @@ async function installVoice(): Promise<{ model: string; modelName: string }> {
 
 let pending: Promise<PiperInstall> | null = null;
 
-/** Download the official Windows Piper build and a British reader voice, once. */
+/** Download the official Piper build for this OS and a British reader voice, once. */
 export function ensurePiper(): Promise<PiperInstall> {
   if (!pending) {
     pending = Promise.all([installBinary(), installVoice()])

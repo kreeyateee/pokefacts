@@ -6,6 +6,12 @@ export const PIPER_VOICE_ID = "piper:en_GB-cori-high";
 /** Preferred British reader. The installer falls back if this file cannot be fetched. */
 export const PIPER_MODEL_NAME = "en_GB-cori-high";
 
+/**
+ * Piper cadence for a handheld Pokédex. Changing this must miss old speech
+ * and mix files so Hear and Send do not reuse a conversational take.
+ */
+export const PIPER_SYNTH_ID = "pokedex-v1";
+
 export const PIPER_VOICE = {
   id: PIPER_VOICE_ID,
   name: "Piper",
@@ -22,4 +28,9 @@ export function isPiperVoice(id?: string | null): boolean {
 export function chosenVoice(id?: string | null): string {
   if (isPiperVoice(id)) return PIPER_VOICE_ID;
   return voiceOrLily(id ?? undefined);
+}
+
+/** Empty for Yoto Labs voices. Piper recordings include the Pokédex cadence. */
+export function piperCacheToken(id?: string | null): string {
+  return isPiperVoice(id) ? PIPER_SYNTH_ID : "";
 }

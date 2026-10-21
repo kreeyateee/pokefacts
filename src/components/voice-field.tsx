@@ -30,8 +30,8 @@ export function VoiceField({
       </select>
       {isPiperVoice(value) ? (
         <p className="mt-1 text-xs leading-5 pk-quiet">
-          Cori, British. Piper reads on this computer, so Hear works before you connect Yoto. Send still
-          needs a Yoto login.
+          Cori, British, in a Pokédex cadence. Piper reads here, so Hear works before you connect Yoto.
+          Send still needs a Yoto login.
         </p>
       ) : (
         <p className="mt-1 text-xs leading-5 pk-quiet">This voice reads every track you send.</p>
