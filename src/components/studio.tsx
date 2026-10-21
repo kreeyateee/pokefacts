@@ -26,6 +26,7 @@ import {
 import {
   applySpeciesSpeech,
   bulkProgressLabel,
+  chapterPictureId,
   factPoolFromCards,
   factsBulkPlaylists,
   factsPlaylistUpload,
@@ -206,15 +207,16 @@ async function uploadPixels(
   onProgress?: (done: number, total: number) => void,
 ): Promise<Record<number, string>> {
   const seen = new Set<number>();
-  const species = card.chapters.filter((chapter) => {
-    if (!chapter.dexId || seen.has(chapter.dexId)) return false;
-    seen.add(chapter.dexId);
+  const pictures = card.chapters.filter((chapter) => {
+    const id = chapterPictureId(chapter);
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
     return true;
   });
   const media: Record<number, string> = {};
   let finished = 0;
-  await mapPool(species, async (chapter) => {
-    const id = chapter.dexId;
+  await mapPool(pictures, async (chapter) => {
+    const id = chapterPictureId(chapter);
     if (!id) return;
     media[id] = await uploadIcon(id);
     finished += 1;
@@ -427,6 +429,13 @@ function firstCard(cards: KidCard[], kind: KidCardKind): KidCard | undefined {
 /** Species number on the page. A repeated form keeps a unique Yoto overlay such as 678b. */
 function chapterNumber(item: { overlay: string; dexId?: number }): string {
   return item.dexId ? String(item.dexId) : item.overlay;
+}
+
+/** Species art is the fallback for a missing species file. A form picture never swaps to the base species. */
+function pictureFallback(item: { formId?: number; dexId?: number; sprite?: string }): string | undefined {
+  if (item.formId || !item.dexId || !item.sprite) return undefined;
+  const species = artworkSrc(item.dexId);
+  return item.sprite !== species ? species : undefined;
 }
 
 function hideBrokenPicture(event: { currentTarget: HTMLImageElement }): void {
@@ -1614,7 +1623,7 @@ export function Studio({
                           alt=""
                           width={44}
                           height={44}
-                          data-fallback={item.dexId && item.sprite !== artworkSrc(item.dexId) ? artworkSrc(item.dexId) : undefined}
+                          data-fallback={pictureFallback(item)}
                           onError={hideBrokenPicture}
                           className="pk-artwork-thumb"
                         />
@@ -1646,11 +1655,11 @@ export function Studio({
                       alt={chapter.title}
                       width={guessing ? 96 : 176}
                       height={guessing ? 96 : 176}
-                      data-fallback={
-                        !guessing && chapter.dexId && portrait !== artworkSrc(chapter.dexId)
-                          ? artworkSrc(chapter.dexId)
-                          : undefined
-                      }
+                      data-fallback={pictureFallback({
+                        formId: chapter.formId,
+                        dexId: chapter.dexId,
+                        sprite: portrait,
+                      })}
                       onError={hideBrokenPicture}
                       className={guessing ? "pk-sprite" : "pk-art"}
                     />

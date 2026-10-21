@@ -1,11 +1,11 @@
-import { getSpecialForm } from "@/lib/catalogue-db";
+import { getAlternateForm } from "@/lib/catalogue-db";
 import { ensureArtwork } from "@/lib/artwork";
 
 function artworkId(kind: string, raw: string): number | null {
   const id = Number(raw);
   if (!Number.isInteger(id) || id < 1) return null;
   if (kind === "species") return id <= 1025 ? id : null;
-  if (kind === "form") return getSpecialForm(id) ? id : null;
+  if (kind === "form") return getAlternateForm(id) ? id : null;
   return null;
 }
 

@@ -1,3 +1,4 @@
+import { artworkSrc as formArtworkSrc } from "@/lib/artwork-path";
 import { artworkSrc } from "@/lib/page-artwork";
 import type { BiologyBlock } from "@/lib/catalogue-types";
 import { dexBlurb, guessSpoken, pickDexEntry, type MonSheet } from "@/lib/dex-facts";
@@ -50,7 +51,7 @@ export type KidChapter = {
   icon: string;
   /** National dex number, when this chapter is one Pokémon. The cry uses this id. */
   dexId?: number;
-  /** PokéAPI form id, for a Mega Evolution or Gigantamax track. */
+  /** PokéAPI form id. Form tracks use this picture, not the species icon. */
   formId?: number;
   /** Bulbapedia article for the on-page credit. Not spoken. */
   articleUrl?: string;
@@ -421,12 +422,18 @@ export function randomPokedexCard(
   };
 }
 
+/** Picture key for a Yoto icon. Forms use the form id so they do not share the species pixel. */
+export function chapterPictureId(chapter: { formId?: number; dexId?: number }): number | undefined {
+  return chapter.formId ?? chapter.dexId;
+}
+
 /** Swap in the uploaded 16×16 icons. Guess Who clues keep the detective picture. */
 export function applyUploadedPixels(card: KidCard, mediaById: Record<number, string>): KidCard {
   return {
     ...card,
     chapters: card.chapters.map((chapter) => {
-      const media = chapter.dexId ? mediaById[chapter.dexId] : undefined;
+      const pictureId = chapterPictureId(chapter);
+      const media = pictureId ? mediaById[pictureId] : undefined;
       if (!media) return chapter;
       const icon = `yoto:#${media}`;
       if (card.kind === "guess") {
@@ -693,7 +700,7 @@ function splitPlaylistCopy(title: string, index: number, total: number, first: n
 
 function formChapter(form: FormPlaylistEntry, used: Set<string>): KidChapter {
   const text = spokenWiki(form.formName, form.blocks ?? []);
-  const icon = `/pixels/${form.speciesId}.png`;
+  const icon = formArtworkSrc("form", form.formId);
   let overlay = String(form.speciesId);
   while (used.has(overlay)) overlay = `${overlay}b`;
   used.add(overlay);
@@ -705,7 +712,7 @@ function formChapter(form: FormPlaylistEntry, used: Set<string>): KidChapter {
     overlay,
     icon,
     [talk("entry", form.formName, text, icon, overlay, undefined, "cry")],
-    { sprite: artworkSrc(form.formId), dexId: form.speciesId },
+    { sprite: icon, dexId: form.speciesId },
   );
   chapter.formId = form.formId;
   if (form.url) chapter.articleUrl = form.url;

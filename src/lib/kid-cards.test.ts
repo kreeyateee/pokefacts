@@ -1270,16 +1270,26 @@ describe("biology speech and form playlists", () => {
     assert.equal(live.chapters.some((chapter) => chapter.title === "Mega Meowstic"), false);
     assert.ok(live.chapters.length <= YOTO_TRACK_LIMIT);
     assert.equal(chaptersForCries(live).length, live.chapters.length);
-    const sentLive = formPlaylistUpload(live, { 6: "char-pixel" }, "deleted-card");
+    const megaX = live.chapters.find((chapter) => chapter.title === "Mega Charizard X");
+    const megaY = live.chapters.find((chapter) => chapter.title === "Mega Charizard Y");
+    assert.equal(megaX?.formId, 10034);
+    assert.equal(megaY?.formId, 10035);
+    const sentLive = formPlaylistUpload(
+      live,
+      { 10034: "mega-x-pixel", 10035: "mega-y-pixel", 6: "char-pixel" },
+      "deleted-card",
+    );
     assert.equal(sentLive.content.title, "Mega Evolutions");
     assert.equal(sentLive.content.metadata?.title, "Mega Evolutions");
     assert.equal(sentLive.content.cardId, undefined);
     assert.equal(Object.hasOwn(sentLive.content, "cardId"), false);
-    const megaX = live.chapters.find((chapter) => chapter.title === "Mega Charizard X");
-    assert.equal(megaX?.sprite, "/artwork/10034.webp");
-    assert.equal(megaX?.tracks[0]?.icon, "/pixels/6.png");
+    assert.equal(megaX?.sprite, "/api/artwork/form/10034");
+    assert.equal(megaX?.tracks[0]?.icon, "/api/artwork/form/10034");
+    assert.equal(megaY?.tracks[0]?.icon, "/api/artwork/form/10035");
     const charizard = sentLive.content.content.chapters.find((chapter) => chapter.title === "Mega Charizard X");
-    assert.equal(charizard?.tracks[0]?.display.icon16x16, "yoto:#char-pixel");
+    const charizardY = sentLive.content.content.chapters.find((chapter) => chapter.title === "Mega Charizard Y");
+    assert.equal(charizard?.tracks[0]?.display.icon16x16, "yoto:#mega-x-pixel");
+    assert.equal(charizardY?.tracks[0]?.display.icon16x16, "yoto:#mega-y-pixel");
     assert.equal(charizard?.tracks[0]?.voiceId, LILY_VOICE_ID);
     assert.equal(live.chapters.find((chapter) => chapter.title === "Mega Charizard X")?.tracks[0]?.lead, "cry");
 
@@ -1292,8 +1302,9 @@ describe("biology speech and form playlists", () => {
         blocks: MEGA_VENUSAUR,
       },
     ]);
-    assert.equal(card.chapters[0]?.sprite, "/artwork/10033.webp");
-    assert.equal(card.chapters[0]?.icon, "/pixels/3.png");
+    assert.equal(card.chapters[0]?.sprite, "/api/artwork/form/10033");
+    assert.equal(card.chapters[0]?.icon, "/api/artwork/form/10033");
+    assert.equal(card.chapters[0]?.tracks[0]?.icon, "/api/artwork/form/10033");
     const spoken = card.chapters[0]?.tracks[0]?.text ?? "";
     assert.match(spoken, /flower grows more prominent/);
     assert.match(spoken, /sturdier to support the extra weight/);
@@ -1311,16 +1322,19 @@ describe("biology speech and form playlists", () => {
     );
     assert.ok(live.chapters.length <= YOTO_TRACK_LIMIT);
     assert.equal(chaptersForCries(live).length, live.chapters.length);
-    const sent = formPlaylistUpload(live, { 6: "char-pixel" });
+    const chapter = live.chapters.find((item) => item.title === "Gigantamax Charizard");
+    assert.equal(chapter?.formId, 10196);
+    const sent = formPlaylistUpload(live, { 10196: "gmax-charizard", 6: "char-pixel" });
     assert.equal(sent.content.title, "Gigantamax");
     assert.equal(sent.content.metadata?.title, "Gigantamax");
     assert.equal(Object.hasOwn(sent.content, "cardId"), false);
     assert.equal(sent.voiceId, LILY_VOICE_ID);
-    const chapter = live.chapters.find((item) => item.title === "Gigantamax Charizard");
     assert.equal(chapter?.tracks[0]?.lead, "cry");
     assert.equal(chapter?.dexId, 6);
-    assert.equal(chapter?.sprite, "/artwork/10196.webp");
-    assert.equal(chapter?.tracks[0]?.icon, "/pixels/6.png");
+    assert.equal(chapter?.sprite, "/api/artwork/form/10196");
+    assert.equal(chapter?.tracks[0]?.icon, "/api/artwork/form/10196");
+    const uploadedGmax = sent.content.content.chapters.find((item) => item.title === "Gigantamax Charizard");
+    assert.equal(uploadedGmax?.tracks[0]?.display.icon16x16, "yoto:#gmax-charizard");
 
     const card = formPlaylist("gmax", [
       {
@@ -1331,15 +1345,15 @@ describe("biology speech and form playlists", () => {
         blocks: GMAX_CHARIZARD,
       },
     ]);
-    assert.equal(card.chapters[0]?.sprite, "/artwork/10196.webp");
-    assert.equal(card.chapters[0]?.tracks[0]?.icon, "/pixels/6.png");
+    assert.equal(card.chapters[0]?.sprite, "/api/artwork/form/10196");
+    assert.equal(card.chapters[0]?.tracks[0]?.icon, "/api/artwork/form/10196");
     const spoken = card.chapters[0]?.tracks[0]?.spoken ?? "";
     assert.match(spoken, /belly is now white/);
     assert.match(spoken, /wings burn hotter/);
     assert.doesNotMatch(spoken, /draconic, bipedal|Bulbapedia|Creative Commons/i);
   });
 
-  it("sends Alolan and Hisuian forms with form artwork and the species pixel", () => {
+  it("sends Alolan and Hisuian forms with that form's artwork", () => {
     const alolan = listAlolanForms();
     const alola = formPlaylists("alola", alolan);
     assert.equal(alola.length, 1);
@@ -1347,22 +1361,25 @@ describe("biology speech and form playlists", () => {
     assert.equal(alola[0]?.chapters.length, 18);
     assert.ok((alola[0] ? countSpokenTracks(alola[0].chapters) : 0) <= YOTO_TRACK_LIMIT);
     const rattata = alola[0]?.chapters.find((chapter) => chapter.title === "Alolan Rattata");
-    assert.equal(rattata?.sprite, "/artwork/10091.webp");
-    assert.equal(rattata?.tracks[0]?.icon, "/pixels/19.png");
+    assert.equal(rattata?.sprite, "/api/artwork/form/10091");
+    assert.equal(rattata?.tracks[0]?.icon, "/api/artwork/form/10091");
     assert.equal(rattata?.tracks[0]?.lead, "cry");
     assert.equal(rattata?.formId, 10091);
     assert.equal(rattata?.dexId, 19);
-    const sent = formPlaylistUpload(alola[0] as NonNullable<(typeof alola)[0]>, { 19: "rattata-pixel" });
+    const sent = formPlaylistUpload(alola[0] as NonNullable<(typeof alola)[0]>, {
+      10091: "alolan-rattata",
+      19: "rattata-pixel",
+    });
     assert.equal(sent.content.title, "Alolan forms");
     const uploaded = sent.content.content.chapters.find((chapter) => chapter.title === "Alolan Rattata");
-    assert.equal(uploaded?.tracks[0]?.display.icon16x16, "yoto:#rattata-pixel");
+    assert.equal(uploaded?.tracks[0]?.display.icon16x16, "yoto:#alolan-rattata");
 
     const hisui = formPlaylists("hisui", listHisuianForms());
     assert.equal(hisui.length, 1);
     assert.equal(hisui[0]?.chapters.length, 16);
     const growlithe = hisui[0]?.chapters.find((chapter) => chapter.title === "Hisuian Growlithe");
-    assert.equal(growlithe?.sprite, "/artwork/10229.webp");
-    assert.equal(growlithe?.tracks[0]?.icon, "/pixels/58.png");
+    assert.equal(growlithe?.sprite, "/api/artwork/form/10229");
+    assert.equal(growlithe?.tracks[0]?.icon, "/api/artwork/form/10229");
     assert.equal(growlithe?.formId, 10229);
 
     const twins = formPlaylists("alola", [
@@ -1370,6 +1387,8 @@ describe("biology speech and form playlists", () => {
       { formId: 2, speciesId: 6, speciesName: "Charizard", formName: "Alolan Charizard Y" },
     ]);
     assert.equal(twins[0]?.chapters.map((chapter) => chapter.title).join("|"), "Alolan Charizard X|Alolan Charizard Y");
+    assert.equal(twins[0]?.chapters[0]?.icon, "/api/artwork/form/1");
+    assert.equal(twins[0]?.chapters[1]?.icon, "/api/artwork/form/2");
     assert.equal(twins[0]?.chapters[1]?.overlay, "6b");
   });
 

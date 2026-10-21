@@ -67,6 +67,7 @@ __pycache__/
 
 # Official artwork fetched for the Pokédex, Mega Evolutions, and Gigantamax
 /data/artwork
+/data/form-pixels
 
 # PokéAPI tables used to fill the second Pokédex line. Not the catalogue itself.
 /data/poke-csv
