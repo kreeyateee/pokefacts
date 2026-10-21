@@ -407,7 +407,16 @@ function catalogueDex(speciesId: number, override?: string): string {
 async function savedFormProse(form: CatalogueFormRef, options: LoadOptions): Promise<BiologyView | null> {
   const file = options.cacheFile ?? CACHE_FILE;
   const row = proseFormRow((await readCache(file))[String(form.formId)], form);
-  return row ? viewFromRow(row) : null;
+  if (!row) return null;
+  if (!usableRow(row, form)) {
+    await storeRow(file, form.formId, {
+      ...row,
+      status: "ready",
+      revision: CACHE_REVISION,
+      settled: true,
+    }).catch(() => undefined);
+  }
+  return viewFromRow(row);
 }
 
 /**

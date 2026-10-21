@@ -446,7 +446,8 @@ async function wikiRequest(
     await sleep(lag * 1000);
     return wikiRequest(params, fetchImpl, sleep, timeoutMs, attempt + 1, timeouts);
   }
-  if (!response.ok || payload?.error) {
+  // A challenge page is HTML with a normal status. That is a failed read, not an empty article.
+  if (!response.ok || !payload || payload.error) {
     throw wikiError(code ?? `http-${response.status}`, payload?.error?.info || "Bulbapedia did not answer.");
   }
   return payload;
@@ -533,8 +534,16 @@ export async function loadBiology(name: string, id: number, options: LoadOptions
   const ask = (params: Record<string, string>) => wikiRequest(params, fetchImpl, sleep, timeoutMs);
   const recover = async (error: unknown): Promise<BiologyView> => {
     const disk = proseRow(raw, name) ?? proseRow((await readCache(cacheFile))[String(id)], name);
-    if (disk) return viewFromRow(disk);
-    throw error;
+    if (!disk) throw error;
+    // The page is showing this prose. Keep it as the current row so the next open does not call Bulbapedia.
+    const kept: CacheRow = {
+      ...disk,
+      status: "ready",
+      revision: CACHE_REVISION,
+      settled: true,
+    };
+    await storeRow(cacheFile, id, kept).catch(() => undefined);
+    return viewFromRow(kept);
   };
 
   let listed: unknown;

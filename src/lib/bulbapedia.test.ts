@@ -334,6 +334,68 @@ describe("Bulbapedia biology", () => {
     }
   });
 
+  it("saves the biology already on screen when Bulbapedia answers with a challenge page", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-wiki-keep-"));
+    const cacheFile = path.join(dir, "biology.json");
+    await writeFile(
+      cacheFile,
+      JSON.stringify({
+        "1": {
+          name: "Bulbasaur",
+          page: "Bulbasaur_(Pokémon)",
+          url: "https://bulbapedia.bulbagarden.net/wiki/Bulbasaur_(Pokémon)",
+          status: "ready",
+          blocks: [{ kind: "paragraph", text: "Bulbasaur keeps the paragraph already on the page." }],
+          fetchedAt: "2020-01-01T00:00:00.000Z",
+          revision: 1,
+        },
+      }),
+    );
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls += 1;
+      return new Response("<html>Just a moment</html>", {
+        status: 200,
+        headers: { "Content-Type": "text/html" },
+      });
+    }) as typeof fetch;
+    try {
+      const shown = await loadBiology("Bulbasaur", 1, { fetchImpl, cacheFile, sleep: async () => undefined });
+      assert.equal(shown.status, "ready");
+      assert.match(shown.blocks.map((block) => (block.kind === "paragraph" ? block.text : "")).join(" "), /already on the page/);
+      assert.equal(calls, 1);
+      const again = await loadBiology("Bulbasaur", 1, {
+        fetchImpl: (async () => {
+          throw new Error("saved biology was fetched again");
+        }) as typeof fetch,
+        cacheFile,
+        sleep: async () => undefined,
+      });
+      assert.match(again.blocks.map((block) => (block.kind === "paragraph" ? block.text : "")).join(" "), /already on the page/);
+      const saved = JSON.parse(await readFile(cacheFile, "utf8")) as Record<string, { revision?: number; status?: string }>;
+      assert.equal(saved["1"]?.status, "ready");
+      assert.equal(saved["1"]?.revision, 2);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not store a challenge page as a missing article", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-wiki-html-"));
+    const cacheFile = path.join(dir, "biology.json");
+    const fetchImpl = (async () =>
+      new Response("<html>Just a moment</html>", {
+        status: 403,
+        headers: { "Content-Type": "text/html" },
+      })) as typeof fetch;
+    try {
+      await assert.rejects(loadBiology("Mew", 151, { fetchImpl, cacheFile, sleep: async () => undefined }));
+      await assert.rejects(readFile(cacheFile, "utf8"));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("stores two species at once without dropping either row", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "champdex-wiki-parallel-"));
     const cacheFile = path.join(dir, "biology.json");
@@ -1052,6 +1114,20 @@ describe("Bulbapedia biology", () => {
       assert.match(spoken.speech, /Cached Mega Pidgeot prose about the long wings/);
       assert.equal(spoken.notice, "");
       assert.match(spoken.speech, /^Mega Pidgeot\./);
+      const again = await loadFormSpeech(
+        { formId: 10073, speciesId: 18, speciesName: "Pidgeot", formName: "Mega Pidgeot" },
+        {
+          fetchImpl,
+          cacheFile,
+          biologyCacheFile: path.join(dir, "biology.json"),
+          sleep: async () => undefined,
+          timeoutMs: 20,
+        },
+      );
+      assert.equal(calls.n, WIKI_TIMEOUT_TRIES);
+      assert.match(again.speech, /long wings/);
+      const saved = JSON.parse(await readFile(cacheFile, "utf8")) as Record<string, { revision?: number }>;
+      assert.equal(saved["10073"]?.revision, 2);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
