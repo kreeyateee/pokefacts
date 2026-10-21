@@ -143,6 +143,29 @@ function traceShape(ctx: CanvasRenderingContext2D, shape: StickerShape, cx: numb
   ctx.closePath();
 }
 
+function imageBox(image: CanvasImageSource): { width: number; height: number } {
+  if (typeof HTMLImageElement !== "undefined" && image instanceof HTMLImageElement) {
+    const width = image.naturalWidth || image.width;
+    const height = image.naturalHeight || image.height;
+    if (width > 0 && height > 0) return { width, height };
+  }
+  if ("width" in image && "height" in image) {
+    const width = Number(image.width);
+    const height = Number(image.height);
+    if (width > 0 && height > 0) return { width, height };
+  }
+  return { width: 1, height: 1 };
+}
+
+function imageUrl(image: CanvasImageSource): string {
+  if (typeof HTMLImageElement !== "undefined" && image instanceof HTMLImageElement) return image.src;
+  return "";
+}
+
+function crispPicture(url: string): boolean {
+  return url.includes("/pixels/") || url.includes("/sprites/");
+}
+
 function paintStickers(ctx: CanvasRenderingContext2D, spec: CardPaint, width: number, height: number) {
   for (const sticker of spec.stickers) {
     const size = sticker.scale * width;
@@ -150,30 +173,51 @@ function paintStickers(ctx: CanvasRenderingContext2D, spec: CardPaint, width: nu
     const centerY = sticker.y * height;
     const radius = size * 0.48;
     const shape = sticker.shape ?? "circle";
+    const clear = !sticker.color || sticker.color === "transparent";
+    const image = spec.images.get(sticker.key);
     ctx.save();
     ctx.translate(centerX, centerY);
     ctx.rotate(sticker.rotation ?? 0);
     ctx.translate(-centerX, -centerY);
     ctx.shadowColor = "rgba(22, 50, 79, 0.35)";
     ctx.shadowBlur = size * 0.08;
-    ctx.shadowOffsetY = size * 0.05;
+    ctx.shadowOffsetY = size * 0.04;
     traceShape(ctx, shape, centerX, centerY, radius);
-    ctx.fillStyle = sticker.color || "#fffdf6";
-    ctx.fill();
-    ctx.shadowColor = "transparent";
-    ctx.lineWidth = Math.max(1, size * 0.035);
-    ctx.strokeStyle = "#16324f";
+    ctx.lineWidth = Math.max(1.5, size * 0.03);
+    if (!clear) {
+      ctx.fillStyle = sticker.color;
+      ctx.fill();
+      ctx.strokeStyle = sticker.color;
+    } else {
+      ctx.strokeStyle = "rgba(22, 50, 79, 0.28)";
+    }
     ctx.stroke();
-    const image = spec.images.get(sticker.key);
+    ctx.shadowColor = "transparent";
     if (image) {
+      const url = imageUrl(image);
+      const deco = sticker.key.startsWith("deco:");
+      const crisp = crispPicture(url);
+      const boundsW = shape === "hex" ? Math.sqrt(3) * radius : radius * 2;
+      const boundsH = radius * 2;
+      const cover = deco || crisp ? 0.92 : 1.28;
+      const targetW = boundsW * cover;
+      const targetH = boundsH * cover;
+      const box = imageBox(image);
+      const imageAspect = box.width / box.height;
+      const targetAspect = targetW / targetH;
+      const drawW = imageAspect > targetAspect ? targetH * imageAspect : targetW;
+      const drawH = imageAspect > targetAspect ? targetH : targetW / imageAspect;
       ctx.save();
-      traceShape(ctx, shape, centerX, centerY, radius * 0.92);
+      traceShape(ctx, shape, centerX, centerY, clear ? radius : radius * 0.9);
       ctx.clip();
-      const inset = size * 0.16;
-      ctx.imageSmoothingEnabled = sticker.key.startsWith("deco:");
-      ctx.drawImage(image, centerX - size / 2 + inset, centerY - size / 2 + inset, size - inset * 2, size - inset * 2);
+      ctx.imageSmoothingEnabled = !crisp;
+      ctx.drawImage(image, centerX - drawW / 2, centerY - drawH / 2, drawW, drawH);
       ctx.restore();
     }
+    traceShape(ctx, shape, centerX, centerY, radius);
+    ctx.lineWidth = Math.max(1, size * (clear ? 0.016 : 0.02));
+    ctx.strokeStyle = clear ? "rgba(22, 50, 79, 0.55)" : "#16324f";
+    ctx.stroke();
     if (spec.selectedId === sticker.id) {
       traceShape(ctx, shape, centerX, centerY, radius);
       ctx.setLineDash([size * 0.08, size * 0.06]);
@@ -195,63 +239,31 @@ function paintFront(ctx: CanvasRenderingContext2D, spec: CardPaint, width: numbe
     ctx.drawImage(spec.painting, 0, 0, width, height);
   }
 
-  const pad = 3.2 * mm;
+  const edge = 1.15 * mm;
   ctx.strokeStyle = "#16324f";
-  ctx.lineWidth = 1.05 * mm;
-  ctx.strokeRect(pad * 0.45, pad * 0.45, width - pad * 0.9, height - pad * 0.9);
+  ctx.lineWidth = 0.7 * mm;
+  ctx.strokeRect(edge, edge, width - edge * 2, height - edge * 2);
 
-  ctx.fillStyle = "rgba(22, 50, 79, 0.9)";
-  ctx.fillRect(pad, pad, width - pad * 2, 13.2 * mm);
-
-  paintParagraph(ctx, spec.kicker.toUpperCase(), {
-    x: pad + 1.2 * mm,
-    y: pad + 0.45 * mm,
-    width: width - pad * 2 - 2 * mm,
-    height: 4.2 * mm,
-  }, {
-    family: spec.fonts.display,
-    weight: 700,
-    color: "#ffcb05",
-    startPx: 3.4 * mm,
-    minPx: 2.4 * mm,
-    align: "left",
-  });
-
-  paintParagraph(ctx, spec.title, {
-    x: pad + 1.2 * mm,
-    y: pad + 4.6 * mm,
-    width: width - pad * 2 - 2.4 * mm,
-    height: 7.4 * mm,
-  }, {
-    family: spec.fonts.display,
-    weight: 700,
-    color: "#fffdf6",
-    startPx: 5.4 * mm,
-    minPx: 3.2 * mm,
-    align: "left",
-    leading: 1.02,
-  });
-
-  ctx.fillStyle = "#ffcb05";
-  ctx.fillRect(pad, pad + 12.2 * mm, width - pad * 2, 1 * mm);
-
-  const bandTop = height - pad - 16.5 * mm;
-  ctx.fillStyle = "#16324f";
-  ctx.fillRect(pad, bandTop, width - pad * 2, 16.5 * mm);
-  paintParagraph(ctx, spec.description, {
-    x: pad + 1.6 * mm,
-    y: bandTop + 1.5 * mm,
-    width: width - pad * 2 - 3.2 * mm,
-    height: 13.5 * mm,
-  }, {
-    family: spec.fonts.body,
-    weight: 700,
-    color: "#fffdf6",
-    startPx: 3.5 * mm,
-    minPx: 2.3 * mm,
-    align: "left",
-    leading: 1.25,
-  });
+  const title = spec.title.trim();
+  if (title) {
+    const barH = 7.2 * mm;
+    ctx.fillStyle = "rgba(22, 50, 79, 0.92)";
+    ctx.fillRect(edge, edge, width - edge * 2, barH);
+    paintParagraph(ctx, title, {
+      x: 2.2 * mm,
+      y: edge + 1.15 * mm,
+      width: width - 4.4 * mm,
+      height: 5 * mm,
+    }, {
+      family: spec.fonts.display,
+      weight: 700,
+      color: "#fffdf6",
+      startPx: 4.4 * mm,
+      minPx: 2.6 * mm,
+      align: "center",
+      leading: 1,
+    });
+  }
 
   paintStickers(ctx, spec, width, height);
 }

@@ -579,7 +579,7 @@
   image-rendering: pixelated;
 }
 
-/* Mystery art: black shape only. The white sits on the frame so the filter cannot turn it black. */
+/* Frame around the canvas. The white the reader sees is painted into the canvas pixels. */
 .pk-silhouette {
   display: grid;
   width: min(16rem, 100%);
@@ -596,9 +596,8 @@
 .pk-silhouette-shape {
   width: 100%;
   height: 100%;
-  object-fit: contain;
-  background: transparent;
-  filter: brightness(0);
+  display: block;
+  background: #fff;
 }
 
 .pk-artwork {
