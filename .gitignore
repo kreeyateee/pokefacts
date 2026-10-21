@@ -44,6 +44,8 @@ next-env.d.ts
 # YouTube audio saved as plain MP3s for a music playlist
 /data/music-mp3
 /data/music-youtube.json
+/data/youtube-cookies.txt
+/data/youtube-proxy.txt
 
 # Deno cache. The binary stays in vendor/deno.
 /vendor/deno/cache

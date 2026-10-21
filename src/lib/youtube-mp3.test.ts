@@ -140,6 +140,38 @@ describe("yt-dlp mp3 arguments", () => {
     assert.equal(launch.env.DENO_NO_UPDATE_CHECK, "1");
   });
 
+  it("sends yt-dlp through a proxy or a cookies file when one is configured", () => {
+    const root = path.join("/app", "pokefacts");
+    const cookies = path.join(root, "data", "youtube-cookies.txt");
+    const packaged = (file: string) => file.endsWith(`${path.sep}yt_dlp${path.sep}__main__.py`);
+    const base = {
+      root,
+      python: { command: "python", prefix: [] as string[] },
+      envCommand: "",
+      homeBin: path.join("/missing", "yt-dlp"),
+    };
+    const proxyLaunch = ytdlpLaunch({
+      ...base,
+      exists: packaged,
+      baseEnv: { PATH: path.join("/usr", "bin"), NODE_ENV: "test", YOUTUBE_PROXY: "http://127.0.0.1:18080" },
+    });
+    assert.deepEqual(proxyLaunch.args.slice(-2), ["--proxy", "http://127.0.0.1:18080"]);
+
+    const rejected = ytdlpLaunch({
+      ...base,
+      exists: packaged,
+      baseEnv: { PATH: path.join("/usr", "bin"), NODE_ENV: "test", YOUTUBE_PROXY: "file:///tmp/not-a-proxy" },
+    });
+    assert.equal(rejected.args.includes("--proxy"), false);
+
+    const cookieLaunch = ytdlpLaunch({
+      ...base,
+      exists: (file) => packaged(file) || file === cookies,
+      baseEnv: { PATH: path.join("/usr", "bin"), NODE_ENV: "test" },
+    });
+    assert.deepEqual(cookieLaunch.args.slice(-2), ["--cookies", cookies]);
+  });
+
   it("only reads files inside the download folder", () => {
     assert.equal(isDownloadPath("/tmp/songs", "/tmp/songs/track.mp3"), true);
     assert.equal(isDownloadPath("/tmp/songs", "/tmp/songs-extra/track.mp3"), false);
