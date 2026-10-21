@@ -54,7 +54,15 @@ if (!response.ok || !response.body) {
   process.exit(1);
 }
 await pipeline(Readable.fromWeb(response.body), createWriteStream(zip));
-const extracted = spawnSync("tar", ["-xf", zip, "-C", destDir], { stdio: "inherit", windowsHide: true });
+let extracted = spawnSync("tar", ["-xf", zip, "-C", destDir], { stdio: "inherit", windowsHide: true });
+if (extracted.status !== 0) {
+  const python = process.platform === "win32" ? "py" : "python3";
+  const prefix = process.platform === "win32" ? ["-3"] : [];
+  extracted = spawnSync(python, [...prefix, "-m", "zipfile", "-e", zip, destDir], {
+    stdio: "inherit",
+    windowsHide: true,
+  });
+}
 await rm(zip, { force: true });
 if (extracted.status !== 0) process.exit(extracted.status ?? 1);
 if (process.platform !== "win32") await chmod(exe, 0o755);
