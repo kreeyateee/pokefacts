@@ -81,14 +81,6 @@ export type CoverDraft = {
   painting: string;
 };
 
-const SPOTS = [
-  { x: 0.5, y: 0.49, scale: 0.46 },
-  { x: 0.27, y: 0.43, scale: 0.28 },
-  { x: 0.73, y: 0.43, scale: 0.28 },
-  { x: 0.32, y: 0.6, scale: 0.26 },
-  { x: 0.68, y: 0.6, scale: 0.26 },
-] as const;
-
 export function mmToPx(mm: number, dpi: number): number {
   return Math.round((mm / 25.4) * dpi);
 }
@@ -157,7 +149,7 @@ export function stickerFilename(title: string, paper: PaperId): string {
 }
 
 export function stickerStorageKey(cardId: string): string {
-  return `pokefacts.stickers.${cardId}`;
+  return `pokefacts.stickers.v2.${cardId}`;
 }
 
 function lineMm(fontPt: number): number {
@@ -212,6 +204,7 @@ export function stickerShape(value: unknown, index = 0): StickerShape {
 }
 
 export function stickerColor(value: unknown, index = 0): string {
+  if (typeof value === "string" && value.toLowerCase() === "transparent") return "transparent";
   if (typeof value === "string" && STICKER_COLORS.some((color) => color === value.toLowerCase())) return value.toLowerCase();
   return STICKER_COLORS[index % STICKER_COLORS.length] ?? "#ffcb05";
 }
@@ -298,6 +291,109 @@ export function openSpot(existing: ReadonlyArray<{ x: number; y: number }>): { x
   return { x: 0.34 + (step % 4) * 0.1, y: 0.4 + (step % 3) * 0.1 };
 }
 
+const HEX_TITLE = 0.115;
+const HEX_MIN_SCALE = 0.23;
+
+function hexInsets(scale: number): { x: number; y: number; w: number; h: number } {
+  const half = Math.max(0.16, scale) / 2;
+  const halfW = Math.min(0.46, half);
+  const halfH = Math.min(0.46, half / ASPECT);
+  const insetX = Math.min(0.47, halfW + 0.02);
+  const insetY = Math.min(0.47, halfH + 0.02);
+  const top = Math.max(insetY, HEX_TITLE);
+  return {
+    x: insetX,
+    y: top,
+    w: Math.max(0.12, 1 - insetX * 2),
+    h: Math.max(0.12, 1 - top - insetY),
+  };
+}
+
+function hexFit(cols: number, rows: number, boxW: number, boxH: number): { r: number; scale: number; fill: number } {
+  const staggered = cols > 1 && rows > 1;
+  const wFactor = Math.sqrt(3) * (cols + (staggered ? 0.5 : 0));
+  const hFactor = staggered ? 1.5 * (rows - 1) + 2 : rows * 2;
+  const rW = boxW / wFactor;
+  const rH = (boxH * ASPECT) / hFactor;
+  let r = Math.min(rW, rH);
+  const maxR = 0.56 * 0.48;
+  if (r > maxR) r = maxR;
+  const scale = r / 0.48;
+  const occW = r * wFactor;
+  const occH = (r / ASPECT) * hFactor;
+  const fill = boxW > 0 && boxH > 0 ? Math.min(1, occW / boxW) * Math.min(1, occH / boxH) : 0;
+  return { r, scale, fill };
+}
+
+function chooseHexGrid(count: number): { cols: number; rows: number; shown: number } {
+  const n = Math.max(0, Math.floor(count));
+  if (n === 0) return { cols: 1, rows: 1, shown: 0 };
+  const probe = hexInsets(0.28);
+  let best: { cols: number; rows: number; shown: number; score: number } | null = null;
+  const consider = (cols: number, rows: number, shown: number, column: boolean) => {
+    if (!column && cols === 1 && n > 1) return;
+    if (cols < 1 || rows < 1 || rows > 8 || cols > 4 || shown < 1 || shown > n) return;
+    if (shown < cols * (rows - 1) + 1) return;
+    const { scale, fill } = hexFit(cols, rows, probe.w, probe.h);
+    if (scale < HEX_MIN_SCALE) return;
+    const score = fill * 4 + Math.min(scale, 0.5) + shown * 0.04 + (shown === n ? 0.45 : 0);
+    if (!best || score > best.score) best = { cols, rows, shown, score };
+  };
+  const search = (column: boolean) => {
+    best = null;
+    for (let cols = 1; cols <= 4; cols += 1) {
+      const rows = Math.ceil(n / cols);
+      consider(cols, rows, n, column);
+    }
+    if (best) return;
+    for (let cols = 1; cols <= 4; cols += 1) {
+      for (let rows = 1; rows <= 8; rows += 1) consider(cols, rows, cols * rows, column);
+    }
+  };
+  search(false);
+  if (!best) search(true);
+  return best ?? { cols: 1, rows: 1, shown: 1 };
+}
+
+/** Pointy-top honeycomb in card fractions. Every spot shares one scale. */
+export function hexagonGrid(count: number): { x: number; y: number; scale: number }[] {
+  const choice = chooseHexGrid(count);
+  if (choice.shown === 0) return [];
+  let fit = hexFit(choice.cols, choice.rows, hexInsets(0.3).w, hexInsets(0.3).h);
+  for (let pass = 0; pass < 4; pass += 1) {
+    const box = hexInsets(fit.scale);
+    fit = hexFit(choice.cols, choice.rows, box.w, box.h);
+  }
+  const box = hexInsets(fit.scale);
+  const { r, scale } = hexFit(choice.cols, choice.rows, box.w, box.h);
+  const pitchX = Math.sqrt(3) * r;
+  const staggered = choice.cols > 1 && choice.rows > 1;
+  const pitchY = ((staggered ? 1.5 : 2) * r) / ASPECT;
+  const hexHalfW = (Math.sqrt(3) / 2) * r;
+  const hexHalfH = r / ASPECT;
+  const { cols, rows, shown } = choice;
+  const odd = staggered ? pitchX / 2 : 0;
+  const gridW = (cols - 1) * pitchX + odd + hexHalfW * 2;
+  const gridH = (rows - 1) * pitchY + hexHalfH * 2;
+  const originX = box.x + (box.w - gridW) / 2 + hexHalfW;
+  const originY = box.y + (box.h - gridH) / 2 + hexHalfH;
+  const spots: { x: number; y: number; scale: number }[] = [];
+  for (let index = 0; index < shown; index += 1) {
+    const row = Math.floor(index / cols);
+    const col = index % cols;
+    const countInRow = Math.min(cols, shown - row * cols);
+    const stagger = staggered && row % 2 === 1 ? pitchX / 2 : 0;
+    let extra = 0;
+    if (countInRow < cols) {
+      const fullSpan = (cols - 1) * pitchX + odd;
+      const rowSpan = (countInRow - 1) * pitchX;
+      extra = fullSpan / 2 - (stagger + rowSpan / 2);
+    }
+    spots.push({ x: originX + stagger + extra + col * pitchX, y: originY + row * pitchY, scale });
+  }
+  return spots;
+}
+
 function spreadKeys(keys: readonly string[], count: number): string[] {
   if (keys.length <= count) return keys.slice();
   const picked: string[] = [];
@@ -313,9 +409,19 @@ function spreadKeys(keys: readonly string[], count: number): string[] {
 }
 
 export function defaultStickers(keys: readonly string[]): PlacedSticker[] {
-  return spreadKeys(keys, SPOTS.length).map((key, index) => {
-    const spot = SPOTS[index] ?? SPOTS[0];
-    return { id: `cover-${key}`, key, x: spot.x, y: spot.y, scale: spot.scale, ...stickerStyle(index) };
+  const spots = hexagonGrid(keys.length);
+  return spreadKeys(keys, spots.length).map((key, index) => {
+    const spot = spots[index] ?? { x: 0.5, y: 0.5, scale: 0.4 };
+    return {
+      id: `cover-${key}`,
+      key,
+      x: spot.x,
+      y: spot.y,
+      scale: spot.scale,
+      rotation: 0,
+      shape: "hex",
+      color: "transparent",
+    };
   });
 }
 

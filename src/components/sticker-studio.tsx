@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { shadowPixelPath, type KidCard } from "@/lib/kid-cards";
+import { shadowPixelPath, type KidCard, type KidChapter } from "@/lib/kid-cards";
+import { artworkSrc } from "@/lib/page-artwork";
 import { APP_NAME } from "@/lib/site";
 import {
   PREVIEW_DPI,
@@ -30,7 +31,6 @@ import {
   sheetSlots,
   stickerFilename,
   stickerStorageKey,
-  stickerStyle,
   topStickerAt,
   type CoverDraft,
   type PaperId,
@@ -73,6 +73,17 @@ function nounFor(kind: KidCard["kind"]): string {
   return "Pokémon";
 }
 
+function crispPicture(src: string): boolean {
+  return src.includes("/pixels/") || src.includes("/sprites/");
+}
+
+function stickerSrc(chapter: KidChapter, guess: boolean): string {
+  if (guess && chapter.dexId) return shadowPixelPath(chapter.dexId);
+  if (chapter.sprite?.includes("/artwork/")) return chapter.sprite;
+  if (chapter.dexId) return artworkSrc(chapter.dexId);
+  return chapter.sprite ?? "";
+}
+
 function monsFor(card: KidCard): StickerMon[] {
   const guess = card.kind === "guess";
   return card.chapters.flatMap((chapter) => {
@@ -81,7 +92,7 @@ function monsFor(card: KidCard): StickerMon[] {
       {
         key: chapter.key,
         name: guess ? `Riddle ${chapter.overlay}` : chapter.title,
-        src: guess ? shadowPixelPath(chapter.dexId) : `/sprites/${chapter.dexId}.png`,
+        src: stickerSrc(chapter, guess),
       },
     ];
   });
@@ -646,7 +657,7 @@ export function StickerStudio({
     const id = `sticker-${crypto.randomUUID()}`;
     setSelected(id);
     setDraft((current) => {
-      const style = stickerStyle(current.stickers.length);
+      const style = { shape: "hex" as const, color: "transparent", rotation: 0 };
       const spot = clampSticker(at ?? openSpot(current.stickers), 0.3, style.rotation);
       const sticker: PlacedSticker = { id, key, x: spot.x, y: spot.y, scale: 0.3, ...style };
       return { ...current, stickers: [...current.stickers, sticker] };
@@ -971,7 +982,7 @@ export function StickerStudio({
           height={shelf ? 56 : 64}
           draggable={false}
           className={shelf ? "h-14 w-14 object-contain" : "h-16 w-16 object-contain"}
-          style={{ imageRendering: mon.key.startsWith("deco:") ? "auto" : "pixelated" }}
+          style={{ imageRendering: crispPicture(mon.src) ? "pixelated" : "auto" }}
         />
         {shelf ? null : <span className="line-clamp-2 w-full text-sm leading-4">{mon.name}</span>}
       </button>
@@ -1011,7 +1022,7 @@ export function StickerStudio({
               </label>
             ) : null}
             <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-              Tap a picture, a Poké Ball, or a berry. Draw on the card, then move the pictures around.
+              The cover starts as a hex pattern of transparent pictures. Tap one to move it, or add a Poké Ball or a berry.
             </p>
           </div>
           <Button type="button" variant="outline" className="h-10 shrink-0 px-4" onClick={close}>
@@ -1162,7 +1173,7 @@ export function StickerStudio({
                   width={48}
                   height={48}
                   className="h-12 w-12 shrink-0 object-contain"
-                  style={{ imageRendering: selectedMon.key.startsWith("deco:") ? "auto" : "pixelated" }}
+                  style={{ imageRendering: crispPicture(selectedMon.src) ? "pixelated" : "auto" }}
                 />
               ) : null}
               <p className="text-sm leading-6">
@@ -1189,6 +1200,14 @@ export function StickerStudio({
                   ))}
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Sticker colour">
+                  <button
+                    type="button"
+                    className="pk-chip"
+                    aria-pressed={selectedSticker.color === "transparent"}
+                    onClick={() => restyle({ color: "transparent" })}
+                  >
+                    No colour
+                  </button>
                   {BRUSHES.map((color) => (
                     <button
                       key={color}
@@ -1256,17 +1275,6 @@ export function StickerStudio({
                 maxLength={80}
                 onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
                 className="pk-field"
-              />
-            </label>
-            <label className="mt-3 grid gap-1 text-sm" htmlFor="sticker-line">
-              Cover line
-              <textarea
-                id="sticker-line"
-                value={draft.description}
-                maxLength={280}
-                onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
-                className="pk-field py-2"
-                style={{ height: "auto", minHeight: "5.5rem" }}
               />
             </label>
           </div>
@@ -1424,7 +1432,7 @@ export function StickerStudio({
           src={ghost.src}
           alt=""
           className="pk-sticker-ghost pointer-events-none fixed z-[60] h-16 w-16 object-contain"
-          style={{ left: ghost.x, top: ghost.y, imageRendering: "pixelated" }}
+          style={{ left: ghost.x, top: ghost.y, imageRendering: crispPicture(ghost.src) ? "pixelated" : "auto" }}
         />
       ) : null}
     </div>
