@@ -69,10 +69,16 @@ describe("Yoto errors", () => {
       redirectUri: redirectUri(),
     });
     assert.equal(params.get("redirect_uri"), "http://127.0.0.1:3847/callback");
+    assert.equal(callbackForOrigin("https://pokefacts.online"), "https://pokefacts.online/callback");
+    assert.equal(
+      callbackForOrigin("https://www.pokefacts.online"),
+      "https://www.pokefacts.online/callback",
+    );
     assert.equal(
       callbackForOrigin("https://pokefacts.duckdns.org"),
       "https://pokefacts.duckdns.org/callback",
     );
+    assert.equal(callbackForOrigin("http://pokefacts.online"), YOTO_REDIRECT_URI);
     assert.equal(callbackForOrigin("http://pokefacts.duckdns.org"), YOTO_REDIRECT_URI);
     assert.equal(callbackForOrigin("https://evil.example"), YOTO_REDIRECT_URI);
     assert.equal(callbackForOrigin("http://127.0.0.1:3847"), YOTO_REDIRECT_URI);
