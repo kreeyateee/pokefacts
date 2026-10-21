@@ -11,6 +11,7 @@ import { readMusicIndex, type MusicSong } from "@/lib/music-index";
 import { musicPlaylistUpload, musicYotoSavePlan, type MusicPlaylistTrack } from "@/lib/youtube-playlist";
 import { yotoFetch } from "@/lib/yoto-session";
 import { uploadForPlaylist } from "@/lib/yoto-send";
+import { yotoPlaylistUrl } from "@/lib/yoto-playlist";
 
 function songMessage(code: string | undefined, found: string | null | undefined): string {
   if (code === "missingtitle") return "Bulbapedia does not have a page for this song.";
@@ -57,6 +58,7 @@ export function MusicPanel({
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [playlistHref, setPlaylistHref] = useState<string | undefined>();
   const [mp3Id, setMp3Id] = useState("");
   const [found, setFound] = useState<Record<string, string | null>>({});
   const foundRef = useRef(found);
@@ -178,6 +180,7 @@ export function MusicPanel({
     if (busy || saving) return;
     setSaving(true);
     setFailed(false);
+    setPlaylistHref(undefined);
     try {
       const finished: MusicPlaylistTrack[] = [];
       for (const item of playlist.songs) {
@@ -217,6 +220,7 @@ export function MusicPanel({
       }
       setFailed(false);
       setNote(`${plan.title} is in your Yoto library.`);
+      setPlaylistHref(yotoPlaylistUrl(payload.result.cardId));
       toastSendReady(plan.title);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "The playlist was not sent.";
@@ -413,7 +417,12 @@ export function MusicPanel({
           {note}
         </p>
       ) : null}
-      <MusicPlaylistSection playlist={playlist} saving={saving} onSave={() => void saveToYoto()} />
+      <MusicPlaylistSection
+        playlist={playlist}
+        saving={saving}
+        playlistHref={playlistHref}
+        onSave={() => void saveToYoto()}
+      />
     </div>
   );
 }

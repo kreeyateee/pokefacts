@@ -35,7 +35,7 @@ export function AppNav({
         ))}
       </div>
       {selected === "collections" ? (
-        <div className="pk-subtabs pk-scroll" role="tablist" aria-label="Collections">
+        <div className="pk-subtabs pk-scroll" role="tablist" aria-label="Collection Cards">
           {COLLECTION_TABS.map((tab) => (
             <button
               key={tab.kind}

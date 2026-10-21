@@ -306,6 +306,7 @@ export function MusicPlaylistSection({
   playlist,
   saving = false,
   onSave,
+  playlistHref,
   title = "Pokémon music",
   onTitle,
   pictures: _pictures,
@@ -314,6 +315,7 @@ export function MusicPlaylistSection({
   playlist: ReturnType<typeof useMusicPlaylist>;
   saving?: boolean;
   onSave?: () => void;
+  playlistHref?: string;
   title?: string;
   onTitle?: (title: string) => void;
   pictures?: Record<string, { id: number; name: string }>;
@@ -377,6 +379,11 @@ export function MusicPlaylistSection({
         >
           {saving ? "Saving to Yoto…" : "Save to Yoto"}
         </button>
+        {playlistHref ? (
+          <a className="pk-pill min-h-11" href={playlistHref} target="_blank" rel="noreferrer">
+            Open in the Yoto app
+          </a>
+        ) : null}
       </div>
       {playlist.songs.length === 0 ? (
         <p className="pk-card min-w-0 px-4 py-4 text-sm leading-6">

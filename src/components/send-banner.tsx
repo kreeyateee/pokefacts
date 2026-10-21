@@ -12,12 +12,14 @@ import {
   sendReadyCopy,
   sendStartedCopy,
 } from "@/lib/send-cheer";
+import { yotoPlaylistUrl } from "@/lib/yoto-playlist";
 
 export type SendJobView = {
   status: string;
   detail: string;
   done?: number;
   total?: number;
+  cardId?: string;
 };
 
 function openDonate() {
@@ -61,6 +63,7 @@ export function SendBanner({
   if (!job) return null;
   const failed = job.status === "failed";
   const done = job.status === "completed";
+  const playlistHref = done ? yotoPlaylistUrl(job.cardId) : undefined;
   const kicker = failed ? "Could not finish" : done ? "Ready to play" : "Recording in the background";
   return (
     <div className="pk-send-dock">
@@ -69,6 +72,11 @@ export function SendBanner({
         <StatusBar label={job.detail} done={job.done} total={job.total} failed={failed} />
         {done || failed ? (
           <div className="pk-send-actions">
+            {playlistHref ? (
+              <a className="pk-banner-btn" href={playlistHref} target="_blank" rel="noreferrer">
+                Open in the Yoto app
+              </a>
+            ) : null}
             {done ? (
               <a
                 className="pk-banner-btn"

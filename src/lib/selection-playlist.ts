@@ -54,9 +54,9 @@ export function selectionSpeciesLimit(kind: SelectionKind): number {
 export function selectionTitle(kind: SelectionKind, custom?: string): string {
   const typed = custom?.replace(/[–—]/g, "-").replace(/\s+/g, " ").trim() ?? "";
   if (typed) return typed.slice(0, 80);
-  if (kind === "whos-that") return "Who's That Pokémon";
+  if (kind === "whos-that") return "Who's That Pokémon Cards";
   if (kind === "advanced") return "Advanced facts";
-  return "Facts";
+  return "Fact Cards";
 }
 
 function asSentence(text: string): string {

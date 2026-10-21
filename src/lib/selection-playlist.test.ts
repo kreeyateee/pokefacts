@@ -155,7 +155,7 @@ describe("catalogue selection playlists", () => {
     assert.equal(built.card.chapters.length, 50);
     assert.equal(built.card.chapters.flatMap((chapter) => chapter.tracks).length, 100);
     assert.deepEqual(built.refused, [51]);
-    assert.equal(built.title, "Who's That Pokémon");
+    assert.equal(built.title, "Who's That Pokémon Cards");
   });
 
   it("splits a catalogue pick into different sticker cards", () => {
@@ -175,7 +175,7 @@ describe("catalogue selection playlists", () => {
 
     const one = selectionStickerCards([{ id: 25, name: "Pikachu" }, { id: 1, name: "Bulbasaur" }], "facts");
     assert.equal(one.length, 1);
-    assert.equal(one[0]?.libraryTitle, "Facts");
+    assert.equal(one[0]?.libraryTitle, "Fact Cards");
     assert.deepEqual(
       one[0]?.chapters.map((chapter) => chapter.dexId),
       [25, 1],

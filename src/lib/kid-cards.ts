@@ -427,6 +427,15 @@ export function chapterPictureId(chapter: { formId?: number; dexId?: number }): 
   return chapter.formId ?? chapter.dexId;
 }
 
+/** Official artwork for the playlist cover: the first Pokémon on the card. */
+export function coverArtworkId(card: KidCard): number | undefined {
+  for (const chapter of card.chapters) {
+    const id = chapterPictureId(chapter);
+    if (id) return id;
+  }
+  return undefined;
+}
+
 /** Swap in the uploaded 16×16 icons. Guess Who clues keep the detective picture. */
 export function applyUploadedPixels(card: KidCard, mediaById: Record<number, string>): KidCard {
   return {

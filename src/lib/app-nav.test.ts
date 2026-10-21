@@ -20,7 +20,7 @@ describe("app navigation", () => {
     );
   });
 
-  it("groups forms and special sets under Collections", () => {
+  it("groups forms and special sets under Collection Cards", () => {
     assert.equal(COLLECTION_TABS.length, 6);
     assert.equal(DEFAULT_COLLECTION, "mega");
     assert.equal(isCollectionKind("mega"), true);
@@ -39,11 +39,15 @@ describe("app navigation", () => {
   });
 
   it("uses short, matching page titles", () => {
-    assert.equal(pageHeading({ view: "catalogue", kind: "meet" }).title, "Catalogue");
+    assert.deepEqual(
+      PRIMARY_TABS.map((tab) => tab.label),
+      ["Fact Cards", "Who's That Pokémon Cards", "Collection Cards", "Pokédex Cards", "Music"],
+    );
+    assert.equal(pageHeading({ view: "catalogue", kind: "meet" }).title, "Pokédex Cards");
     assert.equal(pageHeading({ view: "music", kind: "meet" }).title, "Music");
-    assert.equal(pageHeading({ view: "cards", kind: "guess" }).title, "Who's That Pokémon");
+    assert.equal(pageHeading({ view: "cards", kind: "guess" }).title, "Who's That Pokémon Cards");
     assert.equal(pageHeading({ view: "cards", kind: "mega", libraryTitle: "Mega Evolutions" }).title, "Mega Evolutions");
-    assert.equal(pageHeading({ view: "cards", kind: "meet" }).title, "Pokémon facts");
+    assert.equal(pageHeading({ view: "cards", kind: "meet" }).title, "Fact Cards");
   });
 
   it("keeps playlist notes to one line", () => {

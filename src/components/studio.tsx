@@ -28,6 +28,7 @@ import {
   applySpeciesSpeech,
   bulkProgressLabel,
   chapterPictureId,
+  coverArtworkId,
   factPoolFromCards,
   factsBulkPlaylists,
   factsPlaylistUpload,
@@ -75,6 +76,7 @@ import { isPiperVoice } from "@/lib/piper-voice";
 import {
   afterRejectedPlaylist,
   applyFinishedAudio,
+  applyPlaylistCover,
   bulkFailureText,
   factsBulkUpload,
   finishedPlaylistId,
@@ -86,6 +88,7 @@ import {
   type FinishedAudio,
   type PlaylistUpload,
 } from "@/lib/yoto-send";
+import { isYotoCoverUrl, yotoPlaylistUrl } from "@/lib/yoto-playlist";
 import {
   CARD_KEY,
   clearSavedLoginForScopeGap,
@@ -104,6 +107,7 @@ type JobView = {
   detail: string;
   done?: number;
   total?: number;
+  cardId?: string;
 };
 
 function savedCards(): SavedCards {
@@ -201,6 +205,19 @@ async function uploadIcon(id: number, shadow = false): Promise<string> {
     return mediaId;
   }
   throw new SendFailure(fallback, false);
+}
+
+async function uploadCover(id: number | undefined): Promise<string | undefined> {
+  if (!id) return undefined;
+  try {
+    const response = await yotoFetch(`/api/yoto/cover?id=${id}`, { method: "POST" });
+    const payload = await readBody(response);
+    if (!response.ok) return undefined;
+    const imageL = (payload as { imageL?: unknown } | null)?.imageL;
+    return isYotoCoverUrl(imageL) ? imageL : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function uploadPixels(
@@ -1224,8 +1241,11 @@ export function Studio({
 
   async function sendPrepared(playlist: KidCard, upload: PlaylistUpload, headline?: string) {
     const libraryTitle = upload.content.title || playlist.libraryTitle;
-    const audio = await renderPlaylist(playlist, upload, libraryTitle);
-    const prepared = applyFinishedAudio(upload, audio);
+    const [audio, cover] = await Promise.all([
+      renderPlaylist(playlist, upload, libraryTitle),
+      uploadCover(coverArtworkId(playlist)),
+    ]);
+    const prepared = applyPlaylistCover(applyFinishedAudio(upload, audio), cover);
     if (prepared.create) delete prepared.content.cardId;
     return postPlaylist(playlist, prepared, headline ?? libraryTitle);
   }
@@ -1278,7 +1298,7 @@ export function Studio({
         voiceId: voiceIdRef.current,
       });
       const upload = uploadForPlaylist(prepared, chosenId);
-      await sendPrepared(playlist, upload, playlist.libraryTitle);
+      const sentId = await sendPrepared(playlist, upload, playlist.libraryTitle);
       const updatedTitle = library.find((item) => item.cardId === chosenId)?.title;
       const tracks = countSpokenTracks(playlist.chapters);
       setJob({
@@ -1291,6 +1311,7 @@ export function Studio({
         ),
         done: tracks,
         total: tracks,
+        cardId: sentId,
       });
       toastSendReady(chosenId ? (updatedTitle ?? "The playlist") : playlist.libraryTitle, Boolean(chosenId));
       void loadLibrary();
@@ -1356,7 +1377,7 @@ export function Studio({
             ? pokedexUpload(spokenCard, await uploadPixels(spokenCard), undefined, voiceIdRef.current)
             : factsPlaylistUpload(spokenCard, await uploadPixels(spokenCard), undefined, voiceIdRef.current);
       const upload = uploadForPlaylist({ ...base, voiceId: voiceIdRef.current }, chosenId);
-      await sendPrepared(card, upload, card.libraryTitle);
+      const sentId = await sendPrepared(card, upload, card.libraryTitle);
       const updatedTitle = library.find((item) => item.cardId === chosenId)?.title;
       const tracks = countSpokenTracks(card.chapters);
       setJob({
@@ -1369,6 +1390,7 @@ export function Studio({
         ),
         done: tracks,
         total: tracks,
+        cardId: sentId,
       });
       toastSendReady(chosenId ? (updatedTitle ?? "The playlist") : card.libraryTitle, Boolean(chosenId));
       void loadLibrary();
@@ -1499,6 +1521,7 @@ export function Studio({
         blurb: card.blurb,
       })
     : "";
+  const playlistHref = job?.status === "completed" ? yotoPlaylistUrl(job.cardId) : undefined;
 
   return (
     <div className={job ? "pk-page pk-page-docked" : "pk-page"}>
@@ -1557,10 +1580,10 @@ export function Studio({
                 role="listbox"
                 aria-label={
                   guessing
-                    ? "Who's That Pokémon playlists"
+                    ? "Who's That Pokémon Cards playlists"
                     : formMode || speciesSet
                       ? `${card.title} playlists`
-                      : "Facts playlists"
+                      : "Fact Cards playlists"
                 }
               >
                 {rangeCards.map((item) => {
@@ -1929,6 +1952,18 @@ export function Studio({
                 <p className="text-sm font-bold">
                   {job?.status === "completed" ? "Ready to link" : "After it finishes"}
                 </p>
+                {playlistHref ? (
+                  <p className="mt-2 text-sm leading-6">
+                    <a
+                      className="font-bold text-poke-red underline decoration-2"
+                      href={playlistHref}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Open this playlist in the Yoto app
+                    </a>
+                  </p>
+                ) : null}
                 <ol className="mt-2 grid list-decimal gap-2 pl-4 text-sm leading-6">
                   <li>Open the Yoto app and go to Make Your Own.</li>
                   <li>

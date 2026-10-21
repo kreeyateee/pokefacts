@@ -25,17 +25,18 @@ export function SetupGuide({
           library. It never asks for your Yoto password.
         </li>
         <li>
-          <span className="font-bold">2. Pick what to send.</span> Use Facts or Who&apos;s That for the ready-made
-          cards. Collections holds Mega Evolutions, Gigantamax, Alolan, Hisuian, Legendary, and Mythical sets.
-          Catalogue lets you tick your own list.
+          <span className="font-bold">2. Pick what to send.</span> Use Fact Cards or Who&apos;s That Pokémon Cards for
+          the ready-made cards. Collection Cards holds Mega Evolutions, Gigantamax, Alolan, Hisuian, Legendary, and
+          Mythical sets. Pokédex Cards lets you tick your own list.
         </li>
         <li>
           <span className="font-bold">3. Hear one, then make the card.</span> Hear plays one entry on this page. Make
           this card sends the whole playlist to Make Your Own. Print stickers is next to Send.
         </li>
         <li>
-          <span className="font-bold">4. Link it in the Yoto app.</span> Open Make Your Own, find the playlist name, and
-          choose Link to a card. Hold a blank card to the player. The next playlist needs another blank card.
+          <span className="font-bold">4. Link it in the Yoto app.</span> After a send, open the playlist in the Yoto
+          app. Or open Make Your Own, find the playlist name, and choose Link to a card. Hold a blank card to the
+          player. The next playlist needs another blank card.
         </li>
       </ol>
       <div className="mt-6 flex flex-wrap gap-2">
@@ -52,7 +53,7 @@ export function SetupGuide({
             className="h-11 rounded-full border-[3px] border-ink bg-white px-5 font-heading text-sm font-bold text-ink shadow-[3px_3px_0_var(--ink)]"
             onClick={onHome}
           >
-            Start with Facts
+            Start with Fact Cards
           </button>
         ) : null}
       </div>

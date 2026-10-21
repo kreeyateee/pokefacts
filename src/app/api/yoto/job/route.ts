@@ -14,7 +14,7 @@ type JobBody = {
     title?: string;
     cardId?: string;
     content?: { chapters?: unknown[] };
-    metadata?: { title?: string; description?: string };
+    metadata?: { title?: string; description?: string; cover?: { imageL?: string } };
   };
 };
 

@@ -13,10 +13,10 @@ export const PRIMARY_TABS: ReadonlyArray<{
   id: PrimaryTabId;
   label: string;
 }> = [
-  { id: "facts", label: "Facts" },
-  { id: "guess", label: "Who's That" },
-  { id: "collections", label: "Collections" },
-  { id: "catalogue", label: "Catalogue" },
+  { id: "facts", label: "Fact Cards" },
+  { id: "guess", label: "Who's That Pokémon Cards" },
+  { id: "collections", label: "Collection Cards" },
+  { id: "catalogue", label: "Pokédex Cards" },
   { id: "music", label: "Music" },
 ];
 
@@ -62,7 +62,7 @@ export function pageHeading(input: {
   }
   if (input.view === "catalogue") {
     return {
-      title: "Catalogue",
+      title: "Pokédex Cards",
       blurb: "Look up any Pokémon, tick the ones you want, and build your own playlist.",
     };
   }
@@ -74,19 +74,19 @@ export function pageHeading(input: {
   }
   if (input.kind === "guess") {
     return {
-      title: "Who's That Pokémon",
+      title: "Who's That Pokémon Cards",
       blurb: "Fifty riddles. Hear the cry and clues, guess the name, then send the card.",
     };
   }
   if (isCollectionKind(input.kind)) {
     const tab = COLLECTION_TABS.find((item) => item.kind === input.kind);
     return {
-      title: input.libraryTitle || tab?.title || "Collections",
+      title: input.libraryTitle || tab?.title || "Collection Cards",
       blurb: "Hear each one on this page, then send the set to a Yoto card.",
     };
   }
   return {
-    title: "Pokémon facts",
+    title: "Fact Cards",
     blurb: input.randomFacts
       ? "One hundred Pokémon, drawn at random. Hear one, then send this list to a card."
       : "Hear a short fact, then send this playlist to a Yoto card.",

@@ -157,12 +157,12 @@ function Fact({ label, children }: { label: string; children: string }) {
 const PLAYLIST_KINDS: Array<{ id: SelectionKind; label: string; detail: string }> = [
   {
     id: "whos-that",
-    label: "Who's That Pokémon",
+    label: "Who's That Pokémon Cards",
     detail: "Cry, three clues, then the cry again and the name. Two tracks each, so 50 Pokémon fit.",
   },
   {
     id: "facts",
-    label: "Facts",
+    label: "Fact Cards",
     detail: "Cry, then the name and the first two biology paragraphs.",
   },
   {
@@ -416,7 +416,7 @@ export function Catalogue({
       setBuildProgress(null);
       setBuildMessage(
         playlistKind === "whos-that"
-          ? `Who's That Pokémon uses two tracks for each Pokémon, so 50 fit on a card. ${picked.length} are picked. Nothing was sent.`
+          ? `Who's That Pokémon Cards uses two tracks for each Pokémon, so 50 fit on a card. ${picked.length} are picked. Nothing was sent.`
           : `A playlist holds 100 tracks. ${picked.length} are picked. Nothing was sent.`,
       );
       return;
@@ -656,10 +656,10 @@ export function Catalogue({
               onChange={(event) => setPlaylistTitle(event.target.value)}
               placeholder={
                 playlistKind === "whos-that"
-                  ? "Who's That Pokémon"
+                  ? "Who's That Pokémon Cards"
                   : playlistKind === "advanced"
                     ? "Advanced facts"
-                    : "Facts"
+                    : "Fact Cards"
               }
             className="pk-field"
           />
@@ -691,10 +691,10 @@ export function Catalogue({
               const title =
                 playlistTitle.trim() ||
                 (playlistKind === "whos-that"
-                  ? "Who's That Pokémon"
+                  ? "Who's That Pokémon Cards"
                   : playlistKind === "advanced"
                     ? "Advanced facts"
-                    : "Facts");
+                    : "Fact Cards");
               if (onPrepareSend) {
                 onPrepareSend("Send this pick", title, () => buildPlaylist());
                 return;

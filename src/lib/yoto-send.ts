@@ -14,6 +14,7 @@ import {
   statusErrorText,
   validYotoCardId,
 } from "@/lib/yoto-error";
+import { isYotoCoverUrl } from "@/lib/yoto-playlist";
 
 export type SavedCardMap = Partial<Record<string, string>>;
 
@@ -26,10 +27,29 @@ export type PlaylistUpload = {
   content: {
     title?: string;
     cardId?: string;
-    metadata?: { title?: string; description?: string };
+    metadata?: {
+      title?: string;
+      description?: string;
+      cover?: { imageL?: string };
+    };
     content?: unknown;
   };
 };
+
+export function applyPlaylistCover(upload: PlaylistUpload, imageL?: string): PlaylistUpload {
+  const url = imageL?.trim();
+  if (!isYotoCoverUrl(url)) return upload;
+  return {
+    ...upload,
+    content: {
+      ...upload.content,
+      metadata: {
+        ...upload.content.metadata,
+        cover: { imageL: url },
+      },
+    },
+  };
+}
 
 export function dropSavedCard(store: SavedCardMap, playlistId: string): SavedCardMap {
   if (!Object.prototype.hasOwnProperty.call(store, playlistId)) return store;
@@ -377,7 +397,7 @@ type LibraryCard = {
   cardId?: string;
   title?: string;
   name?: string;
-  metadata?: { title?: string; description?: string };
+  metadata?: { title?: string; description?: string; cover?: { imageL?: string } };
   content?: { chapters?: Array<{ tracks?: unknown[] }> };
 };
 
@@ -499,6 +519,13 @@ export function appendToPlaylist(
     normalized.metadata?.description ||
     stored.title ||
     "";
+  const previousCover = previous.cover?.imageL;
+  const addedCover = normalized.metadata?.cover?.imageL;
+  const coverUrl = isYotoCoverUrl(previousCover)
+    ? previousCover
+    : isYotoCoverUrl(addedCover)
+      ? addedCover
+      : undefined;
 
   return {
     cardId,
@@ -508,6 +535,7 @@ export function appendToPlaylist(
       ...previous,
       description,
       media: { duration, fileSize },
+      ...(coverUrl ? { cover: { imageL: coverUrl } } : {}),
     } as PlaylistUpload["content"]["metadata"],
   };
 }
