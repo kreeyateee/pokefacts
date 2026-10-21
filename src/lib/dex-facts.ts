@@ -80,6 +80,8 @@ export type MonSheet = {
   /** Species it can become. Names only, not the method. */
   evolvesInto?: string[];
   habitat: string | null;
+  /** Official colour, such as Green. */
+  color?: string | null;
   entries: FlavorSource[];
 };
 
@@ -293,149 +295,63 @@ export type ClueHints = {
   heightDecimetres: number;
   weightHectograms: number;
   habitat: string | null;
+  color?: string | null;
 };
 
-const STRONG_VERB =
-  /\b(has|have|had|lives|live|stores|store|possesses|possess|harbors|harbours|burns|burn|spits|spit|opens|open|flies|fly|swims|swim|hides|hide|grows|grow|carries|carry|keeps|keep|makes|make|uses|use|looks|look|seems|seem|roasts|roast|locks|lock|hooks|hook|does|do|comes|come|runs|run|shoots|shoot|builds|build|wears|wear|holds|hold|glows|glow|sleeps|sleep|eats|eat|bites|bite|floats|float|dives|dive|leaps|leap|sings|sing|calls|call|changes|change|protects|protect|melts|melt|causes|cause|intimidates|kicks|kick|charges|charge|watches|watch|stands|stand|walks|walk|climbs|climb|shreds|shred|clamps|clamp)\b/i;
+type Picture = { max: number; phrase: string; token: string };
 
-const BODY_NOUN =
-  /\b(mouth|jaw|jaws|tail|wing|wings|fang|fangs|claw|claws|horn|horns|shell|ear|ears|eye|eyes|paw|paws|fin|fins|head|neck|arm|arms|leg|legs|tooth|teeth|spike|spikes|seed|seeds|flower|flame|flames|fire|leaf|leaves|fur|beak|tongue|mask|sacs|cheek|cheeks|electricity)\b/i;
+/** Heights a child can picture. The token stops the weight line using the same object. */
+const HEIGHTS: Picture[] = [
+  { max: 20, phrase: "shorter than a ruler", token: "ruler" },
+  { max: 45, phrase: "about as tall as a cat", token: "cat" },
+  { max: 80, phrase: "about as tall as a desk", token: "desk" },
+  { max: 105, phrase: "about as tall as a door handle", token: "handle" },
+  { max: 140, phrase: "taller than a door handle", token: "handle" },
+  { max: 170, phrase: "shorter than a grown-up", token: "person" },
+  { max: 205, phrase: "about as tall as a doorway", token: "door" },
+  { max: 260, phrase: "taller than a doorway", token: "door" },
+  { max: 340, phrase: "as tall as a basketball hoop", token: "hoop" },
+  { max: 520, phrase: "taller than a giraffe", token: "giraffe" },
+  { max: 900, phrase: "taller than a house", token: "house" },
+  { max: Number.POSITIVE_INFINITY, phrase: "much taller than a house", token: "house" },
+];
 
-function familyNames(sheet: MonSheet): string[] {
-  const into = sheet.evolvesInto ?? [];
-  return [...new Set([sheet.name, sheet.evolvesFrom ?? "", ...into].filter(Boolean))];
+const WEIGHTS: Picture[] = [
+  { max: 0.2, phrase: "lighter than an apple", token: "apple" },
+  { max: 1, phrase: "about as heavy as a bag of sugar", token: "sugar" },
+  { max: 3, phrase: "about as heavy as a brick", token: "brick" },
+  { max: 5, phrase: "about as heavy as a house cat", token: "cat" },
+  { max: 8, phrase: "about as heavy as a bowling ball", token: "ball" },
+  { max: 14, phrase: "about as heavy as a bicycle", token: "bike" },
+  { max: 28, phrase: "heavier than a bicycle", token: "bike" },
+  { max: 45, phrase: "about as heavy as a large dog", token: "dog" },
+  { max: 80, phrase: "about as heavy as a grown-up", token: "person" },
+  { max: 120, phrase: "heavier than a grown-up", token: "person" },
+  { max: 240, phrase: "about as heavy as a motorbike", token: "motorbike" },
+  { max: 550, phrase: "about as heavy as a horse", token: "horse" },
+  { max: 1400, phrase: "about as heavy as a small car", token: "car" },
+  { max: Number.POSITIVE_INFINITY, phrase: "heavier than a car", token: "car" },
+];
+
+function pickPicture(table: Picture[], value: number): Picture {
+  return table.find((row) => value <= row.max) ?? table[table.length - 1]!;
 }
 
-function verbatimRun(short: string, original: string): number {
-  const words = short
-    .toLowerCase()
-    .replace(/[^a-z0-9' ]/g, " ")
-    .split(/\s+/)
-    .filter(Boolean);
-  const hay = ` ${original.toLowerCase().replace(/[^a-z0-9' ]/g, " ").replace(/\s+/g, " ").trim()} `;
-  for (let size = Math.min(12, words.length); size >= 6; size -= 1) {
-    for (let index = 0; index + size <= words.length; index += 1) {
-      if (hay.includes(` ${words.slice(index, index + size).join(" ")} `)) return size;
+/** Nearest picture that does not reuse the height object. */
+function weightPicture(kilograms: number, usedToken: string): Picture {
+  const exact = pickPicture(WEIGHTS, kilograms);
+  if (exact.token !== usedToken) return exact;
+  let best = exact;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const row of WEIGHTS) {
+    if (row.token === usedToken) continue;
+    const distance = Math.abs(Math.log(Math.max(row.max, 0.05)) - Math.log(Math.max(kilograms, 0.05)));
+    if (distance < bestDistance) {
+      best = row;
+      bestDistance = distance;
     }
   }
-  return 0;
-}
-
-function hideLeadingName(text: string, names: string[]): string {
-  let hidden = text;
-  const ordered = [...names].filter(Boolean).sort((a, b) => b.length - a.length);
-  for (const name of ordered) {
-    const token = escapeRegExp(name);
-    hidden = hidden.replace(new RegExp(`^${token}['’]s(?![\\p{L}\\p{N}])`, "iu"), "Its");
-    hidden = hidden.replace(
-      new RegExp(`^(Once|When|If|Because|After|Before|While|Although)\\s+${token}(?![\\p{L}\\p{N}])`, "iu"),
-      "$1 It",
-    );
-    hidden = hidden.replace(new RegExp(`^${token}(?![\\p{L}\\p{N}])`, "iu"), "It");
-  }
-  return hidden.replace(/\bIt It\b/g, "It").replace(/\s+/g, " ").trim();
-}
-
-function acceptTrait(value: string, original: string, names: string[]): string {
-  const line = asSentence(value);
-  const count = wordCount(line);
-  if (!line || count < 3 || count > 12) return "";
-  if (names.some((name) => mentionsName(name, line))) return "";
-  if (verbatimRun(line, original) >= 6) return "";
-  if (/^(once|when|if|because|although|though)\b/i.test(line)) return "";
-  if (SKIP.test(line)) return "";
-  if (!/^(it|its|the|a|an)\b/i.test(line)) return "";
-  if (!STRONG_VERB.test(line) && !BODY_NOUN.test(line)) return "";
-  return line;
-}
-
-function pluralNoun(noun: string): boolean {
-  return /s$/i.test(noun) && !/ss$/i.test(noun);
-}
-
-function placedTrait(text: string): string {
-  const match = text.match(
-    /\b(seed|seeds|flower|flowers|shell|leaf|leaves|flame|flames|horn|horns|spike|spikes|fang|fangs|wing|wings|fin|fins|tail)\b(?:\s+\w+){0,5}\s+on its (back|head|tail|belly|forehead|chest)\b/i,
-  );
-  if (!match?.[1] || !match[2]) return "";
-  const noun = match[1].toLowerCase();
-  const place = match[2].toLowerCase();
-  return pluralNoun(noun) ? `It has ${noun} on its ${place}` : `It has a ${noun} on its ${place}`;
-}
-
-function describedTrait(text: string): string {
-  const match = text.match(
-    /\b(huge|big|long|sharp|small|tiny|large|giant|massive|thick|soft|hard|sawlike|powerful|strong|wide|hot|cold|bright|round)\s+(mouth|jaw|jaws|tail|wing|wings|fang|fangs|claw|claws|horn|horns|shell|ear|ears|eye|eyes|paw|paws|fin|fins|head|arm|arms|leg|legs|tooth|teeth|spike|spikes|seed|seeds|flower|flame|flames|leaf|leaves|beak|tongue|mask|body)\b/i,
-  );
-  if (!match?.[1] || !match[2]) return "";
-  const adjective = match[1].toLowerCase();
-  const noun = match[2].toLowerCase();
-  if (pluralNoun(noun)) return `It has ${adjective} ${noun}`;
-  const article = /^[aeiou]/i.test(adjective) ? "an" : "a";
-  return `It has ${article} ${adjective} ${noun}`;
-}
-
-function clipClause(clause: string): string {
-  let text = clause.replace(/\s+/g, " ").trim();
-  text = text.replace(/^(once|when|if|because|after|before|while|although|though|and|but|so|from)\s+/i, "");
-  text = text.replace(/\bat the tip of its\b/gi, "on its");
-  text = text.replace(/\bin order to\b/gi, "to");
-  text = text.replace(/\b(absolutely|completely|entirely|very|really|quite|extremely)\b/gi, "");
-  text = text.replace(/^(this pokémon|this pokemon)\s+/i, "It ");
-  text = text.replace(/\s+/g, " ").trim();
-  if (/^(possesses|harbors|harbours|stores|lives|uses|makes|has|keeps|seems|appears|looks)\b/i.test(text)) {
-    text = `It ${text.charAt(0).toLowerCase()}${text.slice(1)}`;
-  }
-  const cut = text.split(/\s+\b(?:in which|that|which|before|after|when|with|by)\b/i)[0] ?? text;
-  return cut.replace(/\s+/g, " ").trim();
-}
-
-/** One short spoken sentence inspired by a dex line, or nothing if it would be a paste. */
-function distillSentence(sentence: string, names: string[]): string {
-  if (SKIP.test(sentence)) return "";
-  const hidden = hideLeadingName(sentence, names);
-  if (!hidden || names.some((name) => mentionsName(name, hidden))) return "";
-  const early = [
-    /\b(?:has|have) clamped its jaws\b|\bclamps its jaws\b/i.test(hidden) && /\bnot let go\b/i.test(hidden)
-      ? "Its jaws lock shut and do not let go"
-      : "",
-    /\bfangs?\b/i.test(hidden) && /\bfishhooks?\b/i.test(hidden) ? "The fangs hook backward like fishhooks" : "",
-    /\bflame burns\b/i.test(hidden) && /\btail\b/i.test(hidden) ? "A flame burns on its tail" : "",
-    placedTrait(hidden),
-    describedTrait(hidden),
-  ];
-  for (const candidate of early) {
-    const line = candidate ? acceptTrait(candidate, sentence, names) : "";
-    if (line) return line;
-  }
-  const clauses = hidden.split(/[,;:—–]/).map((part) => part.trim()).filter(Boolean);
-  for (const clause of clauses) {
-    const line = acceptTrait(clipClause(clause), sentence, names);
-    if (line) return line;
-  }
-  return "";
-}
-
-function heightPhrase(centimetres: number): string {
-  if (centimetres <= 20) return "much shorter than a house cat";
-  if (centimetres <= 45) return "about as tall as a house cat";
-  if (centimetres <= 80) return "about as tall as a small child";
-  if (centimetres <= 120) return "about as tall as a child";
-  if (centimetres <= 180) return "about as tall as a grown person";
-  if (centimetres <= 300) return "taller than a grown person";
-  return "much taller than a person";
-}
-
-function weightPhrase(kilograms: number): string {
-  if (kilograms <= 0.2) return "lighter than an apple";
-  if (kilograms <= 1) return "about as heavy as a bag of sugar";
-  if (kilograms <= 5) return "about as heavy as a house cat";
-  if (kilograms <= 10) return "about as heavy as a bowling ball";
-  if (kilograms <= 20) return "about as heavy as a toddler";
-  if (kilograms <= 45) return "about as heavy as a child";
-  if (kilograms <= 100) return "about as heavy as a grown person";
-  if (kilograms <= 500) return "heavier than a grown person";
-  return "heavier than a small car";
+  return best;
 }
 
 /** One comparison from the real height and weight. It never quotes the Pokédex numbers. */
@@ -443,56 +359,13 @@ function sizeComparison(decimetres: number, hectograms = 0): string {
   const centimetres = decimetres * 10;
   const kilograms = hectograms / 10;
   if (centimetres > 0 && kilograms > 0) {
-    return `It is ${heightPhrase(centimetres)} and ${weightPhrase(kilograms)}.`;
+    const height = pickPicture(HEIGHTS, centimetres);
+    const weight = weightPicture(kilograms, height.token);
+    return `It is ${height.phrase} and ${weight.phrase}.`;
   }
-  if (centimetres > 0) return `It is ${heightPhrase(centimetres)}.`;
-  if (kilograms > 0) return `It is ${weightPhrase(kilograms)}.`;
-  return "Its size is hard to picture.";
-}
-
-function traitLines(sheet: MonSheet): string[] {
-  const names = familyNames(sheet);
-  const traits: string[] = [];
-  for (const entry of sheet.entries) {
-    const sentences = entry.text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [];
-    for (const sentence of sentences) {
-      const line = distillSentence(sentence, names);
-      if (!line || traits.includes(line)) continue;
-      traits.push(line);
-    }
-  }
-  return traits;
-}
-
-function bodyScore(line: string): number {
-  if (/fang|horn|spike|flame|seed|claw|tongue|beak|shell|wing|tail/i.test(line)) return 2;
-  if (BODY_NOUN.test(line)) return 1;
-  return 0;
-}
-
-function genusBody(genus: string, names: string[]): string {
-  const words = genus
-    .replace(/POK[eé]MON/gi, " ")
-    .split(/\s+/)
-    .map((word) => word.trim())
-    .filter((word) => word && !/^(new|the|a|an|species)$/i.test(word));
-  const noun = words.at(-1)?.toLowerCase() ?? "";
-  if (noun.length < 3) return "It has a body part that stands out.";
-  const article = /^[aeiou]/i.test(noun) ? "an" : "a";
-  const line = asSentence(`It has the body of ${article} ${noun}`);
-  if (names.some((name) => mentionsName(name, line))) return "It has a body part that stands out.";
-  return line;
-}
-
-function fallbackHabit(sheet: MonSheet, names: string[]): string {
-  const home = homeFact(sheet.habitat);
-  if (home && !names.some((name) => mentionsName(name, home))) return home;
-  const options = [
-    "It keeps a quiet habit when nobody is watching.",
-    "It repeats one strange habit all day.",
-    "It waits, then moves in a way you would remember.",
-  ];
-  return options[Math.abs(sheet.id) % options.length] ?? options[0] ?? "It keeps a quiet habit.";
+  if (centimetres > 0) return `It is ${pickPicture(HEIGHTS, centimetres).phrase}.`;
+  if (kilograms > 0) return `It is ${pickPicture(WEIGHTS, kilograms).phrase}.`;
+  return "";
 }
 
 function intoNames(sheet: MonSheet): string[] {
@@ -536,46 +409,140 @@ function repeatsClue(extra: string, clues: string[]): boolean {
   });
 }
 
+const IT_VERB: Record<string, string> = {
+  are: "is",
+  have: "has",
+  live: "lives",
+  gather: "gathers",
+  do: "does",
+  fly: "flies",
+  were: "was",
+};
+
+const BARE_DEX_VERB =
+  /^(possesses|wields|harbors|harbours|stores|lives|uses|makes|has|keeps|seems|appears|looks|flies|swims|hides|builds|creates|releases|absorbs|generates|emits|shoots|carries|holds|spreads|changes|protects|glows|roams|wanders|floats|dives|leaps|sings|burrows|mimics|roasts|spits|wears|sleeps|eats|tends|can)\b/i;
+
+/** "Pineco are" becomes "it is". "if it were" and "by it have" stay as they are. */
+function agreeIt(line: string): string {
+  let text = line.replace(/\bit (are|live|do)\b/gi, (_, verb: string) => `it ${IT_VERB[verb.toLowerCase()] ?? verb}`);
+  text = text.replace(/\bit have\b/gi, (match, offset, full) => {
+    const before = full.slice(Math.max(0, offset - 6), offset);
+    if (/\b(?:by|of|with|for|to|from|as|than)\s+$/i.test(before)) return match;
+    return "it has";
+  });
+  text = text.replace(/\bit were\b/gi, (match, offset, full) => {
+    const before = full.slice(Math.max(0, offset - 8), offset);
+    if (/\b(?:if|as)\s+$/i.test(before)) return match;
+    return "it was";
+  });
+  return text.replace(/^(?:elderly|young|old)\s+it\s+is\b/i, "It is");
+}
+
+/** The species name, and "this Pokémon", become "it". The rest of the sentence stays. */
+function withoutPokemonName(sentence: string, names: string[]): string {
+  let line = sentence.replace(/[—–]/g, ", ").replace(/\s+/g, " ").trim();
+  line = line.replace(/\bthis\s+(?:[a-z'-]+\s+){0,4}pok[eé]mon['’]s\b/gi, "its");
+  line = line.replace(/\bof\s+this\s+(?:[a-z'-]+\s+){0,4}pok[eé]mon\b/gi, "of it");
+  line = line.replace(/\bthis\s+(?:[a-z'-]+\s+){0,4}pok[eé]mon\b/gi, "it");
+  line = line.replace(/\bof\s+these\s+(?:[a-z'-]+\s+){0,4}pok[eé]mon\b/gi, "of them");
+  line = line.replace(/\bthese\s+(?:[a-z'-]+\s+){0,4}pok[eé]mon\b/gi, "they");
+  const ordered = [...names].filter(Boolean).sort((left, right) => right.length - left.length);
+  for (const name of ordered) {
+    const token = escapeRegExp(name);
+    line = line.replace(new RegExp(`\\ba\\s+${token}['’]s(?![\\p{L}\\p{N}])`, "giu"), "its");
+    line = line.replace(new RegExp(`${token}['’]s(?![\\p{L}\\p{N}])`, "giu"), "its");
+    line = line.replace(
+      new RegExp(`\\b(?:a|an|the)\\s+(?:[a-z'-]+\\s+){0,3}${token}(?![\\p{L}\\p{N}])`, "giu"),
+      "it",
+    );
+    line = line.replace(new RegExp(`(?:^|(?<=\\s))${token}(?![\\p{L}\\p{N}])`, "giu"), "it");
+  }
+  line = line
+    .replace(/\ba\s+its\b/gi, "its")
+    .replace(/\b(of|to|with|for|from|by|on|in|at)\s+they\b/gi, "$1 them")
+    .replace(/\s+/g, " ")
+    .trim();
+  line = agreeIt(line);
+  line = line.replace(/^they\s+(\w+)/i, (full, verb: string) => {
+    const next = IT_VERB[verb.toLowerCase()];
+    if (!next) return `${full.charAt(0).toUpperCase()}${full.slice(1)}`;
+    return `It ${next}`;
+  });
+  if (BARE_DEX_VERB.test(line)) line = `It ${line.charAt(0).toLowerCase()}${line.slice(1)}`;
+  if (/^its\b/i.test(line)) line = `Its${line.slice(3)}`;
+  else if (/^it\b/i.test(line)) line = `It${line.slice(2)}`;
+  line = line.replace(/^It\s+([A-Za-z]+)/, (full, verb: string) => {
+    const next = IT_VERB[verb.toLowerCase()];
+    return next ? `It ${next}` : full;
+  });
+  if (/^[a-z]/.test(line)) line = `${line.charAt(0).toUpperCase()}${line.slice(1)}`;
+  return asSentence(line);
+}
+
+function nameStillPresent(name: string, text: string): boolean {
+  return nameForms(name).some((form) => {
+    const token = escapeRegExp(form);
+    return new RegExp(`(?:^|(?<=\\s))${token}(?![\\p{L}\\p{N}])`, "iu").test(text);
+  });
+}
+
+/** "Mr. Mime" is one name. A plain period split would leave the name in two pieces. */
+function dexSentences(text: string): string[] {
+  const shielded = text.replace(/\b(Mr|Mrs|Ms|Jr|Sr|Dr|Prof|St)\./g, "$1\u0000");
+  const parts = shielded.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [];
+  return parts.map((part) => part.replace(/\u0000/g, ".").replace(/\s+/g, " ").trim()).filter(Boolean);
+}
+
+/** The whole Pokédex entry, with the species name taken out. Harsh sentences are dropped. */
+function namelessEntry(text: string, names: string[]): string {
+  const sentences = dexSentences(text);
+  const kept: string[] = [];
+  for (const sentence of sentences) {
+    if (SKIP.test(sentence)) continue;
+    const bare = sentence.replace(/[.!?]+$/, "").trim();
+    if (!bare || names.some((name) => bare.toLowerCase() === name.toLowerCase())) continue;
+    const spoken = withoutPokemonName(sentence, names);
+    if (!spoken || names.some((name) => nameStillPresent(name, spoken))) continue;
+    kept.push(spoken);
+  }
+  return kept.join(" ");
+}
+
+/** Colour and type in one clue. Either half is left out when the sheet has no value. */
+function lookSentence(color: string | null | undefined, types: string[]): string {
+  const shade = color?.trim().toLowerCase() ?? "";
+  const typed = types.length > 0 ? typeSentence(types) : "";
+  if (shade && typed) {
+    const rest = typed.replace(/^It is\s+/i, "").replace(/\.$/, "");
+    return `It is ${shade}, and it is ${rest}.`;
+  }
+  if (shade) return `It is ${shade}.`;
+  return typed;
+}
+
 /**
- * Exactly three short clue sentences: a habit, a weird body part, and a
- * size comparison from the real height and weight. They never say the
- * species name, an evolution name, or the elemental type.
+ * Four clues: colour and type, the stored Pokédex entry, a second entry from
+ * another game, then a size picture. A missing piece is left out.
+ * The species name is taken out of both Pokédex lines.
  */
 export function shortClues(sheet: MonSheet): string[] {
-  const names = familyNames(sheet);
-  const traits = traitLines(sheet);
-  const body =
-    [...traits].sort((left, right) => bodyScore(right) - bodyScore(left)).find((line) => bodyScore(line) > 0) ??
-    genusBody(sheet.genus, names);
-  const habit = traits.find((line) => line !== body && STRONG_VERB.test(line) && bodyScore(line) === 0) ?? fallbackHabit(sheet, names);
+  const names = [
+    ...nameForms(sheet.name),
+    ...(sheet.evolvesFrom ? nameForms(sheet.evolvesFrom) : []),
+    ...(sheet.evolvesInto ?? []).flatMap((name) => nameForms(name)),
+  ];
+  const look = lookSentence(sheet.color, sheet.types);
+  const first = sheet.entries[0] ? namelessEntry(sheet.entries[0].text, names) : "";
+  const secondRaw = sheet.entries[1] ? namelessEntry(sheet.entries[1].text, names) : "";
+  const second = secondRaw && secondRaw !== first ? secondRaw : "";
   const size =
     sheet.heightDecimetres > 0 || sheet.weightHectograms > 0
       ? sizeComparison(sheet.heightDecimetres, sheet.weightHectograms)
-      : "Its size is hard to picture.";
-  const clues: string[] = [];
-  const push = (line: string) => {
-    const clean = asSentence(line);
-    if (!clean || clues.includes(clean) || clean.length > 140) return false;
-    if (names.some((name) => mentionsName(name, clean))) return false;
-    if (/\btype\b/i.test(clean)) return false;
-    clues.push(clean);
-    return true;
-  };
-  if (!push(habit)) push(fallbackHabit(sheet, names));
-  if (!push(body)) push(genusBody(sheet.genus, names));
-  if (!push(size)) push("Its size is hard to picture.");
-  for (const filler of [
-    "It keeps a quiet habit when nobody is watching.",
-    "It has a body part that stands out.",
-    "Its size is hard to picture.",
-  ]) {
-    if (clues.length >= 3) break;
-    push(filler);
-  }
-  return clues.slice(0, 3);
+      : "";
+  return [look, first, second, size].filter((line) => line.length > 0);
 }
 
-/** One new sentence for the answer track. It is not one of the three clues. */
+/** One new sentence for the answer track. It is not one of the clues. */
 export function answerExtra(sheet: MonSheet, clues: string[]): string {
   const from = sheet.evolvesFrom && sheet.evolvesFrom !== sheet.name ? sheet.evolvesFrom : null;
   const options = [
@@ -591,20 +558,36 @@ export function answerExtra(sheet: MonSheet, clues: string[]): string {
   return "It stands alone, with no further evolution.";
 }
 
-/** Spoken Guess Who scripts. The cry is joined in front of each track later. */
-export function guessSpoken(sheet: MonSheet): { clue: string; answer: string } {
-  const clues = shortClues(sheet);
-  const clue = `Number ${sheet.id}. ${clues.join(" ")} Shout your guess. One. Two. Three.`;
-  const answer = `It is ${sheet.name}. ${answerExtra(sheet, clues)}`;
+const GUESS_COUNTDOWN = "Shout your guess. One. Two. Three.";
+
+/** Splits a spoken riddle so each clue stays one item and the countdown stays one line. */
+export function riddleParts(script: string): { numberLabel: string; clues: string[]; countdown: string } {
+  const trimmed = script.trim();
+  const hasCount = trimmed.endsWith(GUESS_COUNTDOWN);
+  const body = (hasCount ? trimmed.slice(0, -GUESS_COUNTDOWN.length) : trimmed).trim();
+  const number = body.match(/^Number (\d+)\./);
+  const rest = (number ? body.slice(number[0].length) : body).trim();
+  const clues = (rest.includes("\n") ? rest.split(/\n+/) : rest.split(/(?<=[.!?])\s+(?=[A-Z])/))
+    .map((line) => line.trim())
+    .filter(Boolean);
   return {
-    clue: clue.replace(/\s+/g, " ").trim(),
-    answer: answer.replace(/\s+/g, " ").trim(),
+    numberLabel: number?.[1] ? `Number ${number[1]}` : "",
+    clues,
+    countdown: hasCount ? GUESS_COUNTDOWN : "",
   };
 }
 
+/** Spoken Who's That Pokémon scripts. The cry is joined in front of each track later. */
+export function guessSpoken(sheet: MonSheet): { clue: string; answer: string } {
+  const clues = shortClues(sheet);
+  const clue = [`Number ${sheet.id}.`, ...clues, GUESS_COUNTDOWN].join("\n");
+  const answer = `It is ${sheet.name}. ${answerExtra(sheet, clues)}`.replace(/\s+/g, " ").trim();
+  return { clue, answer };
+}
+
 /**
- * Three short clues that do not say the name.
- * Kept for callers that only have a dex line and a few hints.
+ * Clues for a caller that only has a dex line and a few hints.
+ * The species name is taken out.
  */
 export function threeClues(name: string, entries: FlavorSource[], hints?: ClueHints): string[] {
   return shortClues({
@@ -620,6 +603,7 @@ export function threeClues(name: string, entries: FlavorSource[], hints?: ClueHi
     abilityEffect: null,
     evolution: "",
     habitat: hints?.habitat ?? null,
+    color: hints?.color ?? null,
     entries,
   });
 }

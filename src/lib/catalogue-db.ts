@@ -291,6 +291,8 @@ export function getCatalogueEntry(id: number): CatalogueEntry | null {
         evo_set: number | null;
         info: string;
         info_version: string;
+        info2?: string;
+        info2_version?: string;
         notes: string | null;
       }
     | undefined;
@@ -423,6 +425,8 @@ export function getCatalogueEntry(id: number): CatalogueEntry | null {
     forms: otherForms,
     info: row.info,
     infoVersion: row.info_version,
+    info2: row.info2 ?? "",
+    info2Version: row.info2_version ?? "",
     notes: row.notes,
     evolutionSet: row.evo_set,
     moves: moves.map((move) => move.name),
@@ -433,7 +437,8 @@ export function getCatalogueEntry(id: number): CatalogueEntry | null {
 export function listMonSheets(): MonSheet[] {
   const species = db()
     .prepare(
-      `SELECT id, slug, name, genus, habitat, height_dm, weight_hg, info, info_version, evolves_from_id
+      `SELECT id, slug, name, genus, habitat, height_dm, weight_hg, color, info, info_version,
+              IFNULL(info2, '') AS info2, IFNULL(info2_version, '') AS info2_version, evolves_from_id
        FROM species
        ORDER BY id`,
     )
@@ -447,6 +452,9 @@ export function listMonSheets(): MonSheet[] {
     weight_hg: number;
     info: string;
     info_version: string;
+    info2: string;
+    info2_version: string;
+    color: string;
     evolves_from_id: number | null;
   }>;
   const typeRows = db()
@@ -515,7 +523,11 @@ export function listMonSheets(): MonSheet[] {
       evolvesFrom: row.evolves_from_id ? (nameById.get(row.evolves_from_id) ?? null) : null,
       evolvesInto,
       habitat: row.habitat ? habitatSpeech(row.habitat) : null,
-      entries: row.info ? [{ text: row.info, version: row.info_version }] : [],
+      color: row.color,
+      entries: [
+        row.info ? { text: row.info, version: row.info_version } : null,
+        row.info2 && row.info2 !== row.info ? { text: row.info2, version: row.info2_version } : null,
+      ].filter((entry): entry is { text: string; version: string } => Boolean(entry)),
     };
   });
 }

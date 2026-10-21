@@ -20,7 +20,7 @@ const fredoka = Fredoka({
 export const metadata: Metadata = {
   title: APP_NAME,
   description:
-    "Hear a Pokémon fact, or play Guess Who. The same two games can go on a Yoto card.",
+    "Hear a Pokémon fact, or play Who's That Pokémon. The same two games can go on a Yoto card.",
 };
 
 export const viewport: Viewport = {

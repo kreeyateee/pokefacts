@@ -2,74 +2,25 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  arrangeTiles,
   clampRotation,
-  clampSticker,
   defaultStickers,
-  hexagonGrid,
   isDecorationKey,
+  nearestTileIndex,
   sanitizeStickers,
   stickerHits,
   stickerStyle,
-} from "./sticker-layout.ts";
-
-function rowsOf(stickers: readonly { x: number; y: number }[]): { y: number; xs: number[] }[] {
-  const rows: { y: number; xs: number[] }[] = [];
-  for (const sticker of stickers) {
-    const row = rows.find((item) => Math.abs(item.y - sticker.y) < 0.01);
-    if (row) row.xs.push(sticker.x);
-    else rows.push({ y: sticker.y, xs: [sticker.x] });
-  }
-  return rows.map((row) => ({ y: row.y, xs: row.xs.slice().sort((a, b) => a - b) }));
-}
+  tileCells,
+  tileGrid,
+} from "./sticker-layout";
 
 describe("sticker looks", () => {
-  it("lines suggested pictures up in a transparent hex grid", () => {
+  it("gives each suggested picture a different shape", () => {
     const stickers = defaultStickers(["a", "b", "c", "d", "e"]);
-    assert.equal(stickers.length, 5);
-    for (const sticker of stickers) {
-      assert.equal(sticker.shape, "hex");
-      assert.equal(sticker.color, "transparent");
-      assert.equal(sticker.rotation, 0);
-    }
-    const scales = new Set(stickers.map((sticker) => sticker.scale.toFixed(4)));
-    assert.equal(scales.size, 1);
-    const rows = rowsOf(stickers);
-    assert.ok(rows.length >= 2);
-    const wide = rows.find((row) => row.xs.length >= 2);
-    assert.ok(wide);
-    const pitch = (wide?.xs[1] ?? 0) - (wide?.xs[0] ?? 0);
-    assert.ok(pitch > 0.08);
-    for (const row of rows) {
-      for (let index = 1; index < row.xs.length; index += 1) {
-        assert.ok(Math.abs((row.xs[index] ?? 0) - (row.xs[index - 1] ?? 0) - pitch) < 0.02);
-      }
-    }
-    if (rows.length >= 2) {
-      const shift = (rows[1]?.xs[0] ?? 0) - (rows[0]?.xs[0] ?? 0);
-      assert.ok(Math.abs(Math.abs(shift) - pitch / 2) < 0.03);
-    }
-    const cleaned = sanitizeStickers(stickers, new Set(stickers.map((sticker) => sticker.key)));
-    assert.equal(cleaned?.[0]?.color, "transparent");
-    assert.ok(Math.abs((cleaned?.[0]?.x ?? 0) - (stickers[0]?.x ?? 0)) < 0.001);
-    const spot = clampSticker(stickers[0] ?? { x: 0.5, y: 0.5 }, stickers[0]?.scale ?? 0.3, 0);
-    assert.ok(Math.abs(spot.x - (stickers[0]?.x ?? 0)) < 0.001);
-  });
-
-  it("fills a long list with one honeycomb instead of every picture", () => {
-    const keys = Array.from({ length: 40 }, (_, index) => `mon-${index}`);
-    const stickers = defaultStickers(keys);
-    assert.ok(stickers.length >= 8);
-    assert.ok(stickers.length < keys.length);
-    assert.ok(stickers.every((sticker) => sticker.shape === "hex" && sticker.color === "transparent" && sticker.rotation === 0));
-    const grid = hexagonGrid(1);
-    assert.equal(grid.length, 1);
-    assert.ok((grid[0]?.scale ?? 0) >= 0.45);
-    assert.ok(Math.abs((grid[0]?.x ?? 0) - 0.5) < 0.08);
-    for (const sticker of stickers) {
-      const spot = clampSticker(sticker, sticker.scale, sticker.rotation);
-      assert.ok(Math.abs(spot.x - sticker.x) < 0.001);
-      assert.ok(Math.abs(spot.y - sticker.y) < 0.001);
-    }
+    const shapes = new Set(stickers.map((sticker) => sticker.shape));
+    assert.equal(shapes.size, 5);
+    assert.equal(stickers[0]?.rotation, 0);
+    assert.notEqual(stickers[0]?.color, stickers[1]?.color);
   });
 
   it("keeps a saved decoration, its turn, and its colour", () => {
@@ -106,5 +57,49 @@ describe("sticker looks", () => {
     assert.ok(Math.abs(clampRotation(Math.PI * 2)) < 0.001);
     assert.equal(isDecorationKey("deco:oran"), true);
     assert.equal(isDecorationKey("bulba"), false);
+  });
+});
+
+describe("sticker tiles", () => {
+  it("leaves an empty pattern empty", () => {
+    assert.deepEqual(tileCells("square", 0), []);
+    assert.deepEqual(arrangeTiles([], "hex"), []);
+    assert.equal(nearestTileIndex(0, "circle", 0.5, 0.5), 0);
+  });
+
+  it("fills a square grid and a wider rectangle", () => {
+    const square = tileGrid("square", 4);
+    const rectangle = tileGrid("rectangle", 4);
+    assert.deepEqual(square, { columns: 2, rows: 2 });
+    assert.equal(rectangle.columns, 3);
+    assert.equal(rectangle.rows, 2);
+    const squareCells = tileCells("square", 4);
+    assert.equal(squareCells.length, 4);
+    assert.ok((squareCells[0]?.x ?? 1) < (squareCells[1]?.x ?? 0));
+    assert.ok((squareCells[0]?.y ?? 1) < (squareCells[2]?.y ?? 0));
+    const placed = defaultStickers(["a", "b", "c", "d"]);
+    const tiled = arrangeTiles(placed, "rectangle");
+    assert.deepEqual(
+      tiled.map((sticker) => sticker.key),
+      ["a", "b", "c", "d"],
+    );
+    assert.notEqual(tiled[0]?.x, placed[0]?.x);
+  });
+
+  it("offsets the next hex row and rings a circle", () => {
+    const hex = tileCells("hex", 6);
+    const columns = tileGrid("hex", 6).columns;
+    assert.ok(columns >= 2);
+    assert.ok((hex[columns]?.x ?? 0) > (hex[0]?.x ?? 1));
+    const circle = tileCells("circle", 6);
+    assert.equal(circle.length, 6);
+    const centerX = circle.reduce((sum, cell) => sum + cell.x, 0) / circle.length;
+    const centerY = circle.reduce((sum, cell) => sum + cell.y, 0) / circle.length;
+    const distances = circle.map((cell) => Math.hypot(cell.x - centerX, cell.y - centerY));
+    const nearest = Math.min(...distances);
+    const farthest = Math.max(...distances);
+    assert.ok(farthest - nearest < 0.08);
+    const hit = nearestTileIndex(6, "circle", circle[2]?.x ?? 0, circle[2]?.y ?? 0);
+    assert.equal(hit, 2);
   });
 });

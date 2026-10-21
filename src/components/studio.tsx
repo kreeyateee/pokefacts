@@ -9,6 +9,7 @@ import { SetupGuide } from "@/components/setup-guide";
 import { StatusBar } from "@/components/status-bar";
 import { ConnectDialog } from "@/components/connect-dialog";
 import { MusicPanel } from "@/components/music-panel";
+import { MysterySilhouette } from "@/components/mystery-silhouette";
 import { StickerStudio } from "@/components/sticker-studio";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,7 +41,9 @@ import {
   type KidCard,
   type KidCardKind,
 } from "@/lib/kid-cards";
+import { artworkSrc as artworkApi } from "@/lib/artwork-path";
 import { artworkSrc } from "@/lib/page-artwork";
+import { riddleParts } from "@/lib/dex-facts";
 import { pronounce } from "@/lib/pronounce";
 import { spokenDexLine, statusWithDexNote, WIKI_DEX_NOTE } from "@/lib/spoken-wiki";
 import { selectionUpload } from "@/lib/selection-playlist";
@@ -347,7 +350,7 @@ function WikiCredit({ url }: { url: string }) {
   return (
     <p className="pk-quiet mt-4 text-xs leading-5">
       From{" "}
-      <a className="underline" href={url} rel="noreferrer">
+      <a className="underline" href={url} target="_blank" rel="noreferrer">
         Bulbapedia
       </a>
       . This description is used under CC BY-NC-SA 2.5.
@@ -371,6 +374,23 @@ async function uploadGuessIcons(card: KidCard): Promise<{
     },
   );
   return { real, shadow };
+}
+
+function RiddleReading({ text }: { text: string }) {
+  const parts = riddleParts(text);
+  return (
+    <>
+      <ol className="grid gap-2">
+        {parts.clues.map((clue, index) => (
+          <li key={`${index}-${clue.slice(0, 24)}`} className="pk-clue">
+            <span className="pk-clue-num">{index + 1}</span>
+            <span>{clue}</span>
+          </li>
+        ))}
+      </ol>
+      {parts.countdown ? <p className="pk-countdown">{parts.countdown}</p> : null}
+    </>
+  );
 }
 
 function entryLines(text: string, title: string): string[] {
@@ -584,7 +604,7 @@ export function Studio({
         });
       })
       .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
+        if (controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) return;
         setFactSpeech({
           id,
           speech: fallback || `${name}.`,
@@ -1370,11 +1390,11 @@ export function Studio({
   const visibleTracks =
     guessing && !revealed ? chapter?.tracks.slice(0, 1) : chapter?.tracks;
   const source = visibleTracks?.find((track) => track.source)?.source;
-  const portrait =
-    guessing && chapter?.dexId
-      ? revealed
-        ? `/pixels/${chapter.dexId}.png`
-        : `/pixels/${chapter.dexId}-shadow.png`
+  const mysteryId = guessing && !revealed ? chapter?.dexId : undefined;
+  const portrait = mysteryId
+    ? artworkSrc(mysteryId)
+    : guessing && chapter?.dexId
+      ? `/pixels/${chapter.dexId}.png`
       : guessing
         ? undefined
         : chapter?.sprite;
@@ -1414,7 +1434,7 @@ export function Studio({
               : view === "music"
                 ? "Pokémon music"
               : guessing
-                ? "Guess Who"
+                ? "Who's That Pokémon"
                 : formMode || speciesSet
                   ? card?.libraryTitle
                   : "Pokémon facts"}
@@ -1425,9 +1445,9 @@ export function Studio({
               : view === "catalogue"
               ? "Every species from Kanto to Paldea. The Pokédex line is from the games, with the type, size, abilities, evolution, and stats."
               : view === "music"
-                ? "Albums and songs from Bulbapedia. Play a list here, or save the YouTube audio as an MP3 on a Yoto playlist."
+                ? "Albums and songs from Bulbapedia. Add a song and it plays in the list below."
               : guessing
-                ? "Fifty riddles, drawn at random. You hear the cry, then the clues. The picture stays a shadow until the answer."
+                ? "Fifty riddles. You hear the cry, then the colour and type, two Pokédex lines, and how big it is. The picture stays a shadow until the answer."
                 : formMode
                   ? "The cry, then the selected voice reads that form."
                   : speciesSet
@@ -1471,7 +1491,7 @@ export function Studio({
             onClick={() => showKind("guess")}
             className="pk-tab"
           >
-            Guess Who
+            Who's That Pokémon
           </button>
           <button
             type="button"
@@ -1573,14 +1593,7 @@ export function Studio({
             job={job}
           />
         ) : view === "music" ? (
-          <MusicPanel
-            playlists={library}
-            libraryNote={libraryNote}
-            onConnect={() => setConnectOpen(true)}
-            playlistTarget={targetPlaylist}
-            onPlaylistTarget={setTargetPlaylist}
-            voiceId={voiceId}
-          />
+          <MusicPanel connected={Boolean(session)} onConnect={() => setConnectOpen(true)} voiceId={voiceId} />
         ) : card && chapter ? (
           <div className="grid min-w-0 gap-6 md:grid-cols-[17.5rem_minmax(0,1fr)]">
             <div className="order-3 min-w-0 md:order-1 md:col-span-2">
@@ -1671,7 +1684,7 @@ export function Studio({
                 role="listbox"
                 aria-label={
                   guessing
-                    ? "Guess Who playlists"
+                    ? "Who's That Pokémon playlists"
                     : formMode || speciesSet
                       ? `${card.title} playlists`
                       : "Facts playlists"
@@ -1773,10 +1786,14 @@ export function Studio({
                     : `Number ${chapterNumber(chapter)}`}
                 </p>
                 <div className="pk-hero">
-                  {portrait ? (
+                  {portrait && mysteryId ? (
+                    <div className="pk-silhouette">
+                      <MysterySilhouette src={portrait} fallback={artworkApi("species", mysteryId)} />
+                    </div>
+                  ) : portrait ? (
                     <img
                       src={portrait}
-                      alt={guessing && !revealed ? "" : chapter.title}
+                      alt={chapter.title}
                       width={guessing ? 96 : 176}
                       height={guessing ? 96 : 176}
                       data-fallback={
@@ -1823,6 +1840,17 @@ export function Studio({
                         <p>{formSpokenText(chapter)}</p>
                       </>
                     )
+                  ) : guessing && !revealed ? (
+                    <>
+                      <p className="pk-howto">
+                        Colour and type, two Pokédex lines, then the size. Shout the name before the count ends.
+                      </p>
+                      <RiddleReading text={visibleTracks?.[0]?.text ?? ""} />
+                    </>
+                  ) : guessing ? (
+                    entryLines(chapter.tracks[1]?.text ?? "", chapter.title).map((line) => (
+                      <p key={`${chapter.key}-answer-${line}`}>{line}</p>
+                    ))
                   ) : (
                     visibleTracks?.map((track) =>
                       entryLines(track.text, chapter.title).map((line) =>

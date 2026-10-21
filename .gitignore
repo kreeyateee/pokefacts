@@ -43,6 +43,14 @@ next-env.d.ts
 
 # YouTube audio saved as plain MP3s for a music playlist
 /data/music-mp3
+/data/music-youtube.json
+
+# Deno cache. The binary stays in vendor/deno.
+/vendor/deno/cache
+
+# Python bytecode from the packaged yt-dlp
+__pycache__/
+*.py[cod]
 /data/music-lyrics
 
 # cries downloaded while recording a card
@@ -59,3 +67,6 @@ next-env.d.ts
 
 # Official artwork fetched for the Pokédex, Mega Evolutions, and Gigantamax
 /data/artwork
+
+# PokéAPI tables used to fill the second Pokédex line. Not the catalogue itself.
+/data/poke-csv

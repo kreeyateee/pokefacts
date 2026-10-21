@@ -54,10 +54,9 @@ export async function loadSongLyrics(
   } catch {
     // A missing cache is fetched below.
   }
-  const ask = {
-    fetchImpl: options.fetchImpl,
-    sleep: options.sleep ?? (async () => {}),
-  };
+  const ask: { fetchImpl?: typeof fetch; sleep?: (ms: number) => Promise<void> } = {};
+  if (options.fetchImpl) ask.fetchImpl = options.fetchImpl;
+  if (options.sleep) ask.sleep = options.sleep;
   const listed = await bulbapediaParse({ page, prop: "sections" }, ask);
   const section = lyricsSection(wikiSections(listed));
   const index = section?.index;

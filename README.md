@@ -191,7 +191,7 @@ A Yoto playlist holds 100 tracks. Who's That Pokémon uses two tracks each, so 5
 
 **Print stickers** is on the Facts, Guess Who, Mega Evolutions, and Gigantamax cards, and on a Catalogue pick.
 
-The front starts as a hex grid of transparent Pokémon pictures and one title. Tap a picture, a Poké Ball, or a berry, then change that sticker's shape, colour, or turn. Draw on the card, with an eraser and a clear. Undo steps back. Printing is a separate step: check the sheet, save the PDF, then print at 100% size and cut on the corner marks. When the names will not fit at a readable size, the back is a note instead. Guess Who leaves the names off the back and keeps the shadow pictures.
+The front is a painting you can draw on, with an eraser and a clear. Pick a tile pattern, then tap a picture, a Poké Ball, or a berry. Each one fills the next tile. Undo steps back. Printing is a separate step: check the sheet, save the PDF, then print at 100% size and cut on the corner marks. When the names will not fit at a readable size, the back is a note instead. Guess Who leaves the names off the back and keeps the shadow pictures.
 
 Choose A4 or US Letter. Save PDF stores the file on your computer. Print it at 100% or Actual size. Do not choose Fit to page. Cut on the corner marks. The left sticker is the front. The right sticker is the back.
 

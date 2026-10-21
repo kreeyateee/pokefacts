@@ -87,9 +87,7 @@ export function catalogueVersionRank(identifier: string): number {
  * Lines that talk about killing or death are skipped.
  * When one line uses feet or pounds and another does not, the metric line wins.
  */
-export function pickCatalogueInfo(
-  entries: DexCandidate[],
-): { text: string; version: string } | null {
+function usableDexLines(entries: DexCandidate[]) {
   const cleaned = entries
     .map((entry) => ({
       text: cleanFlavor(entry.text),
@@ -104,6 +102,32 @@ export function pickCatalogueInfo(
     if (!unique.some((kept) => kept.text === entry.text)) unique.push(entry);
   }
   const metric = unique.filter((entry) => !IMPERIAL.test(entry.text));
-  const chosen = (metric.length > 0 ? metric : unique)[0];
+  return metric.length > 0 ? metric : unique;
+}
+
+export function pickCatalogueInfo(
+  entries: DexCandidate[],
+): { text: string; version: string } | null {
+  const chosen = usableDexLines(entries)[0];
   return chosen ? { text: chosen.text, version: chosen.version } : null;
+}
+
+/**
+ * Newest useful English line, plus the oldest line whose wording and game differ.
+ * The second line is the other Pokédex source for Who's That Pokémon.
+ */
+export function pickCataloguePair(entries: DexCandidate[]): {
+  primary: { text: string; version: string } | null;
+  secondary: { text: string; version: string } | null;
+} {
+  const pool = usableDexLines(entries);
+  const primary = pool[0] ?? null;
+  if (!primary) return { primary: null, secondary: null };
+  const secondary =
+    [...pool].reverse().find((entry) => entry.text !== primary.text && entry.version !== primary.version) ??
+    null;
+  return {
+    primary: { text: primary.text, version: primary.version },
+    secondary: secondary ? { text: secondary.text, version: secondary.version } : null,
+  };
 }

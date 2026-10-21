@@ -44,6 +44,10 @@ export type SheetLayout = {
 export const STICKER_SHAPES = ["circle", "round", "hex", "star", "diamond"] as const;
 export type StickerShape = (typeof STICKER_SHAPES)[number];
 
+/** How a cover fills with stickers. Square and rectangle are grids. Circle and hex are packed tiles. */
+export const TILE_LAYOUTS = ["square", "rectangle", "circle", "hex"] as const;
+export type TileLayout = (typeof TILE_LAYOUTS)[number];
+
 export const STICKER_COLORS = ["#ffcb05", "#e10600", "#2a75bb", "#7ac74c", "#f95587", "#ff8c42", "#9b5de5", "#fffdf6", "#16324f"] as const;
 
 export const DECORATION_KEYS = [
@@ -77,9 +81,15 @@ export type CoverDraft = {
   backText: string;
   backMode: BackMode;
   paper: PaperId;
+  /** Tile shape used to place every sticker on the cover. */
+  pattern: TileLayout;
+  /** Multiplier on the pattern's tile size. 1 keeps the fitted size. */
+  tileScale: number;
   stickers: PlacedSticker[];
   painting: string;
 };
+
+const SUGGESTED_STICKERS = 5;
 
 export function mmToPx(mm: number, dpi: number): number {
   return Math.round((mm / 25.4) * dpi);
@@ -192,7 +202,8 @@ const ASPECT = CARD_MM.height / CARD_MM.width;
 
 export function clampScale(scale: number): number {
   if (!Number.isFinite(scale)) return 0.3;
-  return Math.min(0.56, Math.max(0.16, scale));
+  // 0.1 lets a dense tile pattern fit the card. Larger stickers still stop at 0.56.
+  return Math.min(0.56, Math.max(0.1, scale));
 }
 
 export function isDecorationKey(key: string): boolean {
@@ -408,21 +419,182 @@ function spreadKeys(keys: readonly string[], count: number): string[] {
   return picked;
 }
 
-export function defaultStickers(keys: readonly string[]): PlacedSticker[] {
-  const spots = hexagonGrid(keys.length);
-  return spreadKeys(keys, spots.length).map((key, index) => {
-    const spot = spots[index] ?? { x: 0.5, y: 0.5, scale: 0.4 };
+export function tileLayout(value: unknown): TileLayout {
+  return TILE_LAYOUTS.find((layout) => layout === value) ?? "square";
+}
+
+/** 1 is the fitted tile size. Bigger and smaller stay inside this range. */
+export function clampTileScale(value: unknown): number {
+  const number = typeof value === "number" ? value : 1;
+  if (!Number.isFinite(number)) return 1;
+  return Math.min(1.4, Math.max(0.7, Math.round(number * 100) / 100));
+}
+
+const TILE_LEFT = 0.18;
+const TILE_RIGHT = 0.82;
+const TILE_TOP = 0.32;
+const TILE_BOTTOM = 0.86;
+
+export function tileGrid(layout: TileLayout, count: number): { columns: number; rows: number } {
+  if (count < 1) return { columns: 0, rows: 0 };
+  if (layout === "circle") return { columns: count, rows: 1 };
+  if (layout === "rectangle") {
+    const columns = Math.min(count, Math.max(1, Math.ceil(Math.sqrt(count * 2))));
+    return { columns, rows: Math.ceil(count / columns) };
+  }
+  if (layout === "hex") {
+    const columns = Math.min(count, Math.max(1, Math.ceil(Math.sqrt(count * 1.15))));
+    return { columns, rows: Math.ceil(count / columns) };
+  }
+  const columns = Math.min(count, Math.max(1, Math.ceil(Math.sqrt(count))));
+  return { columns, rows: Math.ceil(count / columns) };
+}
+
+function fittedTileScale(columns: number, rows: number, packed = false): number {
+  const width = TILE_RIGHT - TILE_LEFT;
+  const height = TILE_BOTTOM - TILE_TOP;
+  const cellW = width / Math.max(1, columns);
+  const cellH = height / Math.max(1, rows);
+  const fromW = cellW * (packed ? 0.9 : 0.86);
+  const fromH = cellH * ASPECT * (packed ? 0.72 : 0.82);
+  return clampScale(Math.min(fromW, fromH));
+}
+
+export type TileCell = { x: number; y: number; scale: number };
+
+export function tileCells(layout: TileLayout, count: number): TileCell[] {
+  if (count < 1) return [];
+  if (layout === "circle") return circleCells(count);
+  if (layout === "hex") return hexCells(count);
+  return gridCells(count, layout === "rectangle" ? "rectangle" : "square");
+}
+
+function gridCells(count: number, layout: "square" | "rectangle"): TileCell[] {
+  const { columns, rows } = tileGrid(layout, count);
+  const scale = fittedTileScale(columns, rows);
+  const width = TILE_RIGHT - TILE_LEFT;
+  const height = TILE_BOTTOM - TILE_TOP;
+  const cells: TileCell[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    const spot = clampSticker(
+      {
+        x: TILE_LEFT + ((column + 0.5) * width) / columns,
+        y: TILE_TOP + ((row + 0.5) * height) / rows,
+      },
+      scale,
+      0,
+    );
+    cells.push({ x: spot.x, y: spot.y, scale });
+  }
+  return cells;
+}
+
+function hexCells(count: number): TileCell[] {
+  const { columns, rows } = tileGrid("hex", count);
+  const scale = fittedTileScale(columns, rows, true);
+  const width = TILE_RIGHT - TILE_LEFT;
+  const height = TILE_BOTTOM - TILE_TOP;
+  const stride = columns + 0.5;
+  const cells: TileCell[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    const shift = row % 2 === 1 ? 0.5 : 0;
+    const spot = clampSticker(
+      {
+        x: TILE_LEFT + ((column + shift + 0.5) * width) / stride,
+        y: TILE_TOP + ((row + 0.5) * height) / rows,
+      },
+      scale,
+      0,
+    );
+    cells.push({ x: spot.x, y: spot.y, scale });
+  }
+  return cells;
+}
+
+function circleCells(count: number): TileCell[] {
+  const cx = 0.5;
+  const cy = 0.58;
+  const points: { x: number; y: number }[] = [];
+  let remaining = count;
+  let ring = 0;
+  if ((count === 1 || count > 6) && remaining > 0) {
+    points.push({ x: cx, y: cy });
+    remaining -= 1;
+    ring = 1;
+  }
+  while (remaining > 0) {
+    const capacity = 6 * Math.max(1, ring);
+    const take = Math.min(remaining, capacity);
+    const radius = Math.max(1, ring);
+    const rx = 0.1 + 0.12 * radius;
+    const ry = 0.075 + 0.085 * radius;
+    for (let index = 0; index < take; index += 1) {
+      const angle = -Math.PI / 2 + (index * 2 * Math.PI) / take;
+      points.push({ x: cx + Math.cos(angle) * rx, y: cy + Math.sin(angle) * ry });
+    }
+    remaining -= take;
+    ring += 1;
+  }
+  const scale = clampScale(count <= 1 ? 0.4 : count <= 6 ? 0.26 : count <= 12 ? 0.18 : 0.12);
+  return points.map((point) => {
+    const spot = clampSticker(point, scale, 0);
+    return { x: spot.x, y: spot.y, scale };
+  });
+}
+
+/** Put stickers on the pattern cells, in order. An empty list stays empty. */
+export function arrangeTiles(
+  stickers: readonly PlacedSticker[],
+  layout: TileLayout,
+  tileScale = 1,
+): PlacedSticker[] {
+  const cells = tileCells(layout, stickers.length);
+  const factor = clampTileScale(tileScale);
+  return stickers.map((sticker, index) => {
+    const cell = cells[index];
+    if (!cell) return { ...sticker };
+    const scale = clampScale(cell.scale * factor);
+    const spot = clampSticker({ x: cell.x, y: cell.y }, scale, sticker.rotation);
+    return { ...sticker, x: spot.x, y: spot.y, scale };
+  });
+}
+
+/** Index of the tile closest to a point on the card. */
+export function nearestTileIndex(count: number, layout: TileLayout, x: number, y: number): number {
+  const cells = tileCells(layout, count);
+  if (cells.length === 0) return 0;
+  let best = 0;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  cells.forEach((cell, index) => {
+    const distance = Math.hypot(cell.x - x, (cell.y - y) * ASPECT);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = index;
+    }
+  });
+  return best;
+}
+
+export function defaultStickers(keys: readonly string[], layout: TileLayout = "square"): PlacedSticker[] {
+  const picked = spreadKeys(keys, Math.min(keys.length, SUGGESTED_STICKERS));
+  const placed = picked.map((key, index) => {
+    const style = stickerStyle(index);
     return {
       id: `cover-${key}`,
       key,
-      x: spot.x,
-      y: spot.y,
-      scale: spot.scale,
-      rotation: 0,
-      shape: "hex",
-      color: "transparent",
+      x: 0.5,
+      y: 0.5,
+      scale: 0.3,
+      rotation: style.rotation,
+      shape: style.shape,
+      color: style.color,
     };
   });
+  return arrangeTiles(placed, layout, 1);
 }
 
 export function isNumberRun(values: readonly number[]): boolean {
@@ -503,6 +675,8 @@ export function freshCover(input: {
     }),
     backMode: "auto",
     paper: "a4",
+    pattern: "square",
+    tileScale: 1,
     stickers: defaultStickers(input.keys),
     painting: "",
   };

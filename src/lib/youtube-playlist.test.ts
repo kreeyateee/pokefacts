@@ -3,8 +3,8 @@ import { describe, it } from "node:test";
 
 import { POST as postJob } from "../app/api/yoto/job/route";
 import { LILY_VOICE_ID, YOTO_TRACK_LIMIT } from "./kid-cards";
-import { musicPlaylistTitle, musicPlaylistUpload } from "./youtube-playlist";
-import { contentCreateBody } from "./yoto-send";
+import { musicPlaylistTitle, musicPlaylistUpload, musicYotoSavePlan } from "./youtube-playlist";
+import { contentCreateBody, uploadForPlaylist } from "./yoto-send";
 import { YOTO_ICONS } from "./yoto-icons";
 
 const icon = YOTO_ICONS.music;
@@ -20,6 +20,26 @@ function track(index: number) {
 }
 
 describe("music playlist", () => {
+  it("asks to connect Yoto before it downloads a playlist", () => {
+    assert.deepEqual(musicYotoSavePlan({ connected: false, count: 2 }), {
+      ok: false,
+      connect: true,
+      message: "Connect Yoto before saving this playlist.",
+    });
+    assert.equal(musicYotoSavePlan({ connected: true, count: 0 }).ok, false);
+    const ready = musicYotoSavePlan({ connected: true, count: 1, title: "Johto songs" });
+    assert.deepEqual(ready, { ok: true, title: "Johto songs" });
+    if (!ready.ok) return;
+    const upload = uploadForPlaylist(musicPlaylistUpload(ready.title, [track(0)], LILY_VOICE_ID), undefined);
+    assert.equal(upload.create, true);
+    assert.equal(upload.append, false);
+    assert.equal(upload.content.cardId, undefined);
+    const chapters = (
+      upload.content.content as { chapters?: Array<{ tracks?: Array<{ trackUrl?: string }> }> } | undefined
+    )?.chapters;
+    assert.equal(chapters?.[0]?.tracks?.[0]?.trackUrl?.startsWith("yoto:#"), true);
+  });
+
   it("names the playlist and stores each song as an mp3 track", () => {
     assert.equal(musicPlaylistTitle("  Theme  ", "Album"), "Theme");
     assert.equal(musicPlaylistTitle("", "English opening themes"), "English opening themes");
@@ -33,6 +53,15 @@ describe("music playlist", () => {
     assert.equal(chapters[0]?.tracks[0]?.duration, 12.5);
     assert.equal(chapters[0]?.tracks[0]?.channels, "mono");
     assert.equal((chapters[0]?.tracks[0]?.display as { icon16x16: string }).icon16x16, icon);
+    assert.equal(body.title, "Pokémon hits");
+    const pixel = `yoto:#${"p".repeat(43)}`;
+    const pictured = musicPlaylistUpload("Johto songs", [{ ...track(0), title: "Song of Jigglypuff", icon: pixel }, track(1)]);
+    const picturedBody = contentCreateBody(pictured.content);
+    const picturedChapters = (picturedBody.content as { chapters: Array<{ display: { icon16x16: string }; tracks: Array<{ display: { icon16x16: string } }> }> }).chapters;
+    assert.equal(picturedBody.title, "Johto songs");
+    assert.equal(picturedChapters[0]?.display.icon16x16, pixel);
+    assert.equal(picturedChapters[0]?.tracks[0]?.display.icon16x16, pixel);
+    assert.equal(picturedChapters[1]?.tracks[0]?.display.icon16x16, icon);
     const media = (body.metadata as { media?: { fileSize?: number } } | undefined)?.media;
     assert.equal(media?.fileSize, 96_000);
     assert.equal(Object.hasOwn(body, "cardId"), false);

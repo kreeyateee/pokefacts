@@ -10,6 +10,7 @@ import { CATALOGUE_NOTES } from "../src/lib/catalogue-notes";
 import {
   catalogueVersionRank,
   pickCatalogueInfo,
+  pickCataloguePair,
   type DexCandidate,
 } from "../src/lib/catalogue-info";
 
@@ -159,6 +160,33 @@ function pickGrouped(
   for (const [id, entries] of grouped) {
     const choice = pickCatalogueInfo(entries);
     if (choice) picked.set(id, choice);
+  }
+  return picked;
+}
+
+function pickDexLines(
+  rows: Row[],
+  versionOf: (versionId: string) => { rank: number; version: string } | null,
+): Map<string, { text: string; version: string; text2: string; version2: string }> {
+  const grouped = new Map<string, DexCandidate[]>();
+  for (const row of rows) {
+    if (row.language_id !== ENGLISH) continue;
+    const label = versionOf(row.version_id || row.version_group_id);
+    if (!label) continue;
+    const list = grouped.get(row.species_id) ?? [];
+    list.push({ text: row.flavor_text, rank: label.rank, version: label.version });
+    grouped.set(row.species_id, list);
+  }
+  const picked = new Map<string, { text: string; version: string; text2: string; version2: string }>();
+  for (const [id, entries] of grouped) {
+    const choice = pickCataloguePair(entries);
+    if (!choice.primary) continue;
+    picked.set(id, {
+      text: choice.primary.text,
+      version: choice.primary.version,
+      text2: choice.secondary?.text ?? "",
+      version2: choice.secondary?.version ?? "",
+    });
   }
   return picked;
 }
@@ -398,7 +426,7 @@ function main() {
     const current = groupRank.get(row.version_group_id) ?? -1;
     if (rank > current) groupRank.set(row.version_group_id, rank);
   }
-  const dexInfo = pickGrouped(parseCsv("pokemon_species_flavor_text.csv"), "species_id", (versionId) => {
+  const dexInfo = pickDexLines(parseCsv("pokemon_species_flavor_text.csv"), (versionId) => {
     const identifier = versionIdentifier.get(versionId);
     if (!identifier) return null;
     const rank = catalogueVersionRank(identifier);
@@ -475,6 +503,8 @@ function main() {
       evo_set INTEGER,
       info TEXT NOT NULL,
       info_version TEXT NOT NULL,
+      info2 TEXT NOT NULL,
+      info2_version TEXT NOT NULL,
       notes TEXT
     );
     CREATE TABLE abilities (
@@ -549,8 +579,8 @@ function main() {
     INSERT INTO species (
       id, slug, name, genus, generation, region, color, shape, habitat, gender,
       capture_rate, base_happiness, is_baby, is_legendary, is_mythical, hatch_cycles,
-      growth, height_dm, weight_hg, base_experience, evolves_from_id, evo_set, info, info_version, notes
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      growth, height_dm, weight_hg, base_experience, evolves_from_id, evo_set, info, info_version, info2, info2_version, notes
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const insertType = db.prepare(
     "INSERT INTO species_types (species_id, slot, type_name) VALUES (?, ?, ?)",
@@ -649,6 +679,8 @@ function main() {
       row.evolution_chain_id ? Number(row.evolution_chain_id) : null,
       picked?.text ?? "A Pokédex entry for this Pokémon is not on file yet.",
       picked?.version ?? "",
+      picked?.text2 ?? "",
+      picked?.version2 ?? "",
       champdexNotes(id),
     );
     types.forEach((type, index) => insertType.run(id, index + 1, type));

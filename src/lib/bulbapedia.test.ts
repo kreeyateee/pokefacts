@@ -11,7 +11,10 @@ import {
   BULBAPEDIA_API,
   BULBAPEDIA_USER_AGENT,
   biologyBlocks,
+  BULBAPEDIA_DELAY_MAX_MS,
+  BULBAPEDIA_DELAY_MIN_MS,
   bulbapediaArticleUrl,
+  bulbapediaDelayMs,
   loadBiology,
   loadFactSpeech,
   wikiPageTitle,
@@ -51,6 +54,62 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("Bulbapedia biology", () => {
+  it("picks a delay inside the polite range", () => {
+    assert.equal(bulbapediaDelayMs(() => 0), BULBAPEDIA_DELAY_MIN_MS);
+    assert.equal(bulbapediaDelayMs(() => 1), BULBAPEDIA_DELAY_MAX_MS);
+    assert.equal(bulbapediaDelayMs(() => 0.5), 725);
+    assert.equal(bulbapediaDelayMs(() => Number.NaN), BULBAPEDIA_DELAY_MIN_MS);
+  });
+
+  it("waits before each Bulbapedia read and skips the wait when the page is cached", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-wiki-pace-"));
+    const cacheFile = path.join(dir, "biology.json");
+    const pauses: number[] = [];
+    let fetches = 0;
+    const fetchImpl = (async () => {
+      fetches += 1;
+      assert.equal(pauses.length, fetches);
+      if (fetches === 1) {
+        return jsonResponse({
+          parse: {
+            sections: [{ toclevel: 1, level: "2", line: "Biology", index: "1", anchor: "Biology" }],
+          },
+        });
+      }
+      return jsonResponse({
+        parse: { text: "<h2>Biology</h2><p>Bulbasaur keeps this paragraph.</p>" },
+      });
+    }) as typeof fetch;
+    try {
+      const first = await loadBiology("Bulbasaur", 1, {
+        fetchImpl,
+        cacheFile,
+        sleep: async (ms) => {
+          pauses.push(ms);
+        },
+      });
+      assert.equal(first.status, "ready");
+      assert.equal(fetches, 2);
+      assert.equal(pauses.length, 2);
+      for (const pause of pauses) {
+        assert.ok(pause >= BULBAPEDIA_DELAY_MIN_MS && pause <= BULBAPEDIA_DELAY_MAX_MS);
+      }
+      const again = await loadBiology("Bulbasaur", 1, {
+        fetchImpl: (async () => {
+          throw new Error("cached biology was fetched again");
+        }) as typeof fetch,
+        cacheFile,
+        sleep: async (ms) => {
+          pauses.push(ms);
+        },
+      });
+      assert.equal(again.status, "ready");
+      assert.equal(pauses.length, 2);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("turns Biology HTML into prose and keeps the subsections", () => {
     const blocks = biologyBlocks(HTML);
     const text = blocks

@@ -51,7 +51,7 @@ describe("music playlist queue", () => {
     }
     assert.equal(
       musicPlaylistRefusalText("novideo"),
-      "Bulbapedia does not have a YouTube video for this song.",
+      "No YouTube video was found for this song.",
     );
   });
 

@@ -19,7 +19,7 @@ export function SetupGuide({ onConnect }: { onConnect: () => void }) {
           library. It never asks for your Yoto password.
         </li>
         <li>
-          <span className="font-bold">2. Pick what to send.</span> Facts, Guess Who, Mega Evolutions, Gigantamax, or a
+          <span className="font-bold">2. Pick what to send.</span> Facts, Who&apos;s That Pokémon, Mega Evolutions, Gigantamax, or a
           catalogue pick.
         </li>
         <li>

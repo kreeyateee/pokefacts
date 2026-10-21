@@ -12,7 +12,38 @@ export type MusicPlaylistTrack = {
   fileSize: number;
   format?: string;
   channels?: string;
+  /** Uploaded 16×16 pixel, or the music icon when the song is not one Pokémon. */
+  icon?: string;
 };
+
+export type MusicYotoSavePlan =
+  | { ok: true; title: string }
+  | { ok: false; connect: boolean; message: string };
+
+/**
+ * My playlist can be saved only after Yoto is connected and it has songs.
+ * A missing login is not a download failure.
+ */
+export function musicYotoSavePlan(input: {
+  connected: boolean;
+  count: number;
+  title?: string;
+}): MusicYotoSavePlan {
+  if (!input.connected) {
+    return { ok: false, connect: true, message: "Connect Yoto before saving this playlist." };
+  }
+  if (!Number.isFinite(input.count) || input.count < 1) {
+    return { ok: false, connect: false, message: "Add a song before saving this playlist." };
+  }
+  if (input.count > YOTO_TRACK_LIMIT) {
+    return {
+      ok: false,
+      connect: false,
+      message: `A playlist holds ${YOTO_TRACK_LIMIT} tracks. ${input.count} songs are picked. Nothing was sent.`,
+    };
+  }
+  return { ok: true, title: musicPlaylistTitle(input.title, "Pokémon music") };
+}
 
 /** Title for the Yoto playlist. A typed title wins. Otherwise the album name. */
 export function musicPlaylistTitle(typed: string | undefined, fallback: string): string {
@@ -41,7 +72,7 @@ export function musicPlaylistUpload(title: string, tracks: MusicPlaylistTrack[],
     if (!Number.isFinite(track.fileSize) || track.fileSize <= 0) {
       throw new Error(`${label} is missing its file size, so Yoto cannot save the playlist.`);
     }
-    const icon = YOTO_ICONS.music;
+    const icon = track.icon?.startsWith("yoto:#") ? track.icon : YOTO_ICONS.music;
     return {
       key: `c${number}`,
       title: label,

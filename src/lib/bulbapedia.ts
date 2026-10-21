@@ -41,6 +41,42 @@ const WIKI_TIMEOUT_MS = 20_000;
 /** Timed-out reads are tried again this many times, including the first attempt. */
 export const WIKI_TIMEOUT_TRIES = 3;
 
+/**
+ * Random gap before each Bulbapedia read.
+ * A burst of species waits out the previous request, then sleeps in this range.
+ * Tune these two numbers. Cache hits do not sleep.
+ */
+export const BULBAPEDIA_DELAY_MIN_MS = 250;
+export const BULBAPEDIA_DELAY_MAX_MS = 1200;
+
+/** One pause in BULBAPEDIA_DELAY_MIN_MS…BULBAPEDIA_DELAY_MAX_MS. `random` returns 0…1. */
+export function bulbapediaDelayMs(random: () => number = Math.random): number {
+  const roll = random();
+  const unit = Number.isFinite(roll) ? Math.min(1, Math.max(0, roll)) : 0;
+  return BULBAPEDIA_DELAY_MIN_MS + Math.round(unit * (BULBAPEDIA_DELAY_MAX_MS - BULBAPEDIA_DELAY_MIN_MS));
+}
+
+let bulbapediaTail: Promise<void> = Promise.resolve();
+
+/**
+ * One Bulbapedia read at a time, with a random gap after the previous read finishes.
+ * Call this only on the network path. A no-op `sleep` skips the wait in tests.
+ */
+async function paceBulbapedia<T>(sleep: (ms: number) => Promise<void>, task: () => Promise<T>): Promise<T> {
+  const previous = bulbapediaTail;
+  let release: () => void = () => undefined;
+  bulbapediaTail = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await previous;
+  try {
+    await sleep(bulbapediaDelayMs());
+    return await task();
+  } finally {
+    release();
+  }
+}
+
 export type WikiSection = {
   toclevel?: number;
   line?: string;
@@ -394,7 +430,7 @@ async function wikiRequest(
   let response: Response;
   let payload: WikiPayload;
   try {
-    const read = await readWiki(url, fetchImpl, timeoutMs);
+    const read = await paceBulbapedia(sleep, () => readWiki(url, fetchImpl, timeoutMs));
     response = read.response;
     payload = (read.payload ?? null) as WikiPayload;
   } catch (error) {
