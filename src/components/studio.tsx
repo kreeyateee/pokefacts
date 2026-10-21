@@ -1855,8 +1855,8 @@ export function Studio({
                 Make this card
               </h3>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                Hear a voice above, then send. The next step asks you to confirm the voice and where the playlist
-                goes. Recording starts after that, in the background. On the player: {card.childDoes} In the Yoto
+                Open Settings to hear a voice, then send. The next step asks you to confirm the voice and where the
+                playlist goes. Recording starts after that, in the background. On the player: {card.childDoes} In the Yoto
                 app, look for <span className="font-bold text-ink">{card.libraryTitle}</span>.
                 {randomGuess
                   ? " Send uploads a shadow of each 16×16 pixel for the clue, then the real pixel for the answer."

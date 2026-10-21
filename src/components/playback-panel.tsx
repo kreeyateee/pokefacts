@@ -1,6 +1,7 @@
 "use client";
 
 import { VoiceField } from "@/components/voice-field";
+import { pickerVoice } from "@/lib/piper-voice";
 import {
   writePlayback,
   type PlaybackSettings,
@@ -96,6 +97,7 @@ export function PlaybackPanel({
     voiceId !== undefined && onVoiceId ? (
       <VoiceField id={`${idPrefix}-voice`} value={voiceId} onChange={onVoiceId} />
     ) : null;
+  const voiceName = voiceId !== undefined ? pickerVoice(voiceId).name : null;
 
   if (embedded) {
     return (
@@ -107,8 +109,14 @@ export function PlaybackPanel({
   }
 
   return (
-    <div className="pk-card mt-4 px-4 py-3">
-      <p className="text-xs leading-5 pk-quiet">
+    <details className="pk-card mt-4 px-4 py-3">
+      <summary className="cursor-pointer text-left">
+        <span className="inline-flex w-[calc(100%-1.5rem)] items-center justify-between gap-3 align-middle">
+          <span className="font-display text-xl font-bold">Settings</span>
+          {voiceName ? <span className="text-sm font-bold pk-quiet">{voiceName}</span> : null}
+        </span>
+      </summary>
+      <p className="mt-3 text-xs leading-5 pk-quiet">
         Lily is the usual voice. Hear any of them here, then send. Send asks you to confirm before it records.
       </p>
       <div className="mt-3 grid gap-3">
@@ -123,6 +131,6 @@ export function PlaybackPanel({
           </div>
         </details>
       </div>
-    </div>
+    </details>
   );
 }
