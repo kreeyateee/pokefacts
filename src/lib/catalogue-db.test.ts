@@ -7,6 +7,7 @@ import { describe, it } from "node:test";
 import {
   evolutionLine,
   getCatalogueEntry,
+  getAlternateForm,
   getPlaylistForm,
   listAlolanForms,
   listHisuianForms,
@@ -124,6 +125,15 @@ describe("catalogue database", () => {
     assert.equal(mythical.some((sheet) => sheet.name === "Mewtwo"), false);
     assert.equal(getPlaylistForm(10091)?.formName, "Alolan Rattata");
     assert.equal(getPlaylistForm(10099), null);
+    assert.equal(getAlternateForm(10033)?.formName, "Mega Venusaur");
+    assert.equal(getAlternateForm(10033)?.speciesId, 3);
+    assert.equal(getAlternateForm(10196)?.formName, "Gigantamax Charizard");
+    assert.equal(getAlternateForm(10091)?.formName, "Alolan Rattata");
+    assert.equal(getAlternateForm(10229)?.formName, "Hisuian Growlithe");
+    assert.equal(getAlternateForm(10161)?.formName, "Galarian Meowth");
+    assert.equal(getAlternateForm(10253)?.formName, "Paldean Wooper");
+    assert.equal(getAlternateForm(3), null);
+    assert.equal(getAlternateForm(19), null);
     assert.equal(getPlaylistForm(10314)?.formName, "Mega Meowstic (Male)");
     assert.equal(getPlaylistForm(10326)?.formName, "Mega Meowstic (Female)");
   });

@@ -602,8 +602,9 @@ export function listSpecialForms(speciesId: number): CatalogueFormRef[] {
   return queryFormRefs("(f.is_mega = 1 OR f.name LIKE 'Gigantamax %') AND f.species_id = ?", speciesId);
 }
 
-export function getSpecialForm(formId: number): CatalogueFormRef | null {
-  return queryFormRefs("(f.is_mega = 1 OR f.name LIKE 'Gigantamax %') AND f.id = ?", formId)[0] ?? null;
+/** A non-default form: Mega, Gigantamax, regional, or another alternate. */
+export function getAlternateForm(formId: number): CatalogueFormRef | null {
+  return queryFormRefs("f.is_default = 0 AND f.id = ?", formId)[0] ?? null;
 }
 
 /** A Mega, Gigantamax, Alolan, or Hisuian form, for the form-reading route. */

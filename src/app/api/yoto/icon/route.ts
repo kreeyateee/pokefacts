@@ -2,7 +2,9 @@ import { execFile } from "node:child_process";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { getAlternateForm } from "@/lib/catalogue-db";
 import { ffmpegCommand } from "@/lib/ffmpeg-bin";
+import { ensureFormPixel } from "@/lib/form-pixel";
 import { COLOUR_PIXEL_FILTER, SHADOW_PIXEL_FILTER } from "@/lib/pixel-paint";
 import { safeHttpStatus, yotoUpstreamFailure } from "@/lib/yoto-error";
 import { bearerToken, jsonError } from "@/lib/yoto-proxy";
@@ -62,20 +64,34 @@ export async function POST(request: Request) {
   const id = params.get("id") ?? "";
   const shadow = params.get("shadow") === "1";
   const file = pixelFile(id, shadow);
-  if (!file) return jsonError("That picture is not a national Pokédex icon.");
+  const form = file ? null : getAlternateForm(Number(id));
+  if (!file && !form) return jsonError("That picture is not a national Pokédex icon.");
+  if (form && shadow) return jsonError("That picture is not a national Pokédex icon.");
 
   let bytes: Buffer;
   try {
-    if (shadow) await ensureShadow(file, id);
-    else await ensurePixel(file, id);
-    bytes = await readFile(file);
+    if (form) bytes = await ensureFormPixel(form.formId);
+    else if (file && shadow) {
+      await ensureShadow(file, id);
+      bytes = await readFile(file);
+    } else if (file) {
+      await ensurePixel(file, id);
+      bytes = await readFile(file);
+    } else {
+      return jsonError("That picture is not a national Pokédex icon.");
+    }
   } catch {
     return jsonError("That picture is not a national Pokédex icon.");
   }
 
   const url = new URL("https://api.yotoplay.com/media/displayIcons/user/me/upload");
   url.searchParams.set("autoConvert", "false");
-  url.searchParams.set("filename", shadow ? `pokefacts-${id}-shadow` : `pokefacts-${id}`);
+  const filename = form
+    ? `pokefacts-form-${form.formId}`
+    : shadow
+      ? `pokefacts-${id}-shadow`
+      : `pokefacts-${id}`;
+  url.searchParams.set("filename", filename);
 
   const response = await fetch(url, {
     method: "POST",
