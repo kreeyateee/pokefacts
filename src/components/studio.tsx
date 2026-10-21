@@ -1425,7 +1425,7 @@ export function Studio({
               : view === "catalogue"
               ? "Every species from Kanto to Paldea. The Pokédex line is from the games, with the type, size, abilities, evolution, and stats."
               : view === "music"
-                ? "Albums and songs from Bulbapedia. Add YouTube videos to My playlist and play that list here."
+                ? "Albums and songs from Bulbapedia. Play a list here, or save the YouTube audio as an MP3 on a Yoto playlist."
               : guessing
                 ? "Fifty riddles, drawn at random. You hear the cry, then the clues. The picture stays a shadow until the answer."
                 : formMode
@@ -1439,7 +1439,7 @@ export function Studio({
         </div>
       </header>
       <div
-        className="pk-tabs pk-scroll mx-auto flex w-full min-w-0 max-w-5xl flex-nowrap gap-2 overflow-x-auto px-4 sm:px-6 md:flex-wrap md:overflow-visible"
+        className="pk-tabs mx-auto flex w-full min-w-0 max-w-5xl flex-wrap content-start gap-x-2 gap-y-3 px-4 sm:px-6"
         role="tablist"
         aria-label="Play mode"
       >
@@ -1577,6 +1577,9 @@ export function Studio({
             playlists={library}
             libraryNote={libraryNote}
             onConnect={() => setConnectOpen(true)}
+            playlistTarget={targetPlaylist}
+            onPlaylistTarget={setTargetPlaylist}
+            voiceId={voiceId}
           />
         ) : card && chapter ? (
           <div className="grid min-w-0 gap-6 md:grid-cols-[17.5rem_minmax(0,1fr)]">

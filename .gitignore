@@ -41,6 +41,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# YouTube audio saved as plain MP3s for a music playlist
+/data/music-mp3
+/data/music-lyrics
+
 # cries downloaded while recording a card
 /data/cries
 /data/speech

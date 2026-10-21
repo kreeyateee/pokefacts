@@ -5,6 +5,8 @@ import {
   MUSIC_PLAYLIST_LIMIT,
   addMusicPlaylistSong,
   moveMusicPlaylistSong,
+  musicPlaylistIndexAfterPlace,
+  placeMusicPlaylistSong,
   musicPlaylistIndexAfterMove,
   musicPlaylistIndexAfterRemove,
   musicPlaylistRefusalText,
@@ -83,6 +85,9 @@ describe("music playlist queue", () => {
       "Viridian City",
     ]);
     assert.deepEqual(titles(moveMusicPlaylistSong(songs, 0, -1)), titles(songs));
+    assert.deepEqual(titles(placeMusicPlaylistSong(songs, 0, 2)), ["2.B.A. Master", "Viridian City", "Pokémon Theme"]);
+    assert.equal(musicPlaylistIndexAfterPlace(0, 0, 2, 3), 2);
+    assert.equal(musicPlaylistIndexAfterPlace(2, 0, 2, 3), 1);
     assert.deepEqual(titles(moveMusicPlaylistSong(songs, 2, 1)), titles(songs));
     assert.equal(musicPlaylistIndexAfterMove(0, 0, 1, 3), 1);
     assert.equal(musicPlaylistIndexAfterMove(1, 0, 1, 3), 0);

@@ -2,11 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
+import { useRowDrag } from "@/components/row-drag";
+import { SongLyrics } from "@/components/song-lyrics";
 import {
   MUSIC_PLAYLIST_STORAGE_KEY,
   addMusicPlaylistSong,
   moveMusicPlaylistSong,
   musicPlaylistIndexAfterMove,
+  musicPlaylistIndexAfterPlace,
+  placeMusicPlaylistSong,
   musicPlaylistIndexAfterRemove,
   musicPlaylistRefusalText,
   readStoredMusicPlaylist,
@@ -148,6 +152,16 @@ export function useMusicPlaylist() {
     [stored.songs, stored.index],
   );
 
+  const placeSong = useCallback(
+    (from: number, to: number) => {
+      publishMusicPlaylist(
+        placeMusicPlaylistSong(stored.songs, from, to),
+        musicPlaylistIndexAfterPlace(stored.index, from, to, stored.songs.length),
+      );
+    },
+    [stored.songs, stored.index],
+  );
+
   const play = useCallback(() => {
     if (stored.songs.length === 0) return;
     setPlaying(true);
@@ -178,6 +192,7 @@ export function useMusicPlaylist() {
     addSong,
     removeSong,
     moveSong,
+    placeSong,
     play,
     previous,
     next,
@@ -296,6 +311,7 @@ export function MusicPlaylistSection({
   const current = playlist.songs[playlist.index];
   const countLabel =
     playlist.songs.length === 1 ? "1 of 100 songs" : `${playlist.songs.length} of 100 songs`;
+  const drag = useRowDrag("data-music-index", playlist.placeSong);
 
   return (
     <section id="my-playlist" className="grid min-w-0 gap-3" aria-label="My playlist">
@@ -357,16 +373,24 @@ export function MusicPlaylistSection({
             </a>
             .
           </p>
+          <h3 className="mt-3 text-base font-bold text-ink">Lyrics</h3>
+          <SongLyrics page={current.page} />
         </div>
       ) : null}
       {playlist.songs.length > 0 ? (
+        <>
+        <p className="text-sm leading-6">Drag a song onto another place, or use Up and Down.</p>
         <ol className="grid min-w-0 gap-2">
           {playlist.songs.map((song, songIndex) => {
             const currentRow = songIndex === playlist.index;
+            const dropping = drag.overIndex === songIndex && drag.dragIndex !== null && drag.dragIndex !== songIndex;
             return (
               <li
                 key={song.id}
-                className="pk-card pk-playlist-row min-w-0 p-3"
+                {...drag.rowProps(songIndex)}
+                className={`pk-card pk-playlist-row min-w-0 cursor-grab p-3 select-none active:cursor-grabbing ${
+                  drag.dragIndex === songIndex ? "opacity-60" : ""
+                } ${dropping ? "bg-poke-yellow" : ""}`}
                 aria-current={currentRow ? "true" : undefined}
               >
                 <p className="break-words font-bold text-ink">
@@ -406,6 +430,7 @@ export function MusicPlaylistSection({
             );
           })}
         </ol>
+        </>
       ) : null}
     </section>
   );
