@@ -1493,7 +1493,11 @@ export function Studio({
             job={job}
           />
         ) : view === "music" ? (
-          <MusicPanel />
+          <MusicPanel
+            playlists={library}
+            libraryNote={libraryNote}
+            onConnect={() => setConnectOpen(true)}
+          />
         ) : card && chapter ? (
           <div className="grid min-w-0 gap-6 md:grid-cols-[17.5rem_minmax(0,1fr)]">
             <div className="order-3 min-w-0 md:order-1 md:col-span-2">
