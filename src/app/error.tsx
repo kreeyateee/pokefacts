@@ -1,6 +1,6 @@
 "use client";
 
-import { DONATE_URL } from "@/lib/site";
+import Link from "next/link";
 
 export default function Error({
   error,
@@ -12,13 +12,13 @@ export default function Error({
   return (
     <main className="pk-page mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-4 px-6">
       <div className="pk-banner">
-        <a className="pk-wordmark" href={DONATE_URL} target="_blank" rel="noreferrer">
+        <Link className="pk-wordmark" href="/">
           <span className="pk-ball" aria-hidden="true" />
           <span>
             <span className="pk-wordmark-name">Pokefacts</span>
-            <span className="pk-wordmark-coffee">Buy me a coffee</span>
+            <span className="pk-wordmark-tag">Pokémon cards for Yoto</span>
           </span>
-        </a>
+        </Link>
       </div>
       <h1 className="text-3xl font-bold">The field guide hit a snag.</h1>
       <p className="text-sm leading-6 text-muted-foreground">{error.message}</p>

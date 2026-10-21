@@ -220,8 +220,13 @@
   display: flex;
   align-items: center;
   gap: 0.8rem;
+  border: 0;
+  background: none;
+  padding: 0;
   color: white;
+  text-align: left;
   text-decoration: none;
+  cursor: pointer;
 }
 
 .pk-wordmark-name {
@@ -239,16 +244,14 @@
   }
 }
 
-.pk-wordmark-coffee {
+.pk-wordmark-tag {
   display: block;
   margin-top: 0.2rem;
   color: var(--poke-yellow);
   font-weight: 800;
-  text-decoration: underline;
-  text-underline-offset: 3px;
 }
 
-.pk-wordmark:hover .pk-wordmark-coffee {
+.pk-wordmark:hover .pk-wordmark-tag {
   color: white;
 }
 
@@ -269,7 +272,8 @@
     box-shadow 160ms ease;
 }
 
-.pk-banner-btn:hover {
+.pk-banner-btn:hover,
+.pk-banner-btn[aria-pressed="true"] {
   background: white;
 }
 
@@ -302,13 +306,50 @@
   white-space: nowrap;
 }
 
-.pk-tabs {
+.pk-nav {
   margin-top: 0.75rem;
+}
+
+.pk-tabs,
+.pk-subtabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.5rem;
   padding-bottom: 0.35rem;
 }
 
+.pk-account-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.4rem);
+  z-index: 40;
+  min-width: 13.5rem;
+  padding: 0.45rem;
+  border: 3px solid var(--ink);
+  border-radius: 1rem;
+  background: var(--cream);
+  color: var(--ink);
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+.pk-section-title {
+  font-family: var(--font-fredoka), sans-serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--poke-red);
+}
+
+.pk-pick-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
 @media (max-width: 767px) {
-  .pk-tabs {
+  .pk-nav {
     position: sticky;
     top: env(safe-area-inset-top, 0px);
     z-index: 30;

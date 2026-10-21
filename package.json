@@ -11,7 +11,7 @@
     "start": "node scripts/local.mjs",
     "local": "node scripts/local.mjs",
     "lint": "eslint",
-    "test": "tsx --test src/lib/champ-script.test.ts src/lib/kid-cards.test.ts src/lib/catalogue-db.test.ts src/lib/cry-audio.test.ts src/lib/yoto-error.test.ts src/lib/local-start.test.ts src/lib/bulbapedia.test.ts src/lib/selection-playlist.test.ts src/lib/piper.test.ts src/lib/playlist-order.test.ts src/lib/artwork.test.ts src/lib/silhouette.test.ts src/lib/sticker-layout.test.ts src/lib/music.test.ts src/lib/song-lyrics.test.ts src/lib/music-playlist.test.ts src/lib/youtube-playlist.test.ts src/lib/youtube-mp3.test.ts src/lib/youtube-search.test.ts src/lib/music-pokemon.test.ts src/lib/music-yoto-upload.test.ts src/lib/webaoo.test.ts",
+    "test": "tsx --test src/lib/app-nav.test.ts src/lib/champ-script.test.ts src/lib/kid-cards.test.ts src/lib/catalogue-db.test.ts src/lib/cry-audio.test.ts src/lib/yoto-error.test.ts src/lib/local-start.test.ts src/lib/bulbapedia.test.ts src/lib/selection-playlist.test.ts src/lib/piper.test.ts src/lib/playlist-order.test.ts src/lib/artwork.test.ts src/lib/silhouette.test.ts src/lib/sticker-layout.test.ts src/lib/music.test.ts src/lib/song-lyrics.test.ts src/lib/music-playlist.test.ts src/lib/youtube-playlist.test.ts src/lib/youtube-mp3.test.ts src/lib/youtube-search.test.ts src/lib/music-pokemon.test.ts src/lib/music-yoto-upload.test.ts src/lib/webaoo.test.ts",
     "ytdlp": "node scripts/install-yt-dlp.mjs",
     "deno": "node scripts/install-deno.mjs",
     "music": "tsx scripts/refresh-music.ts",

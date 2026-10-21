@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { AppHeader } from "@/components/app-header";
+import { AppNav } from "@/components/app-nav";
 import { Catalogue } from "@/components/catalogue";
 import { PlaybackPanel } from "@/components/playback-panel";
 import { SetupGuide } from "@/components/setup-guide";
@@ -12,6 +14,15 @@ import { MusicPanel } from "@/components/music-panel";
 import { MysterySilhouette } from "@/components/mystery-silhouette";
 import { StickerStudio } from "@/components/sticker-studio";
 import { Button } from "@/components/ui/button";
+import {
+  DEFAULT_COLLECTION,
+  isCollectionKind,
+  pageHeading,
+  playlistNote,
+  primaryTabFor,
+  type CollectionKind,
+  type PrimaryTabId,
+} from "@/lib/app-nav";
 import {
   applySpeciesSpeech,
   bulkProgressLabel,
@@ -47,7 +58,7 @@ import { riddleParts } from "@/lib/dex-facts";
 import { pronounce } from "@/lib/pronounce";
 import { spokenDexLine, statusWithDexNote, WIKI_DEX_NOTE } from "@/lib/spoken-wiki";
 import { selectionUpload } from "@/lib/selection-playlist";
-import { APP_NAME, DONATE_URL, SOURCE_URL } from "@/lib/site";
+import { DONATE_URL, SOURCE_URL } from "@/lib/site";
 import { defaultPlayback, readPlayback, type PlaybackSettings } from "@/lib/playback-settings";
 import { demoHearBody, factTrackBody, readVoiceId, writeVoiceId } from "@/lib/voice-choice";
 import {
@@ -58,7 +69,7 @@ import {
   statusErrorText,
   validYotoCardId,
 } from "@/lib/yoto-error";
-import { isPiperVoice, PICKER_VOICES } from "@/lib/piper-voice";
+import { isPiperVoice } from "@/lib/piper-voice";
 import {
   afterRejectedPlaylist,
   applyFinishedAudio,
@@ -502,6 +513,7 @@ export function Studio({
   const [view, setView] = useState<"cards" | "catalogue" | "setup" | "music">("cards");
   const [playback, setPlayback] = useState<PlaybackSettings>(defaultPlayback);
   const [kind, setKind] = useState<KidCardKind>("meet");
+  const [collectionKind, setCollectionKind] = useState<CollectionKind>(DEFAULT_COLLECTION);
   const [factsId, setFactsId] = useState(RANDOM_POKEDEX_ID);
   const [guessId, setGuessId] = useState(RANDOM_GUESS_ID);
   const [chapterKey, setChapterKey] = useState(randomCard.chapters[0]?.key ?? "start");
@@ -637,6 +649,7 @@ export function Studio({
     setRevealed(false);
     setQuery("");
     setKind(next.kind);
+    if (isCollectionKind(next.kind)) setCollectionKind(next.kind);
     if (next.kind === "meet") setFactsId(next.id);
     else if (next.kind === "guess") setGuessId(next.id);
     else if (isFormPlaylistKind(next.kind) || isSpeciesPlaylistKind(next.kind)) {
@@ -698,6 +711,7 @@ export function Studio({
     }
     setView("cards");
     setKind(nextKind);
+    if (isCollectionKind(nextKind)) setCollectionKind(nextKind);
     if (isFormPlaylistKind(nextKind) || isSpeciesPlaylistKind(nextKind)) {
       const next = activePlaylist(playlistsRef.current, nextKind, playlistId[nextKind]);
       setChapterKey(next ? (playableChapters(next)[0]?.key ?? "start") : "start");
@@ -716,6 +730,37 @@ export function Studio({
     if (!next.chapters.some((item) => item.key === chapterKey && item.key !== "start")) {
       setChapterKey(playableChapters(next)[0]?.key ?? "start");
     }
+  }
+
+
+  function choosePrimary(id: PrimaryTabId) {
+    if (id === "facts") {
+      showKind("meet");
+      return;
+    }
+    if (id === "guess") {
+      showKind("guess");
+      return;
+    }
+    if (id === "collections") {
+      showKind(isCollectionKind(kind) ? kind : collectionKind);
+      return;
+    }
+    stopDemo();
+    setView(id);
+  }
+
+  function goHome() {
+    showKind("meet");
+  }
+
+  function chooseHelp() {
+    if (view === "setup") {
+      showKind("meet");
+      return;
+    }
+    stopDemo();
+    setView("setup");
   }
 
   function shufflePokedex() {
@@ -1399,187 +1444,58 @@ export function Studio({
         ? undefined
         : chapter?.sprite;
 
+  const heading = pageHeading({
+    view,
+    kind,
+    libraryTitle: card?.libraryTitle,
+    randomFacts,
+  });
+  const thisPlaylist = card
+    ? playlistNote({
+        randomGuess,
+        randomFacts,
+        splitSet,
+        formMode,
+        speciesSet,
+        rangeLabel: card.rangeLabel,
+        libraryTitle: card.libraryTitle,
+        blurb: card.blurb,
+      })
+    : "";
+
   return (
     <div className="pk-page">
-      <header className="mx-auto w-full min-w-0 max-w-5xl px-4 pt-6 pb-2 sm:px-6">
-        <div className="pk-banner">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <a className="pk-wordmark" href={DONATE_URL} target="_blank" rel="noreferrer">
-              <span className="pk-ball" aria-hidden="true" />
-              <span>
-                <span className="pk-wordmark-name">{APP_NAME}</span>
-                <span className="pk-wordmark-coffee">Buy me a coffee</span>
-              </span>
-            </a>
-            <div className="flex flex-wrap items-center gap-2 self-start">
-              <a className="pk-banner-btn" href={SOURCE_URL} target="_blank" rel="noreferrer">
-                GitHub
-              </a>
-              {session ? (
-                <button type="button" className="pk-banner-btn" onClick={disconnect}>
-                  {session.name ? `Yoto · ${session.name}` : "Yoto connected"}
-                </button>
-              ) : (
-                <button type="button" className="pk-banner-btn" onClick={() => setConnectOpen(true)}>
-                  Connect Yoto
-                </button>
-              )}
-            </div>
-          </div>
-          <h1 className="mt-3 text-2xl font-bold tracking-tight text-white sm:mt-4 sm:text-4xl">
-            {view === "setup"
-              ? "Set up Pokefacts"
-              : view === "catalogue"
-              ? "Reference catalogue"
-              : view === "music"
-                ? "Pokémon music"
-              : guessing
-                ? "Who's That Pokémon"
-                : formMode || speciesSet
-                  ? card?.libraryTitle
-                  : "Pokémon facts"}
-          </h1>
-          <p className="mt-1 max-w-xl text-sm leading-6 text-white/90">
-            {view === "setup"
-              ? "Connect Yoto, send a playlist, then link it to a blank card in the Yoto app."
-              : view === "catalogue"
-              ? "Every species from Kanto to Paldea. The Pokédex line is from the games, with the type, size, abilities, evolution, and stats."
-              : view === "music"
-                ? "Albums and songs from Bulbapedia. Add a song and it plays in the list below."
-              : guessing
-                ? "Fifty riddles. You hear the cry, then the colour and type, two Pokédex lines, and how big it is. The picture stays a shadow until the answer."
-                : formMode
-                  ? "The cry, then the selected voice reads that form."
-                  : speciesSet
-                    ? "The cry, then the selected voice reads the name and a short description."
-                  : randomFacts
-                    ? "One hundred Pokémon, drawn at random. You hear the cry, then the selected voice reads the name and a short description."
-                    : "The cry, then the name, then a short description."}
-          </p>
+      <AppHeader
+        title={heading.title}
+        blurb={heading.blurb}
+        helpOpen={view === "setup"}
+        session={session}
+        onHome={goHome}
+        onHelp={chooseHelp}
+        onConnect={() => setConnectOpen(true)}
+        onDisconnect={disconnect}
+      />
+      <AppNav
+        selected={primaryTabFor(view, kind)}
+        collection={isCollectionKind(kind) ? kind : collectionKind}
+        onPrimary={choosePrimary}
+        onCollection={showKind}
+      />
+      {view !== "setup" ? (
+        <div className="mx-auto w-full min-w-0 max-w-5xl px-4 sm:px-6">
+          <PlaybackPanel
+            settings={playback}
+            onChange={setPlayback}
+            voiceId={voiceId}
+            onVoiceId={(id) => setVoiceId(writeVoiceId(localStorage, id))}
+          />
         </div>
-      </header>
-      <div
-        className="pk-tabs mx-auto flex w-full min-w-0 max-w-5xl flex-wrap content-start gap-x-2 gap-y-3 px-4 sm:px-6"
-        role="tablist"
-        aria-label="Play mode"
-      >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === "catalogue"}
-            onClick={() => {
-              stopDemo();
-              setView("catalogue");
-            }}
-            className="pk-tab"
-          >
-            Catalogue
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === "cards" && kind === "meet"}
-            onClick={() => showKind("meet")}
-            className="pk-tab"
-          >
-            Facts
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === "cards" && kind === "guess"}
-            onClick={() => showKind("guess")}
-            className="pk-tab"
-          >
-            Who's That Pokémon
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === "cards" && kind === "mega"}
-            onClick={() => showKind("mega")}
-            className="pk-tab"
-          >
-            Mega Evolutions
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === "cards" && kind === "gmax"}
-            onClick={() => showKind("gmax")}
-            className="pk-tab"
-          >
-            Gigantamax
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === "cards" && kind === "alola"}
-            onClick={() => showKind("alola")}
-            className="pk-tab"
-          >
-            Alolan forms
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === "cards" && kind === "hisui"}
-            onClick={() => showKind("hisui")}
-            className="pk-tab"
-          >
-            Hisuian forms
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === "cards" && kind === "legendary"}
-            onClick={() => showKind("legendary")}
-            className="pk-tab"
-          >
-            Legendary Pokémon
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === "cards" && kind === "mythical"}
-            onClick={() => showKind("mythical")}
-            className="pk-tab"
-          >
-            Mythical Pokémon
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === "music"}
-            onClick={() => {
-              stopDemo();
-              setView("music");
-            }}
-            className="pk-tab"
-          >
-            Music
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === "setup"}
-            onClick={() => {
-              stopDemo();
-              setView("setup");
-            }}
-            className="pk-tab"
-          >
-            Setup
-          </button>
-      </div>
-      <div className="mx-auto w-full min-w-0 max-w-5xl px-4 sm:px-6">
-        <PlaybackPanel settings={playback} onChange={setPlayback} />
-      </div>
+      ) : null}
 
       <main className="mx-auto w-full min-w-0 max-w-5xl px-4 py-6 sm:px-6">
         <div key={view === "cards" ? `${view}-${kind}` : view} className="pk-view">
         {view === "setup" ? (
-          <SetupGuide onConnect={() => setConnectOpen(true)} />
+          <SetupGuide onConnect={() => setConnectOpen(true)} onHome={goHome} />
         ) : view === "catalogue" ? (
           <Catalogue
             onSendSelection={sendSelection}
@@ -1596,91 +1512,12 @@ export function Studio({
           <MusicPanel connected={Boolean(session)} onConnect={() => setConnectOpen(true)} voiceId={voiceId} />
         ) : card && chapter ? (
           <div className="grid min-w-0 gap-6 md:grid-cols-[17.5rem_minmax(0,1fr)]">
-            <div className="order-3 min-w-0 md:order-1 md:col-span-2">
-              <div className="flex flex-wrap items-center gap-3">
-                <Button type="button" variant="outline" className="h-11 px-4" onClick={() => setStickersOpen(true)}>
-                  Print stickers
-                </Button>
-                <p className="text-sm leading-6 text-muted-foreground">
-                  {randomGuess ? (
-                    <>
-                      This playlist is the{" "}
-                      <span className="font-bold text-ink">50 riddles on this page</span>.
-                      Shuffle draws a new fifty. Send uses this list, not a new draw. Each clue is a
-                      shadow of the 16×16 pixel. The answer track is the real pixel.
-                    </>
-                  ) : randomFacts ? (
-                    <>
-                      This smaller playlist is the{" "}
-                      <span className="font-bold text-ink">100 Pokémon on this page</span>.
-                      Shuffle draws a new hundred. Send uses this list, not a new draw.
-                    </>
-                  ) : splitSet ? (
-                    <>
-                      This playlist is{" "}
-                      <span className="font-bold text-ink">{card.rangeLabel}</span>. {card.blurb}
-                    </>
-                  ) : formMode ? (
-                    <>
-                      This playlist is{" "}
-                      <span className="font-bold text-ink">{card.libraryTitle}</span>. One
-                      track for each form. The picture is that form&apos;s full artwork.
-                      The Yoto card still uses the species&apos; 16×16 pixel.
-                    </>
-                  ) : speciesSet ? (
-                    <>
-                      This playlist is{" "}
-                      <span className="font-bold text-ink">{card.libraryTitle}</span>. One
-                      track for each Pokémon. The picture is the full artwork. The Yoto icon is
-                      the 16×16 pixel.
-                    </>
-                  ) : (
-                    <>
-                      This playlist is{" "}
-                      <span className="font-bold text-ink">{card.rangeLabel}</span>. It is one
-                      part of the full Pokefacts set.
-                    </>
-                  )}
-                </p>
-                {randomFacts ? (
-                  <Button type="button" variant="outline" className="h-10 px-4" onClick={shufflePokedex}>
-                    Shuffle
-                  </Button>
-                ) : null}
-                {randomGuess ? (
-                  <Button type="button" variant="outline" className="h-10 px-4" onClick={shuffleGuess}>
-                    Shuffle
-                  </Button>
-                ) : null}
-              </div>
-              {kind === "meet" ? (
-                <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <Button
-                    type="button"
-                    className="h-11 px-4"
-                    disabled={sending || !ready}
-                    onClick={() => void sendAllFacts()}
-                  >
-                    {sending && bulkActive
-                      ? "Recording…"
-                      : `Send all ${factsPlaylists.length} Pokefacts playlists`}
-                  </Button>
-                  <p className="max-w-xl text-sm leading-6 text-muted-foreground">
-                    Sends every Pokefacts playlist, one after another, so all 1,025 Pokémon are covered.
-                    Each playlist stays at 100 tracks or fewer. The voice you pick reads every track.
-                  </p>
-                </div>
-              ) : null}
-              {job ? (
-                <StatusBar
-                  label={job.detail}
-                  done={job.done}
-                  total={job.total}
-                  failed={job.status === "failed"}
-                />
-              ) : null}
+            <section className="order-1 min-w-0 md:col-span-2" aria-labelledby="playlist-heading">
+              <h2 id="playlist-heading" className="pk-section-title">
+                This playlist
+              </h2>
               <div
-                className="pk-scroll mt-3 flex gap-2 overflow-x-auto pb-1"
+                className="pk-scroll mt-2 flex gap-2 overflow-x-auto pb-1"
                 role="listbox"
                 aria-label={
                   guessing
@@ -1706,11 +1543,25 @@ export function Studio({
                   );
                 })}
               </div>
-            </div>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <p className="text-sm leading-6 text-muted-foreground">{thisPlaylist}</p>
+                {randomFacts ? (
+                  <Button type="button" variant="outline" className="h-10 px-4" onClick={shufflePokedex}>
+                    Shuffle
+                  </Button>
+                ) : null}
+                {randomGuess ? (
+                  <Button type="button" variant="outline" className="h-10 px-4" onClick={shuffleGuess}>
+                    Shuffle
+                  </Button>
+                ) : null}
+              </div>
+            </section>
 
-            <div className="order-2 grid min-w-0 content-start gap-2 self-start md:order-2">
+            <div className="order-3 grid min-w-0 content-start gap-2 self-start md:order-2">
+              <h2 className="pk-section-title">{guessing ? "Riddles" : "On this card"}</h2>
               <label className="grid gap-1 text-sm" htmlFor="picker">
-                {guessing ? "Riddle on this card" : "Pokémon on this card"}
+                {guessing ? "Find a riddle" : "Find a Pokémon"}
                 <input
                   id="picker"
                   value={query}
@@ -1775,8 +1626,7 @@ export function Studio({
               </nav>
             </div>
 
-            <div className="order-1 min-w-0 md:order-3">
-              <article className="pk-card pk-dex px-4 py-6 sm:px-8 sm:py-8">
+            <article className="order-2 min-w-0 pk-card pk-dex px-4 py-6 sm:px-8 sm:py-8 md:order-3">
                 <div key={chapter.key} className="pk-swap">
                 <p className="pk-kicker">
                   {guessing
@@ -1889,29 +1739,7 @@ export function Studio({
                   </p>
                 ) : null}
                 </div>
-                <label className="mt-6 grid max-w-sm gap-1 text-sm" htmlFor="voice">
-                  Voice
-                  <select
-                    id="voice"
-                    aria-label="Voice"
-                    className="pk-field"
-                    value={voiceId}
-                    onChange={(event) => setVoiceId(writeVoiceId(localStorage, event.target.value))}
-                  >
-                    {PICKER_VOICES.map((voice) => (
-                      <option key={voice.id} value={voice.id}>
-                        {voice.name} — {voice.note}
-                      </option>
-                    ))}
-                  </select>
-                  {isPiperVoice(voiceId) ? (
-                    <p className="mt-2 text-xs leading-5 pk-quiet">
-                      Cori, British. Piper reads on this computer, so Hear works before you connect Yoto. Send still
-                      needs a Yoto login.
-                    </p>
-                  ) : null}
-                </label>
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="mt-6 flex flex-wrap gap-2">
                   {guessing ? (
                     <>
                       <Button
@@ -1986,58 +1814,58 @@ export function Studio({
                 ) : null}
                 <audio ref={clipRef} controls className="mt-4 w-full max-w-md" preload="none" />
               </article>
-
-              <section className="pk-card mt-4 px-5 py-4" aria-labelledby="yoto-send-heading">
-                <h3 id="yoto-send-heading" className="font-display text-2xl">
-                  Send to Yoto
-                </h3>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  On the player: {card.childDoes} In the Yoto app, look for{" "}
-                  <span className="font-bold text-ink">{card.libraryTitle}</span>.
-                  {randomGuess
-                    ? " Send uploads a shadow of each 16×16 pixel for the clue, then the real pixel for the answer."
-                    : formMode
-                      ? " The picture on the card is the species 16×16 pixel."
-                      : speciesSet
-                        ? " The Yoto icon is the 16×16 pixel."
-                        : ""}
+            <section className="order-4 min-w-0 pk-card px-5 py-4 md:col-span-2" aria-labelledby="yoto-send-heading">
+              <h3 id="yoto-send-heading" className="font-display text-2xl">
+                Make this card
+              </h3>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                On the player: {card.childDoes} In the Yoto app, look for{" "}
+                <span className="font-bold text-ink">{card.libraryTitle}</span>.
+                {randomGuess
+                  ? " Send uploads a shadow of each 16×16 pixel for the clue, then the real pixel for the answer."
+                  : formMode
+                    ? " The picture on the card is the species 16×16 pixel."
+                    : speciesSet
+                      ? " The Yoto icon is the 16×16 pixel."
+                      : ""}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                {isPiperVoice(voiceId)
+                  ? "Piper reads on this computer. The cry plays first, then that recording is uploaded."
+                  : "The voice you picked reads every track. The cry plays first."}
+              </p>
+              <label className="mt-3 grid gap-1 text-sm" htmlFor="yoto-playlist">
+                Where it goes
+                <select
+                  id="yoto-playlist"
+                  aria-label="Yoto playlist"
+                  className="pk-field"
+                  value={targetPlaylist}
+                  onChange={(event) => setTargetPlaylist(event.target.value)}
+                >
+                  <option value="">Make a new playlist</option>
+                  {library.map((item) => (
+                    <option key={item.cardId} value={item.cardId}>
+                      Add to {item.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {libraryNote ? (
+                <p className="mt-2 text-sm leading-5 pk-danger" role="status">
+                  {libraryNote}
                 </p>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  {isPiperVoice(voiceId)
-                    ? "Piper reads on this computer. The cry plays first, then that recording is uploaded."
-                    : "The voice you picked reads every track. The cry plays first."}
+              ) : (
+                <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                  {targetPlaylist
+                    ? "Adds these tracks at the end. Tracks already on that playlist stay."
+                    : `Makes a new playlist named ${card.libraryTitle}. Playlists you already have stay as they are.`}
                 </p>
-                <label className="mt-3 grid gap-1 text-sm" htmlFor="yoto-playlist">
-                  Where it goes
-                  <select
-                    id="yoto-playlist"
-                    aria-label="Yoto playlist"
-                    className="pk-field"
-                    value={targetPlaylist}
-                    onChange={(event) => setTargetPlaylist(event.target.value)}
-                  >
-                    <option value="">Make a new playlist</option>
-                    {library.map((item) => (
-                      <option key={item.cardId} value={item.cardId}>
-                        Add to {item.title}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {libraryNote ? (
-                  <p className="mt-2 text-sm leading-5 pk-danger" role="status">
-                    {libraryNote}
-                  </p>
-                ) : (
-                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                    {targetPlaylist
-                      ? "Adds these tracks at the end. Tracks already on that playlist stay."
-                      : `Makes a new playlist named ${card.libraryTitle}. Playlists you already have stay as they are.`}
-                  </p>
-                )}
+              )}
+              <div className="mt-4 flex flex-wrap gap-2">
                 <Button
                   type="button"
-                  className="mt-4 h-11 px-4"
+                  className="h-11 px-4"
                   disabled={sending || !ready}
                   onClick={() => void send()}
                 >
@@ -2049,30 +1877,52 @@ export function Studio({
                         ? "Send these 100"
                         : `Send ${card.rangeLabel}`}
                 </Button>
-                {job ? (
-                  <StatusBar
-                    label={job.detail}
-                    done={job.done}
-                    total={job.total}
-                    failed={job.status === "failed"}
-                  />
+                <Button type="button" variant="outline" className="h-11 px-4" onClick={() => setStickersOpen(true)}>
+                  Print stickers
+                </Button>
+                {kind === "meet" ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-11 px-4"
+                    disabled={sending || !ready}
+                    onClick={() => void sendAllFacts()}
+                  >
+                    {sending && bulkActive
+                      ? "Recording…"
+                      : `Send all ${factsPlaylists.length} playlists`}
+                  </Button>
                 ) : null}
-                <div className="mt-4">
-                  <p className="text-sm font-bold">
-                    {job?.status === "completed" ? "Ready to link" : "After it finishes"}
-                  </p>
-                  <ol className="mt-2 grid list-decimal gap-2 pl-4 text-sm leading-6">
-                    <li>Open the Yoto app and go to Make Your Own.</li>
-                    <li>
-                      Find <span className="font-bold">{card.libraryTitle}</span>.
-                    </li>
-                    <li>Choose Link to a card.</li>
-                    <li>Hold a blank Make Your Own card to the player.</li>
-                    <li>The next playlist needs a different blank card.</li>
-                  </ol>
-                </div>
-              </section>
-            </div>
+              </div>
+              {kind === "meet" ? (
+                <p className="mt-2 max-w-xl text-xs leading-5 text-muted-foreground">
+                  Send all records every Pokefacts playlist, so all 1,025 Pokémon are covered. Each playlist stays at
+                  100 tracks or fewer.
+                </p>
+              ) : null}
+              {job ? (
+                <StatusBar
+                  label={job.detail}
+                  done={job.done}
+                  total={job.total}
+                  failed={job.status === "failed"}
+                />
+              ) : null}
+              <div className="mt-4">
+                <p className="text-sm font-bold">
+                  {job?.status === "completed" ? "Ready to link" : "After it finishes"}
+                </p>
+                <ol className="mt-2 grid list-decimal gap-2 pl-4 text-sm leading-6">
+                  <li>Open the Yoto app and go to Make Your Own.</li>
+                  <li>
+                    Find <span className="font-bold">{card.libraryTitle}</span>.
+                  </li>
+                  <li>Choose Link to a card.</li>
+                  <li>Hold a blank Make Your Own card to the player.</li>
+                  <li>The next playlist needs a different blank card.</li>
+                </ol>
+              </div>
+            </section>
           </div>
         ) : null}
         </div>
@@ -2083,8 +1933,12 @@ export function Studio({
         Pokémon names and the Pokédex lines are from the games. The short notes are written for this app.{" "}
         <a className="underline decoration-poke-red decoration-2" href={DONATE_URL} target="_blank" rel="noreferrer">
           Buy me a coffee
-        </a>{" "}
-        if you want to support it.
+        </a>
+        {" · "}
+        <a className="underline decoration-poke-red decoration-2" href={SOURCE_URL} target="_blank" rel="noreferrer">
+          Source on GitHub
+        </a>
+        .
       </footer>
 
       {stickersOpen && card ? (
