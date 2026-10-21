@@ -1,29 +1,43 @@
 # Pokefacts
 
-Pokefacts makes Pokémon cards for a Yoto player. The cards go into your Yoto library. You then link each one to a blank Make Your Own card.
+Pokémon cards for a [Yoto](https://yotoplay.com/) player. Hear a fact or a riddle on this page, send the playlist to your library, then link it to a blank Make Your Own card.
 
-Open it here: https://pokefacts.online/
+**Use it here: [pokefacts.online](https://pokefacts.online/)**
 
-You can also run it on your own computer. That path is below. The first time on your own computer takes a while. You install two free programs, leave a window open, and connect your own Yoto account. After that, starting it again is one line.
+<p align="center">
+  <a href="https://buymeacoffee.com/kreeyate">
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="72">
+  </a>
+</p>
 
-It is free. If you want to say thanks, you can [buy me a coffee](https://buymeacoffee.com/kreeyate).
+<p align="center">
+  <a href="https://buymeacoffee.com/kreeyate"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy me a coffee"></a>
+  <a href="https://pokefacts.online/"><img src="https://img.shields.io/badge/Open-pokefacts.online-e10600?style=for-the-badge" alt="Open pokefacts.online"></a>
+</p>
+
+Pokefacts is **free**. There is no account to pay for, and there is no paywall. If you like it, [buy me a coffee](https://buymeacoffee.com/kreeyate) — that is the tip jar. The app stays free either way.
+
+You can also run it on your own computer. That path is below. The first time takes a while: you install two free programs, leave a window open, and connect your own Yoto account. After that, starting it again is one line.
 
 This is a fan project. It is not made by Nintendo, Game Freak, Creatures, or Yoto.
 
 ## What it can do
 
-- **Facts.** A short reading for all 1,025 Pokémon. The full set is 11 playlists, Pokefacts 1 through Pokefacts 11. There is also a random card of 100. Shuffle draws a new hundred. Send uses the hundred on the page.
-- **Guess Who.** Fifty riddles on one card. The clue plays the cry and does not say the name. Its picture is a shadow. The next track plays the cry and says the name. Its picture is the real one.
-- **Catalogue.** Look up any Pokémon from Kanto to Paldea. Tick the ones you want, in the order you want them, and build your own playlist. Facts reads the name and the first two biology paragraphs. Advanced facts also reads the size, the type, the ability, and how it evolves. Who's That Pokémon uses two tracks for each Pokémon, so 50 fit on a card.
-- **Mega Evolutions and Gigantamax.** One track for each form. The page shows that form's full picture. The Yoto icon stays the species 16×16 pixel.
-- **Voices.** Lily, George, Brian, and Adam are Yoto voices. Piper — Pokédex sounds like a device reading a Pokédex entry. The first time you pick Piper, Pokefacts downloads that voice. Hear plays on the page before you send anything. Send uses the voice you picked.
-- **Stickers.** Print a front and a back at real Yoto card size, on A4 or US Letter. The front is a cover you arrange by dragging the Pokémon around. The back is the playlist, or a short note when the names will not fit. Cut on the corner marks and stick the pieces on a blank card. Print at 100% or Actual size. Do not choose Fit to page. A long catalogue pick becomes more than one card, and each row on the page is a different card. Save PDF keeps the file on your computer.
+The menu has five destinations. **Help** and **Connect Yoto** sit in the header. The wordmark goes home.
+
+- **Facts.** A short reading for all 1,025 Pokémon. The cry plays first, then the voice. The full set is 11 playlists, Pokefacts 1 through Pokefacts 11. There is also a random card of 100. Shuffle draws a new hundred. **This playlist** and **Make this card** sit in the same place on every card page. **Send all** records every Pokefacts playlist so the whole dex is covered.
+- **Who's That.** Fifty riddles on one card. The clue picture is a black silhouette on opaque white. You hear the colour and the type, two Pokédex lines with the name taken out, then size and weight. The clue never says the name. The next track plays the cry, says the name, and shows the colour pixel. Shuffle draws a new fifty.
+- **Collections.** Mega Evolutions, Gigantamax, Alolan, Hisuian, Legendary, and Mythical. One track for each form or Pokémon. The page shows that form's full picture. The Yoto icon stays the species 16×16 pixel.
+- **Catalogue.** Look up any Pokémon from Kanto to Paldea. Tick the ones you want, in the order you want them, and build your own playlist. Facts reads the name and the first two biology paragraphs from Bulbapedia. Advanced facts also reads the size, the type, the ability, and how it evolves. Who's That Pokémon uses two tracks for each Pokémon, so 50 fit on a card.
+- **Music.** Songs from the games. Play them on the page, add them to a playlist, reorder the list, then send it to Yoto as MP3s. A song about one Pokémon can use that species' pixel on the card.
+- **Voices and sound.** Lily, George, Brian, and Adam are Yoto voices. **Piper — Pokédex** sounds like a device reading a Pokédex entry. The first time you pick Piper, Pokefacts downloads that voice. One panel sets the voice, how loud the cry is, how loud the voice is, the pause after the cry, and metric or imperial units. Hear uses that mix. Send uses the same mix.
+- **Stickers.** **Print stickers** is on Facts, Who's That, Collections, and a Catalogue pick. Pick a tile pattern — square, rectangle, circle, or hex — then tap a Pokémon, a Poké Ball, or a berry. Each one fills the next tile. Drag to swap places. Bigger and Smaller scale the whole pattern. Draw on the card, with an eraser and a clear. Undo steps back. Save a PDF at real Yoto card size on A4 or US Letter, print at 100% or Actual size, and cut on the corner marks. Do not choose Fit to page. When the names will not fit at a readable size, the back is a note instead. Who's That leaves the names off the back and keeps the shadow pictures.
 
 ## What you need
 
 - A computer. A laptop is fine. It has to stay on while the cards are made.
 - The Yoto app on your phone, and a Yoto player.
-- Blank Make Your Own cards. The full set of facts uses 11 cards. Guess Who uses one more.
+- Blank Make Your Own cards. The full set of facts uses 11 cards. Who's That uses one more.
 - About an hour the first time, if you run it on your own computer. Later visits are much shorter.
 
 If you use the website, skip the install steps and start at **Connect your Yoto account**.
@@ -135,7 +149,7 @@ That address is your own computer. It is not a public website, and other people 
 
 You do this once. It lets Pokefacts put playlists into your library.
 
-1. In Pokefacts, click **Put this on a Yoto card**.
+1. In Pokefacts, click **Connect Yoto**.
 2. Open [dashboard.yoto.dev](https://dashboard.yoto.dev/) in another tab and sign in with the same account you use for the Yoto app.
 3. Create a new app and choose **public**. Public means there is no secret password to copy. If the page offers public or confidential, choose public.
 4. Copy the **client ID**. It is a long code for that app. Paste it into the Client ID box in Pokefacts.
@@ -157,12 +171,12 @@ The page has a **Copy** button for the address that matches the site you have op
 
 Those permissions let Pokefacts create playlists in your library, see that library, stay signed in, and read your name. They do not give Pokefacts your password.
 
-7. The browser comes back to Pokefacts. The top of the page shows your Yoto name when the connection worked.
+7. The browser comes back to Pokefacts. The header shows your Yoto name when the connection worked. Disconnect is behind that name, so one tap does not sign you out.
 
 ## 8. Send the fact cards
 
-1. Open the **Facts** tab.
-2. Click **Send all 11 Pokefacts playlists**.
+1. Open **Facts**.
+2. Under **Make this card**, click **Send all** for every Pokefacts playlist.
 
 Leave the computer alone while this runs. Each Pokémon is recorded on its own, so the full set takes a long time. The page tells you how far along it is. The instruction window has to stay open until the page says the playlists are ready.
 
@@ -181,27 +195,35 @@ Do the same for Pokefacts 2 through Pokefacts 11. Each playlist needs its own bl
 
 ## Catalogue
 
-Open the **Catalogue** tab to look up one Pokémon, or to build a playlist from a pick.
+Open **Catalogue** to look up one Pokémon, or to build a playlist from a pick.
 
-Tick the species in the order you want them played. Choose Facts, Advanced facts, or Who's That Pokémon. Type a title if you want one. **Build playlist from selection** sends that card to your Yoto library.
+Tick the species in the order you want them played. Choose Facts, Advanced facts, or Who's That Pokémon. Type a title if you want one. Send that card to your Yoto library.
 
 A Yoto playlist holds 100 tracks. Who's That Pokémon uses two tracks each, so 50 species fit. A longer pick is not sent as one playlist.
 
+## Collections
+
+Open **Collections**, then pick Mega, Gigantamax, Alolan, Hisuian, Legendary, or Mythical. Hear one on the page, then **Make this card**.
+
+## Music
+
+Open **Music**. Play a song on the page, add it to your playlist, move songs up or down, then send the list to Yoto. The public site does not download YouTube on the server. If you run Pokefacts on this computer, that machine saves the MP3 and the server uploads it to Yoto.
+
 ## Stickers
 
-**Print stickers** is on the Facts, Guess Who, Mega Evolutions, and Gigantamax cards, and on a Catalogue pick.
+**Print stickers** is next to Send on Facts, Who's That, Collections, and a Catalogue pick.
 
-The front is a painting you can draw on, with an eraser and a clear. Pick a tile pattern, then tap a picture, a Poké Ball, or a berry. Each one fills the next tile. Undo steps back. Printing is a separate step: check the sheet, save the PDF, then print at 100% size and cut on the corner marks. When the names will not fit at a readable size, the back is a note instead. Guess Who leaves the names off the back and keeps the shadow pictures.
+Pick a tile pattern, then tap a picture, a Poké Ball, or a berry. Each one fills the next tile. Drag a sticker to swap its place. Draw on the card if you want. Printing is a separate step: check the sheet, save the PDF, then print at 100% size and cut on the corner marks.
 
 Choose A4 or US Letter. Save PDF stores the file on your computer. Print it at 100% or Actual size. Do not choose Fit to page. Cut on the corner marks. The left sticker is the front. The right sticker is the back.
 
 A catalogue pick that needs more than one card prints one row per card. Previous sheet and Next sheet move through the pages. The saved PDF has every page.
 
-## Guess Who
+## Who's That
 
-Open the **Guess Who** tab. You get 50 riddles, which is one card. Shuffle draws a new fifty.
+Open **Who's That**. You get 50 riddles, which is one card. Shuffle draws a new fifty.
 
-Each riddle is two tracks. The clue plays the cry and does not say the name. Its picture is a shadow. The answer plays the cry and says the name. Its picture is the real one.
+Each riddle is two tracks. The clue plays the cry and does not say the name. Its picture is a black shape on white. The answer plays the cry and says the name. Its picture is the real pixel.
 
 Send it the same way as the fact cards, then link it to one blank card in the Yoto app.
 
@@ -229,6 +251,16 @@ Then open `http://127.0.0.1:3847` in your browser. You do not need to install No
 **The window says ffmpeg is missing.** Do the ffmpeg step again, close the window, open a new one in the folder, and type `npm start`.
 
 **Yoto sends you back to an error.** The callback address on the Yoto dashboard has to match the site you are using. On your own computer that is `http://127.0.0.1:3847/callback`. On the website that is `https://pokefacts.online/callback`. Fix it there, then click **Continue to Yoto** again.
+
+## Support
+
+Pokefacts is free and will stay free. If it is useful, [buy me a coffee](https://buymeacoffee.com/kreeyate).
+
+<p align="center">
+  <a href="https://buymeacoffee.com/kreeyate">
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="72">
+  </a>
+</p>
 
 ## Where the words and pictures come from
 
