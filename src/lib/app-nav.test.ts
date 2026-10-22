@@ -13,11 +13,11 @@ import {
 } from "./app-nav";
 
 describe("app navigation", () => {
-  it("keeps the primary menu to five destinations", () => {
-    assert.equal(PRIMARY_TABS.length, 5);
+  it("keeps the primary menu to six destinations", () => {
+    assert.equal(PRIMARY_TABS.length, 6);
     assert.deepEqual(
       PRIMARY_TABS.map((tab) => tab.id),
-      ["facts", "guess", "collections", "catalogue", "music"],
+      ["facts", "guess", "collections", "catalogue", "music", "adventures"],
     );
   });
 
@@ -36,13 +36,14 @@ describe("app navigation", () => {
     assert.equal(primaryTabFor("cards", "alola"), "collections");
     assert.equal(primaryTabFor("catalogue", "meet"), "catalogue");
     assert.equal(primaryTabFor("music", "guess"), "music");
+    assert.equal(primaryTabFor("adventures", "meet"), "adventures");
     assert.equal(primaryTabFor("setup", "meet"), null);
   });
 
   it("uses short, matching page titles", () => {
     assert.deepEqual(
       PRIMARY_TABS.map((tab) => tab.label),
-      ["Fact Cards", "Who's That", "Collection Cards", "Pokédex Cards", "Music"],
+      ["Fact Cards", "Who's That", "Collection Cards", "Pokédex Cards", "Music", "Adventures"],
     );
     assert.equal(pageHeading({ view: "setup", kind: "meet" }).title, "How to connect Yoto");
     assert.equal(pageHeading({ view: "catalogue", kind: "meet" }).title, "Pokédex Cards");

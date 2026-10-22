@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { AdventurePanel } from "@/components/adventure-panel";
 import { AppHeader } from "@/components/app-header";
 import { AppNav } from "@/components/app-nav";
 import { Catalogue } from "@/components/catalogue";
@@ -122,6 +123,9 @@ import {
   type RenderJob,
 } from "@/lib/yoto-send";
 import { isYotoCoverUrl, yotoPlaylistUrl } from "@/lib/yoto-playlist";
+import { storyCard, storyPixels } from "@/lib/story/story-card";
+import { storyTrackCount } from "@/lib/story/story-check";
+import type { StoryGraph } from "@/lib/story/story-graph";
 import {
   CARD_KEY,
   clearSavedLoginForScopeGap,
@@ -1768,6 +1772,49 @@ export function Studio({
     }
   }
 
+  /** An adventure card: its pictures, then the interactive playlist. Always a new playlist, never added to one. */
+  async function sendAdventure(story: StoryGraph) {
+    if (sendingRef.current) return;
+    if (!(await connectedSession())) return;
+    try {
+      await driveSend(story.title, false, async () => {
+        setJob({ status: "sending", detail: `Sending ${story.title} to Yoto…` });
+        const pixels = storyPixels(story);
+        const pictures = [
+          ...pixels.real.map((id) => ({ id, shadow: false })),
+          ...pixels.shadow.map((id) => ({ id, shadow: true })),
+        ];
+        const realById: Record<number, string> = {};
+        const shadowById: Record<number, string> = {};
+        let finished = 0;
+        await mapPool(pictures, async ({ id, shadow }) => {
+          (shadow ? shadowById : realById)[id] = await uploadIcon(id, shadow);
+          finished += 1;
+          setJob({
+            status: "sending",
+            detail: `${story.title}, picture ${finished} of ${pictures.length}`,
+            done: finished,
+            total: pictures.length,
+          });
+        });
+        const built = storyCard(story, { voiceId: voiceIdRef.current, realById, shadowById });
+        return newSend({
+          title: story.title,
+          // No cover picture: the first Pokémon with a cry may be a secret the child has to work out.
+          current: { ...pendingPlaylist(built.card, built.upload, story.title), coverId: undefined },
+          finish: {
+            detail: `${story.title} is in your Yoto library.`,
+            toastTitle: story.title,
+            updated: false,
+            tracks: storyTrackCount(story),
+          },
+        });
+      });
+    } catch {
+      // The bar already shows what went wrong.
+    }
+  }
+
   async function sendAllFacts() {
     if (sendingRef.current) return;
     if (!(await connectedSession())) return;
@@ -1894,6 +1941,8 @@ export function Studio({
           />
         ) : view === "music" ? (
           <MusicPanel />
+        ) : view === "adventures" ? (
+          <AdventurePanel sending={sending} onSend={sendAdventure} />
         ) : card && chapter ? (
           <div className="grid min-w-0 gap-6 md:grid-cols-[17.5rem_minmax(0,1fr)]">
             <section className="order-2 min-w-0 md:order-1 md:col-span-2" aria-labelledby="playlist-heading">

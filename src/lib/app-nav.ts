@@ -1,8 +1,8 @@
 import type { KidCardKind } from "@/lib/kid-cards";
 
-export type StudioView = "cards" | "catalogue" | "setup" | "music";
+export type StudioView = "cards" | "catalogue" | "setup" | "music" | "adventures";
 
-export type PrimaryTabId = "facts" | "guess" | "collections" | "catalogue" | "music";
+export type PrimaryTabId = "facts" | "guess" | "collections" | "catalogue" | "music" | "adventures";
 
 export type CollectionKind = Extract<
   KidCardKind,
@@ -18,6 +18,7 @@ export const PRIMARY_TABS: ReadonlyArray<{
   { id: "collections", label: "Collection Cards" },
   { id: "catalogue", label: "Pokédex Cards" },
   { id: "music", label: "Music" },
+  { id: "adventures", label: "Adventures" },
 ];
 
 export const COLLECTION_TABS: ReadonlyArray<{
@@ -44,7 +45,7 @@ export const SAVED_TAB_KEY = "pokefacts.tab";
 
 export type SavedTab = { view: StudioView; kind: KidCardKind };
 
-const STUDIO_VIEWS: readonly StudioView[] = ["cards", "catalogue", "setup", "music"];
+const STUDIO_VIEWS: readonly StudioView[] = ["cards", "catalogue", "setup", "music", "adventures"];
 
 export function readSavedTab(raw: string | null): SavedTab | null {
   if (!raw) return null;
@@ -65,6 +66,7 @@ export function readSavedTab(raw: string | null): SavedTab | null {
 export function primaryTabFor(view: StudioView, kind: KidCardKind): PrimaryTabId | null {
   if (view === "catalogue") return "catalogue";
   if (view === "music") return "music";
+  if (view === "adventures") return "adventures";
   if (view === "setup") return null;
   if (kind === "guess") return "guess";
   if (isCollectionKind(kind)) return "collections";
@@ -93,6 +95,12 @@ export function pageHeading(input: {
     return {
       title: "Music",
       blurb: "Play songs from the games as YouTube videos.",
+    };
+  }
+  if (input.view === "adventures") {
+    return {
+      title: "Adventures",
+      blurb: "Choose-your-own-adventure cards. Try one here, then send it to Yoto.",
     };
   }
   if (input.kind === "guess") {
