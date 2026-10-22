@@ -240,6 +240,63 @@
   box-shadow: none;
 }
 
+.pk-signboard {
+  position: relative;
+  margin: 0.85rem auto 0.9rem;
+  width: 100%;
+  padding: 0.35rem 0.85rem 0.45rem;
+  border: 4px solid var(--ink);
+  border-radius: 0.85rem;
+  background: linear-gradient(180deg, #f3d7a2 0%, #d4a05a 52%, #b67a32 100%);
+  box-shadow: 0 7px 0 var(--ink);
+  text-align: center;
+}
+
+.pk-signboard::before,
+.pk-signboard::after {
+  content: "";
+  position: absolute;
+  top: -1.2rem;
+  width: 0.55rem;
+  height: 1.2rem;
+  background: #6b3f1a;
+  border: 3px solid var(--ink);
+  border-bottom: 0;
+  box-shadow: 2px 0 0 rgb(0 0 0 / 12%);
+}
+
+.pk-signboard::before {
+  left: 16%;
+}
+
+.pk-signboard::after {
+  right: 16%;
+}
+
+.pk-sign {
+  margin: 0;
+  line-height: 1;
+}
+
+.pk-sign-text {
+  display: inline-block;
+  font-family: var(--font-fredoka), "Arial Black", sans-serif;
+  font-size: 1.35rem;
+  font-weight: 700;
+  font-style: italic;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  color: var(--poke-yellow);
+  -webkit-text-stroke: 0.09em var(--poke-blue);
+  paint-order: stroke fill;
+  filter: drop-shadow(0.07em 0.08em 0 var(--ink));
+}
+
+.pk-sign-lg .pk-sign-text {
+  font-size: clamp(2.1rem, 8vw, 3.4rem);
+  -webkit-text-stroke: 0.07em var(--poke-blue);
+}
+
 .pk-banner {
   position: relative;
   overflow: hidden;
@@ -745,18 +802,42 @@
   box-shadow: 6px 6px 0 var(--ink);
 }
 
+.pk-card:not(.pk-playlist-row) {
+  position: relative;
+  padding-top: 3.35rem;
+}
+
+.pk-card:not(.pk-playlist-row)::before {
+  content: "Pokémon";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 1;
+  box-sizing: border-box;
+  height: 2.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 4px;
+  border-bottom: 3px solid var(--ink);
+  border-radius: 1.05rem 1.05rem 0 0;
+  background: linear-gradient(180deg, #e10600 0%, #c01018 100%);
+  box-shadow: inset 0 -4px 0 var(--poke-yellow);
+  font-family: var(--font-fredoka), "Arial Black", sans-serif;
+  font-size: 1.28rem;
+  font-weight: 700;
+  font-style: italic;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  color: var(--poke-yellow);
+  -webkit-text-stroke: 0.08em var(--poke-blue);
+  paint-order: stroke fill;
+  pointer-events: none;
+}
+
 .pk-dex {
   background-color: var(--cream);
-  background-image:
-    linear-gradient(#e10600, #e10600),
-    linear-gradient(#ffcb05, #ffcb05);
-  background-size:
-    100% 12px,
-    100% 4px;
-  background-position:
-    top,
-    0 12px;
-  background-repeat: no-repeat;
 }
 
 .pk-sprite {

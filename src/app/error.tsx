@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 
+import { PokemonSignboard } from "@/components/pokemon-sign";
+
 export default function Error({
   error,
   reset,
@@ -10,7 +12,8 @@ export default function Error({
   reset: () => void;
 }) {
   return (
-    <main className="pk-page mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-4 px-6">
+    <main className="pk-page mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-4 px-6 pt-8">
+      <PokemonSignboard />
       <div className="pk-banner">
         <Link className="pk-wordmark" href="/">
           <span className="pk-ball" aria-hidden="true" />

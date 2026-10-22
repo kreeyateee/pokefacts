@@ -1,3 +1,4 @@
+import { paintPokemonSign } from "@/lib/pokemon-sign";
 import {
   BACK_FOOTER_MM,
   BACK_HEADER_MM,
@@ -230,6 +231,32 @@ function paintStickers(ctx: CanvasRenderingContext2D, spec: CardPaint, width: nu
   }
 }
 
+function paintSignBar(
+  ctx: CanvasRenderingContext2D,
+  spec: CardPaint,
+  width: number,
+  mm: number,
+): number {
+  const edge = 1.15 * mm;
+  const signH = 7.6 * mm;
+  const stripe = 1.05 * mm;
+  ctx.fillStyle = "#e10600";
+  ctx.fillRect(edge, edge, width - edge * 2, signH);
+  ctx.fillStyle = "#ffcb05";
+  ctx.fillRect(edge, edge + signH - stripe, width - edge * 2, stripe);
+  paintPokemonSign(
+    ctx,
+    {
+      x: edge + 1.2 * mm,
+      y: edge,
+      width: width - edge * 2 - 2.4 * mm,
+      height: signH - stripe,
+    },
+    spec.fonts.display,
+  );
+  return edge + signH;
+}
+
 function paintFront(ctx: CanvasRenderingContext2D, spec: CardPaint, width: number, height: number) {
   const mm = pxPerMm(width);
   ctx.fillStyle = "#fff7dc";
@@ -244,28 +271,29 @@ function paintFront(ctx: CanvasRenderingContext2D, spec: CardPaint, width: numbe
   ctx.lineWidth = 0.7 * mm;
   ctx.strokeRect(edge, edge, width - edge * 2, height - edge * 2);
 
+  paintStickers(ctx, spec, width, height);
+
+  const signBottom = paintSignBar(ctx, spec, width, mm);
   const title = spec.title.trim();
   if (title) {
-    const barH = 7.2 * mm;
+    const barH = 6.6 * mm;
     ctx.fillStyle = "rgba(22, 50, 79, 0.92)";
-    ctx.fillRect(edge, edge, width - edge * 2, barH);
+    ctx.fillRect(edge, signBottom, width - edge * 2, barH);
     paintParagraph(ctx, title, {
       x: 2.2 * mm,
-      y: edge + 1.15 * mm,
+      y: signBottom + 0.8 * mm,
       width: width - 4.4 * mm,
       height: 5 * mm,
     }, {
       family: spec.fonts.display,
       weight: 700,
       color: "#fffdf6",
-      startPx: 4.4 * mm,
+      startPx: 4.2 * mm,
       minPx: 2.6 * mm,
       align: "center",
       leading: 1,
     });
   }
-
-  paintStickers(ctx, spec, width, height);
 }
 
 function splitLine(line: string): { mark: string; name: string } {
@@ -291,24 +319,16 @@ function paintBack(ctx: CanvasRenderingContext2D, spec: CardPaint, width: number
   ctx.fillRect(0, height - footerH - 1.05 * mm, width, 1.05 * mm);
 
   const pad = BACK_PAD_MM * mm;
-  paintParagraph(ctx, "PLAYLIST", {
-    x: pad,
-    y: 2.2 * mm,
-    width: width - pad * 2,
-    height: 4 * mm,
-  }, {
-    family: spec.fonts.display,
-    weight: 700,
-    color: "#ffcb05",
-    startPx: 3.2 * mm,
-    minPx: 2.4 * mm,
-    align: "left",
-  });
+  paintPokemonSign(
+    ctx,
+    { x: pad, y: 1.15 * mm, width: width - pad * 2, height: 5.6 * mm },
+    spec.fonts.display,
+  );
   paintParagraph(ctx, spec.title, {
     x: pad,
-    y: 6.4 * mm,
+    y: 7.1 * mm,
     width: width - pad * 2,
-    height: 9 * mm,
+    height: 8.4 * mm,
   }, {
     family: spec.fonts.display,
     weight: 700,
