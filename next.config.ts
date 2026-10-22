@@ -2,6 +2,9 @@ import type { NextConfig } from "next";
 import path from "node:path";
 
 const nextConfig: NextConfig = {
+  // The live server deploys by building into a spare folder, then swapping it in (scripts/deploy-vm.sh),
+  // so the running site never loses its build. Everywhere else this stays the usual .next.
+  distDir: process.env.POKEFACTS_DIST_DIR || ".next",
   allowedDevOrigins: ["127.0.0.1", "**.trycloudflare.com"],
   cacheComponents: true,
   partialPrefetching: true,
