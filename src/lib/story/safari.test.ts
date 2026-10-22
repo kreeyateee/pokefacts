@@ -1,0 +1,359 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+
+import { GET } from "../../app/api/adventure/safari/route";
+import { listSafariSpecies } from "../catalogue-db";
+import { FIELD_NOTES, GOLDEN_STOPS } from "./safari-roster";
+import { storyTrackCount as trackCount, checkStory } from "./story-check";
+import type { StoryGraph, StoryNode } from "./story-graph";
+import {
+  cleanOwner,
+  loadSafariPool,
+  nameVariants,
+  numberWords,
+  SAFARI_AREAS,
+  safariAdventure,
+  safariFromPool,
+  throwFor,
+  type SafariArea,
+  type SafariMon,
+} from "./safari";
+import type { FieldNotes } from "./safari-roster";
+
+function targets(node: StoryNode): string[] {
+  if (node.kind === "scene") return [node.next];
+  if (node.kind === "choice") return [node.left.to, node.right.to];
+  return [];
+}
+
+/** The shared checker, plus what a Safari story must also be: no loops and two different buttons. */
+function checkGraph(graph: StoryGraph): string[] {
+  const errors = checkStory(graph);
+  const byId = new Map(graph.nodes.map((node) => [node.id, node]));
+  for (const node of graph.nodes) {
+    if (node.kind === "choice" && node.left.to === node.right.to) errors.push(`${node.id} has two buttons to one place`);
+  }
+  const state = new Map<string, "open" | "done">();
+  const visit = (id: string) => {
+    const seen = state.get(id);
+    if (seen === "open") {
+      errors.push(`loop through ${id}`);
+      return;
+    }
+    if (seen === "done") return;
+    state.set(id, "open");
+    const node = byId.get(id);
+    if (node) for (const to of targets(node)) visit(to);
+    state.set(id, "done");
+  };
+  visit(graph.start);
+  return errors;
+}
+
+function nodeMap(graph: StoryGraph): Map<string, StoryNode> {
+  return new Map(graph.nodes.map((node) => [node.id, node]));
+}
+
+/** Every node that can reach `id`, not counting itself. */
+function ancestors(graph: StoryGraph, id: string): Set<string> {
+  const parents = new Map<string, string[]>();
+  for (const node of graph.nodes) {
+    for (const to of targets(node)) parents.set(to, [...(parents.get(to) ?? []), node.id]);
+  }
+  const found = new Set<string>();
+  const queue = [...(parents.get(id) ?? [])];
+  while (queue.length > 0) {
+    const next = queue.pop()!;
+    if (found.has(next)) continue;
+    found.add(next);
+    queue.push(...(parents.get(next) ?? []));
+  }
+  return found;
+}
+
+function spokenText(node: StoryNode): string {
+  return node.kind === "choice" ? `${node.text} ${node.left.label} ${node.right.label}` : node.text;
+}
+
+function says(text: string, name: string): boolean {
+  return nameVariants(name).some((variant) =>
+    new RegExp(`(^|[^\\p{L}])${variant.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^\\p{L}])`, "iu").test(text),
+  );
+}
+
+/** Golden path: start to the golden ending, with the button pressed at each choice. */
+function goldenWalk(graph: StoryGraph): Array<{ node: StoryNode; pressed?: "left" | "right" }> {
+  const nodes = nodeMap(graph);
+  const goal = graph.nodes.find((node) => node.kind === "ending" && node.ending.golden)!;
+  const walk = (id: string): Array<{ node: StoryNode; pressed?: "left" | "right" }> | null => {
+    const node = nodes.get(id)!;
+    if (id === goal.id) return [{ node }];
+    if (node.kind === "ending") return null;
+    if (node.kind === "scene") {
+      const rest = walk(node.next);
+      return rest ? [{ node }, ...rest] : null;
+    }
+    for (const side of ["left", "right"] as const) {
+      const rest = walk(node[side].to);
+      if (rest) return [{ node, pressed: side }, ...rest];
+    }
+    return null;
+  };
+  return walk(graph.start) ?? [];
+}
+
+/** All the story rules that do not depend on where the species came from. */
+function assertSafariRules(graph: StoryGraph, nameOf: (id: number) => string) {
+  assert.deepEqual(checkGraph(graph), []);
+  const nodes = nodeMap(graph);
+
+  // Exactly one golden ending, and it is reachable.
+  const golden = graph.nodes.filter((node) => node.kind === "ending" && node.ending.golden);
+  assert.equal(golden.length, 1);
+  assert.ok(goldenWalk(graph).length > 0, "the golden ending is reachable");
+
+  // Every encounter plays a cry and shows a shadow.
+  const encounters = graph.nodes.filter(
+    (node) =>
+      node.kind === "choice" &&
+      [node.left.label, node.right.label].some((label) => /^(throw|creep up on)\b/.test(label)),
+  );
+  assert.ok(encounters.length >= 7);
+  for (const node of encounters) {
+    assert.ok(node.dexId, `${node.id} plays a cry`);
+    assert.deepEqual(node.icon, { dexId: node.dexId, shadow: true }, `${node.id} shows a shadow`);
+  }
+  for (const node of graph.nodes) {
+    if (node.icon && "dexId" in node.icon && node.icon.shadow) assert.equal(node.dexId, node.icon.dexId);
+  }
+
+  // No name before its reveal: not in a shadow node, not in anything that leads to one.
+  const dexIds = new Set(graph.nodes.flatMap((node) => (node.dexId ? [node.dexId] : [])));
+  for (const node of graph.nodes) {
+    if (!(node.icon && "dexId" in node.icon && node.icon.shadow)) continue;
+    const name = nameOf(node.icon.dexId);
+    for (const id of [node.id, ...ancestors(graph, node.id)]) {
+      assert.ok(!says(spokenText(nodes.get(id)!), name), `${id} names ${name} before the reveal`);
+    }
+  }
+  // A question never names any Pokémon in the adventure.
+  const names = [...dexIds].map(nameOf);
+  for (const node of graph.nodes) {
+    if (node.kind !== "choice") continue;
+    for (const name of names) assert.ok(!says(spokenText(node), name), `${node.id} names ${name}`);
+  }
+
+  // Written for the ear: no digits or symbols, sensible lengths, labels read after "Press left to".
+  for (const node of graph.nodes) {
+    assert.doesNotMatch(node.text, /[0-9♀♂&%#@*_<>{}[\]|~^$]/, `${node.id} has a symbol or digit`);
+    assert.ok(node.text.length <= 1500, `${node.id} is ${node.text.length} characters`);
+    assert.doesNotMatch(node.text, /\b(victims?|prey|blood|kill\w*|dead|death)\b|\bIt of\b/i, `${node.id} is not gentle`);
+    if (node.kind === "choice") {
+      for (const label of [node.left.label, node.right.label]) {
+        assert.match(label, /^[a-z]/);
+        assert.ok(label.length <= 40);
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// A fake Safari, so the builder can be tested without the catalogue.
+
+const AREA_TYPES: Record<SafariArea, string> = {
+  cave: "Ghost",
+  forest: "Bug",
+  grassland: "Normal",
+  mountain: "Rock",
+  "rough-terrain": "Ground",
+  sea: "Water",
+  urban: "Psychic",
+  "waters-edge": "Grass",
+};
+const SYLLABLES = ["ka", "lo", "mi", "ru", "te", "va", "zu", "pe"];
+const COLOURS = ["Red", "Blue", "Green", "Yellow", "Pink", "Brown", "Purple", "Gray", "White", "Black"];
+const BEHAVIOUR: Array<[number, number]> = [
+  [255, 50],
+  [190, 90],
+  [45, 100],
+  [60, 40],
+  [200, 30],
+  [30, 85],
+  [75, 55],
+  [150, 70],
+];
+
+function fakeNotes(areaIndex: number, index: number): FieldNotes {
+  return {
+    colour: COLOURS[(areaIndex + index) % COLOURS.length]!.toLowerCase(),
+    glimpse: `with ${index + 1 > 4 ? "long" : "short"} ears and a tail like a feather`,
+    look: "It hums a quiet tune and keeps a pebble in each cheek.",
+    fact: "It sleeps in a heap of leaves.",
+  };
+}
+
+function fakePool(): SafariMon[] {
+  const pool: SafariMon[] = [];
+  SAFARI_AREAS.forEach((area, areaIndex) => {
+    BEHAVIOUR.forEach(([captureRate, speed], index) => {
+      const id = areaIndex === 6 && index === 5 ? 113 : 400 + areaIndex * 10 + index;
+      const name = `${SYLLABLES[areaIndex]}${SYLLABLES[index]}mon`.replace(/^./, (c) => c.toUpperCase());
+      pool.push({
+        id,
+        slug: name.toLowerCase(),
+        name,
+        genus: `Test ${index} Pokémon`,
+        types: [AREA_TYPES[area]],
+        heightDecimetres: 3 + index * 4,
+        weightHectograms: 40 + index * 90,
+        stats: [],
+        abilityName: null,
+        abilityEffect: null,
+        evolution: "",
+        evolvesFrom: null,
+        evolvesInto: [],
+        habitat: `Look for it in ${area.replace(/-/g, " ")}.`,
+        color: COLOURS[(areaIndex + index) % COLOURS.length],
+        entries: [
+          { text: `${name} hums a quiet tune when the moon is out. It keeps a pebble in each cheek.`, version: "shield" },
+          { text: `This Pokémon is very shy. ${name} sleeps in a heap of leaves.`, version: "sword" },
+        ],
+        area,
+        captureRate,
+        speed,
+        notes: fakeNotes(areaIndex, index),
+      });
+    });
+  });
+  return pool;
+}
+
+describe("safari rules", () => {
+  it("follows the warden's throwing rule", () => {
+    assert.equal(throwFor({ captureRate: 190, speed: 120 }), "ball");
+    assert.equal(throwFor({ captureRate: 45, speed: 105 }), "bait");
+    assert.equal(throwFor({ captureRate: 30, speed: 50 }), "rock");
+  });
+
+  it("says numbers the British way", () => {
+    assert.equal(numberWords(190), "one hundred and ninety");
+    assert.equal(numberWords(45), "forty five");
+    assert.equal(numberWords(200), "two hundred");
+  });
+
+  it("keeps a sensible owner name and drops anything else", () => {
+    assert.equal(cleanOwner("  Mia  Rose "), "Mia Rose");
+    assert.equal(cleanOwner("Zoë O'Neil-Smith"), "Zoë O'Neil-Smith");
+    assert.equal(cleanOwner("<script>"), "");
+    assert.equal(cleanOwner("Ash 2"), "");
+    assert.equal(cleanOwner("x".repeat(41)), "");
+    assert.equal(cleanOwner(null), "");
+  });
+});
+
+describe("safari builder with a fake species list", () => {
+  const pool = fakePool();
+  const names = new Map(pool.map((mon) => [mon.id, mon.name]));
+  const nameOf = (id: number) => names.get(id) ?? "";
+
+  it("builds a valid map for many seeds", () => {
+    for (let seed = 1; seed <= 40; seed += 1) {
+      const graph = safariFromPool(pool, { seed, owner: "Mia" });
+      assertSafariRules(graph, nameOf);
+      assert.equal(trackCount(graph), 94, `seed ${seed} uses ${trackCount(graph)} tracks`);
+    }
+  });
+
+  it("is the same for one seed and different across seeds", () => {
+    const first = safariFromPool(pool, { seed: 7 });
+    assert.deepEqual(safariFromPool(pool, { seed: 7 }), first);
+    const others = [8, 9, 10].map((seed) => JSON.stringify(safariFromPool(pool, { seed }).nodes));
+    assert.ok(others.every((nodes) => nodes !== JSON.stringify(first.nodes)));
+  });
+
+  it("greets the owner, and falls back to trainer", () => {
+    assert.match(safariFromPool(pool, { seed: 3, owner: "Mia" }).nodes[0]!.text, /Morning, Mia\./);
+    assert.match(safariFromPool(pool, { seed: 3, owner: "<b>" }).nodes[0]!.text, /Morning, trainer\./);
+  });
+});
+
+describe("safari adventure from the catalogue", () => {
+  const pool = loadSafariPool();
+  const names = new Map(pool.map((mon) => [mon.id, mon.name]));
+  const nameOf = (id: number) => names.get(id) ?? "";
+
+  it("lists Safari species with habitat, catch rate and Speed", () => {
+    const rows = listSafariSpecies();
+    assert.ok(rows.length > 300);
+    const scyther = rows.find((row) => row.id === 123);
+    assert.deepEqual(scyther, { id: 123, habitat: "grassland", captureRate: 45, speed: 105 });
+    assert.ok(rows.every((row) => row.habitat !== "rare"));
+    assert.ok(!rows.some((row) => row.id === 150 || row.id === 172));
+  });
+
+  it("builds a valid, expert map for many seeds", () => {
+    for (let seed = 1; seed <= 60; seed += 1) {
+      const graph = safariAdventure({ seed });
+      assertSafariRules(graph, nameOf);
+      assert.equal(trackCount(graph), 94, `seed ${seed} uses ${trackCount(graph)} tracks`);
+    }
+  });
+
+  it("is deterministic per seed and differs across seeds", () => {
+    assert.deepEqual(safariAdventure({ seed: 42, owner: "Mia" }), safariAdventure({ seed: 42, owner: "Mia" }));
+    const stops = (seed: number) =>
+      safariAdventure({ seed })
+        .nodes.filter((node) => node.id.endsWith("b0"))
+        .map((node) => node.dexId)
+        .join(",");
+    assert.notEqual(stops(1), stops(2));
+    assert.notEqual(stops(2), stops(3));
+  });
+
+  it("serves the route and checks its input", async () => {
+    const good = await GET(new Request("http://localhost/api/adventure/safari?seed=5&owner=Mia")).json();
+    assert.equal(good.story.id, "safari-5");
+    assert.match(good.story.nodes[0].text, /Mia/);
+    const ignored = await GET(new Request("http://localhost/api/adventure/safari?seed=5&owner=%3Cb%3E")).json();
+    assert.match(ignored.story.nodes[0].text, /trainer/);
+    const bad = GET(new Request("http://localhost/api/adventure/safari?seed=1.5"));
+    assert.equal(bad.status, 400);
+    const fresh = await GET(new Request("http://localhost/api/adventure/safari")).json();
+    assert.match(fresh.story.id, /^safari-\d+$/);
+  });
+
+  it("has field notes only for Safari Pokémon, and they never give the name away", () => {
+    const byId = new Map(pool.map((mon) => [mon.id, mon]));
+    const everyName = pool.map((mon) => mon.name);
+    for (const [key, notes] of Object.entries(FIELD_NOTES)) {
+      const mon = byId.get(Number(key));
+      assert.ok(mon, `field notes for ${key}, which is not a Safari Pokémon`);
+      for (const line of [notes.glimpse, notes.look]) {
+        for (const name of everyName) assert.ok(!says(line, name), `${mon.name}'s clue names ${name}`);
+      }
+      assert.match(notes.glimpse, /^[a-z]/, `${mon.name}'s glimpse follows "a ${notes.colour} one,"`);
+      assert.doesNotMatch(notes.glimpse, /[.!?]$/);
+      for (const line of [notes.look, notes.fact]) assert.match(line, /[.!?']$/, `${mon.name} ends its sentences`);
+      assert.doesNotMatch(`${notes.look} ${notes.fact}`, /[0-9]/);
+    }
+    for (const id of Object.keys(GOLDEN_STOPS)) assert.ok(FIELD_NOTES[Number(id)], `golden ${id} has notes`);
+  });
+
+  it("never says a stat, and varies its words from stop to stop", () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const graph = safariAdventure({ seed });
+      const all = graph.nodes.map((node) => node.text).join(" ");
+      assert.doesNotMatch(all, /catch rate|\bspeed\b|Kssh|Expert tip|Stop (one|two|three) of/i);
+      const finds = graph.nodes.filter((node) => /^s\da0$/.test(node.id)).map((node) => node.text.split(". ")[0]);
+      assert.equal(new Set(finds).size, finds.length, `seed ${seed} opens two stops the same way`);
+    }
+  });
+
+  it("walks the golden path through every stop", () => {
+    const graph = safariAdventure({ seed: 1, owner: "Mia" });
+    const walk = goldenWalk(graph);
+    assert.equal(walk.at(-1)?.node.id, "end8");
+    assert.ok(walk.some(({ node }) => node.id === "gold"));
+    assert.equal(walk.filter(({ node }) => /^s\dc0$/.test(node.id)).length, 6);
+  });
+});

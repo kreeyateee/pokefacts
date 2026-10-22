@@ -535,6 +535,38 @@ export function listMonSheets(): MonSheet[] {
   });
 }
 
+export type SafariSpeciesRow = {
+  id: number;
+  /** PokéAPI habitat slug, such as "waters-edge". Never "rare". */
+  habitat: string;
+  captureRate: number;
+  /** Base Speed stat. */
+  speed: number;
+};
+
+/**
+ * Species with a home habitat (Generations 1 to 3), for the Safari Zone adventure.
+ * Legendary, mythical and baby Pokémon stay out, and so does the "rare" habitat they share.
+ */
+export function listSafariSpecies(): SafariSpeciesRow[] {
+  const rows = db()
+    .prepare(
+      `SELECT s.id, s.habitat, s.capture_rate, IFNULL(st.base, 0) AS speed
+       FROM species s
+       LEFT JOIN species_stats st ON st.species_id = s.id AND st.stat_name = 'Speed'
+       WHERE s.habitat IS NOT NULL AND s.habitat != 'rare'
+         AND s.is_legendary = 0 AND s.is_mythical = 0 AND s.is_baby = 0
+       ORDER BY s.id`,
+    )
+    .all() as Array<{ id: number; habitat: string; capture_rate: number; speed: number }>;
+  return rows.map((row) => ({
+    id: row.id,
+    habitat: row.habitat,
+    captureRate: row.capture_rate,
+    speed: row.speed,
+  }));
+}
+
 type FormRefRow = {
   id: number;
   species_id: number;

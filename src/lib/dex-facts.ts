@@ -355,7 +355,7 @@ function weightPicture(kilograms: number, usedToken: string): Picture {
 }
 
 /** One comparison from the real height and weight. It never quotes the Pokédex numbers. */
-function sizeComparison(decimetres: number, hectograms = 0): string {
+export function sizeComparison(decimetres: number, hectograms = 0): string {
   const centimetres = decimetres * 10;
   const kilograms = hectograms / 10;
   if (centimetres > 0 && kilograms > 0) {
