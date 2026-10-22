@@ -1,0 +1,65 @@
+# Tests every push to main, then updates and restarts pokefacts.online on the Oracle VM.
+#
+# Repository secrets: DEPLOY_HOST (VM IP or name), DEPLOY_USER (SSH user), DEPLOY_SSH_KEY (private key).
+# Repository variables: DEPLOY_PATH (checkout on the VM), DEPLOY_RESTART (command that restarts the site).
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+      - run: npm run build
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+      DEPLOY_RESTART: ${{ vars.DEPLOY_RESTART }}
+    steps:
+      - name: Check settings
+        run: |
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_PATH DEPLOY_RESTART; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is not set in the repository's Actions settings."
+              exit 1
+            fi
+          done
+
+      - name: Load SSH key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Update and restart the site
+        run: |
+          ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" bash -s -- "$DEPLOY_PATH" "$DEPLOY_RESTART" <<'REMOTE'
+          set -euo pipefail
+          cd "$1"
+          git fetch origin main
+          git merge --ff-only origin/main
+          npm ci --no-audit --no-fund
+          eval "$2"
+          REMOTE
