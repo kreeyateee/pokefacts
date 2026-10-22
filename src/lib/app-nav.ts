@@ -39,6 +39,29 @@ export function isCollectionKind(kind: KidCardKind): kind is CollectionKind {
   return COLLECTION_TABS.some((tab) => tab.kind === kind);
 }
 
+/** The open tab is kept per browser tab so a Yoto login redirect or a refresh comes back to it. */
+export const SAVED_TAB_KEY = "pokefacts.tab";
+
+export type SavedTab = { view: StudioView; kind: KidCardKind };
+
+const STUDIO_VIEWS: readonly StudioView[] = ["cards", "catalogue", "setup", "music"];
+
+export function readSavedTab(raw: string | null): SavedTab | null {
+  if (!raw) return null;
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!value || typeof value !== "object") return null;
+  const row = value as { view?: unknown; kind?: unknown };
+  if (!STUDIO_VIEWS.includes(row.view as StudioView)) return null;
+  const kind = row.kind as KidCardKind;
+  const knownKind = kind === "meet" || kind === "guess" || isCollectionKind(kind);
+  return { view: row.view as StudioView, kind: knownKind ? kind : "meet" };
+}
+
 export function primaryTabFor(view: StudioView, kind: KidCardKind): PrimaryTabId | null {
   if (view === "catalogue") return "catalogue";
   if (view === "music") return "music";

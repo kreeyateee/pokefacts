@@ -9,6 +9,7 @@ import {
   pageHeading,
   playlistNote,
   primaryTabFor,
+  readSavedTab,
 } from "./app-nav";
 
 describe("app navigation", () => {
@@ -79,5 +80,14 @@ describe("app navigation", () => {
       }),
       /1-100/,
     );
+  });
+
+  it("brings back the saved tab and ignores anything it does not know", () => {
+    assert.deepEqual(readSavedTab('{"view":"catalogue","kind":"meet"}'), { view: "catalogue", kind: "meet" });
+    assert.deepEqual(readSavedTab('{"view":"cards","kind":"alola"}'), { view: "cards", kind: "alola" });
+    assert.deepEqual(readSavedTab('{"view":"cards","kind":"nonsense"}'), { view: "cards", kind: "meet" });
+    assert.equal(readSavedTab('{"view":"attic"}'), null);
+    assert.equal(readSavedTab("nope"), null);
+    assert.equal(readSavedTab(null), null);
   });
 });

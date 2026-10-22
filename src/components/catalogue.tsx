@@ -8,6 +8,7 @@ import { StickerStudio } from "@/components/sticker-studio";
 import { YotoScreen } from "@/components/yoto-screen";
 import { Button } from "@/components/ui/button";
 import { MyoCardButton, openAfterDialog } from "@/components/myo-card-dialog";
+import { useStoredState } from "@/components/use-stored-state";
 import {
   Dialog,
   DialogBody,
@@ -26,6 +27,7 @@ import type {
   CatalogueLineMember,
   CataloguePage,
 } from "@/lib/catalogue-types";
+import { CATALOGUE_PICKS_KEY, readCataloguePicks, serializeCataloguePicks } from "@/lib/catalogue-picks";
 import { heightForUnits, weightForUnits, type MeasureUnits } from "@/lib/format";
 import { statusWithDexNote } from "@/lib/spoken-wiki";
 import type { KidCard } from "@/lib/kid-cards";
@@ -217,9 +219,12 @@ export function Catalogue({
   >([]);
   const [showList, setShowList] = useState(false);
   const [buildOpen, setBuildOpen] = useState(false);
-  const [picked, setPicked] = useState<number[]>([]);
-  const [playlistKind, setPlaylistKind] = useState<SelectionKind>("facts");
-  const [playlistTitle, setPlaylistTitle] = useState("");
+  const [picks, setPicks] = useStoredState(CATALOGUE_PICKS_KEY, readCataloguePicks, serializeCataloguePicks);
+  const { ids: picked, kind: playlistKind, title: playlistTitle } = picks;
+  const setPicked = (next: number[] | ((current: number[]) => number[])) =>
+    setPicks((current) => ({ ...current, ids: typeof next === "function" ? next(current.ids) : next }));
+  const setPlaylistKind = (kind: SelectionKind) => setPicks((current) => ({ ...current, kind }));
+  const setPlaylistTitle = (title: string) => setPicks((current) => ({ ...current, title }));
   const [buildMessage, setBuildMessage] = useState("");
   const [buildProgress, setBuildProgress] = useState<{ done: number; total: number } | null>(null);
   const [buildFailed, setBuildFailed] = useState(false);

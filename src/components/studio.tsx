@@ -23,8 +23,12 @@ import {
   pageHeading,
   playlistNote,
   primaryTabFor,
+  readSavedTab,
+  SAVED_TAB_KEY,
   type CollectionKind,
   type PrimaryTabId,
+  type SavedTab,
+  type StudioView,
 } from "@/lib/app-nav";
 import {
   applySpeciesSpeech,
@@ -181,6 +185,14 @@ function progressLabel(progress: unknown): string | null {
     if (row.total) return `${row.completed ?? 0} of ${row.total} pictures recorded`;
   }
   return null;
+}
+
+function readSessionTab(): SavedTab | null {
+  try {
+    return readSavedTab(sessionStorage.getItem(SAVED_TAB_KEY));
+  } catch {
+    return null;
+  }
 }
 
 function playableChapters(card: KidCard) {
@@ -540,7 +552,7 @@ export function Studio({
   const [factSpeech, setFactSpeech] = useState<{ id: number; speech: string; url: string; notice: string } | null>(
     null,
   );
-  const [view, setView] = useState<"cards" | "catalogue" | "setup" | "music">("cards");
+  const [view, setView] = useState<StudioView>("cards");
   const [playback, setPlayback] = useState<PlaybackSettings>(defaultPlayback);
   const [kind, setKind] = useState<KidCardKind>("meet");
   const [collectionKind, setCollectionKind] = useState<CollectionKind>(DEFAULT_COLLECTION);
@@ -565,6 +577,7 @@ export function Studio({
   const [myoCard, setMyoCard] = useState<MyoCardView | null>(null);
   const pendingCardAction = useRef<(() => void | Promise<void>) | null>(null);
   const myoTimer = useRef<number | null>(null);
+  const tabRestored = useRef(false);
   const [ready, setReady] = useState(false);
   const choiceListRef = useRef<HTMLElement | null>(null);
   const clipRef = useRef<HTMLAudioElement | null>(null);
@@ -618,8 +631,11 @@ export function Studio({
     let cancelled = false;
     setVoiceId(readVoiceId(localStorage));
     setPlayback(readPlayback(localStorage));
+    const savedTab = readSessionTab();
     void ensureSession().then((next) => {
       if (cancelled) return;
+      if (savedTab) restoreTab(savedTab);
+      tabRestored.current = true;
       setSession(next);
       setReady(true);
       if (next) void loadLibrary();
@@ -630,6 +646,15 @@ export function Studio({
       if (myoTimer.current) window.clearTimeout(myoTimer.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!tabRestored.current) return;
+    try {
+      sessionStorage.setItem(SAVED_TAB_KEY, JSON.stringify({ view, kind } satisfies SavedTab));
+    } catch {
+      // Without sessionStorage a refresh opens Fact Cards, as before.
+    }
+  }, [view, kind]);
 
   const factFallback = chapter ? chapterDexText(chapter) : "";
 
@@ -787,6 +812,12 @@ export function Studio({
     }
     stopDemo();
     setView(id);
+  }
+
+  function restoreTab(saved: SavedTab) {
+    if (saved.view === "cards") showKind(saved.kind);
+    else if (saved.view === "setup") chooseHelp();
+    else choosePrimary(saved.view);
   }
 
   function goHome() {
