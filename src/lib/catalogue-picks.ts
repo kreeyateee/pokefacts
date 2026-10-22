@@ -3,7 +3,10 @@ import type { SelectionKind } from "@/lib/selection-playlist";
 /** The Make your own pick lives in localStorage, so a Yoto login redirect or a refresh keeps it. */
 export const CATALOGUE_PICKS_KEY = "pokefacts.cataloguePicks";
 
-/** More than every national dex number; a pick this long is a bad row, not a real pick. */
+/** The last national dex number. A picked id past it is a PokéAPI form id, such as 10091 for Alolan Rattata. */
+export const LAST_SPECIES_ID = 1025;
+
+/** More than every species and form together; a pick this long is a bad row, not a real pick. */
 const MAX_PICKED = 2000;
 
 const SELECTION_KINDS: readonly SelectionKind[] = ["facts", "whos-that", "advanced"];
@@ -15,6 +18,11 @@ type CataloguePicks = {
 };
 
 export const EMPTY_PICKS: CataloguePicks = { ids: [], kind: "facts", title: "" };
+
+/** Species and forms share one list, so the order the child picked stays the playlist order. */
+export function isFormPick(id: number): boolean {
+  return id > LAST_SPECIES_ID;
+}
 
 function isSelectionKind(value: unknown): value is SelectionKind {
   return SELECTION_KINDS.includes(value as SelectionKind);

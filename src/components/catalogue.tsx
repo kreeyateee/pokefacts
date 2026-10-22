@@ -27,14 +27,21 @@ import type {
   CatalogueLineMember,
   CataloguePage,
 } from "@/lib/catalogue-types";
-import { CATALOGUE_PICKS_KEY, readCataloguePicks, serializeCataloguePicks } from "@/lib/catalogue-picks";
+import {
+  CATALOGUE_PICKS_KEY,
+  isFormPick,
+  readCataloguePicks,
+  serializeCataloguePicks,
+} from "@/lib/catalogue-picks";
 import { heightForUnits, weightForUnits, type MeasureUnits } from "@/lib/format";
 import { statusWithDexNote } from "@/lib/spoken-wiki";
 import type { KidCard } from "@/lib/kid-cards";
 import {
+  formSelection,
   selectionPlaylist,
   selectionSpeciesLimit,
   selectionStickerCards,
+  speciesSelection,
   type SelectionKind,
   type SelectionSpecies,
 } from "@/lib/selection-playlist";
@@ -352,6 +359,8 @@ export function Catalogue({
   const pageIds = list?.items.map((item) => item.id) ?? [];
   const pageAll = pageIds.length > 0 && pageIds.every((id) => picked.includes(id));
   const speciesLimit = selectionSpeciesLimit(playlistKind);
+  const formCount = entry?.forms.length ?? 0;
+  const formsPickedHere = entry?.forms.filter((form) => picked.includes(form.id)).length ?? 0;
 
   const entryTabs: Array<{ id: EntryTab; label: string }> = [
     { id: "pokedex", label: "Pokédex" },
@@ -366,6 +375,14 @@ export function Catalogue({
   function openEntry(id: number) {
     setSelected(id);
     setShowList(false);
+  }
+
+  /** Opens the Forms tab and brings it into view, so the form pictures are the next thing a child sees. */
+  function showForms() {
+    setEntryTab("forms");
+    window.requestAnimationFrame(() => {
+      document.getElementById("entry-tab-forms")?.scrollIntoView({ block: "start" });
+    });
   }
 
   /** The name when it is on this page of the list, else the number. */
@@ -454,7 +471,10 @@ export function Catalogue({
     setBuildProgress(null);
     try {
       const response = await fetch(`/api/catalogue?pick=${picked.join(",")}`);
-      const payload = (await response.json()) as { items?: Array<{ id: number; name: string }>; error?: string };
+      const payload = (await response.json()) as {
+        items?: Array<{ id: number; name: string; speciesId?: number }>;
+        error?: string;
+      };
       if (!response.ok || !payload.items) {
         throw new Error(payload.error || "Those Pokémon could not be opened.");
       }
@@ -496,6 +516,28 @@ export function Catalogue({
         if (!id) continue;
         setBuildProgress({ done: index + 1, total: picked.length });
         setBuildMessage(statusWithDexNote(`Reading ${index + 1} of ${picked.length}…`, dexNote));
+        if (isFormPick(id)) {
+          // A form reads through the same form route as the ready-made Mega and regional cards.
+          const formResponse = await fetch(`/api/forms/${id}`);
+          const formPayload = (await formResponse.json()) as {
+            speciesId?: number;
+            speech?: string;
+            notice?: string;
+            error?: string;
+          };
+          if (!formResponse.ok || !formPayload.speciesId) {
+            throw new Error(formPayload.error || "That form could not be opened.");
+          }
+          if (playlistKind !== "whos-that" && formPayload.notice) dexNote = formPayload.notice;
+          const speciesResponse = await fetch(`/api/catalogue/${formPayload.speciesId}`);
+          const speciesPayload = (await speciesResponse.json()) as { entry?: CatalogueEntry; error?: string };
+          const form = speciesPayload.entry ? formSelection(speciesPayload.entry, id, formPayload.speech ?? "") : null;
+          if (!speciesResponse.ok || !form) {
+            throw new Error(speciesPayload.error || "That form could not be opened.");
+          }
+          rows.push(form);
+          continue;
+        }
         const entryResponse = await fetch(`/api/catalogue/${id}`);
         const entryPayload = (await entryResponse.json()) as { entry?: CatalogueEntry; error?: string };
         if (!entryResponse.ok || !entryPayload.entry) {
@@ -507,27 +549,7 @@ export function Catalogue({
           notice?: string;
         };
         if (playlistKind !== "whos-that" && biologyPayload.notice) dexNote = biologyPayload.notice;
-        const entry = entryPayload.entry;
-        rows.push({
-          id: entry.id,
-          name: entry.name,
-          types: entry.types,
-          genus: entry.genus,
-          habitat: entry.habitat,
-          heightLabel: entry.heightLabel,
-          weightLabel: entry.weightLabel,
-          abilities: entry.abilities.map((ability) => ({
-            name: ability.name,
-            info: ability.info,
-            hidden: ability.hidden,
-          })),
-          evolvesFrom: entry.evolvesFrom?.name ?? null,
-          evolutions: entry.evolutions.map((evolution) => ({ name: evolution.name, method: evolution.method })),
-          info: entry.info,
-          info2: entry.info2,
-          color: entry.color,
-          biology: biologyPayload.biology?.blocks ?? [],
-        });
+        rows.push(speciesSelection(entryPayload.entry, biologyPayload.biology?.blocks ?? []));
       }
       const built = selectionPlaylist(rows, playlistKind, playlistTitle, units);
       if (built.refused.length > 0) {
@@ -900,6 +922,16 @@ export function Catalogue({
                   />
                   Add {entry.name} to the playlist
                 </label>
+                {formCount > 0 ? (
+                  <button type="button" className="pk-pill inline-flex min-h-11 items-center px-4 text-sm" onClick={showForms}>
+                    {formCount === 1 ? "Pick its other form" : `Pick from its ${formCount} other forms`}
+                  </button>
+                ) : null}
+                {formsPickedHere > 0 ? (
+                  <p className="text-xs font-bold">
+                    {formsPickedHere === 1 ? "1 form is in the playlist." : `${formsPickedHere} forms are in the playlist.`}
+                  </p>
+                ) : null}
               </div>
             }
             picture={
@@ -1072,47 +1104,76 @@ export function Catalogue({
                 </div>
               ) : null}
               {shownTab === "forms" ? (
-                <ul className="grid gap-3 sm:grid-cols-2">
-                  {entry.forms.map((form) => (
-                    <li key={form.id} className="pk-soft px-3 py-3 text-sm font-normal">
-                      <img
-                        src={artworkApi("form", form.id)}
-                        alt=""
-                        width={112}
-                        height={112}
-                        className="mb-2 h-28 w-28 object-contain"
-                        onError={hideBrokenPicture}
+                <section aria-labelledby="forms-heading">
+                  <h3 id="forms-heading" className="pk-kicker">
+                    Pick a form
+                  </h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Tick a picture to add it to the playlist. Tick it again to take it off. You can pick {entry.name},
+                    a form, or both.
+                  </p>
+                  <ul className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <li className="pk-soft px-3 py-3 text-sm font-normal">
+                      <FormPick
+                        name={entry.name}
+                        src={artworkSrc(entry.id)}
+                        fallback={artworkApi("species", entry.id)}
+                        checked={picked.includes(entry.id)}
+                        onToggle={() => togglePick(entry.id)}
                       />
-                      <p className="font-medium">{form.name}</p>
-                      <div className="mt-1">
-                        <TypeChips types={form.types} />
+                      <div className="mt-2">
+                        <TypeChips types={entry.types} />
                       </div>
                       <p className="mt-1 text-muted-foreground">
-                        {heightForUnits(form.heightLabel, units)} · {weightForUnits(form.weightLabel, units)}
+                        {heightForUnits(entry.heightLabel, units)} · {weightForUnits(entry.weightLabel, units)}
                       </p>
-                      {formNotes
-                        .filter((note) => note.formId === form.id && note.article.status === "ready")
-                        .map((note) => (
-                          <div key={note.formId} className="mt-2 text-foreground">
-                            {note.article.blocks.map((block, index) =>
-                              block.kind === "paragraph" ? (
-                                <p key={index} className="mt-1 leading-6">
-                                  {block.text}
-                                </p>
-                              ) : null,
-                            )}
-                            <p className="mt-2 text-xs leading-5 pk-quiet">
-                              From{" "}
-                              <a className="underline" href={note.article.url} target="_blank" rel="noreferrer">
-                                Bulbapedia
-                              </a>
-                              . This description is used under CC BY-NC-SA 2.5.
-                            </p>
-                          </div>
-                        ))}
                     </li>
-                  ))}
-                </ul>
+                    {entry.forms.map((form) => (
+                      <li key={form.id} className="pk-soft px-3 py-3 text-sm font-normal">
+                        <FormPick
+                          name={form.name}
+                          src={artworkApi("form", form.id)}
+                          checked={picked.includes(form.id)}
+                          onToggle={() => togglePick(form.id)}
+                        />
+                        <div className="mt-2">
+                          <TypeChips types={form.types} />
+                        </div>
+                        <p className="mt-1 text-muted-foreground">
+                          {heightForUnits(form.heightLabel, units)} · {weightForUnits(form.weightLabel, units)}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                  {formNotes.some((note) => note.article.status === "ready") ? (
+                    <>
+                      <h3 className="mt-6 pk-kicker">About the forms</h3>
+                      {entry.forms.flatMap((form) =>
+                        formNotes
+                          .filter((note) => note.formId === form.id && note.article.status === "ready")
+                          .map((note) => (
+                            <div key={note.formId} className="mt-3 max-w-prose text-sm text-foreground">
+                              <h4 className="font-semibold text-ink">{form.name}</h4>
+                              {note.article.blocks.map((block, index) =>
+                                block.kind === "paragraph" ? (
+                                  <p key={index} className="mt-1 leading-6">
+                                    {block.text}
+                                  </p>
+                                ) : null,
+                              )}
+                              <p className="mt-2 text-xs leading-5 pk-quiet">
+                                From{" "}
+                                <a className="underline" href={note.article.url} target="_blank" rel="noreferrer">
+                                  Bulbapedia
+                                </a>
+                                . This description is used under CC BY-NC-SA 2.5.
+                              </p>
+                            </div>
+                          )),
+                      )}
+                    </>
+                  ) : null}
+                </section>
               ) : null}
             </div>
           </EntryCard>
@@ -1203,6 +1264,46 @@ function EvolutionPicks({
         );
       })}
     </ul>
+  );
+}
+
+/**
+ * One big tick for a Pokémon or one of its forms: the picture and the name.
+ * The whole tile is the tick box, so a tap anywhere on it adds or removes it.
+ */
+function FormPick({
+  name,
+  src,
+  fallback,
+  checked,
+  onToggle,
+}: {
+  name: string;
+  src: string;
+  /** Species art only. A form picture never swaps to the base species. */
+  fallback?: string;
+  checked: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <label className="pk-pick pk-form-pick">
+      <input type="checkbox" checked={checked} aria-label={`Pick ${name}`} onChange={onToggle} />
+      <img
+        src={src}
+        alt=""
+        width={88}
+        height={88}
+        data-fallback={fallback}
+        onError={hideBrokenPicture}
+        className="pk-form-pick-art"
+      />
+      <span className="min-w-0">
+        <span className="block text-base leading-tight">{name}</span>
+        <span className="mt-1 block text-xs font-bold text-muted-foreground">
+          {checked ? "In the playlist" : "Not picked"}
+        </span>
+      </span>
+    </label>
   );
 }
 

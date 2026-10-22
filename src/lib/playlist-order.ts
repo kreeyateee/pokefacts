@@ -1,6 +1,8 @@
 export type PlaylistMon = {
   id: number;
   name: string;
+  /** Dex number when it differs from the id: a form such as 10091 sorts as 19. */
+  number?: number;
 };
 
 /**
@@ -34,7 +36,8 @@ export function shiftPlaylistItem<T>(items: readonly T[], index: number, delta: 
 export function orderPlaylist(items: readonly PlaylistMon[], by: "number" | "name"): PlaylistMon[] {
   const next = items.slice();
   next.sort((a, b) => {
-    if (by === "number") return a.id - b.id;
+    // A form sorts beside its species, after it. Form ids are all past the last dex number.
+    if (by === "number") return (a.number ?? a.id) - (b.number ?? b.id) || a.id - b.id;
     const name = a.name.localeCompare(b.name, "en", { sensitivity: "base" });
     return name !== 0 ? name : a.id - b.id;
   });

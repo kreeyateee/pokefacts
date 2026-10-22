@@ -7,8 +7,8 @@ import { describe, it } from "node:test";
 import {
   evolutionLine,
   getCatalogueEntry,
+  cataloguePick,
   getAlternateForm,
-  getPlaylistForm,
   listAlolanForms,
   listHisuianForms,
   listLegendarySheets,
@@ -123,8 +123,6 @@ describe("catalogue database", () => {
     assert.equal(mythical.length, 23);
     assert.equal(mythical.some((sheet) => sheet.name === "Mew"), true);
     assert.equal(mythical.some((sheet) => sheet.name === "Mewtwo"), false);
-    assert.equal(getPlaylistForm(10091)?.formName, "Alolan Rattata");
-    assert.equal(getPlaylistForm(10099), null);
     assert.equal(getAlternateForm(10033)?.formName, "Mega Venusaur");
     assert.equal(getAlternateForm(10033)?.speciesId, 3);
     assert.equal(getAlternateForm(10196)?.formName, "Gigantamax Charizard");
@@ -134,8 +132,29 @@ describe("catalogue database", () => {
     assert.equal(getAlternateForm(10253)?.formName, "Paldean Wooper");
     assert.equal(getAlternateForm(3), null);
     assert.equal(getAlternateForm(19), null);
-    assert.equal(getPlaylistForm(10314)?.formName, "Mega Meowstic (Male)");
-    assert.equal(getPlaylistForm(10326)?.formName, "Mega Meowstic (Female)");
+    assert.equal(getAlternateForm(10099)?.formName, "Alola Cap Pikachu");
+    assert.equal(getAlternateForm(10314)?.formName, "Mega Meowstic (Male)");
+    assert.equal(getAlternateForm(10326)?.formName, "Mega Meowstic (Female)");
+  });
+
+  it("names a picked form with its own height, the species number, and the species colour", () => {
+    const items = cataloguePick([10091, 19, 10034, 99999, 10314]);
+    assert.deepEqual(
+      items.map((item) => [item.id, item.speciesId, item.name]),
+      [
+        [10091, 19, "Alolan Rattata"],
+        [19, 19, "Rattata"],
+        [10034, 6, "Mega Charizard X"],
+        [10314, 678, "Mega Meowstic (Male)"],
+      ],
+    );
+    const rattata = items[1];
+    const alolan = items[0];
+    assert.equal(alolan?.color, rattata?.color);
+    assert.ok((items[2]?.heightDm ?? 0) > 0);
+    assert.deepEqual(cataloguePick([19]), [items[1]]);
+    // A species row is never read as a form, even though both tables hold id 19.
+    assert.equal(cataloguePick([3])[0]?.name, "Venusaur");
   });
 
   it("skips death wording and prefers a metric line over feet or pounds", () => {

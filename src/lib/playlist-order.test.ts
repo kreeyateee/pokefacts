@@ -60,4 +60,18 @@ describe("playlist order", () => {
       ["Flareon", "Jolteon", "Vaporeon", "Eevee"],
     );
   });
+
+  it("orders a form by its species number, just after that species", () => {
+    const mixed: PlaylistMon[] = [
+      { id: 10034, name: "Mega Charizard X", number: 6 },
+      { id: 19, name: "Rattata" },
+      { id: 10091, name: "Alolan Rattata", number: 19 },
+      { id: 6, name: "Charizard" },
+      { id: 4, name: "Charmander" },
+    ];
+    assert.deepEqual(
+      orderPlaylist(mixed, "number").map((item) => item.id),
+      [4, 6, 10034, 19, 10091],
+    );
+  });
 });

@@ -10,6 +10,7 @@ import type {
   CatalogueListItem,
   CataloguePage,
 } from "@/lib/catalogue-types";
+import { isFormPick } from "@/lib/catalogue-picks";
 import type { MonSheet } from "@/lib/dex-facts";
 import { habitatSpeech } from "@/lib/format";
 
@@ -242,26 +243,43 @@ export function evolutionLine(speciesId: number): CatalogueLine {
   };
 }
 
-/** Name, Pokédex height, and colour for each picked id, in the order given. Unknown ids are skipped. */
+/**
+ * Name, Pokédex height, and colour for each picked id, in the order given. Unknown ids are skipped.
+ * A form id (past 1025) gives the form's name and height, the species number, and the species colour.
+ */
 export function cataloguePick(
   ids: readonly number[],
-): Array<{ id: number; name: string; heightDm: number; color: string }> {
-  const wanted = ids.filter((id) => Number.isInteger(id) && id > 0).slice(0, 1025);
+): Array<{ id: number; speciesId: number; name: string; heightDm: number; color: string }> {
+  const wanted = ids.filter((id) => Number.isInteger(id) && id > 0).slice(0, 2000);
   if (wanted.length === 0) return [];
-  type Row = { id: number; name: string; height_dm: number; color: string };
+  type Row = { id: number; species_id: number; name: string; height_dm: number; color: string };
   const found = new Map<number, Row>();
   const unique = [...new Set(wanted)];
-  for (let index = 0; index < unique.length; index += 200) {
-    const chunk = unique.slice(index, index + 200);
-    const marks = chunk.map(() => "?").join(", ");
-    const rows = db()
-      .prepare(`SELECT id, name, height_dm, color FROM species WHERE id IN (${marks})`)
-      .all(...chunk) as Row[];
-    for (const row of rows) found.set(row.id, row);
-  }
+  const speciesIds = unique.filter((id) => !isFormPick(id));
+  const formIds = unique.filter((id) => isFormPick(id));
+  const read = (list: number[], sql: (marks: string) => string) => {
+    for (let index = 0; index < list.length; index += 200) {
+      const chunk = list.slice(index, index + 200);
+      const marks = chunk.map(() => "?").join(", ");
+      const rows = db().prepare(sql(marks)).all(...chunk) as Row[];
+      for (const row of rows) found.set(row.id, row);
+    }
+  };
+  read(
+    speciesIds,
+    (marks) => `SELECT id, id AS species_id, name, height_dm, color FROM species WHERE id IN (${marks})`,
+  );
+  read(
+    formIds,
+    (marks) => `SELECT f.id, f.species_id, f.name, f.height_dm, s.color
+      FROM forms f JOIN species s ON s.id = f.species_id
+      WHERE f.is_default = 0 AND f.id IN (${marks})`,
+  );
   return wanted.flatMap((id) => {
     const row = found.get(id);
-    return row ? [{ id, name: row.name, heightDm: row.height_dm, color: row.color }] : [];
+    if (!row) return [];
+    const name = isFormPick(id) ? formDisplayName(id, row.name) : row.name;
+    return [{ id, speciesId: row.species_id, name, heightDm: row.height_dm, color: row.color }];
   });
 }
 
@@ -640,14 +658,4 @@ export function listSpecialForms(speciesId: number): CatalogueFormRef[] {
 /** A non-default form: Mega, Gigantamax, regional, or another alternate. */
 export function getAlternateForm(formId: number): CatalogueFormRef | null {
   return queryFormRefs("f.is_default = 0 AND f.id = ?", formId)[0] ?? null;
-}
-
-/** A Mega, Gigantamax, Alolan, or Hisuian form, for the form-reading route. */
-export function getPlaylistForm(formId: number): CatalogueFormRef | null {
-  return (
-    queryFormRefs(
-      `(f.is_mega = 1 OR f.name LIKE 'Gigantamax %' OR ((f.name LIKE 'Alolan %' OR f.name LIKE 'Hisuian %') AND f.is_default = 0)) AND f.id = ?`,
-      formId,
-    )[0] ?? null
-  );
 }

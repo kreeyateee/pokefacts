@@ -652,8 +652,10 @@ export function guessUpload(
     ...card,
     chapters: withVoice(card, spoken).chapters.map((chapter) => {
       const id = chapter.dexId;
+      // A form riddle answers with the form's own pixel. Its clue keeps the species shadow.
+      const pictureId = chapterPictureId(chapter);
       const shadowMedia = id ? shadowById[id] : undefined;
-      const realMedia = id ? realById[id] : undefined;
+      const realMedia = pictureId ? realById[pictureId] : undefined;
       if (!shadowMedia && !realMedia) return chapter;
       const shadow = shadowMedia ? `yoto:#${shadowMedia}` : chapter.icon;
       const real = realMedia ? `yoto:#${realMedia}` : shadow;

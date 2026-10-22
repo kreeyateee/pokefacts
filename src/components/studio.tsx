@@ -457,7 +457,9 @@ async function uploadGuessIcons(card: KidCard): Promise<{
     async (chapter) => {
       const id = chapter.dexId;
       if (!id) return;
-      real[id] = await uploadIcon(id);
+      // A picked form answers with its own pixel. Forms have no shadow, so its clue uses the species shadow.
+      const pictureId = chapterPictureId(chapter) ?? id;
+      real[pictureId] = await uploadIcon(pictureId);
       shadow[id] = await uploadIcon(id, true);
     },
   );
