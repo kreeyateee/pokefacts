@@ -163,6 +163,7 @@
 
 .pk-page {
   min-height: 100dvh;
+  overflow-x: hidden;
   padding-bottom: env(safe-area-inset-bottom);
   color: var(--ink);
   background-color: #6fbf4a;
@@ -427,6 +428,10 @@
     height: 2.5rem;
     padding: 0 0.7rem;
     font-size: 0.82rem;
+  }
+
+  .pk-card {
+    box-shadow: 4px 4px 0 var(--ink);
   }
 
   h1 {

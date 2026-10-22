@@ -14,7 +14,7 @@ export function SetupGuide({
 }) {
   return (
     <section className="pk-card mx-auto max-w-3xl px-5 py-6 sm:px-8">
-      <h2 className="font-display text-3xl leading-tight text-balance">
+      <h2 className="font-display text-2xl leading-tight text-balance sm:text-3xl">
         Link Pokefacts to your Yoto
       </h2>
       <p className="mt-2 text-base leading-7">
