@@ -87,3 +87,13 @@ export function readMusicIndex(value: unknown): { index: MusicIndex; error: stri
     error: "",
   };
 }
+
+/**
+ * The song stored under this Bulbapedia page name. Only exact names from the index match,
+ * so titles such as "Can You Name All the Pokémon?" or "You & Me & Pokémon" are fine.
+ */
+export function songForPage(index: MusicIndex, page: string | null | undefined): MusicSong | null {
+  const name = page?.trim() ?? "";
+  if (!name || name.length > 180) return null;
+  return index.songs.find((song) => song.page === name) ?? null;
+}
