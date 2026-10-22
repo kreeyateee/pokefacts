@@ -9,6 +9,7 @@ import {
   DialogBody,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -145,11 +146,18 @@ export function ConnectDialog({
                 {YOTO_REDIRECT_URI}.
               </p>
             )}
-            <Button type="submit" className="h-11" disabled={pending || !canConnect}>
-              {pending ? "Opening Yoto…" : "Continue to Yoto"}
-            </Button>
           </form>
         </DialogBody>
+        <DialogFooter>
+          <Button
+            type="button"
+            className="h-11 w-full sm:w-auto"
+            disabled={pending || !canConnect}
+            onClick={() => void connect()}
+          >
+            {pending ? "Opening Yoto…" : "Continue to Yoto"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
