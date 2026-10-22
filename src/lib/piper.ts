@@ -11,12 +11,12 @@ import { PIPER_MODEL_NAME } from "@/lib/piper-voice";
  * folder is gitignored. The first Piper Hear or Send downloads them once.
  * `npx tsx scripts/install-piper.ts` does the same download ahead of time.
  */
-export const PIPER_DIR = path.join(process.cwd(), "data", "piper");
+const PIPER_DIR = path.join(process.cwd(), "data", "piper");
 
 const RELEASE = "2023.11.14-2";
 const RELEASE_BASE = `https://github.com/rhasspy/piper/releases/download/${RELEASE}`;
 
-export type PiperArchive = {
+type PiperArchive = {
   url: string;
   name: string;
 };
@@ -80,7 +80,7 @@ const VOICE_FILES = [
   },
 ] as const;
 
-export type PiperInstall = {
+type PiperInstall = {
   bin: string;
   model: string;
   modelName: string;
@@ -109,11 +109,11 @@ function exeName(): string {
   return process.platform === "win32" ? "piper.exe" : "piper";
 }
 
-export function defaultPiperBin(): string {
+function defaultPiperBin(): string {
   return path.join(PIPER_DIR, "runtime", exeName());
 }
 
-export function defaultPiperModel(): string {
+function defaultPiperModel(): string {
   return path.join(PIPER_DIR, "voices", `${PIPER_MODEL_NAME}.onnx`);
 }
 

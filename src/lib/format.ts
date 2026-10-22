@@ -88,13 +88,8 @@ export function cleanFlavor(text: string): string {
     .trim();
 }
 
-export function stripTrailingZero(value: string): string {
+function stripTrailingZero(value: string): string {
   return value.replace(/\.0$/, "");
-}
-
-export function metresSpeech(decimetres: number): string {
-  const metres = decimetres / 10;
-  return `${stripTrailingZero(metres.toFixed(1))} metres`;
 }
 
 /** PokéAPI stores height in decimetres. One decimetre is ten centimetres. */
@@ -107,14 +102,14 @@ export function kilogramsSpeech(hectograms: number): string {
   return `${stripTrailingZero(kilograms.toFixed(1))} kilograms`;
 }
 
-export function poundsSpeech(hectograms: number): string {
+function poundsSpeech(hectograms: number): string {
   const kilograms = hectograms / 10;
   const pounds = Math.max(1, Math.round(kilograms * 2.20462));
   return `${pounds} ${pounds === 1 ? "pound" : "pounds"}`;
 }
 
 /** Feet and inches from PokéAPI decimetres. A whole foot leaves the inches off. */
-export function feetInchesSpeech(decimetres: number): string {
+function feetInchesSpeech(decimetres: number): string {
   const meters = decimetres / 10;
   const totalInches = Math.round(meters * 39.3701);
   const feet = Math.floor(totalInches / 12);
@@ -182,8 +177,4 @@ export function catchSpeech(rate: number): string {
 export function statSpeech(slug: string): string {
   if (slug === "hp") return "hit points";
   return slug.replace(/-/g, " ");
-}
-
-export function padDex(id: number): string {
-  return String(id).padStart(3, "0");
 }

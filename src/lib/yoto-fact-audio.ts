@@ -16,7 +16,7 @@ import { synthesizePiper, type PiperSynthOptions } from "@/lib/piper";
 import { chosenVoice, isPiperVoice, piperCacheToken } from "@/lib/piper-voice";
 import { RECONNECT_YOTO, reconnectMessage, yotoErrorText } from "@/lib/yoto-error";
 
-export type FactCryRequest = {
+type FactCryRequest = {
   cardId: string;
   chapterKey: string;
   dexId: number;
@@ -313,7 +313,7 @@ export async function attachCry(
   return { cardId, trackUrl };
 }
 
-export type TrackPrepareRequest = {
+type TrackPrepareRequest = {
   text?: string;
   title?: string;
   dexId?: number;
@@ -340,7 +340,7 @@ export type TrackPrepareRequest = {
   audio?: Buffer;
 };
 
-export type TrackPrepareResult = {
+type TrackPrepareResult = {
   phase: "speech" | "upload" | "ready" | "discarded";
   speechJobId?: string;
   speechCardId?: string;
@@ -707,16 +707,6 @@ async function pollUpload(
     }
   }
   return undefined;
-}
-
-/** Upload one plain MP3 through prepareFactTrack. The song title is not the Yoto filename. */
-export async function uploadPlainMp3(
-  token: string,
-  audio: Buffer,
-  label: string,
-  fetchImpl: typeof fetch = fetch,
-): Promise<UploadedAudio> {
-  return finishFactUpload(token, audio, label, fetchImpl);
 }
 
 function clipReason(text: string): string {

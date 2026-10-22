@@ -7,7 +7,7 @@ export { YOTO_REDIRECT_URI };
 export const SESSION_KEY = "champdex.session";
 export const CLIENT_KEY = "champdex.clientId";
 export const CARD_KEY = "champdex.cardId";
-export const VERIFIER_KEY = "champdex.pkce";
+const VERIFIER_KEY = "champdex.pkce";
 
 export type YotoSession = {
   accessToken: string;
@@ -33,7 +33,7 @@ function base64Url(bytes: Uint8Array): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
-export async function createPkce(): Promise<{
+async function createPkce(): Promise<{
   verifier: string;
   challenge: string;
 }> {
@@ -47,10 +47,10 @@ export async function createPkce(): Promise<{
 }
 
 /** The hosted site. Home computers keep the loopback callback in local-origin.json. */
-export const PUBLIC_APP_HOST = "pokefacts.online";
+const PUBLIC_APP_HOST = "pokefacts.online";
 
 /** Public HTTPS hosts that may start a Yoto login. DuckDNS stays valid during the move. */
-export const PUBLIC_APP_HOSTS = [
+const PUBLIC_APP_HOSTS = [
   PUBLIC_APP_HOST,
   "www.pokefacts.online",
   "pokefacts.duckdns.org",
@@ -80,7 +80,7 @@ export function redirectUri(): string {
   return callbackForOrigin(window.location.origin);
 }
 
-export function readSession(): YotoSession | null {
+function readSession(): YotoSession | null {
   const raw = localStorage.getItem(SESSION_KEY);
   if (!raw) return null;
   try {
@@ -146,7 +146,7 @@ function profileName(idToken?: string): string | undefined {
   return typeof name === "string" ? name : undefined;
 }
 
-export function sessionFromToken(
+function sessionFromToken(
   payload: TokenResponse,
   clientId: string,
   previous?: YotoSession | null,

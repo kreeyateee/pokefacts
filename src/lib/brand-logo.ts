@@ -12,8 +12,6 @@ export const BRAND_IMAGE_KEY = {
   compact: "brand:compact",
 } as const;
 
-export type BrandLayout = keyof typeof BRAND_LOGO;
-
 function sourceSize(image: CanvasImageSource): { width: number; height: number } {
   if (typeof HTMLImageElement !== "undefined" && image instanceof HTMLImageElement) {
     const width = image.naturalWidth || image.width;
@@ -52,8 +50,4 @@ export function paintBrandLogo(
     drawH,
   );
   ctx.restore();
-}
-
-export function brandImage(images: ReadonlyMap<string, CanvasImageSource | null>, layout: keyof typeof BRAND_IMAGE_KEY) {
-  return images.get(BRAND_IMAGE_KEY[layout]) ?? null;
 }

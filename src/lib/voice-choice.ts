@@ -1,7 +1,7 @@
 import { chosenVoice } from "@/lib/piper-voice";
 import type { MixSettings } from "@/lib/playback-settings";
 
-export const VOICE_STORAGE_KEY = "champdex.voiceId";
+const VOICE_STORAGE_KEY = "champdex.voiceId";
 
 type VoiceStorage = {
   getItem(key: string): string | null;
@@ -19,8 +19,8 @@ export function writeVoiceId(storage: Required<Pick<VoiceStorage, "getItem" | "s
 }
 
 /** Short Pokédex line for the on-page voice buttons. No cry is mixed in. */
-export const VOICE_SAMPLE_TITLE = "Voice sample";
-export const VOICE_SAMPLE_TEXT =
+const VOICE_SAMPLE_TITLE = "Voice sample";
+const VOICE_SAMPLE_TEXT =
   "Pikachu. This Pokémon stores electricity in its cheeks. It lets that charge go when it is excited.";
 
 /** Hear request for one voice, with no cry in front. */

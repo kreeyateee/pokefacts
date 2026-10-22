@@ -7,7 +7,6 @@ import { ffmpegCommand, ffprobeCommand } from "@/lib/ffmpeg-bin";
 import {
   clampMix,
   DEFAULT_CRY_VOLUME,
-  DEFAULT_PAUSE_SECONDS,
   type MixSettings,
 } from "@/lib/playback-settings";
 
@@ -43,12 +42,11 @@ function isM4a(bytes: Buffer): boolean {
   return brand === "M4A " || brand === "M4B " || brand === "mp41" || brand === "mp42" || brand === "isom" || brand === "dash";
 }
 
-/** Cry gain and the silence after it. The rendered-file cache key includes both, plus voice gain. */
-export const CRY_MIX_VOLUME = DEFAULT_CRY_VOLUME;
-export const CRY_MIX_PAD_SECONDS = DEFAULT_PAUSE_SECONDS;
+/** Cry gain when none is passed. The rendered-file cache key includes it, the pause, and voice gain. */
+const CRY_MIX_VOLUME = DEFAULT_CRY_VOLUME;
 
 /** Cry at the front, then speech. Voice gain is omitted at 1 so the default mix stays the old filter. */
-export function mergeFilter(mix: MixSettings = clampMix(null)): string {
+function mergeFilter(mix: MixSettings = clampMix(null)): string {
   const voice = mix.voiceVolume === 1 ? "" : `volume=${mix.voiceVolume},`;
   return (
     `[0:a]volume=${mix.cryVolume},apad=pad_dur=${mix.pauseSeconds},aformat=sample_fmts=s16:sample_rates=44100:channel_layouts=mono[a0];` +

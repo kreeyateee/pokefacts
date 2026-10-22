@@ -5,7 +5,7 @@ import { cleanFlavor } from "@/lib/format";
  * Version ids in the PokéAPI tables are not release order: the original
  * Japanese cartridges were added long after Scarlet and Violet.
  */
-export const CATALOGUE_VERSION_ORDER = [
+const CATALOGUE_VERSION_ORDER = [
   "red-japan",
   "green-japan",
   "blue-japan",

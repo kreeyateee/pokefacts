@@ -2,7 +2,7 @@ import { titleCaseName } from "@/lib/format";
 
 type Named = { name: string } | null;
 
-export type EvolutionDetail = {
+type EvolutionDetail = {
   min_level: number | null;
   trigger: Named;
   item: Named;
@@ -35,7 +35,7 @@ function placeName(slug: string): string {
   return titleCaseName(slug.replace(/^mt-/, "mount-"));
 }
 
-export function describeDetail(detail: EvolutionDetail): string {
+function describeDetail(detail: EvolutionDetail): string {
   const trigger = detail.trigger?.name ?? "";
   const bits: string[] = [];
 

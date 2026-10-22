@@ -9,7 +9,7 @@ export type AbilityNote = {
   effect: string;
 };
 
-export type StatNote = {
+type StatNote = {
   slug: string;
   name: string;
   value: number;
@@ -51,41 +51,6 @@ export type DexEntry = {
   slug: string;
   name: string;
 };
-
-export const GENERATIONS = [
-  { id: 1, name: "Kanto", start: 1, end: 151 },
-  { id: 2, name: "Johto", start: 152, end: 251 },
-  { id: 3, name: "Hoenn", start: 252, end: 386 },
-  { id: 4, name: "Sinnoh", start: 387, end: 493 },
-  { id: 5, name: "Unova", start: 494, end: 649 },
-  { id: 6, name: "Kalos", start: 650, end: 721 },
-  { id: 7, name: "Alola", start: 722, end: 809 },
-  { id: 8, name: "Galar", start: 810, end: 905 },
-  { id: 9, name: "Paldea", start: 906, end: 1025 },
-] as const;
-
-export const PARTY_LIMIT = 8;
-
-export const TYPE_NAMES = [
-  "normal",
-  "fire",
-  "water",
-  "grass",
-  "electric",
-  "ice",
-  "fighting",
-  "poison",
-  "ground",
-  "flying",
-  "psychic",
-  "bug",
-  "rock",
-  "ghost",
-  "dragon",
-  "dark",
-  "steel",
-  "fairy",
-] as const;
 
 export const TYPE_COLORS: Record<string, string> = {
   normal: "#A8A77A",

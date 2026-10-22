@@ -1,8 +1,8 @@
 export const DEFAULT_CRY_VOLUME = 4;
-export const DEFAULT_VOICE_VOLUME = 1;
-export const DEFAULT_PAUSE_SECONDS = 0.35;
+const DEFAULT_VOICE_VOLUME = 1;
+const DEFAULT_PAUSE_SECONDS = 0.35;
 
-export const PLAYBACK_STORAGE_KEY = "pokefacts.playback";
+const PLAYBACK_STORAGE_KEY = "pokefacts.playback";
 
 export type MeasureUnits = "metric" | "imperial";
 
@@ -41,7 +41,7 @@ export function clampMix(input?: Partial<MixSettings> | null): MixSettings {
   };
 }
 
-export function clampPlayback(input?: Partial<PlaybackSettings> | null): PlaybackSettings {
+function clampPlayback(input?: Partial<PlaybackSettings> | null): PlaybackSettings {
   return {
     ...clampMix(input),
     units: input?.units === "imperial" ? "imperial" : "metric",

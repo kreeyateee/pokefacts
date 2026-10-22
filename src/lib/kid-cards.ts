@@ -11,12 +11,12 @@ import { iconForType, YOTO_ICONS } from "@/lib/yoto-icons";
 export const LILY_VOICE_ID = "pFZP5JQG7iQjIQuC4Bku";
 
 /** The Pokedex playlist the parent sends: 100 tracks, no extra intro. */
-export const POKEDEX_PLAYLIST_SIZE = 100;
+const POKEDEX_PLAYLIST_SIZE = 100;
 
 export const RANDOM_POKEDEX_ID = "meet-random";
 
 /** One Guess Who playlist: 50 riddles, two tracks each, no separate intro. */
-export const GUESS_RIDDLE_COUNT = 50;
+const GUESS_RIDDLE_COUNT = 50;
 
 export const RANDOM_GUESS_ID = "guess-random";
 
@@ -77,7 +77,7 @@ export type KidCardKind =
 
 export type FormPlaylistKind = "mega" | "gmax" | "alola" | "hisui";
 
-export type SpeciesPlaylistKind = "legendary" | "mythical";
+type SpeciesPlaylistKind = "legendary" | "mythical";
 
 export function isFormPlaylistKind(kind: string): kind is FormPlaylistKind {
   return kind === "mega" || kind === "gmax" || kind === "alola" || kind === "hisui";
@@ -105,10 +105,10 @@ export type KidCard = {
 export const YOTO_TRACK_LIMIT = 100;
 
 /** One intro track plus one fact leaves room for 99 Pokémon. */
-export const FACTS_PER_CARD = YOTO_TRACK_LIMIT - 1;
+const FACTS_PER_CARD = YOTO_TRACK_LIMIT - 1;
 
 /** One intro track plus two tracks per riddle leaves room for 49 riddles. */
-export const RIDDLES_PER_CARD = Math.floor((YOTO_TRACK_LIMIT - 1) / 2);
+const RIDDLES_PER_CARD = Math.floor((YOTO_TRACK_LIMIT - 1) / 2);
 
 const I = YOTO_ICONS;
 
@@ -314,7 +314,7 @@ export function kidCardsFromDex(sheets: MonSheet[]): KidCard[] {
 }
 
 /** The playlist body Yoto takes for a spoken Make Your Own card. */
-export type YotoContent = {
+type YotoContent = {
   title: string;
   cardId?: string;
   content: {
@@ -390,7 +390,7 @@ export function mulberry32(seed: number): () => number {
   };
 }
 
-export function drawSample<T>(items: readonly T[], size: number, random: () => number = Math.random): T[] {
+function drawSample<T>(items: readonly T[], size: number, random: () => number = Math.random): T[] {
   const copy = items.slice();
   const count = Math.min(size, copy.length);
   for (let index = 0; index < count; index += 1) {
@@ -469,7 +469,7 @@ export function coverArtworkId(card: KidCard): number | undefined {
 }
 
 /** Swap in the uploaded 16×16 icons. Guess Who clues keep the detective picture. */
-export function applyUploadedPixels(card: KidCard, mediaById: Record<number, string>): KidCard {
+function applyUploadedPixels(card: KidCard, mediaById: Record<number, string>): KidCard {
   return {
     ...card,
     chapters: card.chapters.map((chapter) => {
@@ -672,7 +672,7 @@ export function applySpeciesSpeech(card: KidCard, speechByDexId: Record<number, 
   };
 }
 
-export type FormPlaylistEntry = {
+type FormPlaylistEntry = {
   formId: number;
   speciesId: number;
   speciesName: string;
@@ -697,17 +697,17 @@ function rankForms<T extends { speciesId: number }>(forms: readonly T[]): T[] {
 }
 
 /** Every species first, then extra forms, stopping at the 100-track card. */
-export function fitFormTracks<T extends { speciesId: number }>(forms: readonly T[], limit = YOTO_TRACK_LIMIT): T[] {
+function fitFormTracks<T extends { speciesId: number }>(forms: readonly T[], limit = YOTO_TRACK_LIMIT): T[] {
   if (forms.length <= limit) return forms.slice();
   return rankForms(forms).slice(0, limit);
 }
 
-export const MEGA_PLAYLIST_ID = "mega-evolutions";
-export const GMAX_PLAYLIST_ID = "gigantamax";
-export const ALOLA_PLAYLIST_ID = "alolan-forms";
-export const HISUI_PLAYLIST_ID = "hisuian-forms";
-export const LEGENDARY_PLAYLIST_ID = "legendary";
-export const MYTHICAL_PLAYLIST_ID = "mythical";
+const MEGA_PLAYLIST_ID = "mega-evolutions";
+const GMAX_PLAYLIST_ID = "gigantamax";
+const ALOLA_PLAYLIST_ID = "alolan-forms";
+const HISUI_PLAYLIST_ID = "hisuian-forms";
+const LEGENDARY_PLAYLIST_ID = "legendary";
+const MYTHICAL_PLAYLIST_ID = "mythical";
 
 const FORM_PLAYLIST_META: Record<FormPlaylistKind, { title: string; id: string }> = {
   mega: { title: "Mega Evolutions", id: MEGA_PLAYLIST_ID },

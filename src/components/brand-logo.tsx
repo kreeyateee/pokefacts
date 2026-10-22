@@ -5,7 +5,7 @@ import { APP_NAME } from "@/lib/site";
 
 const LABEL = `${APP_NAME}. Pokémon cards for Yoto.`;
 
-export function BrandLogo({
+function BrandLogo({
   layout,
   className,
   alt = APP_NAME,

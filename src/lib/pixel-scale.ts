@@ -48,7 +48,7 @@ async function writeWithRetry(file: string, bytes: Buffer): Promise<void> {
 }
 
 /** Decode any PNG (indexed sprites included) to 8-bit RGBA. */
-export async function readImageRgba(file: string): Promise<{ width: number; height: number; rgba: Uint8Array }> {
+async function readImageRgba(file: string): Promise<{ width: number; height: number; rgba: Uint8Array }> {
   return withTempDir(async (dir) => {
     const rgbaFile = path.join(dir, "rgba.png");
     await runFfmpeg(["-y", "-loglevel", "error", "-i", file, "-vf", "format=rgba", "-frames:v", "1", rgbaFile]);
@@ -56,7 +56,7 @@ export async function readImageRgba(file: string): Promise<{ width: number; heig
   });
 }
 
-export async function measureContentBox(file: string): Promise<ContentBox | null> {
+async function measureContentBox(file: string): Promise<ContentBox | null> {
   const image = await readImageRgba(file);
   return contentBounds(image.width, image.height, image.rgba);
 }

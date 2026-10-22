@@ -18,12 +18,12 @@ const SKIP =
   /\b(kill|killing|death|dead|dying|deceased)\b|life would end|afterlife|victims['’] lives|drains? (?:people['’]s |their )?lives/i;
 const IMPERIAL = /\b(feet|foot|pounds|pound|inches|inch|fahrenheit)\b/i;
 
-export type DexLine = {
+type DexLine = {
   text: string;
   version: string;
 };
 
-export function prepareEntries(entries: FlavorSource[]): DexLine[] {
+function prepareEntries(entries: FlavorSource[]): DexLine[] {
   const cleaned = entries
     .map((entry) => ({
       text: cleanFlavor(entry.text),
@@ -289,7 +289,7 @@ export function dexBlurb(sheet: MonSheet, number: string): string {
   return [opening, passage, closing].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
 }
 
-export type ClueHints = {
+type ClueHints = {
   types: string[];
   genus: string;
   heightDecimetres: number;
@@ -525,7 +525,7 @@ function lookSentence(color: string | null | undefined, types: string[]): string
  * another game, then a size picture. A missing piece is left out.
  * The species name is taken out of both Pokédex lines.
  */
-export function shortClues(sheet: MonSheet): string[] {
+function shortClues(sheet: MonSheet): string[] {
   const names = [
     ...nameForms(sheet.name),
     ...(sheet.evolvesFrom ? nameForms(sheet.evolvesFrom) : []),
@@ -543,7 +543,7 @@ export function shortClues(sheet: MonSheet): string[] {
 }
 
 /** One new sentence for the answer track. It is not one of the clues. */
-export function answerExtra(sheet: MonSheet, clues: string[]): string {
+function answerExtra(sheet: MonSheet, clues: string[]): string {
   const from = sheet.evolvesFrom && sheet.evolvesFrom !== sheet.name ? sheet.evolvesFrom : null;
   const options = [
     evolutionSentence(from, intoNames(sheet)),

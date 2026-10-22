@@ -135,7 +135,7 @@ function folderSection(section: WikiSection, formName: string): boolean {
  * A Biology "Forms" section comes before a later stats heading with the same name.
  * Mega Pidgeot's description is under Forms. The Base stats "Mega Pidgeot" heading is not.
  */
-export function formSectionCandidates(sections: WikiSection[], formName: string): WikiSection[] {
+function formSectionCandidates(sections: WikiSection[], formName: string): WikiSection[] {
   const cutoff = gameDataCutoff(sections);
   const before = (section: WikiSection) => beforeGameData(section, cutoff);
   const ordered = [
@@ -199,7 +199,7 @@ function paragraphKept(text: string): boolean {
  * A Forms section keeps only paragraphs that name the form.
  * A heading that is the form keeps the paragraphs under it.
  */
-export function formSpecificBlocks(blocks: BiologyBlock[], formName: string, sectionLine = ""): BiologyBlock[] {
+function formSpecificBlocks(blocks: BiologyBlock[], formName: string, sectionLine = ""): BiologyBlock[] {
   const headingAt = blocks.findIndex(
     (block) =>
       block.kind === "heading" &&
