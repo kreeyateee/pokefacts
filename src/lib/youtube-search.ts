@@ -132,7 +132,7 @@ export function isYoutubeVideoUnavailable(message: string): boolean {
   );
 }
 
-type CacheDecision =
+export type CacheDecision =
   | { action: "use"; youtubeId: string }
   | { action: "probe"; youtubeId: string }
   | { action: "search" };
@@ -205,14 +205,28 @@ async function findWorkingReplacement(title: string, deadId: string): Promise<st
 }
 
 /**
+ * The id a lookup returns without running yt-dlp: the cached answer,
+ * otherwise Bulbapedia's own id, otherwise nothing.
+ */
+export function storedYoutubeId(decision: CacheDecision): string | null {
+  return decision.action === "search" ? null : decision.youtubeId;
+}
+
+/**
  * Bulbapedia's id when that video can still be played.
  * A removed, private, or region-blocked id is replaced by a searched upload and cached.
  * Songs with no id use the cached search, then a fresh search.
+ * Without `local` (see localToolsAllowed) nothing is probed or searched.
  */
-export async function youtubeIdForSong(page: string, title: string, known: string | null): Promise<string | null> {
+export async function youtubeIdForSong(
+  page: string,
+  title: string,
+  known: string | null,
+  options: { local: boolean },
+): Promise<string | null> {
   const cache = await readJsonObject(CACHE_FILE);
   const decision = cachedYoutubeId(cache[page], known);
-  if (decision.action === "use") return decision.youtubeId;
+  if (decision.action === "use" || !options.local) return storedYoutubeId(decision);
   const fetchedAt = new Date().toISOString();
   if (decision.action === "search") {
     const id = await findYoutubeVideoId(title);

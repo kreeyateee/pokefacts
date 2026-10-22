@@ -1,13 +1,13 @@
 import { jsonError } from "@/lib/yoto-proxy";
 import { isYoutubeVideoId } from "@/lib/youtube-link";
 import { readCachedMp3 } from "@/lib/youtube-mp3";
-import { YOUTUBE_MP3_DISABLED_MESSAGE, YOUTUBE_MP3_PUBLIC } from "@/lib/youtube-mp3-site";
+import { LOCAL_TOOLS_DISABLED_MESSAGE, localToolsAllowed } from "@/lib/youtube-mp3-site";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   ctx: { params: Promise<{ youtubeId: string }> },
 ) {
-  if (!YOUTUBE_MP3_PUBLIC) return jsonError(YOUTUBE_MP3_DISABLED_MESSAGE, 410);
+  if (!localToolsAllowed(request)) return jsonError(LOCAL_TOOLS_DISABLED_MESSAGE, 403);
 
   const { youtubeId } = await ctx.params;
   if (!isYoutubeVideoId(youtubeId)) return jsonError("That YouTube video id does not look right.");

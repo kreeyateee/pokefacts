@@ -15,6 +15,7 @@ import {
   youtubeWatchUrl,
   type DownloadRow,
 } from "@/lib/youtube-link";
+import { LOCAL_TOOLS_DISABLED_MESSAGE, localModeEnabled } from "@/lib/youtube-mp3-site";
 
 const CACHE_DIR = path.join(process.cwd(), "data", "music-mp3");
 
@@ -258,7 +259,12 @@ function ytdlpFailure(error: Error, stderr: string, stdout: string): Error {
   return new Error(explainYtdlpFailure(stderr, stdout, { killed, timedOut: killed || code === "ETIMEDOUT" }));
 }
 
+/**
+ * Every yt-dlp process starts here. The public server never sets the local flag,
+ * so it refuses before anything is spawned, even if a route forgot its own check.
+ */
 export function ytdlpOutput(args: string[], timeoutMs: number): Promise<string> {
+  if (!localModeEnabled()) return Promise.reject(new Error(LOCAL_TOOLS_DISABLED_MESSAGE));
   const launch = ytdlpLaunch();
   if (launch.packaged && !launch.python) {
     return Promise.reject(new Error("Python 3 is needed to run the packaged yt-dlp."));
