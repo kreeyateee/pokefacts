@@ -1,23 +1,10 @@
-import { execFile } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { ensureArtwork, isPng } from "@/lib/artwork";
-import { ffmpegCommand } from "@/lib/ffmpeg-bin";
-import { COLOUR_PIXEL_FILTER } from "@/lib/pixel-paint";
+import { paintColourPixel } from "@/lib/pixel-scale";
 
-const FORM_PIXEL_CACHE = path.join(process.cwd(), "data", "form-pixels");
-
-function scalePixel(sprite: string, pixel: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    execFile(
-      ffmpegCommand(),
-      ["-y", "-loglevel", "error", "-i", sprite, "-vf", COLOUR_PIXEL_FILTER, pixel],
-      { timeout: 20_000 },
-      (error) => (error ? reject(error) : resolve()),
-    );
-  });
-}
+const FORM_PIXEL_CACHE = path.join(process.cwd(), "data", "form-pixels", "crop");
 
 type FormPixelOptions = {
   cacheDir?: string;
@@ -48,7 +35,7 @@ export async function ensureFormPixel(formId: number, options: FormPixelOptions 
   const source = path.join(cacheDir, `${formId}.source.png`);
   await writeFile(source, artwork);
   try {
-    await scalePixel(source, file);
+    await paintColourPixel(source, file);
   } finally {
     await rm(source, { force: true });
   }

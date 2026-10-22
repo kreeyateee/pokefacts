@@ -555,7 +555,18 @@ describe("opaque pixel icons", () => {
       }
     }
     const bulbasaur = readPngRgba(readFileSync("public/pixels/1.png"));
-    assert.deepEqual(Array.from(bulbasaur.rgba.slice(0, 4)), [255, 255, 255, 255]);
+    let occupiedRows = 0;
+    for (let y = 0; y < 16; y += 1) {
+      for (let x = 0; x < 16; x += 1) {
+        const i = (y * 16 + x) * 4;
+        const white = bulbasaur.rgba[i] === 255 && bulbasaur.rgba[i + 1] === 255 && bulbasaur.rgba[i + 2] === 255;
+        if (!white) {
+          occupiedRows += 1;
+          break;
+        }
+      }
+    }
+    assert.ok(occupiedRows >= 12, `Bulbasaur should fill the Yoto face, not sit in a few pixels (${occupiedRows} rows).`);
     const shadow = readPngRgba(readFileSync("public/pixels/1-shadow.png"));
     assert.equal(shadow.rgba.includes(28), true);
   });

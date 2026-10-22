@@ -1,43 +1,19 @@
-import { execFile } from "node:child_process";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { getAlternateForm } from "@/lib/catalogue-db";
-import { ffmpegCommand } from "@/lib/ffmpeg-bin";
 import { ensureFormPixel } from "@/lib/form-pixel";
-import { COLOUR_PIXEL_FILTER, SHADOW_PIXEL_FILTER } from "@/lib/pixel-paint";
+import { paintColourPixel, paintShadowPixel } from "@/lib/pixel-scale";
 import { safeHttpStatus, yotoUpstreamFailure } from "@/lib/yoto-error";
 import { bearerToken, jsonError } from "@/lib/yoto-proxy";
-
-function scalePixel(sprite: string, pixel: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    execFile(
-      ffmpegCommand(),
-      ["-y", "-loglevel", "error", "-i", sprite, "-vf", COLOUR_PIXEL_FILTER, pixel],
-      { timeout: 20_000 },
-      (error) => (error ? reject(error) : resolve()),
-    );
-  });
-}
 
 async function ensurePixel(file: string, id: string): Promise<void> {
   try {
     await access(file);
   } catch {
     const sprite = path.join(process.cwd(), "public", "sprites", `${id}.png`);
-    await scalePixel(sprite, file);
+    await paintColourPixel(sprite, file);
   }
-}
-
-function paintShadow(sprite: string, shadow: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    execFile(
-      ffmpegCommand(),
-      ["-y", "-loglevel", "error", "-i", sprite, "-vf", SHADOW_PIXEL_FILTER, shadow],
-      { timeout: 20_000 },
-      (error) => (error ? reject(error) : resolve()),
-    );
-  });
 }
 
 async function ensureShadow(file: string, id: string): Promise<void> {
@@ -45,7 +21,7 @@ async function ensureShadow(file: string, id: string): Promise<void> {
     await access(file);
   } catch {
     const sprite = path.join(process.cwd(), "public", "sprites", `${id}.png`);
-    await paintShadow(sprite, file);
+    await paintShadowPixel(sprite, file);
   }
 }
 

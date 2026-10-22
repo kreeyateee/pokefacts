@@ -23,6 +23,19 @@ describe("form pixels", () => {
         if (!white) coloured = true;
       }
       assert.equal(coloured, true);
+      let occupiedRows = 0;
+      for (let y = 0; y < 16; y += 1) {
+        for (let x = 0; x < 16; x += 1) {
+          const i = (y * 16 + x) * 4;
+          const white =
+            decoded.rgba[i] === 255 && decoded.rgba[i + 1] === 255 && decoded.rgba[i + 2] === 255;
+          if (!white) {
+            occupiedRows += 1;
+            break;
+          }
+        }
+      }
+      assert.ok(occupiedRows >= 12, `form icon should fill the Yoto face (${occupiedRows} rows).`);
       const species = await readFile(path.join(process.cwd(), "public", "pixels", "3.png"));
       assert.equal(first.equals(species), false);
       const second = await ensureFormPixel(10033, { cacheDir: dir, artwork: Buffer.from("not a png") });

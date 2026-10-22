@@ -1,45 +1,31 @@
 /**
  * Repaint every 16×16 icon from the source sprite.
+ * Transparent padding is cropped first so the creature fills the Yoto face.
  * Colour and shadow both get an opaque white background.
  * The shadow is painted from the sprite alpha, not from the colour file.
  */
-import { execFile } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-import { ffmpegCommand } from "../src/lib/ffmpeg-bin";
-import { COLOUR_PIXEL_FILTER, readPngRgba, SHADOW_PIXEL_FILTER } from "../src/lib/pixel-paint";
+import { paintColourAndShadow } from "../src/lib/pixel-scale";
+import { readPngRgba } from "../src/lib/pixel-paint";
 
 const SPRITES = path.join(process.cwd(), "public", "sprites");
 const PIXELS = path.join(process.cwd(), "public", "pixels");
 
-function paint(id: string): Promise<void> {
-  const sprite = path.join(SPRITES, `${id}.png`);
-  const colour = path.join(PIXELS, `${id}.png`);
-  const shadow = path.join(PIXELS, `${id}-shadow.png`);
-  const filter = `[0:v]scale=16:16:flags=neighbor,format=rgba,split=2[base][sil];[base]${COLOUR_PIXEL_FILTER.replace(/^scale=16:16:flags=neighbor,format=rgba,/, "")}[colour];[sil]${SHADOW_PIXEL_FILTER.replace(/^scale=16:16:flags=neighbor,format=rgba,/, "")}[shadow]`;
-  return new Promise((resolve, reject) => {
-    execFile(
-      ffmpegCommand(),
-      [
-        "-y",
-        "-loglevel",
-        "error",
-        "-i",
-        sprite,
-        "-filter_complex",
-        filter,
-        "-map",
-        "[colour]",
-        colour,
-        "-map",
-        "[shadow]",
-        shadow,
-      ],
-      { timeout: 20_000 },
-      (error) => (error ? reject(error) : resolve()),
-    );
-  });
+function occupiedRows(rgba: Uint8Array, size = 16): number {
+  let rows = 0;
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const i = (y * size + x) * 4;
+      const white = rgba[i] === 255 && rgba[i + 1] === 255 && rgba[i + 2] === 255;
+      if (!white) {
+        rows += 1;
+        break;
+      }
+    }
+  }
+  return rows;
 }
 
 function opaqueWhite(file: string, shadow: boolean): void {
@@ -62,9 +48,17 @@ const ids = readdirSync(SPRITES)
   .map((name) => name.replace(/\.png$/, ""))
   .sort((left, right) => Number(left) - Number(right));
 
+async function paintOne(id: string): Promise<void> {
+  await paintColourAndShadow(
+    path.join(SPRITES, `${id}.png`),
+    path.join(PIXELS, `${id}.png`),
+    path.join(PIXELS, `${id}-shadow.png`),
+  );
+}
+
 async function main(): Promise<void> {
   let cursor = 0;
-  let failed = 0;
+  const missed: string[] = [];
   async function worker(): Promise<void> {
     for (;;) {
       const index = cursor;
@@ -72,24 +66,36 @@ async function main(): Promise<void> {
       const id = ids[index];
       if (!id) return;
       try {
-        await paint(id);
+        await paintOne(id);
       } catch (error) {
-        failed += 1;
+        missed.push(id);
         console.error(id, error instanceof Error ? error.message : error);
       }
       if ((index + 1) % 100 === 0) console.log(`${index + 1} of ${ids.length}`);
     }
   }
 
-  await Promise.all(Array.from({ length: 8 }, () => worker()));
-  if (failed > 0) {
-    console.error(`${failed} sprites failed.`);
+  await Promise.all(Array.from({ length: 2 }, () => worker()));
+  const leftover: string[] = [];
+  for (const id of missed) {
+    try {
+      await paintOne(id);
+    } catch (error) {
+      leftover.push(id);
+      console.error(id, error instanceof Error ? error.message : error);
+    }
+  }
+  if (leftover.length > 0) {
+    console.error(`${leftover.length} sprites failed.`);
     process.exit(1);
   }
   for (const id of ["1", "25", "640"]) {
     opaqueWhite(path.join(PIXELS, `${id}.png`), false);
     opaqueWhite(path.join(PIXELS, `${id}-shadow.png`), true);
   }
+  const bulbasaur = readPngRgba(readFileSync(path.join(PIXELS, "1.png")));
+  const rows = occupiedRows(bulbasaur.rgba);
+  if (rows < 12) throw new Error(`Bulbasaur only fills ${rows} rows after the crop.`);
   console.log(`Painted ${ids.length} colour icons and ${ids.length} shadows.`);
 }
 
