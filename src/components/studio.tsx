@@ -11,6 +11,7 @@ import { SendBanner, toastSendAllReady, toastSendReady, toastSendStarted } from 
 import { SetupGuide } from "@/components/setup-guide";
 import { CardOptionsDialog } from "@/components/card-options-dialog";
 import { ConnectDialog } from "@/components/connect-dialog";
+import { MyoCardButton, MyoCardDialog, openAfterDialog, type MyoCardView } from "@/components/myo-card-dialog";
 import { MusicPanel } from "@/components/music-panel";
 import { MysterySilhouette } from "@/components/mystery-silhouette";
 import { YotoScreen } from "@/components/yoto-screen";
@@ -561,7 +562,9 @@ export function Studio({
   const [job, setJob] = useState<JobView | null>(null);
   const [stickersOpen, setStickersOpen] = useState(false);
   const [cardPrompt, setCardPrompt] = useState<{ confirmLabel: string; newTitle: string } | null>(null);
+  const [myoCard, setMyoCard] = useState<MyoCardView | null>(null);
   const pendingCardAction = useRef<(() => void | Promise<void>) | null>(null);
+  const myoTimer = useRef<number | null>(null);
   const [ready, setReady] = useState(false);
   const choiceListRef = useRef<HTMLElement | null>(null);
   const clipRef = useRef<HTMLAudioElement | null>(null);
@@ -624,6 +627,7 @@ export function Studio({
     return () => {
       cancelled = true;
       stopDemo();
+      if (myoTimer.current) window.clearTimeout(myoTimer.current);
     };
   }, []);
 
@@ -1003,6 +1007,34 @@ export function Studio({
     setSending(next);
   }
 
+  function showMyoCard(next: MyoCardView, afterDialog = false) {
+    if (myoTimer.current) window.clearTimeout(myoTimer.current);
+    const open = () => setMyoCard(next);
+    if (afterDialog) {
+      myoTimer.current = openAfterDialog(open);
+      return;
+    }
+    open();
+  }
+
+  function noteSendStarted(title: string) {
+    toastSendStarted(title);
+    showMyoCard(
+      {
+        title,
+        cardId: validYotoCardId(targetPlaylistRef.current),
+        sending: true,
+      },
+      true,
+    );
+  }
+
+  function finishMyoCard(cardId?: string) {
+    setMyoCard((current) =>
+      current ? { ...current, cardId: cardId ?? current.cardId, sending: false } : current,
+    );
+  }
+
   function reportFailure(message: string) {
     const reconnect = clearSavedLoginForScopeGap(message);
     const detail = reconnect ?? message;
@@ -1254,6 +1286,7 @@ export function Studio({
 
   function askCardOptions(confirmLabel: string, newTitle: string, run: () => void | Promise<void>) {
     if (sendingRef.current) return;
+    setMyoCard(null);
     pendingCardAction.current = run;
     setCardPrompt({ confirmLabel, newTitle });
   }
@@ -1278,7 +1311,7 @@ export function Studio({
     }
     const dexNote = playlistDexNote(playlist);
     markSending(true);
-    toastSendStarted(playlist.libraryTitle);
+    noteSendStarted(playlist.libraryTitle);
     setJob({
       status: "sending",
       detail: statusWithDexNote(`Sending ${playlist.libraryTitle} to Yoto…`, dexNote),
@@ -1316,6 +1349,7 @@ export function Studio({
         cardId: sentId,
       });
       toastSendReady(chosenId ? (updatedTitle ?? "The playlist") : playlist.libraryTitle, Boolean(chosenId));
+      finishMyoCard(sentId);
       void loadLibrary();
     } catch (error) {
       const failure = asSendFailure(error, "The recording stopped.");
@@ -1331,7 +1365,7 @@ export function Studio({
     if (!(await connectedSession())) return;
     markSending(true);
     setBulkActive(false);
-    toastSendStarted(card.libraryTitle);
+    noteSendStarted(card.libraryTitle);
     setJob({ status: "sending", detail: `Sending ${card.rangeLabel} to Yoto…` });
     try {
       const chosenId = validYotoCardId(targetPlaylistRef.current);
@@ -1395,6 +1429,7 @@ export function Studio({
         cardId: sentId,
       });
       toastSendReady(chosenId ? (updatedTitle ?? "The playlist") : card.libraryTitle, Boolean(chosenId));
+      finishMyoCard(sentId);
       void loadLibrary();
     } catch (error) {
       const failure = asSendFailure(error, "The recording stopped.");
@@ -1410,7 +1445,7 @@ export function Studio({
     const playlists = factsPlaylists;
     markSending(true);
     setBulkActive(true);
-    toastSendStarted("All Pokefacts playlists");
+    noteSendStarted("Pokefacts 1");
     try {
       for (const playlist of playlists) forgetCard(playlist.id);
       const createdTitles: string[] = [];
@@ -1469,6 +1504,7 @@ export function Studio({
         total: playlists.length,
       });
       toastSendAllReady(playlists.length);
+      finishMyoCard();
     } catch (error) {
       const failure = asSendFailure(error, "The recording stopped.");
       reportFailure(failure.message);
@@ -1564,10 +1600,17 @@ export function Studio({
         {view === "setup" ? (
           <SetupGuide onConnect={() => setConnectOpen(true)} onHome={goHome} />
         ) : view === "catalogue" ? (
-          <Catalogue
+            <Catalogue
             sending={sending}
             onSendSelection={sendSelection}
             onPrepareSend={(confirmLabel, newTitle, run) => askCardOptions(confirmLabel, newTitle, run)}
+            onShowMyoCard={(title) =>
+              showMyoCard({
+                title,
+                cardId: validYotoCardId(targetPlaylist) ?? job?.cardId,
+                sending,
+              })
+            }
             onBuildStart={() => {
               if (!sendingRef.current) setJob(null);
             }}
@@ -1721,6 +1764,15 @@ export function Studio({
                     >
                       {sending && !bulkActive ? "Recording in the background…" : "Create card"}
                     </Button>
+                    <MyoCardButton
+                      onClick={() =>
+                        showMyoCard({
+                          title: card.libraryTitle,
+                          cardId: validYotoCardId(targetPlaylist) ?? job?.cardId,
+                          sending,
+                        })
+                      }
+                    />
                   </div>
                   <p className="mt-2 text-xs leading-5 text-muted-foreground">
                     Sends this whole list ({card.rangeLabel}), not only the Pokémon on screen. Paper stickers come after
@@ -1957,6 +2009,15 @@ export function Studio({
                 >
                   {sending && !bulkActive ? "Recording in the background…" : "Create card"}
                 </Button>
+                <MyoCardButton
+                  onClick={() =>
+                    showMyoCard({
+                      title: card.libraryTitle,
+                      cardId: validYotoCardId(targetPlaylist) ?? job?.cardId,
+                      sending,
+                    })
+                  }
+                />
                 {kind === "meet" ? (
                   <Button
                     type="button"
@@ -2023,11 +2084,27 @@ export function Studio({
         job={job}
         onDismiss={() => setJob(null)}
         onPrintStickers={view === "cards" && card ? () => setStickersOpen(true) : undefined}
+        onShowMyoCard={() =>
+          showMyoCard({
+            title: card?.libraryTitle ?? myoCard?.title ?? "this playlist",
+            cardId: validYotoCardId(targetPlaylist) ?? job?.cardId ?? myoCard?.cardId,
+            sending,
+          })
+        }
       />
       {stickersOpen && card ? (
         <StickerStudio key={card.id} card={card} cards={rangeCards} onClose={() => setStickersOpen(false)} />
       ) : null}
       <ConnectDialog open={connectOpen} onOpenChange={setConnectOpen} />
+      <MyoCardDialog
+        open={Boolean(myoCard)}
+        onOpenChange={(open) => {
+          if (!open) setMyoCard(null);
+        }}
+        title={myoCard?.title}
+        cardId={myoCard?.cardId}
+        sending={myoCard?.sending ?? sending}
+      />
       <CardOptionsDialog
         open={Boolean(cardPrompt)}
         onOpenChange={(open) => {

@@ -28,11 +28,13 @@ export function PlaylistWindow({
   onOpenChange,
   ids,
   onChange,
+  onShowMyoCard,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   ids: readonly number[];
   onChange: (ids: number[]) => void;
+  onShowMyoCard?: () => void;
 }) {
   const [names, setNames] = useState<Record<number, string>>({});
   const [nameError, setNameError] = useState("");
@@ -154,6 +156,11 @@ export function PlaylistWindow({
           >
             Reverse
           </button>
+          {onShowMyoCard ? (
+            <button type="button" className="pk-pill px-3 text-xs" onClick={onShowMyoCard}>
+              Make Your Own card
+            </button>
+          ) : null}
         </div>
         {nameError ? (
           <p className="text-sm pk-danger" role="alert">

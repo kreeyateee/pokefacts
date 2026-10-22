@@ -57,10 +57,12 @@ export function SendBanner({
   job,
   onDismiss,
   onPrintStickers,
+  onShowMyoCard,
 }: {
   job: SendJobView | null;
   onDismiss?: () => void;
   onPrintStickers?: () => void;
+  onShowMyoCard?: () => void;
 }) {
   if (!job) return null;
   const failed = job.status === "failed";
@@ -82,8 +84,13 @@ export function SendBanner({
             to the player. Paper stickers are optional after that.
           </p>
         ) : null}
-        {done || failed ? (
+        {onShowMyoCard || done || failed ? (
           <div className="pk-send-actions">
+            {onShowMyoCard ? (
+              <button type="button" className="pk-banner-btn" onClick={onShowMyoCard}>
+                Make Your Own card
+              </button>
+            ) : null}
             {playlistHref ? (
               <a className="pk-banner-btn" href={playlistHref} target="_blank" rel="noreferrer">
                 Open in the Yoto app
@@ -104,7 +111,7 @@ export function SendBanner({
                 {DONATE_LABEL}
               </a>
             ) : null}
-            {onDismiss ? (
+            {(done || failed) && onDismiss ? (
               <button type="button" className="pk-send-dismiss" onClick={onDismiss}>
                 Dismiss
               </button>

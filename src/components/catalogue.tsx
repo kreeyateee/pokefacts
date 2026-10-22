@@ -7,6 +7,7 @@ import { StatusBar } from "@/components/status-bar";
 import { StickerStudio } from "@/components/sticker-studio";
 import { YotoScreen } from "@/components/yoto-screen";
 import { Button } from "@/components/ui/button";
+import { MyoCardButton, openAfterDialog } from "@/components/myo-card-dialog";
 import {
   Dialog,
   DialogBody,
@@ -185,6 +186,7 @@ const PLAYLIST_KINDS: Array<{ id: SelectionKind; label: string; detail: string }
 export function Catalogue({
   onSendSelection,
   onPrepareSend,
+  onShowMyoCard,
   onBuildStart,
   units = "metric",
   job = null,
@@ -192,6 +194,7 @@ export function Catalogue({
 }: {
   onSendSelection?: (card: KidCard) => Promise<void>;
   onPrepareSend?: (confirmLabel: string, newTitle: string, run: () => void | Promise<void>) => void;
+  onShowMyoCard?: (title: string) => void;
   onBuildStart?: () => void;
   units?: MeasureUnits;
   job?: { status: string; detail: string; done?: number; total?: number } | null;
@@ -397,6 +400,24 @@ export function Catalogue({
     }
   }
 
+  function pickTitle(): string {
+    return (
+      playlistTitle.trim() ||
+      (playlistKind === "whos-that"
+        ? "Who's That Pokémon Cards"
+        : playlistKind === "advanced"
+          ? "Advanced facts"
+          : "Fact Cards")
+    );
+  }
+
+  function showMyoCard() {
+    if (!onShowMyoCard) return;
+    setBuildOpen(false);
+    setPlaylistOpen(false);
+    openAfterDialog(() => onShowMyoCard(pickTitle()));
+  }
+
   async function printStickers() {
     if (picked.length === 0 || stickerBusy || building) return;
     setStickerBusy(true);
@@ -593,6 +614,7 @@ export function Catalogue({
           <Button type="button" className="h-11 px-4" onClick={() => setBuildOpen(true)}>
             Create card
           </Button>
+          {onShowMyoCard ? <MyoCardButton onClick={showMyoCard} /> : null}
         </div>
         <Dialog open={buildOpen} onOpenChange={setBuildOpen}>
           <DialogContent className="overflow-hidden sm:max-w-xl" showCloseButton>
@@ -619,6 +641,7 @@ export function Catalogue({
           >
             Open playlist
           </Button>
+          {onShowMyoCard ? <MyoCardButton className="mt-2 h-11 w-full" onClick={showMyoCard} /> : null}
           <label className="mt-2 flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -711,16 +734,10 @@ export function Catalogue({
                 className="mt-3 h-11 w-full"
                 disabled={picked.length === 0 || building || sending}
                 onClick={() => {
-                  const title =
-                    playlistTitle.trim() ||
-                    (playlistKind === "whos-that"
-                      ? "Who's That Pokémon Cards"
-                      : playlistKind === "advanced"
-                        ? "Advanced facts"
-                        : "Fact Cards");
+                  const title = pickTitle();
                   if (onPrepareSend) {
                     setBuildOpen(false);
-                    onPrepareSend("Send this pick", title, () => buildPlaylist());
+                    openAfterDialog(() => onPrepareSend("Send this pick", title, () => buildPlaylist()));
                     return;
                   }
                   void buildPlaylist();
@@ -845,6 +862,7 @@ export function Catalogue({
           <Button type="button" className="h-11 px-4" onClick={() => setBuildOpen(true)}>
             Create card
           </Button>
+          {onShowMyoCard ? <MyoCardButton onClick={showMyoCard} /> : null}
         </div>
         {entryError?.id === selected ? (
           <p className="text-sm pk-danger" role="alert">
@@ -1080,6 +1098,7 @@ export function Catalogue({
           setPicked(next);
           setBuildMessage("");
         }}
+        onShowMyoCard={onShowMyoCard ? showMyoCard : undefined}
       />
     </div>
   );

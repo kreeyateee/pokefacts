@@ -68,10 +68,11 @@ export function SetupGuide({
           it is done.
         </li>
         <li>
-          <span className="font-bold">4. Put it on a blank card.</span> When the bar says
-          the playlist is ready, open it in the Yoto app. Choose Link to a card, then hold
-          a blank Make Your Own card to the player. The next playlist needs another blank
-          card. Paper stickers are optional, and they come after this step.
+          <span className="font-bold">4. Put it on a blank card.</span> A Make Your Own
+          card window opens as soon as the send starts. You can also open it while you
+          build a playlist. In the Yoto app, choose Link to a card, then hold a blank
+          Make Your Own card to the player. The next playlist needs another blank card.
+          Paper stickers are optional, and they come after this step.
         </li>
       </ol>
 
