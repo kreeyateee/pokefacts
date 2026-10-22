@@ -1,6 +1,9 @@
 /** Name shown in the app, the browser tab, and the README. */
 export const APP_NAME = "Pokefacts";
 
+/** Public site. Open Graph tags need this absolute address. */
+export const PUBLIC_SITE_ORIGIN = "https://pokefacts.online";
+
 /** One-off tip jar. Donations are optional. The app stays free. */
 export const DONATE_URL = "https://buymeacoffee.com/kreeyate";
 

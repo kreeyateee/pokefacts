@@ -3,7 +3,7 @@ import { Fredoka, Nunito } from "next/font/google";
 
 import { LocalOrigin } from "@/components/local-origin";
 import { Toaster } from "@/components/ui/sonner";
-import { APP_NAME } from "@/lib/site";
+import { APP_NAME, PUBLIC_SITE_ORIGIN } from "@/lib/site";
 
 import "./globals.css";
 
@@ -18,9 +18,24 @@ const fredoka = Fredoka({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(PUBLIC_SITE_ORIGIN),
   title: APP_NAME,
   description:
     "Hear a Pokémon fact, or play Who's That Pokémon. The same two games can go on a Yoto card.",
+  openGraph: {
+    title: APP_NAME,
+    description:
+      "Hear a Pokémon fact, or play Who's That Pokémon. The same two games can go on a Yoto card.",
+    url: "/",
+    siteName: APP_NAME,
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: APP_NAME,
+    description:
+      "Hear a Pokémon fact, or play Who's That Pokémon. The same two games can go on a Yoto card.",
+  },
 };
 
 export const viewport: Viewport = {
