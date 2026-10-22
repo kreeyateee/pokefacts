@@ -16,7 +16,7 @@ describe("send cheer copy", () => {
   it("tells the parent the card is recording in the background", () => {
     assert.equal(
       sendStartedCopy("Pokefacts 1"),
-      "Pokefacts 1 is recording in the background. Keep browsing.",
+      "Pokefacts 1 is recording in the background. Keep browsing. If you close the page, it carries on next time you open Pokefacts.",
     );
     assert.match(sendStartedCopy("  "), /This playlist is recording in the background/);
   });

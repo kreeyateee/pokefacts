@@ -65,7 +65,7 @@ export function SetupGuide({
           <span className="font-bold">3. Send a playlist.</span> Start with Fact Cards if
           you are new. Tap Create card, pick a voice if you like, then confirm. Recording
           keeps going in the background. A bar at the bottom of the screen tells you when
-          it is done.
+          it is done. If you close the page, it carries on next time you open Pokefacts.
         </li>
         <li>
           <span className="font-bold">4. Put it on a blank card.</span> A Make Your Own

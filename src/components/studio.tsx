@@ -69,7 +69,32 @@ import { pronounce } from "@/lib/pronounce";
 import { spokenDexLine, statusWithDexNote, WIKI_DEX_NOTE } from "@/lib/spoken-wiki";
 import { selectionUpload } from "@/lib/selection-playlist";
 import { DONATE_URL, SOURCE_URL } from "@/lib/site";
-import { defaultPlayback, readPlayback, type PlaybackSettings } from "@/lib/playback-settings";
+import { defaultPlayback, readPlayback, type MixSettings, type PlaybackSettings } from "@/lib/playback-settings";
+import {
+  PENDING_SEND_KEY,
+  SEND_LOCK_BEAT_MS,
+  SEND_LOCK_KEY,
+  finishedTrackCount,
+  isSendDone,
+  readPendingSend,
+  sendLockFree,
+  sendLockValue,
+  serializePendingSend,
+  startPendingSend,
+  unfinishedJobs,
+  withCover,
+  withCurrent,
+  withDexNote,
+  withFailure,
+  withoutFailure,
+  withoutScratch,
+  withPlaylistSent,
+  withScratch,
+  withTrackDone,
+  type PendingBulk,
+  type PendingPlaylist,
+  type PendingSend,
+} from "@/lib/pending-send";
 import { demoHearBody, factTrackBody, readVoiceId, writeVoiceId } from "@/lib/voice-choice";
 import {
   asSendFailure,
@@ -94,6 +119,7 @@ import {
   uploadForPlaylist,
   type FinishedAudio,
   type PlaylistUpload,
+  type RenderJob,
 } from "@/lib/yoto-send";
 import { isYotoCoverUrl, yotoPlaylistUrl } from "@/lib/yoto-playlist";
 import {
@@ -135,6 +161,17 @@ function forgetCard(id: string) {
   delete next[id];
   localStorage.setItem(SAVED_CARDS, JSON.stringify(next));
   localStorage.removeItem(CARD_KEY);
+}
+
+/** Thrown when the parent taps Cancel, so the send stops between steps. */
+class SendCancelled extends Error {}
+
+function readStoredPendingSend(): PendingSend | null {
+  try {
+    return readPendingSend(localStorage.getItem(PENDING_SEND_KEY), Date.now());
+  } catch {
+    return null;
+  }
 }
 
 function delay(ms: number) {
@@ -578,6 +615,11 @@ export function Studio({
   const pendingCardAction = useRef<(() => void | Promise<void>) | null>(null);
   const myoTimer = useRef<number | null>(null);
   const tabRestored = useRef(false);
+  const [pendingSend, setPendingSend] = useState<PendingSend | null>(null);
+  const pendingRef = useRef<PendingSend | null>(null);
+  const cancelRef = useRef(false);
+  const lockOwner = useRef("");
+  const lockBeat = useRef<number | null>(null);
   const [ready, setReady] = useState(false);
   const choiceListRef = useRef<HTMLElement | null>(null);
   const clipRef = useRef<HTMLAudioElement | null>(null);
@@ -639,13 +681,28 @@ export function Studio({
       setSession(next);
       setReady(true);
       if (next) void loadLibrary();
+      pickUpPendingSend(next);
     });
     return () => {
       cancelled = true;
       stopDemo();
       if (myoTimer.current) window.clearTimeout(myoTimer.current);
+      if (lockBeat.current) window.clearInterval(lockBeat.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!sending) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    // The send stops with this page, so the next page load may pick it up straight away.
+    const leave = () => releaseSendLock();
+    window.addEventListener("beforeunload", warn);
+    window.addEventListener("pagehide", leave);
+    return () => {
+      window.removeEventListener("beforeunload", warn);
+      window.removeEventListener("pagehide", leave);
+    };
+  }, [sending]);
 
   useEffect(() => {
     if (!tabRestored.current) return;
@@ -1077,9 +1134,62 @@ export function Studio({
     toast.error(detail);
   }
 
+  function savePending(next: PendingSend | null) {
+    pendingRef.current = next;
+    setPendingSend(next);
+    try {
+      if (next) localStorage.setItem(PENDING_SEND_KEY, serializePendingSend(next));
+      else localStorage.removeItem(PENDING_SEND_KEY);
+    } catch {
+      // Without room to save, the send still runs. It just cannot pick up after a refresh.
+    }
+  }
+
+  function changePending(change: (send: PendingSend) => PendingSend) {
+    if (pendingRef.current) savePending(change(pendingRef.current));
+  }
+
+  function throwIfCancelled() {
+    if (cancelRef.current) throw new SendCancelled();
+  }
+
+  function holdSendLock(): boolean {
+    if (!lockOwner.current) lockOwner.current = Math.random().toString(36).slice(2);
+    const owner = lockOwner.current;
+    try {
+      if (!sendLockFree(localStorage.getItem(SEND_LOCK_KEY), owner, Date.now())) return false;
+      const beat = () => localStorage.setItem(SEND_LOCK_KEY, sendLockValue(owner, Date.now()));
+      beat();
+      if (lockBeat.current) window.clearInterval(lockBeat.current);
+      lockBeat.current = window.setInterval(() => {
+        try {
+          beat();
+        } catch {
+          // The lock only keeps a second tab from sending at the same time.
+        }
+      }, SEND_LOCK_BEAT_MS);
+    } catch {
+      // Without storage there is no second tab to share the send with.
+    }
+    return true;
+  }
+
+  function releaseSendLock() {
+    if (lockBeat.current) window.clearInterval(lockBeat.current);
+    lockBeat.current = null;
+    try {
+      if (sendLockFree(localStorage.getItem(SEND_LOCK_KEY), lockOwner.current, Date.now())) {
+        localStorage.removeItem(SEND_LOCK_KEY);
+      }
+    } catch {
+      // Nothing was stored.
+    }
+  }
+
   async function pollJob(id: string, headline?: string, mark?: { done: number; total: number }) {
     for (let attempt = 0; attempt < 150; attempt += 1) {
       await delay(attempt < 8 ? 400 : 1000);
+      throwIfCancelled();
       const response = await yotoFetch(`/api/yoto/job/${id}`);
       const payload = await readBody(response);
       if (isRateLimited(response.status, payload)) {
@@ -1112,14 +1222,11 @@ export function Studio({
     throw new SendFailure("Yoto is still recording. Check Make Your Own in the Yoto app in a minute.", false);
   }
 
-  async function postPlaylist(
-    playlist: KidCard,
-    upload: PlaylistUpload,
-    headline?: string,
-  ): Promise<string | undefined> {
+  async function postPlaylist(playlistId: string, upload: PlaylistUpload, headline: string): Promise<string | undefined> {
     let attempt = upload;
     let retried = false;
     for (;;) {
+      throwIfCancelled();
       const response = await yotoFetch("/api/yoto/job", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1130,7 +1237,7 @@ export function Studio({
         const gateway = looksLikeGateway(response.status, payload);
         if (!gateway && !attempt.append) {
           const decision = afterRejectedPlaylist({
-            playlistId: playlist.id,
+            playlistId,
             upload: attempt,
             status: response.status,
             body: payload,
@@ -1138,7 +1245,7 @@ export function Studio({
             retried,
           });
           localStorage.setItem(SAVED_CARDS, JSON.stringify(decision.store));
-          if (decision.action === "retry-create" || decision.store[playlist.id] === undefined) {
+          if (decision.action === "retry-create" || decision.store[playlistId] === undefined) {
             localStorage.removeItem(CARD_KEY);
           }
           if (decision.action === "retry-create") {
@@ -1158,7 +1265,7 @@ export function Studio({
           create: attempt.create,
         });
         if (!newId) throw new SendFailure("Yoto did not return the new playlist.", false);
-        rememberCard(playlist.id, newId);
+        rememberCard(playlistId, newId);
         return newId;
       }
       if (!created?.jobId) {
@@ -1172,7 +1279,7 @@ export function Studio({
         create: attempt.create,
       });
       if (!newId) throw new SendFailure("Yoto did not return the new playlist.", false);
-      rememberCard(playlist.id, newId);
+      rememberCard(playlistId, newId);
       return newId;
     }
   }
@@ -1198,7 +1305,8 @@ export function Studio({
   }
 
   async function renderOneTrack(
-    job: { text: string; title: string; dexId?: number; name?: string; progress: string },
+    job: RenderJob,
+    voice: { voiceId: string; mix: MixSettings },
     scratch: Set<string>,
     mark: { done: number; total: number },
   ): Promise<FinishedAudio> {
@@ -1209,6 +1317,7 @@ export function Studio({
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         for (let step = 0; step < 40; step += 1) {
+          throwIfCancelled();
           setJob({ status: "sending", detail: job.progress, done: mark.done, total: mark.total });
           const response = await yotoFetch("/api/yoto/track", {
             method: "POST",
@@ -1219,11 +1328,11 @@ export function Studio({
                 title: job.title,
                 dexId: job.dexId,
                 name: job.name,
-                voiceId: voiceIdRef.current,
+                voiceId: voice.voiceId,
                 speechJobId,
                 speechCardId,
                 uploadId,
-                mix: playbackRef.current,
+                mix: voice.mix,
               }),
             ),
           });
@@ -1258,6 +1367,7 @@ export function Studio({
             if (!cardId) throw new SendFailure("The voice did not return a recording.", false);
             speechCardId = cardId;
             scratch.add(cardId);
+            changePending((send) => withScratch(send, cardId));
             uploadId = undefined;
             continue;
           }
@@ -1271,6 +1381,7 @@ export function Studio({
         }
         throw new SendFailure("This track is still recording. Retry.", false);
       } catch (error) {
+        if (error instanceof SendCancelled) throw error;
         last = asSendFailure(error, "This track did not finish.");
         if (!isRateLimited(0, last.message) && /could not record|did not start|does not look right/i.test(last.message)) {
           speechJobId = undefined;
@@ -1282,37 +1393,249 @@ export function Studio({
     throw last;
   }
 
-  async function renderPlaylist(playlist: KidCard, upload: PlaylistUpload, libraryTitle: string) {
-    const jobs = renderJobs(libraryTitle, playlist, upload);
-    const audio: Record<string, FinishedAudio> = {};
-    const scratch = new Set<string>();
-    const mark = { done: 0, total: jobs.length };
+  /** Record the tracks still missing. Each finished track is saved, so a resumed send skips it. */
+  async function renderPlaylist(current: PendingPlaylist, send: PendingSend) {
+    const audio = { ...send.audio };
+    const scratch = new Set(send.scratch);
+    const mark = { done: finishedTrackCount(send), total: current.jobs.length };
     try {
-      await mapPool(jobs, async (job) => {
-        audio[job.key] = await renderOneTrack(job, scratch, mark);
+      await mapPool(unfinishedJobs(send), async (job) => {
+        const finished = await renderOneTrack(job, send, scratch, mark);
+        audio[job.key] = finished;
+        changePending((next) => withTrackDone(next, job.key, finished));
         mark.done += 1;
         setJob({
           status: "sending",
-          detail: `${libraryTitle}, ${mark.done} of ${mark.total}`,
+          detail: `${current.libraryTitle}, ${mark.done} of ${mark.total}`,
           done: mark.done,
           total: mark.total,
         });
       });
       return audio;
     } finally {
-      await discardScratch([...scratch]);
+      const swept = [...scratch];
+      await discardScratch(swept);
+      changePending((next) => withoutScratch(next, swept));
     }
   }
 
-  async function sendPrepared(playlist: KidCard, upload: PlaylistUpload, headline?: string) {
-    const libraryTitle = upload.content.title || playlist.libraryTitle;
-    const [audio, cover] = await Promise.all([
-      renderPlaylist(playlist, upload, libraryTitle),
-      uploadCover(coverArtworkId(playlist)),
-    ]);
-    const prepared = applyPlaylistCover(applyFinishedAudio(upload, audio), cover);
+  async function sendPrepared(current: PendingPlaylist, send: PendingSend) {
+    const coverReady =
+      send.cover !== undefined
+        ? Promise.resolve(send.cover ?? undefined)
+        : uploadCover(current.coverId).then((cover) => {
+            changePending((next) => withCover(next, cover));
+            return cover;
+          });
+    const [audio, cover] = await Promise.all([renderPlaylist(current, send), coverReady]);
+    const prepared = applyPlaylistCover(applyFinishedAudio(current.upload, audio), cover);
     if (prepared.create) delete prepared.content.cardId;
-    return postPlaylist(playlist, prepared, headline ?? libraryTitle);
+    return postPlaylist(current.playlistId, prepared, current.headline);
+  }
+
+  function pendingPlaylist(playlist: KidCard, upload: PlaylistUpload, headline?: string): PendingPlaylist {
+    const libraryTitle = upload.content.title || playlist.libraryTitle;
+    return {
+      playlistId: playlist.id,
+      libraryTitle,
+      headline: headline ?? libraryTitle,
+      rangeLabel: playlist.rangeLabel,
+      coverId: coverArtworkId(playlist),
+      upload,
+      jobs: renderJobs(libraryTitle, playlist, upload),
+    };
+  }
+
+  async function assertRoom(cardId: string, chapters: KidCard["chapters"]) {
+    const response = await yotoFetch(`/api/yoto/card?id=${encodeURIComponent(cardId)}`);
+    const summary = (await readApi(response, "Could not read that playlist.")) as { tracks?: number };
+    const adding = countSpokenTracks(chapters);
+    const free = YOTO_TRACK_LIMIT - (summary.tracks ?? 0);
+    if (adding > free) throw new SendFailure(freeSlotMessage(free, adding), false);
+  }
+
+  /** "Send all" reads and pictures each numbered playlist only when it is next. */
+  async function prepareBulkPlaylist(id: string, bulk: PendingBulk, voiceId: string): Promise<PendingPlaylist> {
+    const playlist = factsPlaylists.find((item) => item.id === id);
+    if (!playlist) throw new SendFailure("That Pokefacts playlist is not on this page any more.", false);
+    const index = bulk.total - bulk.remaining.length + 1;
+    const headline = bulkProgressLabel(index, bulk.total);
+    setJob({ status: "sending", detail: headline, done: index - 1, total: bulk.total });
+    let dexNote = "";
+    const readings = await speechesFor(playlist, (done, total, notice) => {
+      if (notice) dexNote = notice;
+      setJob({
+        status: "sending",
+        detail: statusWithDexNote(`${playlist.libraryTitle}, description ${done} of ${total}`, notice),
+        done,
+        total,
+      });
+    });
+    if (readings.notice) dexNote = readings.notice;
+    changePending((send) => withDexNote(send, dexNote));
+    const spoken = applySpeciesSpeech(playlist, readings.speech);
+    const pixels = await uploadPixels(spoken, (done, total) => {
+      setJob({
+        status: "sending",
+        detail: `${playlist.libraryTitle}, picture ${done} of ${total}`,
+        done,
+        total,
+      });
+    });
+    return pendingPlaylist(playlist, factsBulkUpload(spoken, pixels, voiceId), headline);
+  }
+
+  /** Work through the saved send until every playlist in it is in the Yoto library. */
+  async function runPendingSend(): Promise<string | undefined> {
+    let cardId: string | undefined;
+    for (let send = pendingRef.current; send && !isSendDone(send); send = pendingRef.current) {
+      const { bulk, current } = send;
+      const nextId = bulk?.remaining[0];
+      try {
+        if (current) {
+          cardId = await sendPrepared(current, send);
+          changePending(withPlaylistSent);
+        } else if (bulk && nextId) {
+          const prepared = await prepareBulkPlaylist(nextId, bulk, send.voiceId);
+          changePending((next) => withCurrent(next, prepared));
+        }
+      } catch (error) {
+        if (!bulk || error instanceof SendCancelled) throw error;
+        const failure = asSendFailure(error, "The recording stopped.");
+        const index = bulk.total - bulk.remaining.length + (current ? 0 : 1);
+        throw new SendFailure(
+          bulkFailureText({
+            headline: bulkProgressLabel(index, bulk.total),
+            rangeLabel: current?.rangeLabel ?? factsPlaylists.find((item) => item.id === nextId)?.rangeLabel ?? "",
+            reason: failure.message,
+            createdTitles: bulk.created,
+            playlistIndex: index,
+            gateway: failure.gateway,
+          }),
+          failure.gateway,
+        );
+      }
+    }
+    return cardId;
+  }
+
+  function finishSend(send: PendingSend, cardId: string | undefined) {
+    if (send.bulk) {
+      const { total, dexNote } = send.bulk;
+      setJob({
+        status: "completed",
+        detail: statusWithDexNote(`All ${total} Pokefacts playlists are in your Yoto library.`, dexNote),
+        done: total,
+        total,
+      });
+      toastSendAllReady(total);
+      finishMyoCard();
+      return;
+    }
+    const finish = send.finish;
+    setJob({
+      status: "completed",
+      detail: finish?.detail ?? `${send.title} is in your Yoto library.`,
+      done: finish?.tracks,
+      total: finish?.tracks,
+      cardId,
+    });
+    toastSendReady(finish?.toastTitle ?? send.title, finish?.updated ?? false);
+    finishMyoCard(cardId);
+    void loadLibrary();
+  }
+
+  /**
+   * Prepare a send, save it, and record it. A failure is reported on the bar and rethrown.
+   * The saved send survives a refresh or a closed tab and picks up on the next visit.
+   */
+  async function driveSend(title: string, bulk: boolean, prepare: () => Promise<PendingSend>): Promise<void> {
+    if (!holdSendLock()) {
+      const message = "Another Pokefacts tab is sending to Yoto. Let it finish first.";
+      toast(message);
+      throw new SendFailure(message, false);
+    }
+    markSending(true);
+    setBulkActive(bulk);
+    cancelRef.current = false;
+    noteSendStarted(title);
+    try {
+      savePending(await prepare());
+      const cardId = await runPendingSend();
+      const finished = pendingRef.current;
+      savePending(null);
+      if (finished) finishSend(finished, cardId);
+    } catch (error) {
+      if (error instanceof SendCancelled) {
+        savePending(null);
+        setJob(null);
+        setMyoCard(null);
+        toast("Sending stopped.");
+        return;
+      }
+      const failure = asSendFailure(error, "The recording stopped.");
+      changePending((send) => withFailure(send, failure.message));
+      reportFailure(failure.message);
+      throw failure;
+    } finally {
+      markSending(false);
+      setBulkActive(false);
+      releaseSendLock();
+    }
+  }
+
+  /** A send saved by an earlier visit: carry on, or wait for Retry when it had failed. */
+  function pickUpPendingSend(live: YotoSession | null) {
+    const saved = readStoredPendingSend();
+    // Another open tab may be recording it right now.
+    if (!saved || !sendLockFree(localStorage.getItem(SEND_LOCK_KEY), lockOwner.current, Date.now())) return;
+    savePending(saved);
+    if (saved.failed) {
+      setJob({ status: "failed", detail: saved.failed });
+      return;
+    }
+    if (!live) {
+      setConnectOpen(true);
+      toast(`Connect Yoto to finish sending ${saved.title}.`);
+      return;
+    }
+    resumeSend(saved);
+  }
+
+  function resumeSend(send: PendingSend) {
+    const done = finishedTrackCount(send);
+    const total = send.current?.jobs.length;
+    void driveSend(send.title, Boolean(send.bulk), async () => {
+      setJob({
+        status: "sending",
+        detail:
+          done > 0
+            ? `Picking up where it stopped. ${done} of ${total} tracks were already saved.`
+            : `Picking up ${send.title} where it stopped.`,
+        done,
+        total,
+      });
+      return withoutFailure(send);
+    }).catch(() => {
+      // The bar already shows what went wrong.
+    });
+  }
+
+  async function retrySend() {
+    const send = pendingRef.current;
+    if (!send || sendingRef.current) return;
+    if (!(await connectedSession())) return;
+    resumeSend(send);
+  }
+
+  function cancelSend() {
+    cancelRef.current = true;
+    setJob((current) => (current ? { ...current, detail: "Stopping after this step…" } : current));
+  }
+
+  function dismissJob() {
+    setJob(null);
+    if (!sendingRef.current) savePending(null);
   }
 
   function askCardOptions(confirmLabel: string, newTitle: string, run: () => void | Promise<void>) {
@@ -1333,6 +1656,10 @@ export function Studio({
     if (run) void run();
   }
 
+  function newSend(input: Omit<Parameters<typeof startPendingSend>[0], "now" | "voiceId" | "mix">): PendingSend {
+    return startPendingSend({ ...input, now: Date.now(), voiceId: voiceIdRef.current, mix: playbackRef.current });
+  }
+
   async function sendSelection(playlist: KidCard): Promise<void> {
     if (sendingRef.current) {
       throw new Error("Another playlist is still recording in the background.");
@@ -1340,22 +1667,14 @@ export function Studio({
     if (!(await connectedSession())) {
       throw new Error("Connect Yoto before building a playlist.");
     }
-    const dexNote = playlistDexNote(playlist);
-    markSending(true);
-    noteSendStarted(playlist.libraryTitle);
-    setJob({
-      status: "sending",
-      detail: statusWithDexNote(`Sending ${playlist.libraryTitle} to Yoto…`, dexNote),
-    });
-    try {
+    await driveSend(playlist.libraryTitle, false, async () => {
+      const dexNote = playlistDexNote(playlist);
+      setJob({
+        status: "sending",
+        detail: statusWithDexNote(`Sending ${playlist.libraryTitle} to Yoto…`, dexNote),
+      });
       const chosenId = validYotoCardId(targetPlaylistRef.current);
-      if (chosenId) {
-        const response = await yotoFetch(`/api/yoto/card?id=${encodeURIComponent(chosenId)}`);
-        const summary = (await readApi(response, "Could not read that playlist.")) as { tracks?: number };
-        const adding = countSpokenTracks(playlist.chapters);
-        const free = YOTO_TRACK_LIMIT - (summary.tracks ?? 0);
-        if (adding > free) throw new SendFailure(freeSlotMessage(free, adding), false);
-      }
+      if (chosenId) await assertRoom(chosenId, playlist.chapters);
       const icons = playlist.kind === "guess" ? await uploadGuessIcons(playlist) : null;
       const pixels = icons ? icons.real : await uploadPixels(playlist);
       const prepared = selectionUpload(playlist, pixels, {
@@ -1364,184 +1683,109 @@ export function Studio({
         voiceId: voiceIdRef.current,
       });
       const upload = uploadForPlaylist(prepared, chosenId);
-      const sentId = await sendPrepared(playlist, upload, playlist.libraryTitle);
       const updatedTitle = library.find((item) => item.cardId === chosenId)?.title;
-      const tracks = countSpokenTracks(playlist.chapters);
-      setJob({
-        status: "completed",
-        detail: statusWithDexNote(
-          chosenId
-            ? `${updatedTitle ?? "The playlist"} was updated.`
-            : `${playlist.libraryTitle} is in your Yoto library.`,
-          dexNote,
-        ),
-        done: tracks,
-        total: tracks,
-        cardId: sentId,
+      return newSend({
+        title: playlist.libraryTitle,
+        current: pendingPlaylist(playlist, upload, playlist.libraryTitle),
+        finish: {
+          detail: statusWithDexNote(
+            chosenId
+              ? `${updatedTitle ?? "The playlist"} was updated.`
+              : `${playlist.libraryTitle} is in your Yoto library.`,
+            dexNote,
+          ),
+          toastTitle: chosenId ? (updatedTitle ?? "The playlist") : playlist.libraryTitle,
+          updated: Boolean(chosenId),
+          tracks: countSpokenTracks(playlist.chapters),
+        },
       });
-      toastSendReady(chosenId ? (updatedTitle ?? "The playlist") : playlist.libraryTitle, Boolean(chosenId));
-      finishMyoCard(sentId);
-      void loadLibrary();
-    } catch (error) {
-      const failure = asSendFailure(error, "The recording stopped.");
-      reportFailure(failure.message);
-      throw failure;
-    } finally {
-      markSending(false);
-    }
+    });
   }
 
   async function send() {
     if (!card || sendingRef.current) return;
     if (!(await connectedSession())) return;
-    markSending(true);
-    setBulkActive(false);
-    noteSendStarted(card.libraryTitle);
-    setJob({ status: "sending", detail: `Sending ${card.rangeLabel} to Yoto…` });
     try {
-      const chosenId = validYotoCardId(targetPlaylistRef.current);
-      if (chosenId) {
-        const response = await yotoFetch(`/api/yoto/card?id=${encodeURIComponent(chosenId)}`);
-        const summary = (await readApi(response, "Could not read that playlist.")) as { tracks?: number };
-        const adding = countSpokenTracks(card.chapters);
-        const free = YOTO_TRACK_LIMIT - (summary.tracks ?? 0);
-        if (adding > free) throw new SendFailure(freeSlotMessage(free, adding), false);
-      }
-      const formKind = isFormPlaylistKind(card.kind);
-      let dexNote = "";
-      let spokenCard = card;
-      if (!formKind && card.kind !== "guess") {
-        const readings = await speechesFor(card, (done, total, notice) => {
-          if (notice) dexNote = notice;
-          setJob({
-            status: "sending",
-            detail: statusWithDexNote(`${card.libraryTitle}, description ${done} of ${total}`, notice),
-            done,
-            total,
+      await driveSend(card.libraryTitle, false, async () => {
+        setJob({ status: "sending", detail: `Sending ${card.rangeLabel} to Yoto…` });
+        const chosenId = validYotoCardId(targetPlaylistRef.current);
+        if (chosenId) await assertRoom(chosenId, card.chapters);
+        const formKind = isFormPlaylistKind(card.kind);
+        let dexNote = "";
+        let spokenCard = card;
+        if (!formKind && card.kind !== "guess") {
+          const readings = await speechesFor(card, (done, total, notice) => {
+            if (notice) dexNote = notice;
+            setJob({
+              status: "sending",
+              detail: statusWithDexNote(`${card.libraryTitle}, description ${done} of ${total}`, notice),
+              done,
+              total,
+            });
           });
+          if (readings.notice) dexNote = readings.notice;
+          spokenCard = applySpeciesSpeech(card, readings.speech);
+        }
+        if (isFormPlaylistKind(card.kind)) {
+          await ensureFormProse(card.kind, (detail) => {
+            if (detail.includes(WIKI_DEX_NOTE)) dexNote = WIKI_DEX_NOTE;
+            setJob({ status: "sending", detail });
+          });
+        }
+        const readyForm = isFormPlaylistKind(card.kind)
+          ? (activePlaylist(playlistsRef.current, card.kind, card.id) ?? spokenCard)
+          : spokenCard;
+        if (!dexNote) dexNote = playlistDexNote(readyForm);
+        let base: PlaylistUpload;
+        if (randomGuess) {
+          const icons = await uploadGuessIcons(card);
+          base = guessUpload(card, icons.real, icons.shadow, undefined, voiceIdRef.current);
+        } else if (formKind) {
+          base = formPlaylistUpload(readyForm, await uploadPixels(readyForm), undefined, voiceIdRef.current);
+        } else if (randomFacts) {
+          base = pokedexUpload(spokenCard, await uploadPixels(spokenCard), undefined, voiceIdRef.current);
+        } else {
+          base = factsPlaylistUpload(spokenCard, await uploadPixels(spokenCard), undefined, voiceIdRef.current);
+        }
+        const upload = uploadForPlaylist({ ...base, voiceId: voiceIdRef.current }, chosenId);
+        const updatedTitle = library.find((item) => item.cardId === chosenId)?.title;
+        return newSend({
+          title: card.libraryTitle,
+          current: pendingPlaylist(card, upload, card.libraryTitle),
+          finish: {
+            detail: statusWithDexNote(
+              chosenId ? `${updatedTitle ?? "The playlist"} was updated.` : `${card.rangeLabel} is in your Yoto library.`,
+              dexNote,
+            ),
+            toastTitle: chosenId ? (updatedTitle ?? "The playlist") : card.libraryTitle,
+            updated: Boolean(chosenId),
+            tracks: countSpokenTracks(card.chapters),
+          },
         });
-        if (readings.notice) dexNote = readings.notice;
-        spokenCard = applySpeciesSpeech(card, readings.speech);
-      }
-      if (isFormPlaylistKind(card.kind)) {
-        await ensureFormProse(card.kind, (detail) => {
-          if (detail.includes(WIKI_DEX_NOTE)) dexNote = WIKI_DEX_NOTE;
-          setJob({ status: "sending", detail });
-        });
-      }
-      const readyForm = isFormPlaylistKind(card.kind)
-        ? (activePlaylist(playlistsRef.current, card.kind, card.id) ?? spokenCard)
-        : spokenCard;
-      if (!dexNote) dexNote = playlistDexNote(readyForm);
-      const base = randomGuess
-        ? await (async () => {
-            const icons = await uploadGuessIcons(card);
-            return guessUpload(card, icons.real, icons.shadow, undefined, voiceIdRef.current);
-          })()
-        : formKind
-          ? formPlaylistUpload(readyForm, await uploadPixels(readyForm), undefined, voiceIdRef.current)
-          : randomFacts
-            ? pokedexUpload(spokenCard, await uploadPixels(spokenCard), undefined, voiceIdRef.current)
-            : factsPlaylistUpload(spokenCard, await uploadPixels(spokenCard), undefined, voiceIdRef.current);
-      const upload = uploadForPlaylist({ ...base, voiceId: voiceIdRef.current }, chosenId);
-      const sentId = await sendPrepared(card, upload, card.libraryTitle);
-      const updatedTitle = library.find((item) => item.cardId === chosenId)?.title;
-      const tracks = countSpokenTracks(card.chapters);
-      setJob({
-        status: "completed",
-        detail: statusWithDexNote(
-          chosenId
-            ? `${updatedTitle ?? "The playlist"} was updated.`
-            : `${card.rangeLabel} is in your Yoto library.`,
-          dexNote,
-        ),
-        done: tracks,
-        total: tracks,
-        cardId: sentId,
       });
-      toastSendReady(chosenId ? (updatedTitle ?? "The playlist") : card.libraryTitle, Boolean(chosenId));
-      finishMyoCard(sentId);
-      void loadLibrary();
-    } catch (error) {
-      const failure = asSendFailure(error, "The recording stopped.");
-      reportFailure(failure.message);
-    } finally {
-      markSending(false);
+    } catch {
+      // The bar already shows what went wrong.
     }
   }
 
   async function sendAllFacts() {
     if (sendingRef.current) return;
     if (!(await connectedSession())) return;
-    const playlists = factsPlaylists;
-    markSending(true);
-    setBulkActive(true);
-    noteSendStarted("Pokefacts 1");
     try {
-      for (const playlist of playlists) forgetCard(playlist.id);
-      const createdTitles: string[] = [];
-      let dexNote = "";
-      for (let index = 0; index < playlists.length; index += 1) {
-        const playlist = playlists[index];
-        if (!playlist) continue;
-        const headline = bulkProgressLabel(index + 1, playlists.length);
-        setJob({ status: "sending", detail: headline, done: index, total: playlists.length });
-        try {
-          const readings = await speechesFor(playlist, (done, total, notice) => {
-            if (notice) dexNote = notice;
-            setJob({
-              status: "sending",
-              detail: statusWithDexNote(`${playlist.libraryTitle}, description ${done} of ${total}`, notice),
-              done,
-              total,
-            });
-          });
-          if (readings.notice) dexNote = readings.notice;
-          const spoken = applySpeciesSpeech(playlist, readings.speech);
-          const pixels = await uploadPixels(spoken, (done, total) => {
-            setJob({
-              status: "sending",
-              detail: `${playlist.libraryTitle}, picture ${done} of ${total}`,
-              done,
-              total,
-            });
-          });
-          const upload = factsBulkUpload(spoken, pixels, voiceIdRef.current);
-          delete upload.content.cardId;
-          await sendPrepared(playlist, upload, headline);
-          createdTitles.push(playlist.libraryTitle);
-        } catch (error) {
-          const failure = asSendFailure(error, "The recording stopped.");
-          throw new SendFailure(
-            bulkFailureText({
-              headline,
-              rangeLabel: playlist.rangeLabel,
-              reason: failure.message,
-              createdTitles,
-              playlistIndex: index + 1,
-              gateway: failure.gateway,
-            }),
-            failure.gateway,
-          );
-        }
-      }
-      setJob({
-        status: "completed",
-        detail: statusWithDexNote(
-          `All ${playlists.length} Pokefacts playlists are in your Yoto library.`,
-          dexNote,
-        ),
-        done: playlists.length,
-        total: playlists.length,
+      await driveSend("Pokefacts 1", true, async () => {
+        for (const playlist of factsPlaylists) forgetCard(playlist.id);
+        return newSend({
+          title: "Pokefacts 1",
+          bulk: {
+            remaining: factsPlaylists.map((playlist) => playlist.id),
+            created: [],
+            total: factsPlaylists.length,
+            dexNote: "",
+          },
+        });
       });
-      toastSendAllReady(playlists.length);
-      finishMyoCard();
-    } catch (error) {
-      const failure = asSendFailure(error, "The recording stopped.");
-      reportFailure(failure.message);
-    } finally {
-      markSending(false);
-      setBulkActive(false);
+    } catch {
+      // The bar already shows what went wrong.
     }
   }
 
@@ -2113,7 +2357,9 @@ export function Studio({
 
       <SendBanner
         job={job}
-        onDismiss={() => setJob(null)}
+        onDismiss={dismissJob}
+        onCancel={sending ? cancelSend : undefined}
+        onRetry={pendingSend?.failed && !sending ? () => void retrySend() : undefined}
         onPrintStickers={view === "cards" && card ? () => setStickersOpen(true) : undefined}
         onShowMyoCard={() =>
           showMyoCard({

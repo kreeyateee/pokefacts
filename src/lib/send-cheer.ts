@@ -9,7 +9,7 @@ export const SEND_TOAST_MS = 20_000;
 
 export function sendStartedCopy(title: string): string {
   const name = title.trim() || "This playlist";
-  return `${name} is recording in the background. Keep browsing.`;
+  return `${name} is recording in the background. Keep browsing. If you close the page, it carries on next time you open Pokefacts.`;
 }
 
 export function sendReadyCopy(title: string, updated = false): string {

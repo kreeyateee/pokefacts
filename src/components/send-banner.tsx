@@ -58,11 +58,17 @@ export function SendBanner({
   onDismiss,
   onPrintStickers,
   onShowMyoCard,
+  onCancel,
+  onRetry,
 }: {
   job: SendJobView | null;
   onDismiss?: () => void;
   onPrintStickers?: () => void;
   onShowMyoCard?: () => void;
+  /** Stop a send that is still recording. */
+  onCancel?: () => void;
+  /** Pick a failed send up from its last finished track. */
+  onRetry?: () => void;
 }) {
   if (!job) return null;
   const failed = job.status === "failed";
@@ -110,6 +116,16 @@ export function SendBanner({
               >
                 {DONATE_LABEL}
               </a>
+            ) : null}
+            {failed && onRetry ? (
+              <button type="button" className="pk-banner-btn" onClick={onRetry}>
+                Retry
+              </button>
+            ) : null}
+            {!done && !failed && onCancel ? (
+              <button type="button" className="pk-send-dismiss" onClick={onCancel}>
+                Cancel
+              </button>
             ) : null}
             {(done || failed) && onDismiss ? (
               <button type="button" className="pk-send-dismiss" onClick={onDismiss}>
