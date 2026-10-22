@@ -3,8 +3,10 @@ import {
   factsPlaylistUpload,
   pokefactsTitle,
   trackProgressLabel,
+  YOTO_EVENT_NAMES,
   YOTO_TRACK_LIMIT,
   type KidCard,
+  type YotoTrackEvents,
 } from "@/lib/kid-cards";
 import {
   looksLikeGateway,
@@ -158,6 +160,16 @@ export type RenderJob = {
 
 type UploadTrack = { key?: string; title?: string; trackUrl?: string };
 
+/** True for a choose-your-own-adventure card, whose tracks jump by key when a button is pressed. */
+export function isInteractive(content: PlaylistUpload["content"] | undefined): boolean {
+  const nested = content?.content;
+  return isRecord(nested) && nested.playbackType === "interactive";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 function uploadChapters(upload: PlaylistUpload): UploadTrack[][] {
   const nested = upload.content.content;
   if (!nested || typeof nested !== "object") return [];
@@ -208,8 +220,13 @@ export async function mapPool<T, R>(
   return results;
 }
 
-/** One browser request per track. Species lines use "Pokefacts 1, track 12 of 99". */
+/**
+ * One browser request per track. Species lines use "Pokefacts 1, track 12 of 99".
+ * On an interactive card every track is counted, and only tracks marked `lead: "cry"` get the cry,
+ * so a choice's repeating question does not.
+ */
 export function renderJobs(libraryTitle: string, card: KidCard, upload: PlaylistUpload): RenderJob[] {
+  const interactive = isInteractive(upload.content);
   const chapters = uploadChapters(upload);
   const rows = chapters.flatMap((tracks, index) => {
     const source = card.chapters[index];
@@ -219,7 +236,7 @@ export function renderJobs(libraryTitle: string, card: KidCard, upload: Playlist
     return tracks.map((track, trackIndex) => {
       const sourceTrack = source.tracks[trackIndex];
       // Every track in a species chapter starts with that cry, even if `lead` was dropped.
-      const dexId = source.dexId;
+      const dexId = interactive && sourceTrack?.lead !== "cry" ? undefined : source.dexId;
       return {
         key: track.key ?? "",
         title: track.title ?? sourceTrack?.title ?? "Line",
@@ -229,6 +246,14 @@ export function renderJobs(libraryTitle: string, card: KidCard, upload: Playlist
       };
     });
   });
+  if (interactive) {
+    return rows.map((row, index) => ({
+      ...row,
+      progress: trackProgressLabel(libraryTitle, index + 1, rows.length),
+      done: index + 1,
+      total: rows.length,
+    }));
+  }
   const total = rows.filter((row) => row.dexId).length;
   let seen = 0;
   return rows.map((row) => {
@@ -304,6 +329,7 @@ type CreateTrack = {
   format?: string;
   channels?: string | number;
   uid?: string;
+  events?: YotoTrackEvents;
 };
 
 function fitKey(key: string, used: Set<string>): string {
@@ -318,6 +344,77 @@ function fitKey(key: string, used: Set<string>): string {
   }
   used.add(next);
   return next;
+}
+
+/** An interactive card keeps its keys exactly, because its button events jump by key. */
+function exactKey(key: string | undefined, used: Set<string>, label: string): string {
+  if (!key || !/^[\w-]+$/.test(key)) {
+    throw new Error(`${label} has no usable key, so a button jump cannot find it.`);
+  }
+  if (key.length > YOTO_KEY_LIMIT) {
+    throw new Error(`${label} has the key ${key}, longer than the ${YOTO_KEY_LIMIT} characters Yoto allows.`);
+  }
+  if (used.has(key)) throw new Error(`The key ${key} is used twice, so a button jump could land on the wrong one.`);
+  used.add(key);
+  return key;
+}
+
+const EVENT_COMMANDS = new Set(["goto", "stop", "repeat"]);
+
+/** Every track key on the card, by chapter key. */
+function trackKeysByChapter(chapters: unknown[]): Map<string, Set<string>> {
+  const keys = new Map<string, Set<string>>();
+  for (const chapter of chapters) {
+    if (!isRecord(chapter) || typeof chapter.key !== "string") continue;
+    const tracks = keys.get(chapter.key) ?? new Set<string>();
+    for (const track of Array.isArray(chapter.tracks) ? chapter.tracks : []) {
+      if (isRecord(track) && typeof track.key === "string") tracks.add(track.key);
+    }
+    keys.set(chapter.key, tracks);
+  }
+  return keys;
+}
+
+function eventProblem(label: string, name: string, event: unknown, keys: Map<string, Set<string>>): string | undefined {
+  if (!(YOTO_EVENT_NAMES as readonly string[]).includes(name)) return `${label} has an unknown event, ${name}.`;
+  if (event === undefined) return undefined;
+  if (!isRecord(event) || typeof event.cmd !== "string" || !EVENT_COMMANDS.has(event.cmd)) {
+    return `${label} ${name} must be goto, stop or repeat.`;
+  }
+  if (event.cmd !== "goto") return undefined;
+  const params = isRecord(event.params) ? event.params : {};
+  const { chapterKey, trackKey } = params;
+  if (typeof chapterKey !== "string" || typeof trackKey !== "string") {
+    return `${label} ${name} jumps without naming a chapter and a track.`;
+  }
+  if (!keys.get(chapterKey)?.has(trackKey)) {
+    return `${label} ${name} jumps to ${chapterKey}/${trackKey}, which is not on this card.`;
+  }
+  return undefined;
+}
+
+/**
+ * Why the button events in this card content cannot be sent, or undefined when they are fine.
+ * Events belong to an interactive card. Each is goto, stop or repeat,
+ * and a goto names a track inside the chapter it names.
+ */
+export function trackEventProblem(nested: unknown): string | undefined {
+  const row = isRecord(nested) ? nested : {};
+  const chapters = Array.isArray(row.chapters) ? row.chapters : [];
+  const keys = trackKeysByChapter(chapters);
+  for (const chapter of chapters) {
+    for (const track of isRecord(chapter) && Array.isArray(chapter.tracks) ? chapter.tracks : []) {
+      if (!isRecord(track) || track.events === undefined) continue;
+      const label = typeof track.key === "string" ? `Track ${track.key}` : "A track";
+      if (row.playbackType !== "interactive") return `${label} has button events, which only work on an interactive card.`;
+      if (!isRecord(track.events)) return `${label} has malformed button events.`;
+      for (const [name, event] of Object.entries(track.events)) {
+        const problem = eventProblem(label, name, event, keys);
+        if (problem) return problem;
+      }
+    }
+  }
+  return undefined;
 }
 
 function audioChannels(value: string | number | undefined): "mono" | "stereo" {
@@ -342,6 +439,8 @@ function iconOrThrow(value: string | null | undefined, label: string): string {
  * when metadata includes a title field their content schema does not define,
  * or when an audio track omits uid, duration, or fileSize.
  * A create never sends cardId.
+ * An interactive card keeps every key as it is, since its button events jump by key,
+ * and fails here rather than renaming one.
  */
 export function contentCreateBody(content: PlaylistUpload["content"]): PlaylistUpload["content"] {
   const body = structuredClone(content);
@@ -350,18 +449,22 @@ export function contentCreateBody(content: PlaylistUpload["content"]): PlaylistU
   delete metadata.title;
   const nested = body.content;
   const chapters = nested && typeof nested === "object" ? ((nested as { chapters?: CreateChapter[] }).chapters ?? []) : [];
+  const interactive = isInteractive(content);
   const usedKeys = new Set<string>();
+  const trackKeys = new Set<string>();
   let duration = 0;
   let fileSize = 0;
   for (const chapter of chapters) {
     const label = chapter.title?.trim() || chapter.key || "a track";
-    chapter.key = fitKey(chapter.key ?? "chapter", usedKeys);
+    chapter.key = interactive ? exactKey(chapter.key, usedKeys, label) : fitKey(chapter.key ?? "chapter", usedKeys);
     chapter.defaultTrackDisplay = chapter.defaultTrackDisplay ?? null;
     chapter.defaultTrackAmbient = chapter.defaultTrackAmbient ?? null;
     if (chapter.display) chapter.display.icon16x16 = iconOrThrow(chapter.display.icon16x16, label);
     for (const track of chapter.tracks ?? []) {
       const trackLabel = track.title?.trim() || label;
-      track.key = fitKey(track.key ?? chapter.key, usedKeys);
+      track.key = interactive
+        ? exactKey(track.key, trackKeys, trackLabel)
+        : fitKey(track.key ?? chapter.key, usedKeys);
       track.uid = track.key;
       delete track.voiceId;
       if (track.type === "audio") {
@@ -379,6 +482,8 @@ export function contentCreateBody(content: PlaylistUpload["content"]): PlaylistU
       if (track.display) track.display.icon16x16 = iconOrThrow(track.display.icon16x16, trackLabel);
     }
   }
+  const eventIssue = trackEventProblem(nested);
+  if (eventIssue) throw new Error(eventIssue);
   body.metadata = {
     ...metadata,
     description: metadata.description ?? body.title ?? "",
@@ -472,6 +577,9 @@ export function appendToPlaylist(
   const stored = unwrapCard(existing) ?? (existing as LibraryCard);
   const cardId = validYotoCardId(stored.cardId);
   if (!cardId) throw new Error("That Yoto playlist id does not look right.");
+  if (isInteractive(addition)) {
+    throw new Error("An adventure card is sent as a new playlist. It cannot be added onto another one.");
+  }
   const existingNested = (
     stored.content && typeof stored.content === "object" ? structuredClone(stored.content) : { chapters: [] }
   ) as { chapters?: CreateChapter[] };

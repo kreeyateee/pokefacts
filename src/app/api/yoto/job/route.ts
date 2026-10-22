@@ -2,7 +2,7 @@ import { YOTO_TRACK_LIMIT } from "@/lib/kid-cards";
 import { isPiperVoice } from "@/lib/piper-voice";
 import { safeHttpStatus, validYotoCardId, yotoUpstreamFailure } from "@/lib/yoto-error";
 import { bearerToken, forwardYoto, jsonError } from "@/lib/yoto-proxy";
-import { appendToPlaylist, contentCreateBody } from "@/lib/yoto-send";
+import { appendToPlaylist, contentCreateBody, trackEventProblem } from "@/lib/yoto-send";
 
 type JobBody = {
   voiceId?: string;
@@ -13,7 +13,8 @@ type JobBody = {
   content?: {
     title?: string;
     cardId?: string;
-    content?: { chapters?: unknown[] };
+    /** An interactive card also carries playbackType, config, editSettings and track events. */
+    content?: { chapters?: unknown[]; playbackType?: string };
     metadata?: { title?: string; description?: string; cover?: { imageL?: string } };
   };
 };
@@ -84,6 +85,16 @@ export async function POST(request: Request) {
   if (piper && speechCount > 0) {
     return jsonError("Piper records on this computer.");
   }
+  if (body.content?.content?.playbackType === "interactive") {
+    if (body.append === true) {
+      return jsonError("An adventure card is sent as a new playlist. It cannot be added onto another one.");
+    }
+    if (speechCount > 0) {
+      return jsonError("An adventure card is sent once every track is recorded.");
+    }
+  }
+  const eventProblem = trackEventProblem(body.content?.content);
+  if (eventProblem) return jsonError(eventProblem);
 
   const content = body.content ? { ...body.content } : undefined;
   const appendId =
