@@ -267,3 +267,11 @@ Pokefacts is free and will stay free. If it is useful, [buy me a coffee](https:/
 The names, the Pokédex lines, the types, the size, and the pictures come from the Pokémon games by way of [PokéAPI](https://pokeapi.co/). A few Pokémon also have a short note written for Pokefacts.
 
 The species page can show a Biology section from [Bulbapedia](https://bulbapedia.bulbagarden.net/). That text is used under [CC BY-NC-SA 2.5](https://creativecommons.org/licenses/by-nc-sa/2.5/). A catalogue Facts or Advanced facts playlist reads the opening of that section aloud. The built-in Pokefacts cards read a short description from the games instead.
+
+## Maintenance scripts
+
+You do not need these to use Pokefacts. They rebuild files that already come with the download.
+
+- **`npx tsx scripts/fill-second-dex.ts`** stores a second Pokédex line for each species in `data/champdex.sqlite`. It reads three PokéAPI tables from `data/poke-csv`: `versions.csv`, `version_names.csv`, and `pokemon_species_flavor_text.csv`. Download those first.
+- **`npm run pixels`** repaints every 16×16 Yoto icon in `public/pixels` from the sprites in `public/sprites`. Each Pokémon gets a colour icon and a shadow icon. The script checks every icon after it paints them.
+- **`python scripts/make-brand-logo.py`** cuts `public/brand/source.jpg` into the transparent logo PNGs in `public/brand`. It also writes the app icon and the share pictures in `src/app`. It needs Python and Pillow.

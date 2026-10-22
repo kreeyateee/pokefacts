@@ -22,7 +22,15 @@
 
 # misc
 .DS_Store
+
+# keys and SSH files
 *.pem
+*.ppk
+*.key
+id_rsa
+id_ed25519
+id_ecdsa
+.ssh/
 
 # debug
 npm-debug.log*
@@ -37,6 +45,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# Cursor cloud agent setup
+/.cursor/environment.json
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
@@ -45,8 +56,8 @@ next-env.d.ts
 /data/music-mp3
 /data/music-youtube.json
 
-# Deno cache. The binary stays in vendor/deno.
-/vendor/deno/cache
+# Deno and yt-dlp binaries from npm run deno and npm run ytdlp
+/vendor/
 
 # Python bytecode from the packaged yt-dlp
 __pycache__/
