@@ -15,14 +15,14 @@ import {
 } from "./app-nav";
 
 describe("app navigation", () => {
-  it("splits the menu into ready-made, make your own, and music", () => {
+  it("splits the menu into ready-made, make your own, adventures, and music", () => {
     assert.deepEqual(
       SECTIONS.map((item) => item.id),
-      ["ready", "own", "music"],
+      ["ready", "own", "adventures", "music"],
     );
     assert.deepEqual(
       SECTIONS.map((item) => item.label),
-      ["Ready-made", "Make your own", "Music"],
+      ["Ready-made", "Make your own", "Adventures", "Music"],
     );
   });
 
@@ -42,13 +42,16 @@ describe("app navigation", () => {
   it("maps each page to one section", () => {
     assert.equal(sectionFor("cards"), "ready");
     assert.equal(sectionFor("catalogue"), "own");
+    assert.equal(sectionFor("adventures"), "adventures");
     assert.equal(sectionFor("music"), "music");
     assert.equal(sectionFor("setup"), null);
     assert.equal(viewForSection("own"), "catalogue");
+    assert.equal(viewForSection("adventures"), "adventures");
     assert.equal(viewForSection("music"), "music");
   });
 
   it("uses short, matching page titles", () => {
+    assert.equal(pageHeading({ view: "adventures", kind: "meet" }).title, "Adventures");
     assert.equal(pageHeading({ view: "setup", kind: "meet" }).title, "How to connect Yoto");
     assert.equal(pageHeading({ view: "catalogue", kind: "meet" }).title, "Make your own");
     assert.equal(pageHeading({ view: "music", kind: "meet" }).title, "Music");

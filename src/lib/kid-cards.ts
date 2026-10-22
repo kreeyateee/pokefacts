@@ -73,7 +73,8 @@ export type KidCardKind =
   | "alola"
   | "hisui"
   | "legendary"
-  | "mythical";
+  | "mythical"
+  | "story";
 
 export type FormPlaylistKind = "mega" | "gmax" | "alola" | "hisui";
 
@@ -313,11 +314,45 @@ export function kidCardsFromDex(sheets: MonSheet[]): KidCard[] {
   ];
 }
 
+/** What a button press or the end of a track does on an interactive card. */
+export type YotoTrackEvent =
+  | { cmd: "goto"; params: { chapterKey: string; trackKey: string } }
+  | { cmd: "stop" }
+  | { cmd: "repeat" };
+
+/** Lhb and Rhb are the left-hand and right-hand buttons on the player. */
+export type YotoTrackEvents = {
+  onLhb?: YotoTrackEvent;
+  onRhb?: YotoTrackEvent;
+  onEnd?: YotoTrackEvent;
+};
+
+export const YOTO_EVENT_NAMES = ["onLhb", "onRhb", "onEnd"] as const;
+
+/** Playback settings Yoto's own story converter uses, so the buttons pick a path. */
+export type YotoInteractiveConfig = {
+  autoadvance: "none";
+  disableTrackNav: boolean;
+  disableChapterNav: boolean;
+  /** Seconds before a card starts again from the beginning instead of resuming. */
+  resumeTimeout: number;
+};
+
+export type YotoEditSettings = {
+  autoOverlayLabels: "chapters";
+  editKeys: boolean;
+  interactiveContent: boolean;
+};
+
 /** The playlist body Yoto takes for a spoken Make Your Own card. */
-type YotoContent = {
+export type YotoContent = {
   title: string;
   cardId?: string;
   content: {
+    /** Set on a choose-your-own-adventure card. Tracks then carry button events. */
+    playbackType?: "interactive";
+    config?: YotoInteractiveConfig;
+    editSettings?: YotoEditSettings;
     chapters: Array<{
       key: string;
       title: string;
@@ -337,6 +372,7 @@ type YotoContent = {
         fileSize?: number;
         format?: string;
         channels?: string | number;
+        events?: YotoTrackEvents;
       }>;
     }>;
   };
@@ -390,7 +426,7 @@ export function mulberry32(seed: number): () => number {
   };
 }
 
-function drawSample<T>(items: readonly T[], size: number, random: () => number = Math.random): T[] {
+export function drawSample<T>(items: readonly T[], size: number, random: () => number = Math.random): T[] {
   const copy = items.slice();
   const count = Math.min(size, copy.length);
   for (let index = 0; index < count; index += 1) {

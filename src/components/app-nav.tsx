@@ -15,7 +15,7 @@ function hideBrokenPicture(event: { currentTarget: HTMLImageElement }): void {
   image.style.visibility = "hidden";
 }
 
-/** Ready-made, Make your own and Music on top. Ready-made opens a shelf of sets, each with a picture. */
+/** Ready-made, Make your own, Adventures and Music on top. Ready-made opens a shelf of sets, each with a picture. */
 export function AppNav({
   section,
   kind,

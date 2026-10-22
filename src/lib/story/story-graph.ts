@@ -1,0 +1,52 @@
+/**
+ * A choose-your-own-adventure card as a map of story nodes.
+ * The left and right buttons on a Yoto Player pick between two paths at a choice node.
+ * The compiler (story-card.ts) turns this map into a Yoto interactive playlist.
+ */
+
+/** Short and unique: lowercase letters and digits, at most 8 characters. Used for Yoto chapter keys. */
+export type StoryNodeId = string;
+
+export type StoryChoice = {
+  to: StoryNodeId;
+  /** What the narrator says for this button: "throw bait", "head for the lake". */
+  label: string;
+};
+
+/** A 16×16 picture on the player screen: a Pokémon's pixel icon or shadow, or a stock Yoto icon id. */
+export type StoryIcon = { dexId: number; shadow?: boolean } | { yoto: string };
+
+type NodeBase = {
+  id: StoryNodeId;
+  /** Shown in the Yoto app's track list. Keep it short and spoiler-free. */
+  title: string;
+  /** What the narrator says. Plain sentences, at most 3000 characters. */
+  text: string;
+  /** Plays this Pokémon's cry before the narration. */
+  dexId?: number;
+  icon?: StoryIcon;
+};
+
+/** Narration that carries straight on to `next`. */
+export type SceneNode = NodeBase & { kind: "scene"; next: StoryNodeId };
+
+/** Narration, then a short question that repeats until a button is pressed. */
+export type ChoiceNode = NodeBase & { kind: "choice"; left: StoryChoice; right: StoryChoice };
+
+/** The story stops here. Endings are numbered so a child can collect them. */
+export type EndingNode = NodeBase & {
+  kind: "ending";
+  ending: { number: number; name: string; golden?: boolean };
+};
+
+export type StoryNode = SceneNode | ChoiceNode | EndingNode;
+
+export type StoryGraph = {
+  /** Stable id for this adventure and send, such as "safari-1234". */
+  id: string;
+  title: string;
+  /** One or two sentences for the Yoto library. */
+  description: string;
+  start: StoryNodeId;
+  nodes: StoryNode[];
+};

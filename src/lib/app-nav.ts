@@ -1,9 +1,9 @@
 import type { KidCardKind } from "@/lib/kid-cards";
 
-export type StudioView = "cards" | "catalogue" | "setup" | "music";
+export type StudioView = "cards" | "catalogue" | "setup" | "music" | "adventures";
 
-/** Top of the menu: ready-made playlists, the Pokédex builder, then Music. Adventures slots in before Music. */
-export type SectionId = "ready" | "own" | "music";
+/** Top of the menu: ready-made playlists, the Pokédex builder, Adventures, then Music. */
+export type SectionId = "ready" | "own" | "adventures" | "music";
 
 export type CollectionKind = Extract<
   KidCardKind,
@@ -18,6 +18,7 @@ export const SECTIONS: ReadonlyArray<{
 }> = [
   { id: "ready", label: "Ready-made" },
   { id: "own", label: "Make your own" },
+  { id: "adventures", label: "Adventures" },
   { id: "music", label: "Music" },
 ];
 
@@ -57,7 +58,7 @@ export const SAVED_TAB_KEY = "pokefacts.tab";
 
 export type SavedTab = { view: StudioView; kind: KidCardKind };
 
-const STUDIO_VIEWS: readonly StudioView[] = ["cards", "catalogue", "setup", "music"];
+const STUDIO_VIEWS: readonly StudioView[] = ["cards", "catalogue", "setup", "music", "adventures"];
 
 export function readSavedTab(raw: string | null): SavedTab | null {
   if (!raw) return null;
@@ -77,12 +78,14 @@ export function readSavedTab(raw: string | null): SavedTab | null {
 export function sectionFor(view: StudioView): SectionId | null {
   if (view === "catalogue") return "own";
   if (view === "music") return "music";
+  if (view === "adventures") return "adventures";
   if (view === "setup") return null;
   return "ready";
 }
 
 export function viewForSection(section: Exclude<SectionId, "ready">): StudioView {
-  return section === "own" ? "catalogue" : "music";
+  if (section === "own") return "catalogue";
+  return section;
 }
 
 export function pageHeading(input: {
@@ -107,6 +110,12 @@ export function pageHeading(input: {
     return {
       title: "Music",
       blurb: "Play songs from the games as YouTube videos.",
+    };
+  }
+  if (input.view === "adventures") {
+    return {
+      title: "Adventures",
+      blurb: "Choose-your-own-adventure cards. Try one here, then send it to Yoto.",
     };
   }
   if (input.kind === "guess") {
