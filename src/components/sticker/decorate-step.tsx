@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { CrowdPicker, HeroPicker } from "@/components/sticker/sticker-pickers";
 import type { StickerMon } from "@/lib/sticker-cover";
-import type { CoverDraft } from "@/lib/sticker-layout";
+import type { CoverDraft, DrawLayer } from "@/lib/sticker-layout";
 
 export const BRUSH_COLORS = ["#16324f", "#e10600", "#ffcb05", "#2a75bb", "#7ac74c", "#f95587", "#9b5de5", "#ff8c42", "#fffdf6"] as const;
 
@@ -19,21 +19,33 @@ export type Tool = "pictures" | "draw";
 function DrawTools({
   brush,
   brushSize,
+  layer,
   hasDrawing,
   onBrush,
   onBrushSize,
+  onLayer,
   onClear,
 }: {
   brush: string;
   brushSize: number;
+  layer: DrawLayer;
   hasDrawing: boolean;
   onBrush: (color: string) => void;
   onBrushSize: (mm: number) => void;
+  onLayer: (layer: DrawLayer) => void;
   onClear: () => void;
 }) {
   return (
     <div className="grid gap-2">
       <p className="text-sm leading-6">Draw right on the card with your finger or the mouse.</p>
+      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Where the drawing goes">
+        <button type="button" role="radio" aria-checked={layer === "behind"} className="pk-chip pk-chip-big" onClick={() => onLayer("behind")}>
+          Behind the Pokémon
+        </button>
+        <button type="button" role="radio" aria-checked={layer === "front"} className="pk-chip pk-chip-big" onClick={() => onLayer("front")}>
+          On top
+        </button>
+      </div>
       <div className="flex flex-wrap gap-2" role="group" aria-label="Pen colour">
         {BRUSH_COLORS.map((color) => (
           <button
@@ -82,6 +94,7 @@ export function DecorateStep({
   onBrush,
   onBrushSize,
   onClearDrawing,
+  onDrawLayer,
   onHero,
   onCrowd,
   onShake,
@@ -96,6 +109,7 @@ export function DecorateStep({
   onBrush: (color: string) => void;
   onBrushSize: (mm: number) => void;
   onClearDrawing: () => void;
+  onDrawLayer: (layer: DrawLayer) => void;
   onHero: (key: string) => void;
   onCrowd: (crowd: string[] | null) => void;
   onShake: () => void;
@@ -131,9 +145,11 @@ export function DecorateStep({
         <DrawTools
           brush={brush}
           brushSize={brushSize}
+          layer={cover.drawLayer}
           hasDrawing={Boolean(cover.painting)}
           onBrush={onBrush}
           onBrushSize={onBrushSize}
+          onLayer={onDrawLayer}
           onClear={onClearDrawing}
         />
       ) : group ? (

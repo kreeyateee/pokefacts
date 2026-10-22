@@ -13,6 +13,7 @@ import {
   sheetSlots,
   type BackMode,
   type CoverStyle,
+  type DrawLayer,
   type PaperId,
 } from "@/lib/sticker-layout";
 import { maskFromAlpha, pilePhoto, type PileMask } from "@/lib/sticker-pile";
@@ -60,6 +61,8 @@ export type CardPaint = {
   images: ReadonlyMap<string, CanvasImageSource | null>;
   fonts: { display: string; body: string };
   painting?: CanvasImageSource | null;
+  /** Where the drawing goes. Each front paints it at one of two points. */
+  drawLayer: DrawLayer;
   hero: { image: CanvasImageSource | null; info: HeroInfo } | null;
 };
 
@@ -252,8 +255,8 @@ function paintLogoPill(ctx: CanvasRenderingContext2D, spec: CardPaint, rect: Rec
   });
 }
 
-function paintDrawing(ctx: CanvasRenderingContext2D, spec: CardPaint, width: number, height: number) {
-  if (!spec.painting) return;
+function paintDrawing(ctx: CanvasRenderingContext2D, spec: CardPaint, width: number, height: number, layer: DrawLayer) {
+  if (!spec.painting || spec.drawLayer !== layer) return;
   ctx.save();
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(spec.painting, 0, 0, width, height);
@@ -324,7 +327,7 @@ function paintPhotoFront(ctx: CanvasRenderingContext2D, spec: CardPaint, width: 
   sky.addColorStop(1, "#fff1c9");
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, width, height);
-  paintDrawing(ctx, spec, width, height);
+  paintDrawing(ctx, spec, width, height, "behind");
 
   const area = box(PHOTO_FRONT.crowd, mm);
   const members = crowdPictures(spec);
@@ -353,6 +356,7 @@ function paintPhotoFront(ctx: CanvasRenderingContext2D, spec: CardPaint, width: 
 
   paintLogoPill(ctx, spec, PHOTO_FRONT.logo, mm);
   paintTitleRibbon(ctx, spec, PHOTO_FRONT.ribbon, mm, 5.2);
+  paintDrawing(ctx, spec, width, height, "front");
 }
 
 function drawMember(
@@ -385,6 +389,7 @@ function paintPileFront(ctx: CanvasRenderingContext2D, spec: CardPaint, width: n
   const mm = scaleFor(ctx);
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, width, height);
+  paintDrawing(ctx, spec, width, height, "behind");
   const area = box(PILE_FRONT.crowd, mm);
   const members = crowdPictures(spec);
   const byKey = new Map(members.map((member) => [member.key, member]));
@@ -397,8 +402,8 @@ function paintPileFront(ctx: CanvasRenderingContext2D, spec: CardPaint, width: n
     drawMember(ctx, spec, member.trimmed.picture, (-item.width / 2) * mm, (-item.height / 2) * mm, item.width * mm, item.height * mm);
     ctx.restore();
   }
-  paintDrawing(ctx, spec, width, height);
   paintTitleRibbon(ctx, spec, PILE_FRONT.ribbon, mm, 4.6);
+  paintDrawing(ctx, spec, width, height, "front");
 }
 
 function paintTitleRibbon(ctx: CanvasRenderingContext2D, spec: CardPaint, rect: Rect, mm: number, startMm: number) {
@@ -566,6 +571,7 @@ function paintPokedexFront(ctx: CanvasRenderingContext2D, spec: CardPaint, width
     ctx.lineTo(screen.x + screen.w, y);
     ctx.stroke();
   }
+  paintDrawing(ctx, spec, width, height, "behind");
   paintHeroArt(ctx, spec, {
     x: screen.x + 2 * mm,
     y: screen.y + 4.2 * mm,
@@ -637,7 +643,7 @@ function paintPokedexFront(ctx: CanvasRenderingContext2D, spec: CardPaint, width
   ctx.arc(dot.x + dot.w / 2, dot.y + dot.h / 2, dot.w / 2, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
-  paintDrawing(ctx, spec, width, height);
+  paintDrawing(ctx, spec, width, height, "front");
 }
 
 function paintTradingFront(ctx: CanvasRenderingContext2D, spec: CardPaint, width: number, height: number) {
@@ -692,6 +698,7 @@ function paintTradingFront(ctx: CanvasRenderingContext2D, spec: CardPaint, width
   sky.addColorStop(1, lighten(color, 0.25));
   ctx.fillStyle = sky;
   ctx.fillRect(frame.x, frame.y, frame.w, frame.h);
+  paintDrawing(ctx, spec, width, height, "behind");
   ctx.save();
   ctx.beginPath();
   ctx.rect(frame.x, frame.y, frame.w, frame.h);
@@ -763,7 +770,7 @@ function paintTradingFront(ctx: CanvasRenderingContext2D, spec: CardPaint, width
     minPx: 1.6 * mm,
     align: "right",
   });
-  paintDrawing(ctx, spec, width, height);
+  paintDrawing(ctx, spec, width, height, "front");
 }
 
 function splitLine(line: string): { mark: string; name: string } {

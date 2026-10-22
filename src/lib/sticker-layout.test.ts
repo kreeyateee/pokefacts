@@ -70,6 +70,19 @@ describe("saved covers", () => {
     assert.deepEqual(readCoverDraft("{", fresh, keys), fresh);
   });
 
+  it("puts a new drawing behind the Pokémon and keeps older drawings where they were", () => {
+    assert.equal(fresh.drawLayer, "behind");
+    assert.equal(readCoverDraft(JSON.stringify({ ...fresh, drawLayer: "front" }), fresh, keys).drawLayer, "front");
+    const old = (style: string) => {
+      const { drawLayer: _dropped, ...rest } = { ...fresh, style };
+      return readCoverDraft(JSON.stringify(rest), fresh, keys).drawLayer;
+    };
+    assert.equal(old("photo"), "behind");
+    assert.equal(old("pile"), "front");
+    assert.equal(old("trading"), "front");
+    assert.equal(readCoverDraft(JSON.stringify({ ...fresh, drawLayer: "sideways" }), fresh, keys).drawLayer, "behind");
+  });
+
   it("only lists names on the back when asked and when they fit", () => {
     assert.equal(showsNameList(["001 Bulbasaur"], "names", false), true);
     assert.equal(showsNameList(["001 Bulbasaur"], "steps", false), false);

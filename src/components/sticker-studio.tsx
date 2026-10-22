@@ -257,6 +257,7 @@ export function StickerStudio({ card, cards = [], onClose }: { card: KidCard; ca
       images: pictures,
       fonts: fonts(),
       painting: live ?? (itemCover.painting ? (pictures.get(itemCover.painting) ?? null) : null),
+      drawLayer: itemCover.drawLayer,
       hero: star
         ? {
             image: pictures.get(pictureKey(star, itemCover.sprites)) ?? null,
@@ -597,6 +598,7 @@ export function StickerStudio({ card, cards = [], onClose }: { card: KidCard; ca
                 onBrush={setBrush}
                 onBrushSize={setBrushSize}
                 onClearDrawing={() => change((current) => ({ ...current, painting: "" }))}
+                onDrawLayer={(layer) => change((current) => ({ ...current, drawLayer: layer }))}
                 onHero={(key) => {
                   if (key !== cover.hero) change((current) => ({ ...current, hero: key }));
                 }}

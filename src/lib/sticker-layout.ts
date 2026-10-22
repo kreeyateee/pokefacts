@@ -54,6 +54,9 @@ export type CoverStyle = (typeof COVER_STYLES)[number];
 /** How to play in three big steps, every name, or a note the parent writes. */
 export type BackMode = "steps" | "names" | "note";
 
+/** Where the child's drawing goes: behind the Pokémon, or on top of everything. */
+export type DrawLayer = "behind" | "front";
+
 export type CoverDraft = {
   style: CoverStyle;
   /** Chapter key of the star Pokémon on the Pokédex and trading card fronts. */
@@ -70,6 +73,7 @@ export type CoverDraft = {
   /** Shakes the pile into a new arrangement. */
   pileSeed: number;
   painting: string;
+  drawLayer: DrawLayer;
   /** When this cover was last saved, so old picks can be tidied away. */
   savedAt: number;
 };
@@ -255,6 +259,7 @@ export function freshCover(input: {
     sprites: false,
     pileSeed: 0,
     painting: "",
+    drawLayer: "behind",
     savedAt: 0,
   };
 }
@@ -271,6 +276,12 @@ export function coverStyle(value: unknown): CoverStyle {
 /** Older covers saved "auto"; they now show the how-to-play steps. */
 export function backMode(value: unknown): BackMode {
   return value === "names" || value === "note" ? value : "steps";
+}
+
+/** Covers saved before the choice keep the old places: behind the group photo, on top of every other front. */
+export function drawLayer(value: unknown, style: CoverStyle): DrawLayer {
+  if (value === "behind" || value === "front") return value;
+  return style === "photo" ? "behind" : "front";
 }
 
 /**
@@ -303,6 +314,7 @@ export function readCoverDraft(raw: string | null, fresh: CoverDraft, keys: Read
     sprites: parsed.sprites === true,
     pileSeed: typeof parsed.pileSeed === "number" && Number.isInteger(parsed.pileSeed) ? parsed.pileSeed : 0,
     painting: paintingUrl(parsed.painting),
+    drawLayer: drawLayer(parsed.drawLayer, coverStyle(parsed.style)),
     savedAt: typeof parsed.savedAt === "number" && Number.isFinite(parsed.savedAt) ? parsed.savedAt : 0,
   };
 }
