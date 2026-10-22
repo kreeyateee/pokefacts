@@ -1,4 +1,4 @@
-import { getCatalogueEntry, getPlaylistForm } from "@/lib/catalogue-db";
+import { getAlternateForm, getCatalogueEntry } from "@/lib/catalogue-db";
 import { bulbapediaArticleUrl } from "@/lib/bulbapedia";
 import { loadFormSpeech } from "@/lib/form-prose";
 import { spokenDexLine, WIKI_DEX_NOTE } from "@/lib/spoken-wiki";
@@ -12,9 +12,10 @@ export async function GET(
   if (!Number.isInteger(formId) || formId < 1) {
     return Response.json({ error: "That form is not in the catalogue." }, { status: 404 });
   }
-  const form = getPlaylistForm(formId);
+  // Any alternate form: the ready-made collections, and a Galarian or other form picked in Make your own.
+  const form = getAlternateForm(formId);
   if (!form) {
-    return Response.json({ error: "That form is not in a playlist." }, { status: 404 });
+    return Response.json({ error: "That form is not in the catalogue." }, { status: 404 });
   }
   try {
     const { speech, article, notice } = await loadFormSpeech(form);

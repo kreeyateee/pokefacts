@@ -1,4 +1,5 @@
-import type { BiologyBlock } from "@/lib/catalogue-types";
+import { artworkSrc as formArtworkSrc } from "@/lib/artwork-path";
+import type { BiologyBlock, CatalogueEntry } from "@/lib/catalogue-types";
 import { heightForUnits, weightForUnits, type MeasureUnits } from "@/lib/format";
 import { guessSpoken, type MonSheet } from "@/lib/dex-facts";
 import {
@@ -18,7 +19,12 @@ import type { PlaylistUpload } from "@/lib/yoto-send";
 export type SelectionKind = "whos-that" | "facts" | "advanced";
 
 export type SelectionSpecies = {
+  /** National dex number. A form keeps its species number, so the cry and the clue number stay right. */
   id: number;
+  /** PokéAPI form id, such as 10091, when the pick is an alternate form. */
+  formId?: number;
+  /** Species name of a form, so a Who's That clue leaves out "Rattata" as well as "Alolan Rattata". */
+  speciesName?: string;
   name: string;
   types: string[];
   genus: string;
@@ -35,16 +41,69 @@ export type SelectionSpecies = {
   /** Official colour, such as Yellow. */
   color?: string | null;
   biology: BiologyBlock[];
+  /** A form's finished reading from the form route: its own prose, or the fallback that route chose. */
+  speech?: string;
 };
 
 type SelectionBuild = {
   card: KidCard;
-  /** Species ids that do not fit on the card, in the order they were picked. */
+  /** Picked ids that do not fit on the card, in the order they were picked. A form is its form id. */
   refused: number[];
   title: string;
 };
 
 const ADVANCED_AFTER_NAME = 1700;
+
+/** One picked species, from its catalogue entry and its Bulbapedia Biology. */
+export function speciesSelection(entry: CatalogueEntry, biology: BiologyBlock[]): SelectionSpecies {
+  return {
+    id: entry.id,
+    name: entry.name,
+    types: entry.types,
+    genus: entry.genus,
+    habitat: entry.habitat,
+    heightLabel: entry.heightLabel,
+    weightLabel: entry.weightLabel,
+    abilities: entry.abilities.map((ability) => ({
+      name: ability.name,
+      info: ability.info,
+      hidden: ability.hidden,
+    })),
+    evolvesFrom: entry.evolvesFrom?.name ?? null,
+    evolutions: entry.evolutions.map((evolution) => ({ name: evolution.name, method: evolution.method })),
+    info: entry.info,
+    info2: entry.info2,
+    color: entry.color,
+    biology,
+  };
+}
+
+/**
+ * One picked form, from its species entry and the reading the form route gave it.
+ * The form's own name, types, height, and weight win. The Pokédex lines and evolutions are the species'.
+ * The catalogue only knows the species abilities and colour, and a form often differs,
+ * so a form leaves both out rather than say the wrong thing.
+ * Null when the entry has no such form.
+ */
+export function formSelection(entry: CatalogueEntry, formId: number, speech: string): SelectionSpecies | null {
+  const form = entry.forms.find((item) => item.id === formId);
+  if (!form) return null;
+  const name = form.name.replace(/\s+/g, " ").trim();
+  const reading = speech.replace(/\s+/g, " ").trim();
+  const nameOnly = !reading || reading === name || reading === `${name}.`;
+  return {
+    ...speciesSelection(entry, []),
+    formId,
+    speciesName: entry.name,
+    name,
+    types: form.types.length > 0 ? form.types : entry.types,
+    heightLabel: form.heightLabel,
+    weightLabel: form.weightLabel,
+    abilities: [],
+    color: null,
+    ...(nameOnly ? {} : { speech: reading }),
+  };
+}
 
 export function selectionSpeciesLimit(kind: SelectionKind): number {
   return kind === "whos-that" ? Math.floor(YOTO_TRACK_LIMIT / 2) : YOTO_TRACK_LIMIT;
@@ -104,15 +163,24 @@ function evolutionSpeech(species: SelectionSpecies): string {
   return parts.join(" ");
 }
 
-/** Name, then the first two Biology paragraphs. A missing wiki read uses the Pokédex line. */
+/** The id this pick is stored under: the form id for a form, else the dex number. */
+export function selectionPickId(species: Pick<SelectionSpecies, "id" | "formId">): number {
+  return species.formId ?? species.id;
+}
+
+/**
+ * Name, then the first two Biology paragraphs. A missing wiki read uses the Pokédex line.
+ * A form reads what the form route gave it, the way the ready-made form collections do.
+ */
 export function factsSpeech(species: SelectionSpecies): string {
-  return spokenFact(species.name, species.biology, species.info);
+  const ready = species.speech?.replace(/\s+/g, " ").trim();
+  return ready || spokenFact(species.name, species.biology, species.info);
 }
 
 /** Biology, then height, weight, type, ability, and evolution. Capped so it is not a wiki dump. */
 export function advancedSpeech(species: SelectionSpecies, units: MeasureUnits = "metric"): string {
   const name = species.name.replace(/\s+/g, " ").trim();
-  const biology = spokenFact(name, species.biology, species.info);
+  const biology = factsSpeech({ ...species, name });
   const weight = weightForUnits(species.weightLabel, units);
   const height = heightForUnits(species.heightLabel, units);
   const extra = [
@@ -151,7 +219,7 @@ function toSheet(species: SelectionSpecies): MonSheet {
   const evolution = evolutionSpeech(species);
   return {
     id: species.id,
-    slug: `sel-${species.id}`,
+    slug: `sel-${selectionPickId(species)}`,
     name: species.name,
     genus: species.genus,
     types: species.types,
@@ -185,30 +253,44 @@ function track(key: string, title: string, text: string, icon: string, overlay: 
   };
 }
 
-function factChapter(species: SelectionSpecies, text: string): KidChapter {
-  const icon = `/pixels/${species.id}.png`;
-  const overlay = String(species.id);
-  return {
-    key: `sel-${species.id}`,
+/**
+ * A form chapter is built the way the ready-made form collections build theirs:
+ * the form artwork until the 16×16 form pixel is uploaded, the species number for the cry,
+ * and the form id for the picture.
+ */
+function factChapter(species: SelectionSpecies, text: string, overlay: string): KidChapter {
+  const icon = species.formId ? formArtworkSrc("form", species.formId) : `/pixels/${species.id}.png`;
+  const chapter: KidChapter = {
+    key: `sel-${selectionPickId(species)}`,
     title: species.name,
     overlay,
     picture: "this Pokémon",
     mark: overlay,
     icon,
     dexId: species.id,
-    sprite: `/sprites/${species.id}.png`,
+    sprite: species.formId ? icon : `/sprites/${species.id}.png`,
     tracks: [track("entry", species.name, text, icon, overlay)],
   };
+  if (species.formId) chapter.formId = species.formId;
+  return chapter;
 }
 
-/** Clue then answer. Both lead with the cry. The clue icon is the shadow pixel. */
-function riddleChapter(species: SelectionSpecies): KidChapter {
-  const script = guessSpoken(toSheet(species));
+/**
+ * Clue then answer. Both lead with the cry. The clue icon is the shadow pixel.
+ * Forms have no shadow pixel, so a form's clue uses its species shadow and the answer shows the form.
+ */
+function riddleChapter(species: SelectionSpecies, overlay: string): KidChapter {
+  const sheet = toSheet(species);
+  const script = guessSpoken(sheet);
+  const speciesName = species.speciesName?.trim();
+  const clue =
+    species.formId && speciesName && speciesName !== species.name
+      ? guessSpoken({ ...sheet, name: speciesName }).clue
+      : script.clue;
   const shadow = shadowPixelPath(species.id);
-  const real = `/pixels/${species.id}.png`;
-  const overlay = String(species.id);
-  return {
-    key: `sel-${species.id}`,
+  const real = species.formId ? formArtworkSrc("form", species.formId) : `/pixels/${species.id}.png`;
+  const chapter: KidChapter = {
+    key: `sel-${selectionPickId(species)}`,
     title: species.name,
     overlay,
     picture: "a shadow",
@@ -217,10 +299,32 @@ function riddleChapter(species: SelectionSpecies): KidChapter {
     dexId: species.id,
     sprite: shadow,
     tracks: [
-      track("clues", "Clues", script.clue, shadow, "?"),
+      track("clues", "Clues", clue, shadow, "?"),
       track("answer", "The answer", script.answer, real, "Yes"),
     ],
   };
+  if (species.formId) chapter.formId = species.formId;
+  return chapter;
+}
+
+/**
+ * Yoto overlay numbers, in pick order. A species shows its dex number.
+ * A form shows its species number too, with b, c, and so on when that number is already on the card,
+ * the way the ready-made form collections keep 678 and 678b apart.
+ */
+export function selectionOverlays(species: readonly Pick<SelectionSpecies, "id" | "formId">[]): string[] {
+  const used = new Set(species.filter((item) => !item.formId).map((item) => String(item.id)));
+  return species.map((item) => {
+    if (!item.formId) return String(item.id);
+    let overlay = String(item.id);
+    let letter = 0;
+    while (used.has(overlay)) {
+      overlay = `${item.id}${String.fromCharCode(98 + letter)}`;
+      letter += 1;
+    }
+    used.add(overlay);
+    return overlay;
+  });
 }
 
 /**
@@ -235,11 +339,14 @@ export function selectionPlaylist(
 ): SelectionBuild {
   const limit = selectionSpeciesLimit(kind);
   const accepted = species.slice(0, limit);
-  const refused = species.slice(limit).map((item) => item.id);
+  const refused = species.slice(limit).map(selectionPickId);
   const title = selectionTitle(kind, customTitle);
-  const chapters = accepted.map((item) =>
-    kind === "whos-that" ? riddleChapter(item) : factChapter(item, kind === "advanced" ? advancedSpeech(item, units) : factsSpeech(item)),
-  );
+  const overlays = selectionOverlays(accepted);
+  const chapters = accepted.map((item, index) => {
+    const overlay = overlays[index] ?? String(item.id);
+    if (kind === "whos-that") return riddleChapter(item, overlay);
+    return factChapter(item, kind === "advanced" ? advancedSpeech(item, units) : factsSpeech(item), overlay);
+  });
   const blurb =
     kind === "whos-that"
       ? "The cry, then the colour and type, two Pokédex lines, and how big it is. The cry again, then the name."
@@ -262,9 +369,14 @@ export function selectionPlaylist(
   return { card, refused, title };
 }
 
-function namedSpecies(item: { id: number; name: string }): SelectionSpecies {
+/** A picked id and its name, as /api/catalogue?pick= returns them. A form also has its species number. */
+type NamedPick = { id: number; name: string; speciesId?: number };
+
+function namedSpecies(item: NamedPick): SelectionSpecies {
+  const speciesId = item.speciesId ?? item.id;
   return {
-    id: item.id,
+    id: speciesId,
+    ...(speciesId !== item.id ? { formId: item.id } : {}),
     name: item.name,
     types: [],
     genus: "",
@@ -294,7 +406,7 @@ function pickStamp(ids: readonly number[]): string {
  * Who's That cards leave the names off the label.
  */
 export function selectionStickerCards(
-  species: readonly { id: number; name: string }[],
+  species: readonly NamedPick[],
   kind: SelectionKind,
   customTitle?: string,
   units: MeasureUnits = "metric",

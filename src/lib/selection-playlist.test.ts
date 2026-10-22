@@ -1,16 +1,23 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { getCatalogueEntry } from "./catalogue-db";
 import { heightForUnits, weightForUnits } from "./format";
-import { chaptersForCries, YOTO_TRACK_LIMIT } from "./kid-cards";
+import { chapterPictureId, chaptersForCries, coverArtworkId, YOTO_TRACK_LIMIT, type KidCard } from "./kid-cards";
+import { artworkSrc } from "./page-artwork";
 import {
   advancedSpeech,
   factsSpeech,
+  formSelection,
+  selectionOverlays,
+  selectionPickId,
   selectionPlaylist,
   selectionStickerCards,
   selectionUpload,
+  speciesSelection,
   type SelectionSpecies,
 } from "./selection-playlist";
+import { monsFor } from "./sticker-cover";
 import { spokenWiki } from "./spoken-wiki";
 import { renderJobs } from "./yoto-send";
 
@@ -207,5 +214,183 @@ describe("catalogue selection playlists", () => {
     const metric = advancedSpeech(pikachu, "metric");
     assert.match(metric, /6 kilograms/);
     assert.match(metric, /40 centimetres/);
+  });
+});
+
+type SentChapter = {
+  title: string;
+  display: { icon16x16: string };
+  tracks: Array<{ title: string; display: { icon16x16: string } }>;
+};
+
+function sentChapters(upload: ReturnType<typeof selectionUpload>): SentChapter[] {
+  return (upload.content.content as { chapters: SentChapter[] }).chapters;
+}
+
+describe("picked forms in a catalogue playlist", () => {
+  const rattata = getCatalogueEntry(19);
+  const charizard = getCatalogueEntry(6);
+  const alolanSpeech = "Alolan Rattata. It lives in cities and eats leftover food at night.";
+
+  function rows(): SelectionSpecies[] {
+    assert.ok(rattata && charizard);
+    const alolan = formSelection(rattata, 10091, alolanSpeech);
+    const megaX = formSelection(charizard, 10034, "Mega Charizard X. Its flames turn blue.");
+    assert.ok(alolan && megaX);
+    return [speciesSelection(rattata, species(19).biology), alolan, megaX];
+  }
+
+  it("takes a form's own name, types, and size, keeps the species number, and leaves abilities out", () => {
+    assert.ok(rattata);
+    const alolan = formSelection(rattata, 10091, alolanSpeech);
+    const listed = rattata.forms.find((form) => form.id === 10091);
+    assert.ok(alolan && listed);
+    assert.equal(alolan.id, 19);
+    assert.equal(alolan.formId, 10091);
+    assert.equal(alolan.name, "Alolan Rattata");
+    assert.equal(alolan.speciesName, "Rattata");
+    assert.deepEqual(alolan.types, listed.types);
+    assert.ok(alolan.types.includes("Dark"));
+    assert.equal(alolan.heightLabel, listed.heightLabel);
+    assert.equal(alolan.weightLabel, listed.weightLabel);
+    assert.deepEqual(alolan.abilities, []);
+    assert.equal(alolan.color, null);
+    assert.equal(alolan.info, rattata.info);
+    assert.equal(alolan.speech, alolanSpeech);
+    assert.equal(selectionPickId(alolan), 10091);
+    // A reading that is only the name is not a description, so the Pokédex line is read instead.
+    const bare = formSelection(rattata, 10091, "Alolan Rattata.");
+    assert.equal(bare?.speech, undefined);
+    assert.match(factsSpeech(bare as SelectionSpecies), /^Alolan Rattata\. \S/);
+    // Mega Charizard X is not one of Rattata's forms.
+    assert.equal(formSelection(rattata, 10034, "Mega Charizard X."), null);
+  });
+
+  it("builds form tracks the way the form collections do, in the order the child set", () => {
+    const built = selectionPlaylist(rows(), "facts", "Mixed");
+    const chapters = built.card.chapters;
+    assert.deepEqual(
+      chapters.map((chapter) => [chapter.key, chapter.title, chapter.dexId, chapter.formId, chapter.overlay]),
+      [
+        ["sel-19", "Rattata", 19, undefined, "19"],
+        ["sel-10091", "Alolan Rattata", 19, 10091, "19b"],
+        ["sel-10034", "Mega Charizard X", 6, 10034, "6"],
+      ],
+    );
+    const form = chapters[1];
+    assert.equal(form?.tracks[0]?.title, "Alolan Rattata");
+    assert.equal(form?.tracks[0]?.text, alolanSpeech);
+    assert.equal(form?.tracks[0]?.lead, "cry");
+    assert.equal(form?.icon, "/api/artwork/form/10091");
+    assert.equal(form?.sprite, "/api/artwork/form/10091");
+    assert.equal(form?.tracks[0]?.icon, "/api/artwork/form/10091");
+    assert.equal(chapterPictureId(form ?? {}), 10091);
+    assert.equal(chapters[0]?.icon, "/pixels/19.png");
+
+    const upload = selectionUpload(
+      built.card,
+      { 19: "pixel-19", 10091: "pixel-10091", 10034: "pixel-10034" },
+      { title: built.title },
+    );
+    const sent = sentChapters(upload);
+    assert.deepEqual(
+      sent.map((chapter) => [chapter.title, chapter.display.icon16x16, chapter.tracks[0]?.display.icon16x16]),
+      [
+        ["Rattata", "yoto:#pixel-19", "yoto:#pixel-19"],
+        ["Alolan Rattata", "yoto:#pixel-10091", "yoto:#pixel-10091"],
+        ["Mega Charizard X", "yoto:#pixel-10034", "yoto:#pixel-10034"],
+      ],
+    );
+    assert.equal(sent[1]?.tracks[0]?.title, "Alolan Rattata");
+    const jobs = renderJobs(built.title, built.card, upload);
+    assert.deepEqual(
+      jobs.map((job) => [job.dexId, job.name]),
+      [
+        [19, "Rattata"],
+        [19, "Alolan Rattata"],
+        [6, "Mega Charizard X"],
+      ],
+    );
+    assert.match(jobs[1]?.text ?? "", /leftover food/);
+    assert.deepEqual(
+      chaptersForCries(built.card).map((item) => item.dexId),
+      [19, 19, 6],
+    );
+    const [first, , last] = rows();
+    const formFirst = selectionPlaylist([last as SelectionSpecies, first as SelectionSpecies], "facts");
+    assert.equal(coverArtworkId(formFirst.card), 10034);
+  });
+
+  it("reads a form's own size and type in advanced facts, without the species ability", () => {
+    const alolan = rows()[1] as SelectionSpecies;
+    const text = advancedSpeech(alolan);
+    assert.match(text, /^Alolan Rattata\. It lives in cities/);
+    assert.match(text, new RegExp(`It weighs ${weightForUnits(alolan.weightLabel, "metric")}`));
+    assert.match(text, /Dark/);
+    assert.doesNotMatch(text, /Its ability is/);
+  });
+
+  it("keeps both names out of a form riddle and answers with the form's pixel", () => {
+    const alolan = rows()[1] as SelectionSpecies;
+    const built = selectionPlaylist([alolan], "whos-that");
+    const chapter = built.card.chapters[0];
+    assert.ok(chapter);
+    const clue = chapter.tracks[0]?.text ?? "";
+    const answer = chapter.tracks[1]?.text ?? "";
+    assert.match(clue, /^Number 19\./);
+    assert.doesNotMatch(clue, /Rattata|Alolan/i);
+    assert.match(answer, /^It is Alolan Rattata\./);
+    assert.equal(chapter.icon, "/pixels/19-shadow.png");
+    assert.equal(chapter.tracks[1]?.icon, "/api/artwork/form/10091");
+    const upload = selectionUpload(built.card, { 10091: "pixel-10091" }, {
+      title: built.title,
+      shadowById: { 19: "shadow-19" },
+    });
+    const tracks = sentChapters(upload)[0]?.tracks ?? [];
+    assert.equal(tracks[0]?.display.icon16x16, "yoto:#shadow-19");
+    assert.equal(tracks[1]?.display.icon16x16, "yoto:#pixel-10091");
+  });
+
+  it("numbers a form after its species, and two forms of one species apart", () => {
+    assert.deepEqual(
+      selectionOverlays([{ id: 678, formId: 10314 }, { id: 678, formId: 10326 }, { id: 678 }, { id: 6, formId: 10034 }]),
+      ["678b", "678c", "678", "6"],
+    );
+  });
+
+  it("refuses a form past the card by its form id", () => {
+    const picked = [...Array.from({ length: 100 }, (_, index) => species(index + 1)), rows()[1] as SelectionSpecies];
+    assert.deepEqual(selectionPlaylist(picked, "facts").refused, [10091]);
+  });
+
+  it("puts a form's own artwork on the sticker cards", () => {
+    const cards = selectionStickerCards(
+      [
+        { id: 10091, name: "Alolan Rattata", speciesId: 19 },
+        { id: 19, name: "Rattata", speciesId: 19 },
+      ],
+      "facts",
+    );
+    assert.equal(cards.length, 1);
+    const card = cards[0] as KidCard;
+    assert.deepEqual(
+      card.chapters.map((chapter) => [chapter.dexId, chapter.formId]),
+      [
+        [19, 10091],
+        [19, undefined],
+      ],
+    );
+    const mons = monsFor(card);
+    assert.deepEqual(
+      mons.map((mon) => [mon.name, mon.art, mon.dexId]),
+      [
+        ["Alolan Rattata", "/api/artwork/form/10091", 19],
+        ["Rattata", artworkSrc(19), 19],
+      ],
+    );
+    assert.notEqual(mons[0]?.key, mons[1]?.key);
+    const speciesOnly = selectionStickerCards([{ id: 19, name: "Rattata" }], "facts");
+    const formOnly = selectionStickerCards([{ id: 10091, name: "Alolan Rattata", speciesId: 19 }], "facts");
+    assert.notEqual(speciesOnly[0]?.id, formOnly[0]?.id);
   });
 });

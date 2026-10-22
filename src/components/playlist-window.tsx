@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { artworkSrc } from "@/lib/artwork-path";
+import { isFormPick } from "@/lib/catalogue-picks";
 import {
   movePlaylistItem,
   orderPlaylist,
@@ -36,7 +37,7 @@ export function PlaylistWindow({
   onChange: (ids: number[]) => void;
   onShowMyoCard?: () => void;
 }) {
-  const [names, setNames] = useState<Record<number, string>>({});
+  const [names, setNames] = useState<Record<number, { name: string; speciesId: number }>>({});
   const [nameError, setNameError] = useState("");
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
@@ -52,14 +53,17 @@ export function PlaylistWindow({
     const controller = new AbortController();
     void fetch(`/api/catalogue?pick=${missing.join(",")}`, { signal: controller.signal })
       .then(async (response) => {
-        const payload = (await response.json()) as { items?: Array<{ id: number; name: string }>; error?: string };
+        const payload = (await response.json()) as {
+          items?: Array<{ id: number; name: string; speciesId?: number }>;
+          error?: string;
+        };
         if (!response.ok || !payload.items) throw new Error(payload.error || "Those names could not be loaded.");
         return payload.items;
       })
       .then((items) => {
         setNames((current) => {
           const next = { ...current };
-          for (const item of items) next[item.id] = item.name;
+          for (const item of items) next[item.id] = { name: item.name, speciesId: item.speciesId ?? item.id };
           return next;
         });
         setNameError("");
@@ -71,8 +75,8 @@ export function PlaylistWindow({
     return () => controller.abort();
   }, [open, ids]);
 
-  const mons: PlaylistMon[] = ids.map((id) => ({ id, name: names[id] ?? "" }));
-  const namesReady = ids.every((id) => Boolean(names[id]));
+  const mons: PlaylistMon[] = ids.map((id) => ({ id, name: names[id]?.name ?? "", number: names[id]?.speciesId }));
+  const namesReady = ids.every((id) => Boolean(names[id]?.name));
 
   function orderBy(by: "number" | "name") {
     onChange(orderPlaylist(mons, by).map((item) => item.id));
@@ -170,12 +174,14 @@ export function PlaylistWindow({
         <DialogBody className="pr-1">
           {ids.length === 0 ? (
             <p className="pk-soft px-4 py-6 text-sm text-muted-foreground">
-              Tick Pokémon in Make your own, including their evolutions, and they appear here in that order.
+              Tick Pokémon in Make your own, including their evolutions and forms, and they appear here in that order.
             </p>
           ) : (
             <ul className="grid gap-2 sm:grid-cols-2">
               {mons.map((mon, index) => {
-                const name = mon.name || numberLabel(mon.id);
+                // A form shows its own picture and its species number.
+                const form = isFormPick(mon.id);
+                const name = mon.name || (form ? "A form" : numberLabel(mon.id));
                 const dropping = overIndex === index && dragIndex !== null && dragIndex !== index;
                 return (
                   <li
@@ -192,7 +198,7 @@ export function PlaylistWindow({
                     <div className="flex items-center gap-2">
                       <span className="w-6 text-xs font-bold tabular-nums text-poke-red">{index + 1}</span>
                       <img
-                        src={artworkSrc("species", mon.id)}
+                        src={artworkSrc(form ? "form" : "species", mon.id)}
                         alt=""
                         width={48}
                         height={48}
@@ -200,7 +206,9 @@ export function PlaylistWindow({
                         className="h-12 w-12 shrink-0 object-contain"
                       />
                       <span className="min-w-0">
-                        <span className="block text-xs tabular-nums opacity-70">{numberLabel(mon.id)}</span>
+                        <span className="block text-xs tabular-nums opacity-70">
+                          {form ? (mon.number ? numberLabel(mon.number) : "") : numberLabel(mon.id)}
+                        </span>
                         <span className="block truncate font-medium">{name}</span>
                       </span>
                     </div>
