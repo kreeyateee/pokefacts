@@ -418,12 +418,12 @@
 
 @media (max-width: 767px) {
   .pk-nav {
-    position: sticky;
-    top: env(safe-area-inset-top, 0px);
-    z-index: 30;
     padding-top: 0.45rem;
     padding-bottom: 0.45rem;
-    background: #3aa0e8;
+  }
+
+  .pk-logo-compact-header {
+    max-height: 3.6rem;
   }
 }
 
@@ -733,28 +733,18 @@
   box-shadow: 6px 6px 0 var(--ink);
 }
 
-.pk-card:not(.pk-playlist-row) {
-  position: relative;
-  padding-top: 4.15rem;
-}
-
-.pk-card:not(.pk-playlist-row)::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  z-index: 1;
-  box-sizing: border-box;
-  height: 3.15rem;
-  border-bottom: 3px solid var(--ink);
-  border-radius: 1.05rem 1.05rem 0 0;
-  background: #fffdf6 url("/brand/logo-compact.png") center / auto 2.55rem no-repeat;
-  pointer-events: none;
-}
-
 .pk-dex {
   background-color: var(--cream);
+  background-image:
+    linear-gradient(#e10600, #e10600),
+    linear-gradient(#ffcb05, #ffcb05);
+  background-size:
+    100% 12px,
+    100% 4px;
+  background-position:
+    top,
+    0 12px;
+  background-repeat: no-repeat;
 }
 
 .pk-sprite {

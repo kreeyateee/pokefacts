@@ -1886,28 +1886,16 @@ export function Studio({
                 ) : null}
                 <audio ref={clipRef} controls className="mt-4 w-full max-w-md" preload="none" />
               </article>
-            <section className="order-4 min-w-0 pk-card px-5 py-4 md:col-span-2" aria-labelledby="yoto-send-heading">
-              <h3 id="yoto-send-heading" className="font-display text-2xl">
-                Make this card
+            <div className="order-4 min-w-0 md:col-span-2" aria-labelledby="yoto-send-heading">
+              <h3 id="yoto-send-heading" className="sr-only">
+                Create card
               </h3>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                Open Settings to hear a voice, then send. The next step asks you to confirm the voice and where the
-                playlist goes. Recording starts after that, in the background. On the player: {card.childDoes} In the Yoto
-                app, look for <span className="font-bold text-ink">{card.libraryTitle}</span>.
-                {randomGuess
-                  ? " Send uploads a shadow of each 16×16 pixel for the clue, then the real pixel for the answer."
-                  : formMode
-                    ? " The picture on the card is the species 16×16 pixel."
-                    : speciesSet
-                      ? " The Yoto icon is the 16×16 pixel."
-                      : ""}
-              </p>
               {libraryNote ? (
-                <p className="mt-2 text-sm leading-5 pk-danger" role="status">
+                <p className="mb-2 text-sm leading-5 pk-danger" role="status">
                   {libraryNote}
                 </p>
               ) : null}
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
                   className="h-11 px-4"
@@ -1924,13 +1912,7 @@ export function Studio({
                     )
                   }
                 >
-                  {sending && !bulkActive
-                    ? "Recording in the background…"
-                    : randomGuess
-                      ? "Send these 50 riddles"
-                      : randomFacts
-                        ? "Send these 100"
-                        : `Send ${card.rangeLabel}`}
+                  {sending && !bulkActive ? "Recording in the background…" : "Create card"}
                 </Button>
                 <Button type="button" variant="outline" className="h-11 px-4" onClick={() => setStickersOpen(true)}>
                   Print stickers
@@ -1955,39 +1937,19 @@ export function Studio({
                   </Button>
                 ) : null}
               </div>
-              {kind === "meet" ? (
-                <p className="mt-2 max-w-xl text-xs leading-5 text-muted-foreground">
-                  Send all records every Pokefacts playlist, so all 1,025 Pokémon are covered. Each playlist stays at
-                  100 tracks or fewer.
+              {playlistHref ? (
+                <p className="mt-3 text-sm leading-6">
+                  <a
+                    className="font-bold text-poke-red underline decoration-2"
+                    href={playlistHref}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open this playlist in the Yoto app
+                  </a>
                 </p>
               ) : null}
-              <div className="mt-4">
-                <p className="text-sm font-bold">
-                  {job?.status === "completed" ? "Ready to link" : "After it finishes"}
-                </p>
-                {playlistHref ? (
-                  <p className="mt-2 text-sm leading-6">
-                    <a
-                      className="font-bold text-poke-red underline decoration-2"
-                      href={playlistHref}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Open this playlist in the Yoto app
-                    </a>
-                  </p>
-                ) : null}
-                <ol className="mt-2 grid list-decimal gap-2 pl-4 text-sm leading-6">
-                  <li>Open the Yoto app and go to Make Your Own.</li>
-                  <li>
-                    Find <span className="font-bold">{card.libraryTitle}</span>.
-                  </li>
-                  <li>Choose Link to a card.</li>
-                  <li>Hold a blank Make Your Own card to the player.</li>
-                  <li>The next playlist needs a different blank card.</li>
-                </ol>
-              </div>
-            </section>
+            </div>
           </div>
         ) : null}
         </div>

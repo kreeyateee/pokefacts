@@ -7,6 +7,14 @@ import { StatusBar } from "@/components/status-bar";
 import { StickerStudio } from "@/components/sticker-studio";
 import { YotoScreen } from "@/components/yoto-screen";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { artworkSrc } from "@/lib/page-artwork";
 import { artworkSrc as artworkApi } from "@/lib/artwork-path";
 import { yotoPixelSrc } from "@/lib/yoto-screen";
@@ -204,7 +212,8 @@ export function Catalogue({
   const [formNotes, setFormNotes] = useState<
     Array<{ formId: number; name: string; article: BiologyView }>
   >([]);
-  const [showList, setShowList] = useState(true);
+  const [showList, setShowList] = useState(false);
+  const [buildOpen, setBuildOpen] = useState(false);
   const [picked, setPicked] = useState<number[]>([]);
   const [playlistKind, setPlaylistKind] = useState<SelectionKind>("facts");
   const [playlistTitle, setPlaylistTitle] = useState("");
@@ -509,7 +518,7 @@ export function Catalogue({
 
   return (
     <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-      <section className="flex min-w-0 flex-col self-start">
+      <section className="flex min-w-0 flex-col self-start max-lg:order-2">
         <h2 className="order-1 pk-section-title">Find Pokémon</h2>
         <label className="order-1 mt-2 grid gap-1 text-sm" htmlFor="catalogue-search">
           Search
@@ -571,19 +580,25 @@ export function Catalogue({
             ))}
           </select>
         </label>
-        <div className="pk-card order-2 mt-3 px-3 py-3 lg:hidden">
-          <div className="pk-pick-bar">
-            <p className="text-sm font-medium">
-              {picked.length.toLocaleString("en-GB")} Pokémon picked
-            </p>
-            <a href="#catalogue-build" className="pk-pill shrink-0">
-              Make card
-            </a>
-          </div>
+        <div className="order-2 mt-3 flex flex-wrap items-center gap-2 lg:order-2">
+          <p className="text-sm font-medium">
+            {picked.length.toLocaleString("en-GB")} Pokémon picked
+          </p>
+          <Button type="button" className="h-11 px-4" onClick={() => setBuildOpen(true)}>
+            Create card
+          </Button>
         </div>
-        <div id="catalogue-build" className="pk-card order-3 mt-4 px-3 py-3 lg:order-2">
-          <h2 className="pk-section-title">Your pick</h2>
-          <p className="mt-2 text-sm font-medium">
+        <Dialog open={buildOpen} onOpenChange={setBuildOpen}>
+          <DialogContent className="overflow-hidden sm:max-w-xl" showCloseButton>
+            <DialogHeader>
+              <DialogTitle className="font-display text-2xl">Create card</DialogTitle>
+              <DialogDescription>
+                Tick Pokémon in the list, then send or print. The next step asks for the voice and where the playlist
+                goes.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogBody>
+          <p className="text-sm font-medium">
             {picked.length.toLocaleString("en-GB")} Pokémon picked
           </p>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
@@ -630,8 +645,7 @@ export function Catalogue({
               Clear the pick
             </button>
           ) : null}
-          <h2 className="mt-4 pk-section-title">Make a card</h2>
-          <fieldset className="mt-2 grid gap-2">
+          <fieldset className="mt-4 grid gap-2">
             <legend className="text-sm font-medium">Playlist type</legend>
             {PLAYLIST_KINDS.map((option) => (
               <button
@@ -667,9 +681,6 @@ export function Catalogue({
             className="pk-field"
           />
           </label>
-          <p className="mt-1 text-xs leading-5 pk-quiet">
-            Send this pick asks for the voice and where the playlist goes before anything is recorded.
-          </p>
           <Button
             type="button"
             variant="outline"
@@ -699,6 +710,7 @@ export function Catalogue({
                     ? "Advanced facts"
                     : "Fact Cards");
               if (onPrepareSend) {
+                setBuildOpen(false);
                 onPrepareSend("Send this pick", title, () => buildPlaylist());
                 return;
               }
@@ -720,7 +732,9 @@ export function Catalogue({
               failed={statusFailed}
             />
           ) : null}
-        </div>
+            </DialogBody>
+          </DialogContent>
+        </Dialog>
         <p className="order-2 mt-3 text-xs pk-quiet lg:order-3">
           {list
             ? `${list.total.toLocaleString("en-GB")} of ${list.species.toLocaleString("en-GB")} species`
@@ -805,16 +819,19 @@ export function Catalogue({
         </div>
       </section>
 
-      <article className={`pk-card pk-dex min-w-0 self-start px-4 py-6 sm:px-8 sm:py-8 ${showList ? "hidden lg:block" : "block"}`}>
-        {entry && entry.id === selected ? null : (
+      <article className={`pk-card pk-dex min-w-0 self-start px-4 py-6 sm:px-8 sm:py-8 max-lg:order-1 ${showList ? "hidden lg:block" : "block"}`}>
+        <div className="mb-4 flex flex-wrap items-center gap-2 lg:hidden">
           <button
             type="button"
-            className="mb-4 inline-flex min-h-11 items-center text-sm font-bold text-poke-red underline lg:hidden"
+            className="inline-flex min-h-11 items-center text-sm font-bold text-poke-red underline"
             onClick={() => setShowList(true)}
           >
             Back to the list
           </button>
-        )}
+          <Button type="button" className="h-11 px-4" onClick={() => setBuildOpen(true)}>
+            Create card
+          </Button>
+        </div>
         {entryError?.id === selected ? (
           <p className="text-sm pk-danger" role="alert">
             {entryError.message}
@@ -843,13 +860,6 @@ export function Catalogue({
                   <p className="pk-kicker">
                     {numberLabel(entry.id)} · {entry.region}
                   </p>
-                  <button
-                    type="button"
-                    className="inline-flex min-h-11 shrink-0 items-center text-sm font-bold text-poke-red underline lg:hidden"
-                    onClick={() => setShowList(true)}
-                  >
-                    Back to the list
-                  </button>
                 </div>
                 <h2 className="font-display text-3xl leading-tight sm:text-5xl">{entry.name}</h2>
               </div>
