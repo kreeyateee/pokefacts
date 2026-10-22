@@ -11,7 +11,7 @@ import { PIPER_MODEL_NAME } from "@/lib/piper-voice";
  * folder is gitignored. The first Piper Hear or Send downloads them once.
  * `npx tsx scripts/install-piper.ts` does the same download ahead of time.
  */
-const PIPER_DIR = path.join(process.cwd(), "data", "piper");
+const PIPER_DIR = path.join(/* turbopackIgnore: true */ process.cwd(), "data", "piper");
 
 const RELEASE = "2023.11.14-2";
 const RELEASE_BASE = `https://github.com/rhasspy/piper/releases/download/${RELEASE}`;
@@ -213,7 +213,7 @@ async function installBinary(): Promise<string> {
   if (existing) return existing;
   const archive = piperReleaseArchive();
   if (!archive) throw new Error(MISSING);
-  const packed = path.join(PIPER_DIR, archive.name);
+  const packed = path.join(/* turbopackIgnore: true */ PIPER_DIR, archive.name);
   if (!(await fileAtLeast(packed, 1_000_000))) await downloadTo(archive.url, packed);
   const runtime = path.join(PIPER_DIR, "runtime");
   await mkdir(runtime, { recursive: true });

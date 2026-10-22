@@ -4,7 +4,7 @@ import { readJsonObject, updateJsonObject } from "@/lib/json-cache";
 import { isYoutubeVideoId, youtubeWatchUrl } from "@/lib/youtube-link";
 import { ytdlpOutput } from "@/lib/youtube-mp3";
 
-const CACHE_FILE = path.join(process.cwd(), "data", "music-youtube.json");
+const CACHE_FILE = path.join(/* turbopackIgnore: true */ process.cwd(), "data", "music-youtube.json");
 const SEARCH_FIELD = "\u001f";
 
 export type YoutubeSearchHit = {

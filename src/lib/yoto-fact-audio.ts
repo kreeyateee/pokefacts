@@ -53,7 +53,7 @@ type CardPayload = {
   metadata?: { title?: string; description?: string };
 };
 
-const CRY_CACHE = path.join(process.cwd(), "data", "cries");
+const CRY_CACHE = path.join(/* turbopackIgnore: true */ process.cwd(), "data", "cries");
 const cryMemory = new Map<string, Buffer>();
 
 function sha256(bytes: Buffer): string {
@@ -352,8 +352,8 @@ type TrackPrepareResult = {
   channels?: string;
 };
 
-const SPEECH_ROOT = path.join(process.cwd(), "data", "speech");
-const RENDER_ROOT = path.join(process.cwd(), "data", "rendered");
+const SPEECH_ROOT = path.join(/* turbopackIgnore: true */ process.cwd(), "data", "speech");
+const RENDER_ROOT = path.join(/* turbopackIgnore: true */ process.cwd(), "data", "rendered");
 
 /** Cache identity for a finished mix: voice, cry gain, voice gain, pause, dex number, and the script. */
 export function renderedCacheKey(
@@ -797,10 +797,10 @@ export async function prepareFactTrack(
 
   // Dex number, not the slot on the card. A Pokefacts playlist never has 142 tracks.
   const label = dexId ? String(dexId) : "intro";
-  const renderedFile = path.join(roots.rendered, `${renderedCacheKey(text, dexId, voiceId, mix)}.json`);
-  const mergedFile = path.join(roots.rendered, `${renderedCacheKey(text, dexId, voiceId, mix)}.mp3`);
+  const renderedFile = path.join(/* turbopackIgnore: true */ roots.rendered, `${renderedCacheKey(text, dexId, voiceId, mix)}.json`);
+  const mergedFile = path.join(/* turbopackIgnore: true */ roots.rendered, `${renderedCacheKey(text, dexId, voiceId, mix)}.mp3`);
   const speechFile = path.join(
-    roots.speech,
+    /* turbopackIgnore: true */ roots.speech,
     `${speechKey(text, voiceId)}.${isPiperVoice(voiceId) ? "wav" : "mp3"}`,
   );
   let scratchHeld = Boolean(request.speechCardId);

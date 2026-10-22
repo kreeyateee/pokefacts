@@ -15,7 +15,7 @@ export const BULBAPEDIA_API = "https://bulbapedia.bulbagarden.net/w/api.php";
 
 export const BULBAPEDIA_USER_AGENT = "Pokefacts/0.1 (private household; mjlane90@gmail.com)";
 
-const CACHE_FILE = path.join(process.cwd(), "data", "bulbapedia", "biology.json");
+const CACHE_FILE = path.join(/* turbopackIgnore: true */ process.cwd(), "data", "bulbapedia", "biology.json");
 
 /** Bump when the HTML reader changes, so an older empty result is fetched again. */
 const CACHE_REVISION = 2;

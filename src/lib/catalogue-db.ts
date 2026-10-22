@@ -19,7 +19,7 @@ let database: DatabaseSync | null = null;
 
 function db(): DatabaseSync {
   if (!database) {
-    database = new DatabaseSync(path.join(process.cwd(), "data", "champdex.sqlite"), {
+    database = new DatabaseSync(path.join(/* turbopackIgnore: true */ process.cwd(), "data", "champdex.sqlite"), {
       readOnly: true,
     });
   }

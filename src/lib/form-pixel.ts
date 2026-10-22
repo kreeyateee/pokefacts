@@ -4,7 +4,7 @@ import path from "node:path";
 import { ensureArtwork, isPng } from "@/lib/artwork";
 import { paintColourPixel } from "@/lib/pixel-scale";
 
-const FORM_PIXEL_CACHE = path.join(process.cwd(), "data", "form-pixels", "crop");
+const FORM_PIXEL_CACHE = path.join(/* turbopackIgnore: true */ process.cwd(), "data", "form-pixels", "crop");
 
 type FormPixelOptions = {
   cacheDir?: string;

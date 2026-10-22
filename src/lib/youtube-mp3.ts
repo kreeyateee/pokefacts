@@ -17,7 +17,7 @@ import {
 } from "@/lib/youtube-link";
 import { LOCAL_TOOLS_DISABLED_MESSAGE, localModeEnabled } from "@/lib/youtube-mp3-site";
 
-const CACHE_DIR = path.join(process.cwd(), "data", "music-mp3");
+const CACHE_DIR = path.join(/* turbopackIgnore: true */ process.cwd(), "data", "music-mp3");
 
 export type ParsedMp3 = {
   youtubeId: string;
@@ -89,7 +89,7 @@ export function detectPython(): PythonLauncher | null {
         ];
   for (const candidate of candidates) {
     const result = spawnSync(
-      candidate.command,
+      /* turbopackIgnore: true */ candidate.command,
       [...candidate.prefix, "-c", "import sys; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)"],
       { windowsHide: true, timeout: 8_000 },
     );
@@ -140,7 +140,7 @@ export function ytdlpLaunch(input?: {
   const homeBin =
     input?.homeBin ??
     path.join(homedir(), ".local", "bin", process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp");
-  if (exists(homeBin)) {
+  if (exists(/* turbopackIgnore: true */ homeBin)) {
     return { command: homeBin, args: runtime.args, env, packaged, python: Boolean(python), deno: runtime.deno };
   }
   return {

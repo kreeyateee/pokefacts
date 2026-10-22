@@ -44,7 +44,7 @@ type DemoOptions = {
   piper?: PiperSynthOptions;
 };
 
-const DEMO_ROOT = path.join(process.cwd(), "data", "demo");
+const DEMO_ROOT = path.join(/* turbopackIgnore: true */ process.cwd(), "data", "demo");
 
 function sha256(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");

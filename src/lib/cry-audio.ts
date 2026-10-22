@@ -143,7 +143,7 @@ function clipSummary(info: ClipInfo): string {
 /** ffprobe the bytes. A failure uses ffprobe's own last line, not a generic mix error. */
 export async function describeClip(bytes: Buffer, name = "clip.mp3"): Promise<ClipInfo> {
   const dir = await mkdtemp(path.join(tmpdir(), "champdex-probe-"));
-  const file = path.join(dir, name);
+  const file = path.join(/* turbopackIgnore: true */ dir, name);
   try {
     await writeFile(file, bytes);
     const stdout = await new Promise<string>((resolve, reject) => {

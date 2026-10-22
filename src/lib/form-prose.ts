@@ -23,7 +23,7 @@ import { formProse, spokenDexLine, spokenForm, spokenWiki, WIKI_DEX_NOTE } from 
  * A form page that only redirects is not its own article: the matching
  * section on the species page is used instead of the species Biology lead.
  */
-const CACHE_FILE = path.join(process.cwd(), "data", "bulbapedia", "forms.json");
+const CACHE_FILE = path.join(/* turbopackIgnore: true */ process.cwd(), "data", "bulbapedia", "forms.json");
 /**
  * Revision 2 refetches Mega and Gigantamax rows the old parser stored as missing.
  * A revision 1 row that already has prose is still used.

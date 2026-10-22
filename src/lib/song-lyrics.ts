@@ -4,7 +4,7 @@ import path from "node:path";
 import { bulbapediaParse, wikiSectionHtml, wikiSections, type WikiSection } from "@/lib/bulbapedia";
 import { decodeHtml } from "@/lib/music";
 
-const LYRICS_CACHE = path.join(process.cwd(), "data", "music-lyrics");
+const LYRICS_CACHE = path.join(/* turbopackIgnore: true */ process.cwd(), "data", "music-lyrics");
 
 /** The Bulbapedia heading that holds the song words. */
 export function lyricsSection(sections: readonly WikiSection[]): WikiSection | undefined {
