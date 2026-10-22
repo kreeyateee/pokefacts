@@ -16,7 +16,7 @@ import {
 import { reconnectMessage, yotoErrorText } from "@/lib/yoto-error";
 import { spokenForDemo } from "@/lib/voice-choice";
 
-export type DemoAudio = {
+type DemoAudio = {
   audio: Buffer;
   /** True when the cry was mixed in front of the voice. */
   cryFirst: boolean;

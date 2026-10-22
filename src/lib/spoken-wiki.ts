@@ -1,7 +1,7 @@
 import type { BiologyBlock } from "@/lib/catalogue-types";
 
 /** Spoken wiki prose stays near a minute. The name is added after this cap. */
-export const SPOKEN_WIKI_LIMIT = 1200;
+const SPOKEN_WIKI_LIMIT = 1200;
 
 const CREDIT = /bulbapedia|creative commons|\bcc\s*by-nc-sa\b|licensed under/i;
 
@@ -49,7 +49,7 @@ function clipAt(text: string, limit: number): string {
   return (word.length >= 80 ? word : slice.trim()).replace(/\s+/g, " ").trim();
 }
 
-export function capProse(paragraphs: string[], limit = SPOKEN_WIKI_LIMIT): string {
+function capProse(paragraphs: string[], limit = SPOKEN_WIKI_LIMIT): string {
   let text = "";
   for (const paragraph of paragraphs.slice(0, 2)) {
     const clean = withoutCredits(paragraph);

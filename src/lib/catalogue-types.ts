@@ -1,21 +1,21 @@
-export type CatalogueAbility = {
+type CatalogueAbility = {
   name: string;
   hidden: boolean;
   /** Short PokéAPI ability line, when the games have one. */
   info: string;
 };
 
-export type CatalogueStat = {
+type CatalogueStat = {
   name: string;
   value: number;
 };
 
-export type CatalogueLink = {
+type CatalogueLink = {
   id: number;
   name: string;
 };
 
-export type CatalogueEvolution = CatalogueLink & {
+type CatalogueEvolution = CatalogueLink & {
   method: string;
 };
 
@@ -34,7 +34,7 @@ export type CatalogueLine = {
   subevolutions: CatalogueLineMember[];
 };
 
-export type CatalogueMatch = {
+type CatalogueMatch = {
   type: string;
   multiplier: number;
 };

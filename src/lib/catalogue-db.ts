@@ -26,13 +26,13 @@ function db(): DatabaseSync {
   return database;
 }
 
-export function kilogramsLabel(hectograms: number): string {
+function kilogramsLabel(hectograms: number): string {
   const kilograms = hectograms / 10;
   const text = Number.isInteger(kilograms) ? String(kilograms) : kilograms.toFixed(1);
   return `${text} kilograms`;
 }
 
-export function centimetresLabel(decimetres: number): string {
+function centimetresLabel(decimetres: number): string {
   return `${decimetres * 10} centimetres`;
 }
 

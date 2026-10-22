@@ -8,7 +8,7 @@ const MAX_PICKED = 2000;
 
 const SELECTION_KINDS: readonly SelectionKind[] = ["facts", "whos-that", "advanced"];
 
-export type CataloguePicks = {
+type CataloguePicks = {
   ids: number[];
   kind: SelectionKind;
   title: string;

@@ -12,7 +12,7 @@ export const PIPER_MODEL_NAME = "en_GB-cori-high";
  */
 export const PIPER_SYNTH_ID = "pokedex-v1";
 
-export const PIPER_VOICE = {
+const PIPER_VOICE = {
   id: PIPER_VOICE_ID,
   name: "Piper",
   note: "Pokédex",

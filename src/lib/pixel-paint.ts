@@ -1,7 +1,7 @@
 import { inflateSync } from "node:zlib";
 
 /** The Yoto face is a 16×16 matrix. */
-export const YOTO_PIXEL_SIZE = 16;
+const YOTO_PIXEL_SIZE = 16;
 
 export type ContentBox = { x: number; y: number; width: number; height: number };
 

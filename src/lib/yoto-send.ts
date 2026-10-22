@@ -51,7 +51,7 @@ export function applyPlaylistCover(upload: PlaylistUpload, imageL?: string): Pla
   };
 }
 
-export function dropSavedCard(store: SavedCardMap, playlistId: string): SavedCardMap {
+function dropSavedCard(store: SavedCardMap, playlistId: string): SavedCardMap {
   if (!Object.prototype.hasOwnProperty.call(store, playlistId)) return store;
   const next = { ...store };
   delete next[playlistId];
@@ -168,7 +168,7 @@ function uploadChapters(upload: PlaylistUpload): UploadTrack[][] {
 
 /** Tracks prepared at once. Three overlaps ffmpeg and Yoto uploads; four is the ceiling. */
 export const TRACK_POOL_SIZE = 3;
-export const TRACK_POOL_CAP = 4;
+const TRACK_POOL_CAP = 4;
 
 export function trackPoolSize(requested = TRACK_POOL_SIZE): number {
   const size = Math.trunc(requested);

@@ -1,5 +1,0 @@
-{
-  "name": "Pokefacts",
-  "install": "npm ci",
-  "start": "exec npm run dev"
-}

@@ -587,7 +587,7 @@ export async function loadBiology(name: string, id: number, options: LoadOptions
   return viewFromRow(row);
 }
 
-export type FactSpeech = {
+type FactSpeech = {
   biology: BiologyView;
   speech: string;
   /** Set when the live wiki read failed and the catalogue Pokédex line was spoken. */

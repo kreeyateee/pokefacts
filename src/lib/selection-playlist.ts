@@ -37,7 +37,7 @@ export type SelectionSpecies = {
   biology: BiologyBlock[];
 };
 
-export type SelectionBuild = {
+type SelectionBuild = {
   card: KidCard;
   /** Species ids that do not fit on the card, in the order they were picked. */
   refused: number[];
@@ -51,7 +51,7 @@ export function selectionSpeciesLimit(kind: SelectionKind): number {
 }
 
 /** Yoto content title. A typed title wins. Otherwise the playlist type names the card. */
-export function selectionTitle(kind: SelectionKind, custom?: string): string {
+function selectionTitle(kind: SelectionKind, custom?: string): string {
   const typed = custom?.replace(/[–—]/g, "-").replace(/\s+/g, " ").trim() ?? "";
   if (typed) return typed.slice(0, 80);
   if (kind === "whos-that") return "Who's That Pokémon Cards";
