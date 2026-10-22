@@ -15,7 +15,8 @@
     "ytdlp": "node scripts/install-yt-dlp.mjs",
     "deno": "node scripts/install-deno.mjs",
     "music": "tsx scripts/refresh-music.ts",
-    "catalogue": "tsx scripts/build-catalogue.ts"
+    "catalogue": "tsx scripts/build-catalogue.ts",
+    "pixels": "tsx scripts/paint-pixels.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

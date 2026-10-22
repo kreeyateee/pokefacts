@@ -49,17 +49,30 @@ export function pixelFitFilter(box: ContentBox | null): string {
 }
 
 /**
- * 16×16 icons for the dark Yoto screen.
- * Colour pixels keep the sprite colours and fill every clear pixel with white.
- * Shadow pixels are a dark silhouette on the same white, taken from the sprite
- * alpha. Painting the shadow from an already-whitened pixel would turn the
- * whole square dark, because that file has no transparent pixels left.
+ * 16×16 icons for the dark Yoto screen, where a clear pixel is an unlit LED.
+ * Colour icons keep the sprite colours and leave the background clear, so only the creature lights up.
+ * Who's That shadows are a solid silhouette that fades from grey at the top to near-black at the bottom.
+ * Pure black would be an unlit LED, so even the bottom row stays a little lit.
+ * Both are taken from the sprite alpha, never from each other.
  */
-export const COLOUR_PIXEL_FILL =
-  "geq=r='if(gt(alpha(X,Y),0),r(X,Y),255)':g='if(gt(alpha(X,Y),0),g(X,Y),255)':b='if(gt(alpha(X,Y),0),b(X,Y),255)':a='255',format=rgba";
+export const SHADOW_TOP_GREY = 150;
+export const SHADOW_BOTTOM_GREY = 40;
 
-export const SHADOW_PIXEL_FILL =
-  "geq=r='if(gt(alpha(X,Y),0),28,255)':g='if(gt(alpha(X,Y),0),28,255)':b='if(gt(alpha(X,Y),0),32,255)':a='255',format=rgba";
+const IN_SHAPE = "gt(alpha(X,Y),0)";
+const SOLID_OR_CLEAR = `a='if(${IN_SHAPE},255,0)'`;
+
+/** The grey a shadow pixel gets on row `y` (0 at the top) of the 16×16 face. */
+export function shadowGrey(y: number): number {
+  const fade = (SHADOW_TOP_GREY - SHADOW_BOTTOM_GREY) / (YOTO_PIXEL_SIZE - 1);
+  return Math.round(SHADOW_TOP_GREY - fade * y);
+}
+
+export const COLOUR_PIXEL_FILL =
+  `geq=r='if(${IN_SHAPE},r(X,Y),0)':g='if(${IN_SHAPE},g(X,Y),0)':b='if(${IN_SHAPE},b(X,Y),0)':${SOLID_OR_CLEAR},format=rgba`;
+
+const SHADOW_SHADE = `if(${IN_SHAPE},${SHADOW_TOP_GREY}-${SHADOW_TOP_GREY - SHADOW_BOTTOM_GREY}*Y/${YOTO_PIXEL_SIZE - 1},0)`;
+
+export const SHADOW_PIXEL_FILL = `geq=r='${SHADOW_SHADE}':g='${SHADOW_SHADE}':b='${SHADOW_SHADE}':${SOLID_OR_CLEAR},format=rgba`;
 
 export function colourPixelFilter(box: ContentBox | null = null): string {
   return `${pixelFitFilter(box)},${COLOUR_PIXEL_FILL}`;
@@ -68,12 +81,6 @@ export function colourPixelFilter(box: ContentBox | null = null): string {
 export function shadowPixelFilter(box: ContentBox | null = null): string {
   return `${pixelFitFilter(box)},${SHADOW_PIXEL_FILL}`;
 }
-
-/** @deprecated Use colourPixelFilter(box) so padding is cropped first. */
-export const COLOUR_PIXEL_FILTER = colourPixelFilter(null);
-
-/** @deprecated Use shadowPixelFilter(box) so padding is cropped first. */
-export const SHADOW_PIXEL_FILTER = shadowPixelFilter(null);
 
 function paeth(left: number, up: number, upLeft: number): number {
   const estimate = left + up - upLeft;
@@ -85,7 +92,7 @@ function paeth(left: number, up: number, upLeft: number): number {
   return upLeft;
 }
 
-/** Decode a non-interlaced 8-bit RGBA PNG. Used to check the white background. */
+/** Decode a non-interlaced 8-bit RGBA PNG. Used to check painted icons. */
 export function readPngRgba(bytes: Buffer): { width: number; height: number; rgba: Uint8Array } {
   const signature = "89504e470d0a1a0a";
   if (bytes.subarray(0, 8).toString("hex") !== signature) throw new Error("Not a PNG.");

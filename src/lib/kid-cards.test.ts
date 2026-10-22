@@ -40,7 +40,7 @@ import {
 } from "./kid-cards";
 import { spokenWiki } from "./spoken-wiki";
 import type { BiologyBlock } from "./catalogue-types";
-import { readPngRgba } from "./pixel-paint";
+import { readPngRgba, shadowGrey } from "./pixel-paint";
 import { pronounce } from "./pronounce";
 import {
   afterRejectedPlaylist,
@@ -533,42 +533,36 @@ function pngInfo(id: number) {
   return pngInfoFile(`public/pixels/${id}.png`);
 }
 
-describe("opaque pixel icons", () => {
-  it("fills every 16×16 icon and shadow with an opaque white background", () => {
+describe("pixel icons for the Yoto screen", () => {
+  it("keeps every icon's background clear and fades every shadow from grey to near-black", () => {
     const files = readdirSync("public/pixels").filter((name) => name.endsWith(".png"));
     assert.equal(files.length, 2050);
     for (const name of files) {
       const decoded = readPngRgba(readFileSync(`public/pixels/${name}`));
       assert.equal(decoded.width, 16, name);
       assert.equal(decoded.height, 16, name);
-      for (let index = 3; index < decoded.rgba.length; index += 4) {
-        assert.equal(decoded.rgba[index], 255, name);
-      }
-      if (!name.endsWith("-shadow.png")) continue;
+      let lit = 0;
       for (let index = 0; index < decoded.rgba.length; index += 4) {
-        const red = decoded.rgba[index];
-        const green = decoded.rgba[index + 1];
-        const blue = decoded.rgba[index + 2];
-        const white = red === 255 && green === 255 && blue === 255;
-        const ink = red === 28 && green === 28 && blue === 32;
-        assert.equal(white || ink, true, `${name} has a pixel that is not white or the shadow`);
+        const alpha = decoded.rgba[index + 3];
+        assert.ok(alpha === 0 || alpha === 255, `${name} has a half-clear pixel`);
+        if (alpha === 0) continue;
+        lit += 1;
+        if (!name.endsWith("-shadow.png")) continue;
+        const [red, green, blue] = decoded.rgba.subarray(index, index + 3);
+        const grey = shadowGrey(Math.floor(index / 64));
+        assert.ok(red === green && green === blue, `${name} shadow has colour`);
+        assert.ok(Math.abs((red ?? 0) - grey) <= 1, `${name} shadow is not the grey for its row`);
       }
+      assert.ok(lit > 0 && lit < 256, `${name} needs a creature and a clear background`);
     }
     const bulbasaur = readPngRgba(readFileSync("public/pixels/1.png"));
     let occupiedRows = 0;
     for (let y = 0; y < 16; y += 1) {
-      for (let x = 0; x < 16; x += 1) {
-        const i = (y * 16 + x) * 4;
-        const white = bulbasaur.rgba[i] === 255 && bulbasaur.rgba[i + 1] === 255 && bulbasaur.rgba[i + 2] === 255;
-        if (!white) {
-          occupiedRows += 1;
-          break;
-        }
+      if (bulbasaur.rgba.subarray(y * 64, y * 64 + 64).some((value, i) => i % 4 === 3 && value === 255)) {
+        occupiedRows += 1;
       }
     }
     assert.ok(occupiedRows >= 12, `Bulbasaur should fill the Yoto face, not sit in a few pixels (${occupiedRows} rows).`);
-    const shadow = readPngRgba(readFileSync("public/pixels/1-shadow.png"));
-    assert.equal(shadow.rgba.includes(28), true);
   });
 });
 

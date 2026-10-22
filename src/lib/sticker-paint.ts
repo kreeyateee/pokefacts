@@ -167,6 +167,32 @@ function crispPicture(url: string): boolean {
   return url.includes("/pixels/") || url.includes("/sprites/");
 }
 
+/** Who's That shadows fade from grey to black for the Yoto LEDs. On paper they print as a solid silhouette. */
+export const PAPER_SHADOW_INK = "#1c1c20";
+
+export function isShadowPicture(url: string): boolean {
+  return /-shadow\.png(?:[?#]|$)/.test(url);
+}
+
+const paperSilhouettes = new WeakMap<CanvasImageSource, HTMLCanvasElement>();
+
+function paperSilhouette(image: CanvasImageSource): CanvasImageSource {
+  const cached = paperSilhouettes.get(image);
+  if (cached) return cached;
+  const { width, height } = imageBox(image);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ink = canvas.getContext("2d");
+  if (!ink) return image;
+  ink.drawImage(image, 0, 0, width, height);
+  ink.globalCompositeOperation = "source-in";
+  ink.fillStyle = PAPER_SHADOW_INK;
+  ink.fillRect(0, 0, width, height);
+  paperSilhouettes.set(image, canvas);
+  return canvas;
+}
+
 function paintStickers(ctx: CanvasRenderingContext2D, spec: CardPaint, width: number, height: number) {
   for (const sticker of spec.stickers) {
     const size = sticker.scale * width;
@@ -212,7 +238,8 @@ function paintStickers(ctx: CanvasRenderingContext2D, spec: CardPaint, width: nu
       traceShape(ctx, shape, centerX, centerY, clear ? radius : radius * 0.9);
       ctx.clip();
       ctx.imageSmoothingEnabled = !crisp;
-      ctx.drawImage(image, centerX - drawW / 2, centerY - drawH / 2, drawW, drawH);
+      const picture = isShadowPicture(url) ? paperSilhouette(image) : image;
+      ctx.drawImage(picture, centerX - drawW / 2, centerY - drawH / 2, drawW, drawH);
       ctx.restore();
     }
     traceShape(ctx, shape, centerX, centerY, radius);

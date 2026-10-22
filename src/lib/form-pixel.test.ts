@@ -16,25 +16,21 @@ describe("form pixels", () => {
       const decoded = readPngRgba(first);
       assert.equal(decoded.width, 16);
       assert.equal(decoded.height, 16);
-      let coloured = false;
-      for (let index = 0; index < decoded.rgba.length; index += 4) {
-        assert.equal(decoded.rgba[index + 3], 255);
-        const white = decoded.rgba[index] === 255 && decoded.rgba[index + 1] === 255 && decoded.rgba[index + 2] === 255;
-        if (!white) coloured = true;
-      }
-      assert.equal(coloured, true);
+      let lit = 0;
       let occupiedRows = 0;
       for (let y = 0; y < 16; y += 1) {
+        let rowLit = false;
         for (let x = 0; x < 16; x += 1) {
-          const i = (y * 16 + x) * 4;
-          const white =
-            decoded.rgba[i] === 255 && decoded.rgba[i + 1] === 255 && decoded.rgba[i + 2] === 255;
-          if (!white) {
-            occupiedRows += 1;
-            break;
+          const alpha = decoded.rgba[(y * 16 + x) * 4 + 3];
+          assert.ok(alpha === 0 || alpha === 255, "a form icon pixel is clear or solid");
+          if (alpha === 255) {
+            lit += 1;
+            rowLit = true;
           }
         }
+        if (rowLit) occupiedRows += 1;
       }
+      assert.ok(lit > 0 && lit < 256, "a form icon has a creature on a clear background");
       assert.ok(occupiedRows >= 12, `form icon should fill the Yoto face (${occupiedRows} rows).`);
       const species = await readFile(path.join(process.cwd(), "public", "pixels", "3.png"));
       assert.equal(first.equals(species), false);

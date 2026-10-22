@@ -43,7 +43,7 @@ import {
   type TileLayout,
 } from "@/lib/sticker-layout";
 import { decorationArt } from "@/lib/sticker-decor";
-import { paintCard, paintSheet, type CardPaint } from "@/lib/sticker-paint";
+import { isShadowPicture, paintCard, paintSheet, type CardPaint } from "@/lib/sticker-paint";
 import { jpegPagesPdf } from "@/lib/sticker-pdf";
 
 type StickerMon = {
@@ -1097,7 +1097,10 @@ export function StickerStudio({
           height={shelf ? 56 : 64}
           draggable={false}
           className={shelf ? "h-14 w-14 object-contain" : "h-16 w-16 object-contain"}
-          style={{ imageRendering: crispPicture(mon.src) ? "pixelated" : "auto" }}
+          style={{
+            imageRendering: crispPicture(mon.src) ? "pixelated" : "auto",
+            filter: isShadowPicture(mon.src) ? "brightness(0)" : undefined,
+          }}
         />
         {shelf ? null : <span className="line-clamp-2 w-full text-sm leading-4">{mon.name}</span>}
       </button>
@@ -1313,7 +1316,10 @@ export function StickerStudio({
                   width={48}
                   height={48}
                   className="h-12 w-12 shrink-0 object-contain"
-                  style={{ imageRendering: crispPicture(selectedMon.src) ? "pixelated" : "auto" }}
+                  style={{
+                    imageRendering: crispPicture(selectedMon.src) ? "pixelated" : "auto",
+                    filter: isShadowPicture(selectedMon.src) ? "brightness(0)" : undefined,
+                  }}
                 />
               ) : null}
               <p className="text-sm leading-6">
@@ -1586,7 +1592,12 @@ export function StickerStudio({
           src={ghost.src}
           alt=""
           className="pk-sticker-ghost pointer-events-none fixed z-[60] h-16 w-16 object-contain"
-          style={{ left: ghost.x, top: ghost.y, imageRendering: crispPicture(ghost.src) ? "pixelated" : "auto" }}
+          style={{
+            left: ghost.x,
+            top: ghost.y,
+            imageRendering: crispPicture(ghost.src) ? "pixelated" : "auto",
+            filter: isShadowPicture(ghost.src) ? "brightness(0)" : undefined,
+          }}
         />
       ) : null}
     </div>
