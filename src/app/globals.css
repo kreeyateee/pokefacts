@@ -260,14 +260,14 @@
 }
 
 .pk-logo-horizontal {
-  width: min(38rem, 100%);
-  max-height: 6.75rem;
+  width: min(46rem, 100%);
+  max-height: 8.25rem;
 }
 
 .pk-logo-compact-header {
   display: none;
-  width: min(22rem, 100%);
-  max-height: 4.4rem;
+  width: min(24rem, 100%);
+  max-height: 5.1rem;
 }
 
 .pk-logo-hero {
@@ -735,7 +735,7 @@
 
 .pk-card:not(.pk-playlist-row) {
   position: relative;
-  padding-top: 3.6rem;
+  padding-top: 4.15rem;
 }
 
 .pk-card:not(.pk-playlist-row)::before {
@@ -746,10 +746,10 @@
   top: 0;
   z-index: 1;
   box-sizing: border-box;
-  height: 2.55rem;
+  height: 3.15rem;
   border-bottom: 3px solid var(--ink);
   border-radius: 1.05rem 1.05rem 0 0;
-  background: #fffdf6 url("/brand/logo-compact.png") center / auto 2.05rem no-repeat;
+  background: #fffdf6 url("/brand/logo-compact.png") center / auto 2.55rem no-repeat;
   pointer-events: none;
 }
 
