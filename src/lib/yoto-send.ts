@@ -16,6 +16,7 @@ import {
   statusErrorText,
   validYotoCardId,
 } from "@/lib/yoto-error";
+import type { TrackPart } from "@/lib/story/story-voices";
 import { isYotoCoverUrl } from "@/lib/yoto-playlist";
 
 export type SavedCardMap = Partial<Record<string, string>>;
@@ -152,6 +153,8 @@ export type RenderJob = {
   dexId?: number;
   /** Species name, used when a cry cannot be added. */
   name?: string;
+  /** Adventure lines in several voices, with sounds, recorded as this one track. */
+  parts?: TrackPart[];
   progress: string;
   /** Finished tracks so far, including this one when it has started. */
   done?: number;
@@ -243,6 +246,7 @@ export function renderJobs(libraryTitle: string, card: KidCard, upload: Playlist
         text: track.trackUrl ?? "",
         dexId,
         name: dexId ? source.title : undefined,
+        ...(sourceTrack?.parts ? { parts: sourceTrack.parts } : {}),
       };
     });
   });

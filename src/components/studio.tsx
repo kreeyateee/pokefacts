@@ -1330,6 +1330,8 @@ export function Studio({
   ): Promise<FinishedAudio> {
     let speechJobId: string | undefined;
     let speechCardId: string | undefined;
+    // On an adventure track, the line the current speech job is recording.
+    let speechPart: string | undefined;
     let uploadId: string | undefined;
     let last = new SendFailure("This track did not finish.", false);
     for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -1349,6 +1351,8 @@ export function Studio({
                 voiceId: voice.voiceId,
                 speechJobId,
                 speechCardId,
+                speechPart,
+                parts: job.parts,
                 uploadId,
                 mix: voice.mix,
               }),
@@ -1368,6 +1372,7 @@ export function Studio({
           const payload = body as {
             phase?: string;
             speechJobId?: string;
+            speechPart?: string;
             uploadId?: string;
             trackUrl?: string;
             duration?: number;
@@ -1380,6 +1385,7 @@ export function Studio({
           }
           if (payload.phase === "speech" && payload.speechJobId) {
             speechJobId = payload.speechJobId;
+            speechPart = payload.speechPart;
             const finished = await pollJob(payload.speechJobId, job.progress, mark);
             const cardId = scratchCardId(finished);
             if (!cardId) throw new SendFailure("The voice did not return a recording.", false);
@@ -1403,6 +1409,7 @@ export function Studio({
         last = asSendFailure(error, "This track did not finish.");
         if (!isRateLimited(0, last.message) && /could not record|did not start|does not look right/i.test(last.message)) {
           speechJobId = undefined;
+          speechPart = undefined;
           uploadId = undefined;
         }
         await delay(isRateLimited(0, last.message) ? Math.min(8_000, 1_000 * (attempt + 1)) : 600);
@@ -1954,7 +1961,13 @@ export function Studio({
         ) : view === "music" ? (
           <MusicPanel />
         ) : view === "adventures" ? (
-          <AdventurePanel sending={sending} onSend={sendAdventure} />
+          <AdventurePanel
+            sending={sending}
+            onSend={sendAdventure}
+            voiceId={voiceId}
+            connected={Boolean(session)}
+            mix={playback}
+          />
         ) : card && chapter ? (
           <div className="grid min-w-0 gap-5">
             <section className="pk-panel min-w-0" aria-labelledby="playlist-heading">

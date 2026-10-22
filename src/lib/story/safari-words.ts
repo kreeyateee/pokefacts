@@ -1,6 +1,9 @@
 /**
  * Everything the Safari Zone narrator says, written by hand. The adventure only picks lines and fills gaps.
  *
+ * A cue in square brackets plays a sound there: [catch] is the Poké Ball's three wobbles and click.
+ * Dialogue goes in single quotes, and each character's lines are read in their own voice.
+ *
  * Gaps look like {name}. Each pool lists the gaps it may use:
  *   {home} {homeAt}     where the Pokémon lives: "the lake", "by the lake"
  *   {decoy} {decoyAt}   the wrong place
@@ -250,7 +253,7 @@ export function introText(owner: string): string {
 
 export const LESSON_TEXT = [
   "Marigold takes you to a little pond by the gate. 'Watch,' she whispers.",
-  "A small Pokémon is nibbling a crust on the path. Marigold doesn't even crouch down. She lobs a Safari Ball, bonk, and it's caught.",
+  "A small Pokémon is nibbling a crust on the path. Marigold doesn't even crouch down. She lobs a Safari Ball, bonk. [catch]",
   "'Common as crumbs, that one,' she says. 'Common ones, you just throw the ball.'",
   "Then something streaks across the grass, so fast it's a blur. 'Rare, and fast,' says Marigold. 'Chase it, and it's gone.'",
   "She tosses a handful of bait. The Pokémon skids to a stop and starts munching. 'Nobody runs off while they're chewing.'",
@@ -366,26 +369,25 @@ export const THROW_LABEL: Record<SafariThrow, string> = {
 /** The right throw. Then the name. */
 export const CAUGHT_LINES: Record<SafariThrow, readonly string[]> = {
   ball: [
-    "You don't wait. The Safari Ball flies, bonks it on the head, and swallows it in a flash of red. Wobble. Wobble. Click!",
-    "Straight in with the ball. It wobbles once, it wobbles twice, and then a lovely click.",
-    "You throw the ball before you can talk yourself out of it. It doesn't even wobble. Click!",
-    "No fuss. One Safari Ball, one perfect throw, one very satisfying click.",
+    "You don't wait. The Safari Ball flies, bonks it on the head, and swallows it in a flash of red. [catch] Gotcha!",
+    "Straight in with the ball. It shakes once, it shakes twice, it shakes three times. [catch] Gotcha!",
+    "You throw the ball before you can talk yourself out of it. [catch] Got it!",
+    "No fuss. One Safari Ball, one perfect throw. [catch] Gotcha!",
   ],
   bait: [
-    "You toss a handful of bait. It sniffs. It nibbles. Then it's munching so happily that it doesn't even see the ball coming. Click!",
-    "The bait lands right under its nose. It freezes, starts chewing, and while its cheeks are full, your ball drops neatly on top. Click!",
-    "One handful of bait, and it forgets all about running. Chomp, chomp, chomp. Ball. Wobble. Click!",
-    "It's about to bolt, but the bait smells too good. It stops for one bite, and one bite is all you need. Click!",
+    "You toss a handful of bait. It sniffs. It nibbles. Then it's munching so happily that it doesn't even see the ball coming. [catch] Gotcha!",
+    "The bait lands right under its nose. It freezes, starts chewing, and while its cheeks are full, your ball drops neatly on top. [catch] Got it!",
+    "One handful of bait, and it forgets all about running. Chomp, chomp, chomp. Then the ball. [catch] Gotcha!",
+    "It's about to bolt, but the bait smells too good. It stops for one bite, and one bite is all you need. [catch] Gotcha!",
   ],
   rock: [
-    "You plop a rock down right beside it. Not at it. Beside it. It jumps, spins round, gets in a terrible fluster, and while it's still flustering, your ball lands. Click!",
-    "Your rock lands with a thud next to it. It huffs and puffs and turns in a slow circle, far too flustered to wriggle out of the ball. Click!",
-    "Thunk. The rock lands beside it, and it gets such a surprise that it sits down. The ball is already flying. Wobble. Wobble. Click!",
-    "You drop a rock beside it, and it's so busy being cross about the rock that it never notices the ball. Click!",
+    "You plop a rock down right beside it. Not at it. Beside it. It jumps, spins round, gets in a terrible fluster, and while it's still flustering, your ball lands. [catch] Gotcha!",
+    "Your rock lands with a thud next to it. It huffs and puffs and turns in a slow circle, far too flustered to wriggle out of the ball. [catch] Got it!",
+    "Thunk. The rock lands beside it, and it gets such a surprise that it sits down. The ball is already flying. [catch] Gotcha!",
+    "You drop a rock beside it, and it's so busy being cross about the rock that it never notices the ball. [catch] Gotcha!",
   ],
 };
 
-/** What you get when you throw the wrong thing: `thrown` then the right throw. */
 /** A wrong throw, then the right one: "ball-bait" is a ball thrown at a Pokémon that wanted bait. */
 export type WrongThrow = Exclude<`${SafariThrow}-${SafariThrow}`, "ball-ball" | "bait-bait" | "rock-rock">;
 

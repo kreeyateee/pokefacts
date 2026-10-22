@@ -18,6 +18,9 @@ export async function POST(request: Request) {
     discardCardIds?: string[];
     sweepScratch?: boolean;
     voiceId?: string;
+    /** Adventure lines in several voices, with sounds. Checked by prepareFactTrack. */
+    parts?: unknown;
+    speechPart?: string;
     cryVolume?: number;
     voiceVolume?: number;
     pauseSeconds?: number;

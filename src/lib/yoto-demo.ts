@@ -13,6 +13,8 @@ import {
   readCachedMergedMp3,
   recordingCardId,
 } from "@/lib/yoto-fact-audio";
+import { joinTrackParts } from "@/lib/story-audio";
+import { readTrackParts, type TrackPart } from "@/lib/story/story-voices";
 import { reconnectMessage, yotoErrorText } from "@/lib/yoto-error";
 import { spokenForDemo } from "@/lib/voice-choice";
 
@@ -30,6 +32,8 @@ type DemoRequest = {
   cryVolume?: number;
   voiceVolume?: number;
   pauseSeconds?: number;
+  /** Adventure lines in several voices, with sounds, played as one clip. */
+  parts?: unknown;
 };
 
 type DemoOptions = {
@@ -42,6 +46,8 @@ type DemoOptions = {
   /** Folder of merged MP3s. Hear plays one of these instead of calling Lily. */
   rendered?: string;
   piper?: PiperSynthOptions;
+  /** Folder holding the story sounds. The site's public folder by default. */
+  sounds?: string;
 };
 
 const DEMO_ROOT = path.join(/* turbopackIgnore: true */ process.cwd(), "data", "demo");
@@ -152,6 +158,12 @@ export async function prepareDemoAudio(
     throw new Error(`That cry is not in the national Pokédex (${String(dexId)}).`);
   }
 
+  if (request.parts !== undefined) {
+    const parts = readTrackParts(request.parts);
+    if (!parts) throw new Error("The lines for this adventure track could not be read.");
+    return partsDemo(token, parts, title, dexId, fetchImpl, options, mix);
+  }
+
   if (dexId) {
     const cached = await readCachedMergedMp3(text, voiceId, dexId, options.rendered, mix);
     if (cached) return { audio: cached, cryFirst: true };
@@ -226,6 +238,39 @@ async function piperDemo(
   } finally {
     if (timer) clearTimeout(timer);
     void mixing.catch(() => undefined);
+  }
+}
+
+/**
+ * An adventure track: every line in its own voice, the sounds between them, and the cry in front.
+ * If the cry cannot be mixed, the lines still play.
+ */
+async function partsDemo(
+  token: string,
+  parts: TrackPart[],
+  title: string,
+  dexId: number | undefined,
+  fetchImpl: typeof fetch,
+  options: DemoOptions,
+  mix: MixSettings,
+): Promise<DemoAudio> {
+  const joined = await joinTrackParts(
+    parts,
+    (part) =>
+      isPiperVoice(part.voiceId)
+        ? synthesizePiper(part.text, options.piper)
+        : recordVoice(token, part.text, title, part.voiceId, fetchImpl, options),
+    options.sounds,
+  );
+  if (!dexId) return { audio: joined, cryFirst: false };
+  try {
+    const loadCry = options.loadCry ?? ((id: number) => ensureCry(id, fetchImpl));
+    const merge = options.merge ?? ((cry: Buffer, speech: Buffer) => mergeCryFirst(cry, speech, mix));
+    const merged = await merge(await loadCry(dexId), joined);
+    if (!inputContainer(merged) || merged.length < 128) throw new Error("The cry mix was not playable audio.");
+    return { audio: merged, cryFirst: true };
+  } catch {
+    return { audio: joined, cryFirst: false };
   }
 }
 

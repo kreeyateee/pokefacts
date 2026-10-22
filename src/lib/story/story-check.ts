@@ -1,6 +1,8 @@
 import { YOTO_TRACK_LIMIT } from "@/lib/kid-cards";
 import { pronounce } from "@/lib/pronounce";
 import type { StoryGraph, StoryIcon, StoryNode, StoryNodeId } from "@/lib/story/story-graph";
+import { isStorySound, SOUND_CUE, withoutCues } from "@/lib/story/story-sound";
+import { storyChunks } from "@/lib/story/story-voices";
 
 /** Yoto reads at most this many characters of text to speech on one track. */
 export const STORY_TEXT_LIMIT = 3000;
@@ -80,12 +82,20 @@ function nodeProblems(node: StoryNode, endings: number): string[] {
     problems.push(`${name} has no narration.`);
   } else {
     const lines = storyLines(node, endings);
-    const spoken = pronounce(lines.narration).length;
+    const spoken = pronounce(withoutCues(lines.narration)).length;
     if (spoken > STORY_TEXT_LIMIT) {
       problems.push(`${name} narration is ${spoken} characters. Yoto reads at most ${STORY_TEXT_LIMIT}.`);
     }
     if (lines.question && pronounce(lines.question).length > STORY_TEXT_LIMIT) {
       problems.push(`${name} question is longer than Yoto reads.`);
+    }
+    for (const match of node.text.matchAll(SOUND_CUE)) {
+      if (!isStorySound(match[1])) problems.push(`${name} plays [${match[1]}], which is not a story sound.`);
+    }
+    try {
+      storyChunks(node.text);
+    } catch {
+      problems.push(`${name} opens a quote and never closes it.`);
     }
   }
   if (node.kind === "choice") {

@@ -4,6 +4,8 @@
  * The compiler (story-card.ts) turns this map into a Yoto interactive playlist.
  */
 
+import type { StoryCharacter } from "@/lib/story/story-voices";
+
 /** Short and unique: lowercase letters and digits, at most 8 characters. Used for Yoto chapter keys. */
 export type StoryNodeId = string;
 
@@ -20,7 +22,10 @@ type NodeBase = {
   id: StoryNodeId;
   /** Shown in the Yoto app's track list. Keep it short and spoiler-free. */
   title: string;
-  /** What the narrator says. Plain sentences, at most 3000 characters. */
+  /**
+   * What is said. Plain sentences, at most 3000 characters. Dialogue goes in single quotes and is read
+   * in the speaker's voice; a cue such as [catch] plays a sound there.
+   */
   text: string;
   /** Plays this Pokémon's cry before the narration. */
   dexId?: number;
@@ -49,4 +54,6 @@ export type StoryGraph = {
   description: string;
   start: StoryNodeId;
   nodes: StoryNode[];
+  /** Characters who speak, each in their own voice. Without a cast, the narrator reads everything. */
+  cast?: StoryCharacter[];
 };

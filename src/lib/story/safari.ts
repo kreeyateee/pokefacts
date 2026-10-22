@@ -17,7 +17,9 @@ import { pronounce } from "@/lib/pronounce";
 import { FIELD_NOTES, GOLDEN_STOPS, type FieldNotes } from "@/lib/story/safari-roster";
 import * as W from "@/lib/story/safari-words";
 import type { StoryGraph, StoryIcon, StoryNode } from "@/lib/story/story-graph";
-import { iconForType, YOTO_ICONS } from "@/lib/yoto-icons";
+import { isStorySound } from "@/lib/story/story-sound";
+import type { StoryCharacter } from "@/lib/story/story-voices";
+import { iconForType, YOTO_ICONS, YOTO_VOICES } from "@/lib/yoto-icons";
 
 export const SAFARI_AREAS = [
   "cave",
@@ -48,6 +50,27 @@ export const FAST_SPEED = 70;
 
 /** A type sign only counts when at least this many Safari Pokémon of that type live in the right place. */
 const HOME_AT_LEAST = 4;
+
+function voiceNamed(name: (typeof YOTO_VOICES)[number]["name"]): string {
+  return YOTO_VOICES.find((voice) => voice.name === name)?.id ?? YOTO_VOICES[0].id;
+}
+
+/**
+ * Who speaks in the Safari. The narrator reads in the voice chosen in Settings.
+ * Marigold is older and warm: Lily, lower and a touch slower. Barnaby is young and pleased with
+ * himself: George, or Brian when George is narrating, higher and quicker.
+ */
+export const SAFARI_CAST: StoryCharacter[] = [
+  { id: "marigold", name: "Marigold", pronoun: "she", voices: [voiceNamed("Lily")], pitch: -3, tempo: 0.92 },
+  {
+    id: "barnaby",
+    name: "Barnaby",
+    pronoun: "he",
+    voices: [voiceNamed("George"), voiceNamed("Brian")],
+    pitch: 2.5,
+    tempo: 1.08,
+  },
+];
 
 /** How many stops Barnaby turns up at, on the way in. */
 const BARNABY_VISITS = 3;
@@ -107,12 +130,19 @@ export function nameVariants(name: string): string[] {
   return [...new Set([name, plainName(name), spokenName(name), name.replace(/[♀♂]/g, "").trim()])].filter(Boolean);
 }
 
-/** Text for the ear: no digits, no stray symbols. */
+/** Text for the ear: no digits, no stray symbols. Sound cues such as [catch] are kept. */
 function speakable(text: string): string {
   return text
-    .replace(/(\d+)/g, (digits) => numberWords(Number(digits)))
-    .replace(/[&]/g, " and ")
-    .replace(/[%#*_<>{}[\]|~^$@♀♂]/g, " ")
+    .split(/(\[\w+\])/)
+    .map((piece) =>
+      /^\[\w+\]$/.test(piece) && isStorySound(piece.slice(1, -1))
+        ? piece
+        : piece
+            .replace(/(\d+)/g, (digits) => numberWords(Number(digits)))
+            .replace(/[&]/g, " and ")
+            .replace(/[%#*_<>{}[\]|~^$@♀♂]/g, " "),
+    )
+    .join("")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -747,6 +777,7 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
       "Follow Warden Marigold round the Safari Zone, beat Barnaby to the rare ones, and use your Pokémon know-how to pick the right throw.",
     start: "start",
     nodes,
+    cast: SAFARI_CAST,
   };
 }
 

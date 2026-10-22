@@ -5,6 +5,7 @@ import { dexBlurb, guessSpoken, pickDexEntry, type MonSheet } from "@/lib/dex-fa
 import { pronounce } from "@/lib/pronounce";
 import { spokenWiki } from "@/lib/spoken-wiki";
 import { chosenVoice, isPiperVoice } from "@/lib/piper-voice";
+import type { TrackPart } from "@/lib/story/story-voices";
 import { iconForType, YOTO_ICONS } from "@/lib/yoto-icons";
 
 /** Lily, the British woman. Yoto Labs records her MP3 from the spoken script. */
@@ -36,6 +37,8 @@ export type KidTrack = {
   source?: string;
   /** Play the Pokémon cry before this script. The how-to intro leaves this off. */
   lead?: "cry";
+  /** An adventure track with characters or sounds: each line in its own voice, recorded as one track. */
+  parts?: TrackPart[];
 };
 
 export type KidChapter = {

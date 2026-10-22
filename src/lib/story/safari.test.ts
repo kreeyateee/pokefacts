@@ -5,6 +5,8 @@ import { GET } from "../../app/api/adventure/safari/route";
 import { listSafariSpecies } from "../catalogue-db";
 import { FIELD_NOTES, GOLDEN_STOPS } from "./safari-roster";
 import { storyTrackCount as trackCount, checkStory } from "./story-check";
+import { withoutCues } from "./story-sound";
+import { speakerLines } from "./story-voices";
 import type { StoryGraph, StoryNode } from "./story-graph";
 import {
   cleanOwner,
@@ -145,7 +147,7 @@ function assertSafariRules(graph: StoryGraph, nameOf: (id: number) => string) {
 
   // Written for the ear: no digits or symbols, sensible lengths, labels read after "Press left to".
   for (const node of graph.nodes) {
-    assert.doesNotMatch(node.text, /[0-9♀♂&%#@*_<>{}[\]|~^$]/, `${node.id} has a symbol or digit`);
+    assert.doesNotMatch(withoutCues(node.text), /[0-9♀♂&%#@*_<>{}[\]|~^$]/, `${node.id} has a symbol or digit`);
     assert.ok(node.text.length <= 1500, `${node.id} is ${node.text.length} characters`);
     assert.doesNotMatch(node.text, /\b(victims?|prey|blood|kill\w*|dead|death)\b|\bIt of\b/i, `${node.id} is not gentle`);
     if (node.kind === "choice") {
@@ -346,6 +348,20 @@ describe("safari adventure from the catalogue", () => {
       assert.doesNotMatch(all, /catch rate|\bspeed\b|Kssh|Expert tip|Stop (one|two|three) of/i);
       const finds = graph.nodes.filter((node) => /^s\da0$/.test(node.id)).map((node) => node.text.split(". ")[0]);
       assert.equal(new Set(finds).size, finds.length, `seed ${seed} opens two stops the same way`);
+    }
+  });
+
+  it("plays the catch sound at every catch, and gives every quote a speaker", () => {
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      const graph = safariAdventure({ seed, owner: "Mia" });
+      for (const node of graph.nodes) {
+        const catching = /^s\dc\d$/.test(node.id) || node.id === "end8";
+        assert.equal(node.text.includes("[catch]"), catching || node.id === "lesson", `${node.id} catch sound`);
+        const lines = speakerLines(node.text, graph.cast ?? []);
+        for (const line of lines) {
+          if ("speaker" in line) assert.ok(["narrator", "marigold", "barnaby"].includes(line.speaker));
+        }
+      }
     }
   });
 

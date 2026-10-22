@@ -2,11 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { useAdventureListen } from "@/components/adventure-listen";
 import { Button } from "@/components/ui/button";
 import { useStoredState } from "@/components/use-stored-state";
+import type { MixSettings } from "@/lib/playback-settings";
+import { pickerVoice } from "@/lib/piper-voice";
 import { storyIconPath } from "@/lib/story/story-card";
 import { endingCount, storyLines, storyTrackCount } from "@/lib/story/story-check";
 import type { StoryGraph, StoryNode } from "@/lib/story/story-graph";
+import { withoutCues } from "@/lib/story/story-sound";
+import { castVoices, NARRATOR, speakerLines, type VoiceStyle } from "@/lib/story/story-voices";
 
 const OWNER_KEY = "pokefacts.adventure-owner";
 
@@ -51,17 +56,77 @@ function NodePicture({ node }: { node: StoryNode }) {
   );
 }
 
+/** Each character's lines are coloured on the page, so you can see who will speak them. */
+const SPEAKER_COLOURS = ["text-[#b3400c]", "text-[#22609f]", "text-[#5b3f9e]"];
+
+/** The words on the page, with each character's lines in their colour and a marker where a sound plays. */
+function SpokenText({ text, story }: { text: string; story: StoryGraph }) {
+  const cast = story.cast ?? [];
+  let lines;
+  try {
+    lines = speakerLines(text, cast);
+  } catch {
+    return <>{withoutCues(text)}</>;
+  }
+  return (
+    <>
+      {lines.map((line, index) => {
+        if ("sound" in line) {
+          return (
+            <span
+              key={index}
+              className="mx-1 inline-block rounded-full bg-poke-red px-2 align-middle text-xs font-bold text-white"
+              title="The Poké Ball catch sound plays here"
+            >
+              ● ● ● click!
+            </span>
+          );
+        }
+        const character = cast.findIndex((item) => item.id === line.speaker);
+        if (line.speaker === NARRATOR || character < 0) return <span key={index}>{line.text} </span>;
+        return (
+          <span
+            key={index}
+            className={`font-semibold ${SPEAKER_COLOURS[character % SPEAKER_COLOURS.length]}`}
+            title={cast[character]?.name}
+          >
+            ‘{line.text}’{" "}
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
+function styleNote(style: VoiceStyle | undefined): string {
+  if (!style) return "";
+  const name = pickerVoice(style.voiceId).name;
+  const pitch = style.pitch < 0 ? "lower" : style.pitch > 0 ? "higher" : "";
+  const pace = style.tempo < 1 ? "slower" : style.tempo > 1 ? "quicker" : "";
+  const shift = [pitch, pace].filter(Boolean).join(" and ");
+  return shift ? `${name}, ${shift}` : name;
+}
+
 /**
- * The Safari Zone adventure: a child's name, a new draw, a play-through preview with Left and Right,
- * and Send to Yoto. The studio owns sending; this panel only hands it the story.
+ * The Safari Zone adventure: a child's name, a new draw, a play-through preview with Left and Right
+ * that can be listened to, and Send to Yoto. The studio owns sending; this panel only hands it the story.
  */
 export function AdventurePanel({
   sending,
   onSend,
+  voiceId,
+  connected,
+  mix,
 }: {
   sending: boolean;
   onSend: (story: StoryGraph) => Promise<void>;
+  /** The narrator's voice from Settings. */
+  voiceId: string;
+  /** Signed in to Yoto, so the page can play the voices the card will use. */
+  connected: boolean;
+  mix: MixSettings;
 }) {
+  const listener = useAdventureListen({ voiceId, connected, mix });
   const [owner, setOwner] = useStoredState(OWNER_KEY, parseOwner, keepOwner);
   // The panel only opens after the page has loaded, so a random first draw cannot upset hydration.
   const [seed, setSeed] = useState<number>(newSeed);
@@ -105,11 +170,13 @@ export function AdventurePanel({
   function go(to: string) {
     const next = byId.get(to);
     if (!next) return;
+    listener.stop();
     setNodeId(to);
     if (next.kind === "ending") setFound((current) => new Set(current).add(next.ending.number));
   }
 
   function freshAdventure() {
+    listener.stop();
     setFound(new Set());
     setNodeId("");
     setSeed(newSeed());
@@ -186,8 +253,21 @@ export function AdventurePanel({
                 {node.dexId ? <p className="text-xs text-muted-foreground">A Pokémon cry plays first.</p> : null}
               </div>
             </div>
-            <p className="mt-3 whitespace-pre-line leading-7">{lines.narration}</p>
+            <p className="mt-3 whitespace-pre-line leading-7">
+              <SpokenText text={lines.narration} story={story} />
+            </p>
             {lines.question ? <p className="mt-3 font-medium">{lines.question}</p> : null}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 px-3"
+                onClick={() => (listener.listening ? listener.stop() : void listener.listen(story, node, lines))}
+              >
+                {listener.listening ? "■ Stop" : "▶ Listen"}
+              </Button>
+              {listener.note ? <span className="text-xs text-muted-foreground">{listener.note}</span> : null}
+            </div>
             <div className="mt-4 flex flex-wrap gap-2">
               {node.kind === "choice" ? (
                 <>
@@ -216,6 +296,7 @@ export function AdventurePanel({
             <p className="mt-2 text-xs leading-5 text-muted-foreground">
               On the player, a scene carries on by itself and a question repeats until a button is pressed.
             </p>
+            <VoiceKey story={story} voiceId={voiceId} />
           </div>
         )}
         {story ? (
@@ -235,5 +316,25 @@ export function AdventurePanel({
         ) : null}
       </section>
     </div>
+  );
+}
+
+/** Who reads what: the narrator in the Settings voice, and each character in theirs. */
+function VoiceKey({ story, voiceId }: { story: StoryGraph; voiceId: string }) {
+  const cast = story.cast ?? [];
+  if (cast.length === 0) return null;
+  const voices = castVoices(voiceId, cast);
+  return (
+    <p className="mt-2 text-xs leading-5 text-muted-foreground">
+      Voices: narrator {styleNote(voices[NARRATOR])}
+      {cast.map((character, index) => (
+        <span key={character.id}>
+          {"; "}
+          <span className={`font-semibold ${SPEAKER_COLOURS[index % SPEAKER_COLOURS.length]}`}>{character.name}</span>{" "}
+          {styleNote(voices[character.id])}
+        </span>
+      ))}
+      . Change the narrator in Settings.
+    </p>
   );
 }

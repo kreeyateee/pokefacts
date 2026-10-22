@@ -1,5 +1,6 @@
 import { inputContainer } from "@/lib/cry-audio";
 import { isPiperVoice } from "@/lib/piper-voice";
+import { readTrackParts } from "@/lib/story/story-voices";
 import { looksLikeGateway, PUBLIC_LINK_TIMEOUT, reconnectMessage } from "@/lib/yoto-error";
 import { prepareDemoAudio } from "@/lib/yoto-demo";
 import { bearerToken, jsonError } from "@/lib/yoto-proxy";
@@ -14,6 +15,7 @@ export async function POST(request: Request) {
     cryVolume?: number;
     voiceVolume?: number;
     pauseSeconds?: number;
+    parts?: unknown;
   };
   try {
     body = (await request.json()) as typeof body;
@@ -22,7 +24,12 @@ export async function POST(request: Request) {
   }
 
   const token = bearerToken(request);
-  if (!token && !isPiperVoice(body.voiceId)) return jsonError("Connect Yoto before hearing an entry.", 401);
+  // An adventure line plays without Yoto only when every voice in it is Piper.
+  const parts = body.parts === undefined ? null : readTrackParts(body.parts);
+  const piperOnly = parts
+    ? parts.every((part) => !("voiceId" in part) || isPiperVoice(part.voiceId))
+    : isPiperVoice(body.voiceId);
+  if (!token && !piperOnly) return jsonError("Connect Yoto before hearing an entry.", 401);
 
   try {
     const result = await prepareDemoAudio(token ?? "", {
@@ -33,6 +40,7 @@ export async function POST(request: Request) {
       cryVolume: body.cryVolume,
       voiceVolume: body.voiceVolume,
       pauseSeconds: body.pauseSeconds,
+      ...(body.parts !== undefined ? { parts: body.parts } : {}),
     });
     const kind = inputContainer(result.audio);
     const contentType = kind === "ogg" ? "audio/ogg" : kind === "wav" ? "audio/wav" : "audio/mpeg";

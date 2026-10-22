@@ -3,6 +3,8 @@ import { chosenVoice } from "@/lib/piper-voice";
 import { pronounce } from "@/lib/pronounce";
 import { checkStory, endingCount, storyLines } from "@/lib/story/story-check";
 import type { StoryGraph, StoryIcon, StoryNode, StoryNodeId } from "@/lib/story/story-graph";
+import { withoutCues } from "@/lib/story/story-sound";
+import { castVoices, trackParts, type StoryCharacter, type VoiceStyle } from "@/lib/story/story-voices";
 import type {
   YotoContent,
   YotoEditSettings,
@@ -100,18 +102,36 @@ function chapterOrder(graph: StoryGraph): StoryNode[] {
   return [...start, ...graph.nodes.filter((node) => node.id !== graph.start)];
 }
 
-function storyTrack(key: string, title: string, text: string, icon: string, overlay: string, voiceId: string): KidTrack {
-  return { key, title, text, spoken: pronounce(text), icon, overlay, voiceId };
+/** Who speaks in this story and in which voice. */
+type Voicing = { voiceId: string; voices: Record<string, VoiceStyle>; cast: readonly StoryCharacter[] };
+
+/**
+ * One track. The page shows the words without sound cues. A track with dialogue or a sound also
+ * carries its parts, so each line is recorded in its speaker's voice and joined into this one track.
+ */
+function storyTrack(key: string, title: string, text: string, icon: string, overlay: string, voicing: Voicing): KidTrack {
+  const shown = withoutCues(text);
+  const parts = trackParts(text, voicing.voices, voicing.cast, pronounce);
+  return {
+    key,
+    title,
+    text: shown,
+    spoken: pronounce(shown),
+    icon,
+    overlay,
+    voiceId: voicing.voiceId,
+    ...(parts ? { parts } : {}),
+  };
 }
 
-function storyChapter(node: StoryNode, index: number, endings: number, icon: string, voiceId: string): KidChapter {
+function storyChapter(node: StoryNode, index: number, endings: number, icon: string, voicing: Voicing): KidChapter {
   const overlay = String(index + 1);
   const lines = storyLines(node, endings);
-  const narration = storyTrack(narrationKey(node.id), node.title.trim(), lines.narration, icon, overlay, voiceId);
+  const narration = storyTrack(narrationKey(node.id), node.title.trim(), lines.narration, icon, overlay, voicing);
   if (node.dexId) narration.lead = "cry";
   const tracks = [narration];
   if (lines.question) {
-    tracks.push(storyTrack(questionKey(node.id), QUESTION_TITLE, lines.question, icon, overlay, voiceId));
+    tracks.push(storyTrack(questionKey(node.id), QUESTION_TITLE, lines.question, icon, overlay, voicing));
   }
   return {
     key: node.id,
@@ -137,11 +157,13 @@ export function storyCard(
   const problems = checkStory(graph);
   if (problems.length > 0) throw new Error(`${graph.title || "This story"} is not ready. ${problems.join(" ")}`);
   const voiceId = chosenVoice(options.voiceId ?? LILY_VOICE_ID);
+  const cast = graph.cast ?? [];
+  const voicing: Voicing = { voiceId, voices: castVoices(voiceId, cast), cast };
   const endings = endingCount(graph);
   const nodes = chapterOrder(graph);
   const chapters = nodes.map((node, index) => {
     const icon = uploadedIcon(storyIconPath(node), options.realById ?? {}, options.shadowById ?? {});
-    return storyChapter(node, index, endings, icon, voiceId);
+    return storyChapter(node, index, endings, icon, voicing);
   });
   const card: KidCard = {
     id: graph.id,

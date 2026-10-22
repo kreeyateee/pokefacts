@@ -14,6 +14,8 @@ import {
 import { clampMix, isDefaultMix, mixCacheToken, type MixSettings } from "@/lib/playback-settings";
 import { synthesizePiper, type PiperSynthOptions } from "@/lib/piper";
 import { chosenVoice, isPiperVoice, piperCacheToken } from "@/lib/piper-voice";
+import { isSpokenPart, joinTrackParts, type SpokenPart } from "@/lib/story-audio";
+import { partKey, readTrackParts } from "@/lib/story/story-voices";
 import { RECONNECT_YOTO, reconnectMessage, yotoErrorText } from "@/lib/yoto-error";
 
 type FactCryRequest = {
@@ -338,11 +340,16 @@ type TrackPrepareRequest = {
    * The HTTP track route does not send this; the music route passes the file.
    */
   audio?: Buffer;
+  /** Adventure lines in several voices, with sounds. Each is recorded, then all are joined into one track. */
+  parts?: unknown;
+  /** Which of those lines the speech job or scratch card belongs to. */
+  speechPart?: string;
 };
 
 type TrackPrepareResult = {
   phase: "speech" | "upload" | "ready" | "discarded";
   speechJobId?: string;
+  speechPart?: string;
   speechCardId?: string;
   uploadId?: string;
   trackUrl?: string;
@@ -757,6 +764,8 @@ export async function prepareFactTrack(
     cries?: string;
     merge?: (cry: Buffer, speech: Buffer) => Promise<Buffer>;
     piper?: PiperSynthOptions;
+    /** Folder holding the story sounds. The site's public folder by default. */
+    sounds?: string;
   } = { speech: SPEECH_ROOT, rendered: RENDER_ROOT },
 ): Promise<TrackPrepareResult> {
   const discardIds = [request.discardCardId, ...(request.discardCardIds ?? [])].filter(
@@ -794,11 +803,18 @@ export async function prepareFactTrack(
   if (request.uploadId && !/^[\w-]{4,120}$/.test(request.uploadId)) {
     throw new Error("That upload id does not look right.");
   }
+  const parts = request.parts === undefined ? null : readTrackParts(request.parts);
+  if (request.parts !== undefined && !parts) throw new Error("The lines for this adventure track could not be read.");
+  if (request.speechPart && !/^[a-z0-9]{1,16}$/.test(request.speechPart)) {
+    throw new Error("That line id does not look right.");
+  }
+  // Every voice and sound in the track is part of its identity, so a recast story is recorded again.
+  const keyText = parts ? `${text}\n${JSON.stringify(parts)}` : text;
 
   // Dex number, not the slot on the card. A Pokefacts playlist never has 142 tracks.
   const label = dexId ? String(dexId) : "intro";
-  const renderedFile = path.join(/* turbopackIgnore: true */ roots.rendered, `${renderedCacheKey(text, dexId, voiceId, mix)}.json`);
-  const mergedFile = path.join(/* turbopackIgnore: true */ roots.rendered, `${renderedCacheKey(text, dexId, voiceId, mix)}.mp3`);
+  const renderedFile = path.join(/* turbopackIgnore: true */ roots.rendered, `${renderedCacheKey(keyText, dexId, voiceId, mix)}.json`);
+  const mergedFile = path.join(/* turbopackIgnore: true */ roots.rendered, `${renderedCacheKey(keyText, dexId, voiceId, mix)}.mp3`);
   const speechFile = path.join(
     /* turbopackIgnore: true */ roots.speech,
     `${speechKey(text, voiceId)}.${isPiperVoice(voiceId) ? "wav" : "mp3"}`,
@@ -819,7 +835,7 @@ export async function prepareFactTrack(
       return fresh;
     }
     // Hashes written before the volume was part of the key. Those mixes used volume 4, voice 1, and a 0.35s pad.
-    if (isDefaultMix(mix)) {
+    if (isDefaultMix(mix) && !parts) {
       const legacy = await readReady(
         path.join(/* turbopackIgnore: true */ roots.rendered, `${legacyRenderedKey(text, dexId, voiceId)}.json`),
         dexId,
@@ -897,7 +913,12 @@ export async function prepareFactTrack(
       throw cryFailure(bad);
     }
     await releaseScratch();
+    return finishSpeech(speech);
+  };
 
+  /** The cry in front when there is one, then the upload. `speech` is a finished reading. */
+  const finishSpeech = async (speech: Buffer): Promise<TrackPrepareResult> => {
+    const kind = inputContainer(speech);
     let audio = speech;
     if (dexId) {
       try {
@@ -923,6 +944,85 @@ export async function prepareFactTrack(
       throw cryFailure(error);
     }
   };
+
+  /**
+   * An adventure track: each line is recorded in its own voice, one at a time, then they are joined
+   * with the sounds. A Yoto Labs line uses the same speech job and scratch card steps as a plain track,
+   * tagged with `speechPart` so a recording always lands on the line it was made for.
+   */
+  const fromParts = async (lines: NonNullable<typeof parts>): Promise<TrackPrepareResult> => {
+    const spoken = lines.filter(isSpokenPart);
+    const fileFor = (part: SpokenPart) =>
+      path.join(
+        /* turbopackIgnore: true */ roots.speech,
+        `${speechKey(part.text, part.voiceId)}.${isPiperVoice(part.voiceId) ? "wav" : "mp3"}`,
+      );
+    const saveFromCard = async (part: SpokenPart, cardId: string) => {
+      const playable = await loadCard(token, cardId, true, fetchImpl);
+      const source = httpsAudio(playable);
+      if (!source) throw new Error("This line's recording is not ready to download.");
+      const response = await fetchImpl(source, { signal: AbortSignal.timeout(20_000) });
+      if (!response.ok) throw new Error("This line's recording could not be downloaded.");
+      const speech = Buffer.from(await response.arrayBuffer());
+      if (speech.length < 128 || !inputContainer(speech)) throw new Error("This line's recording was empty.");
+      await writeBytesAtomic(fileFor(part), speech);
+      const ids = new Set<string>([cardId]);
+      if (playable.cardId) ids.add(playable.cardId);
+      for (const id of ids) await discardCard(token, id, fetchImpl);
+      if (request.speechCardId && ids.has(request.speechCardId)) scratchHeld = false;
+    };
+    for (const part of spoken) {
+      if (await fileExists(fileFor(part))) continue;
+      if (isPiperVoice(part.voiceId)) {
+        const wav = await synthesizePiper(part.text, roots.piper);
+        if (inputContainer(wav) !== "wav" || wav.length < 44) throw new Error("Piper did not write a recording.");
+        await writeBytesAtomic(fileFor(part), wav);
+        continue;
+      }
+      const key = partKey(part);
+      if (request.speechPart === key && request.speechCardId) {
+        await saveFromCard(part, request.speechCardId);
+        continue;
+      }
+      if (request.speechPart === key && request.speechJobId) {
+        const status = await yoto(
+          token,
+          `https://labs.api.yotoplay.com/content/job/${encodeURIComponent(request.speechJobId)}`,
+          undefined,
+          fetchImpl,
+          15_000,
+        );
+        const fields = jobFields(await readJson(status));
+        if (!status.ok) throw new Error(fields.error || "Could not check this line's recording.");
+        if (fields.status === "failed") throw new Error(fields.error || "Yoto could not record this line.");
+        if (fields.status !== "completed" || !fields.cardId) {
+          return { phase: "speech", speechJobId: request.speechJobId, speechPart: key };
+        }
+        await saveFromCard(part, fields.cardId);
+        continue;
+      }
+      await releaseScratch();
+      const created = await yoto(
+        token,
+        `https://labs.api.yotoplay.com/content/job?voiceId=${encodeURIComponent(part.voiceId)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(scratchContent(part.text, title, part.voiceId)),
+        },
+        fetchImpl,
+        20_000,
+      );
+      const started = jobFields(await readJson(created));
+      if (!created.ok || !started.jobId) throw new Error(started.error || "Yoto did not start this line.");
+      return { phase: "speech", speechJobId: started.jobId, speechPart: key };
+    }
+    await releaseScratch();
+    const joined = await joinTrackParts(lines, (part) => readFile(fileFor(part)), roots.sounds);
+    return finishSpeech(joined);
+  };
+
+  if (parts) return fromParts(parts);
 
   if (await fileExists(speechFile)) return fromSpeechFile();
 
