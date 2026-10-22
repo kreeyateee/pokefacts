@@ -25,13 +25,15 @@ This is a fan project. It is not made by Nintendo, Game Freak, Creatures, or Yot
 
 The menu has five destinations. **Help** and **Connect Yoto** sit in the header. The wordmark goes home.
 
-- **Facts.** A short reading for all 1,025 Pokémon. The cry plays first, then the voice. The full set is 11 playlists, Pokefacts 1 through Pokefacts 11. There is also a random card of 100. Shuffle draws a new hundred. **This playlist** and **Make this card** sit in the same place on every card page. **Send all** records every Pokefacts playlist so the whole dex is covered.
-- **Who's That.** Fifty riddles on one card. The clue picture is a black silhouette on opaque white. You hear the colour and the type, two Pokédex lines with the name taken out, then size and weight. The clue never says the name. The next track plays the cry, says the name, and shows the colour pixel. Shuffle draws a new fifty.
+- **Facts.** A short reading for all 1,025 Pokémon. The cry plays first, then the voice. The full set is 11 playlists, Pokefacts 1 through Pokefacts 11. There is also a random card of 100. Shuffle draws a new hundred. **This playlist** and **Create card** sit in the same place on every card page. **Send all** records every Pokefacts playlist so the whole dex is covered.
+- **Who's That.** Fifty riddles on one card. On the player the clue picture is a shadow that fades from grey to near-black, so it shows up on the dark screen without giving the answer away. You hear the colour and the type, two Pokédex lines with the name taken out, then size and weight. The clue never says the name. The next track plays the cry, says the name, and shows the colour pixel. Shuffle draws a new fifty.
 - **Collections.** Mega Evolutions, Gigantamax, Alolan, Hisuian, Legendary, and Mythical. One track for each form or Pokémon. The page and the Yoto icon use that form's picture. A regional, Mega, or Gigantamax track does not reuse the original species icon.
 - **Catalogue.** Look up any Pokémon from Kanto to Paldea. Tick the ones you want, in the order you want them, and build your own playlist. Facts reads the name and the first two biology paragraphs from Bulbapedia. Advanced facts also reads the size, the type, the ability, and how it evolves. Who's That Pokémon uses two tracks for each Pokémon, so 50 fit on a card.
-- **Music.** Songs from the games. Play them on the page, add them to a playlist, reorder the list, then send it to Yoto as MP3s. A song about one Pokémon can use that species' pixel on the card.
-- **Voices and sound.** Lily is the usual voice. George, Brian, and Adam are the other Yoto voices. **Piper — Pokédex** sounds like a device reading a Pokédex entry. Each voice has a Hear button on the page so you can sample it. The first time you pick Piper, Pokefacts downloads that voice. Make this card asks for the voice and the playlist before it records. One panel also sets how loud the cry is, how loud the voice is, the pause after the cry, and metric or imperial units.
-- **Stickers.** **Print stickers** is on Facts, Who's That, Collections, and a Catalogue pick. Pick a tile pattern — square, rectangle, circle, or hex — then tap a Pokémon, a Poké Ball, or a berry. Each one fills the next tile. Drag to swap places. Bigger and Smaller scale the whole pattern. Draw on the card, with an eraser and a clear. Undo steps back. Save a PDF at real Yoto card size on A4 or US Letter, print at 100% or Actual size, and cut on the corner marks. Do not choose Fit to page. When the names will not fit at a readable size, the back is a note instead. Who's That leaves the names off the back and keeps the shadow pictures.
+- **Music.** Songs from the games, with lyrics. Play, pause, skip, repeat, and shuffle on the page, tap a song in your playlist to play it, and drag to reorder. On a home computer, **Save to Yoto** turns the playlist into MP3s and sends it as a card. A song about one Pokémon uses that species' pixel.
+- **Make Your Own card.** A window opens as soon as a playlist starts sending, with the steps for linking it to a blank card in the Yoto app. It is also a button on every card page.
+- **Sending is safe to leave.** Each recorded track is saved as it finishes. If the page is refreshed or closed mid-send, it carries on from the same track next time you open Pokefacts. A failed send keeps its progress and offers **Retry**, and a running send can be cancelled. Your Pokédex pick and the tab you were on survive the Yoto login too.
+- **Voices and sound.** Lily is the usual voice. George, Brian, and Adam are the other Yoto voices. **Piper — Pokédex** sounds like a device reading a Pokédex entry. Each voice has a Hear button on the page so you can sample it. The first time you pick Piper, Pokefacts downloads that voice. **Create card** asks for the voice and the playlist before it records. One panel also sets how loud the cry is, how loud the voice is, the pause after the cry, and metric or imperial units.
+- **Stickers.** Make a printed front and back for any card, from the **Stickers** button on every card page or **Make stickers** in the Pokédex builder. Three steps: pick a look, decorate, print. Four fronts: a **Group photo** of everyone lined up like a school photo at their real Pokédex heights and grouped by colour, a **Pile** of everyone packed edge to edge with the giants as big as the card allows, a **Pokédex**, and a **Trading card** with a star Pokémon you choose. Use the full artwork or the game sprites. Draw on the front, add the child's name to the back, and save a PDF at real Yoto card size on A4 or US Letter.
 
 ## What you need
 
@@ -176,7 +178,7 @@ Those permissions let Pokefacts create playlists in your library, see that libra
 ## 8. Send the fact cards
 
 1. Open **Facts**.
-2. Under **Make this card**, click **Send all** for every Pokefacts playlist.
+2. Click **Send all** to record every Pokefacts playlist.
 
 Leave the computer alone while this runs. Each Pokémon is recorded on its own, so the full set takes a long time. The page tells you how far along it is. The instruction window has to stay open until the page says the playlists are ready.
 
@@ -203,29 +205,36 @@ A Yoto playlist holds 100 tracks. Who's That Pokémon uses two tracks each, so 5
 
 ## Collections
 
-Open **Collections**, then pick Mega, Gigantamax, Alolan, Hisuian, Legendary, or Mythical. Hear one on the page, then **Make this card**.
+Open **Collections**, then pick Mega, Gigantamax, Alolan, Hisuian, Legendary, or Mythical. Hear one on the page, then **Create card**.
 
 ## Music
 
-Open **Music**. Play a song on the page, add it to your playlist, move songs up or down, then send the list to Yoto. The public site does not download YouTube on the server. If you run Pokefacts on this computer, that machine saves the MP3 and the server uploads it to Yoto.
+Open **Music**. Play a song on the page, add it to your playlist, and drag songs into order. Tap a song in the playlist to play it. Repeat and Shuffle are remembered.
+
+**Save to Yoto** appears only when Pokefacts runs on your own computer and you open it at `127.0.0.1` or `localhost`. That computer turns each song into an MP3 and sends the playlist to Yoto. The public site never downloads from YouTube.
 
 ## Stickers
 
-**Print stickers** is next to Send on Facts, Who's That, Collections, and a Catalogue pick.
+Press **Stickers** on any card page, or **Make stickers** in the Pokédex builder. You can make them before or after sending.
 
-Pick a tile pattern, then tap a picture, a Poké Ball, or a berry. Each one fills the next tile. Drag a sticker to swap its place. Draw on the card if you want. Printing is a separate step: check the sheet, save the PDF, then print at 100% size and cut on the corner marks.
+1. **Style.** Pick a front: Group photo, Pile, Pokédex, or Trading card. Choose full artwork or game sprites. Type a name for the card and, if you like, whose card it is. **Make it for me** picks a star Pokémon for you.
+2. **Decorate.** Choose who is in the photo or the pile, or pick the star for the Pokédex and trading card fronts. Draw on the front with a pen or a rubber. **Undo** steps back.
+3. **Print.** Choose what the back says: three how-to-play steps, every name, or your own note. Choose A4 or US Letter and this card or every card in the playlist, then **Save PDF to print**.
 
-Choose A4 or US Letter. Save PDF stores the file on your computer. Print it at 100% or Actual size. Do not choose Fit to page. Cut on the corner marks. The left sticker is the front. The right sticker is the back.
-
-A catalogue pick that needs more than one card prints one row per card. Previous sheet and Next sheet move through the pages. The saved PDF has every page.
+Print at 100% or Actual size, not Fit to page. Each sheet has a 5 cm line to check the size. Cut along the grey edge of each card. Who's That cards keep the names off the back and print the pictures as black shadows.
 
 ## Who's That
 
 Open **Who's That**. You get 50 riddles, which is one card. Shuffle draws a new fifty.
 
-Each riddle is two tracks. The clue plays the cry and does not say the name. Its picture is a black shape on white. The answer plays the cry and says the name. Its picture is the real pixel.
+Each riddle is two tracks. The clue plays the cry and does not say the name. Its picture is a grey shadow. The answer plays the cry and says the name. Its picture is the real pixel.
 
 Send it the same way as the fact cards, then link it to one blank card in the Yoto app.
+
+## Coming next
+
+- **Adventures.** Choose-your-own-adventure cards played with the two buttons on a Yoto Player. The first is an expert Safari Zone: track down rare Pokémon by their cries and habits, and choose the right throw. It needs a 3rd-generation Yoto Player or a Yoto Mini; Yoto has not added button stories to 4th-generation players yet.
+- **A tidier menu.** Ready-made playlists and make your own will sit apart, with a proper Pokédex view.
 
 ## When you want to stop
 
