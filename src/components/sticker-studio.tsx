@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { shadowPixelPath, type KidCard, type KidChapter } from "@/lib/kid-cards";
 import { artworkSrc } from "@/lib/page-artwork";
+import { BRAND_IMAGE_KEY, BRAND_LOGO } from "@/lib/brand-logo";
 import { APP_NAME } from "@/lib/site";
 import {
   PREVIEW_DPI,
@@ -521,6 +522,31 @@ export function StickerStudio({
   }
 
   useEffect(() => {
+    let cancelled = false;
+    const files = [
+      [BRAND_IMAGE_KEY.compact, BRAND_LOGO.compact],
+      [BRAND_IMAGE_KEY.vertical, BRAND_LOGO.vertical],
+      [BRAND_IMAGE_KEY.horizontal, BRAND_LOGO.horizontal],
+    ] as const;
+    for (const [key, src] of files) {
+      if (images.current.has(key)) continue;
+      const image = new Image();
+      image.onload = () => {
+        images.current.set(key, image);
+        if (!cancelled) setLoaded((count) => count + 1);
+      };
+      image.onerror = () => {
+        images.current.set(key, null);
+        if (!cancelled) setLoaded((count) => count + 1);
+      };
+      image.src = src;
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     const made = decorationArt();
     const next: StickerMon[] = [];
     for (const item of made) {
@@ -625,6 +651,7 @@ export function StickerStudio({
           images: renderFaces(pageCards, SHEET_PREVIEW_DPI, null),
           fonts: fonts(),
           brand: APP_NAME,
+          logo: images.current.get(BRAND_IMAGE_KEY.compact),
         });
       }
     };
@@ -953,6 +980,7 @@ export function StickerStudio({
           images: renderFaces(group, PRINT_DPI, null),
           fonts: drawn,
           brand: APP_NAME,
+          logo: images.current.get(BRAND_IMAGE_KEY.compact),
         });
         const blob = await new Promise<Blob | null>((resolve) => sheet.toBlob(resolve, "image/jpeg", 0.93));
         if (!blob) throw new Error("jpeg");

@@ -1,4 +1,4 @@
-import { paintPokemonSign } from "@/lib/pokemon-sign";
+import { BRAND_IMAGE_KEY, paintBrandLogo } from "@/lib/brand-logo";
 import {
   BACK_FOOTER_MM,
   BACK_HEADER_MM,
@@ -238,22 +238,17 @@ function paintSignBar(
   mm: number,
 ): number {
   const edge = 1.15 * mm;
-  const signH = 7.6 * mm;
-  const stripe = 1.05 * mm;
-  ctx.fillStyle = "#e10600";
+  const signH = 11.4 * mm;
+  ctx.fillStyle = "#fffdf6";
   ctx.fillRect(edge, edge, width - edge * 2, signH);
-  ctx.fillStyle = "#ffcb05";
-  ctx.fillRect(edge, edge + signH - stripe, width - edge * 2, stripe);
-  paintPokemonSign(
-    ctx,
-    {
-      x: edge + 1.2 * mm,
-      y: edge,
-      width: width - edge * 2 - 2.4 * mm,
-      height: signH - stripe,
-    },
-    spec.fonts.display,
-  );
+  ctx.fillStyle = "#16324f";
+  ctx.fillRect(edge, edge + signH - 0.45 * mm, width - edge * 2, 0.45 * mm);
+  paintBrandLogo(ctx, spec.images.get(BRAND_IMAGE_KEY.compact), {
+    x: edge + 1.4 * mm,
+    y: edge + 0.7 * mm,
+    width: width - edge * 2 - 2.8 * mm,
+    height: signH - 1.6 * mm,
+  });
   return edge + signH;
 }
 
@@ -319,16 +314,17 @@ function paintBack(ctx: CanvasRenderingContext2D, spec: CardPaint, width: number
   ctx.fillRect(0, height - footerH - 1.05 * mm, width, 1.05 * mm);
 
   const pad = BACK_PAD_MM * mm;
-  paintPokemonSign(
-    ctx,
-    { x: pad, y: 1.15 * mm, width: width - pad * 2, height: 5.6 * mm },
-    spec.fonts.display,
-  );
+  paintBrandLogo(ctx, spec.images.get(BRAND_IMAGE_KEY.compact), {
+    x: pad,
+    y: 1.2 * mm,
+    width: width - pad * 2,
+    height: 6.2 * mm,
+  });
   paintParagraph(ctx, spec.title, {
     x: pad,
-    y: 7.1 * mm,
+    y: 8 * mm,
     width: width - pad * 2,
-    height: 8.4 * mm,
+    height: 7.4 * mm,
   }, {
     family: spec.fonts.display,
     weight: 700,
@@ -442,6 +438,7 @@ export function paintSheet(
     images: readonly CanvasImageSource[];
     fonts: { display: string; body: string };
     brand: string;
+    logo?: CanvasImageSource | null;
   },
 ) {
   const pairs = Math.max(1, Math.ceil(options.images.length / 2));
@@ -490,7 +487,17 @@ export function paintSheet(
   const first = layout.slots[0];
   if (first) {
     const cardTop = mmToPx(first.y, options.dpi);
-    ctx.fillText(options.brand, width / 2, Math.max(fontPx, (cardTop - markReach) / 2));
+    const bannerH = Math.max(fontPx * 2.2, (cardTop - markReach) * 0.72);
+    if (options.logo) {
+      paintBrandLogo(ctx, options.logo, {
+        x: mmToPx(16, options.dpi),
+        y: Math.max(mmToPx(2, options.dpi), (cardTop - markReach - bannerH) / 2),
+        width: width - mmToPx(32, options.dpi),
+        height: bannerH,
+      });
+    } else {
+      ctx.fillText(options.brand, width / 2, Math.max(fontPx, (cardTop - markReach) / 2));
+    }
   }
   const last = layout.slots[layout.slots.length - 1];
   if (last) {

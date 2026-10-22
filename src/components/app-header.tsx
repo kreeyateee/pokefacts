@@ -2,8 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 
-import { PokemonSignboard } from "@/components/pokemon-sign";
-import { APP_NAME } from "@/lib/site";
+import { BrandHomeButton } from "@/components/brand-logo";
 import type { YotoSession } from "@/lib/yoto-session";
 
 export function AppHeader({
@@ -46,17 +45,10 @@ export function AppHeader({
   }, [accountOpen]);
 
   return (
-    <header className="mx-auto w-full min-w-0 max-w-5xl px-4 pt-8 pb-2 sm:px-6">
-      <PokemonSignboard />
+    <header className="mx-auto w-full min-w-0 max-w-5xl px-4 pt-5 pb-2 sm:px-6">
+      <BrandHomeButton onClick={onHome} />
       <div className="pk-banner">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <button type="button" className="pk-wordmark" onClick={onHome}>
-            <span className="pk-ball" aria-hidden="true" />
-            <span>
-              <span className="pk-wordmark-name">{APP_NAME}</span>
-              <span className="pk-wordmark-tag">Pokémon cards for Yoto</span>
-            </span>
-          </button>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-end">
           <div className="flex flex-wrap items-center gap-2 self-start">
             <button
               type="button"

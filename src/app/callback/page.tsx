@@ -1,10 +1,9 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { PokemonSignboard } from "@/components/pokemon-sign";
+import { BrandPosterLink } from "@/components/brand-logo";
 import { exchangeCode } from "@/lib/yoto-session";
 
 function CallbackInner() {
@@ -37,17 +36,8 @@ function CallbackInner() {
   }, [code, denied, router]);
 
   return (
-    <main className="pk-page mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-4 px-6 pt-8">
-      <PokemonSignboard />
-      <div className="pk-banner">
-        <Link className="pk-wordmark" href="/">
-          <span className="pk-ball" aria-hidden="true" />
-          <span>
-            <span className="pk-wordmark-name">Pokefacts</span>
-            <span className="pk-wordmark-tag">Pokémon cards for Yoto</span>
-          </span>
-        </Link>
-      </div>
+    <main className="pk-page mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-4 px-6 pt-6">
+      <BrandPosterLink />
       <h1 className="text-3xl font-bold text-ink">Signing in</h1>
       <p className="text-sm leading-6 text-muted-foreground">{message}</p>
     </main>
