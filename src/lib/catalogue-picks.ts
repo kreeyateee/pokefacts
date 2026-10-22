@@ -1,6 +1,6 @@
 import type { SelectionKind } from "@/lib/selection-playlist";
 
-/** The Pokédex Cards pick lives in localStorage, so a Yoto login redirect or a refresh keeps it. */
+/** The Make your own pick lives in localStorage, so a Yoto login redirect or a refresh keeps it. */
 export const CATALOGUE_PICKS_KEY = "pokefacts.cataloguePicks";
 
 /** More than every national dex number; a pick this long is a bad row, not a real pick. */

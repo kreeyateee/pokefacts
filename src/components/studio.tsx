@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { AppHeader } from "@/components/app-header";
-import { AppNav } from "@/components/app-nav";
+import { AppNav, type ShelfPicture } from "@/components/app-nav";
+import { EntryCard, EntryPager } from "@/components/entry-card";
 import { Catalogue } from "@/components/catalogue";
 import { PlaybackPanel } from "@/components/playback-panel";
 import { SendBanner, toastSendAllReady, toastSendReady, toastSendStarted } from "@/components/send-banner";
@@ -18,15 +19,15 @@ import { YotoScreen } from "@/components/yoto-screen";
 import { StickerStudio } from "@/components/sticker-studio";
 import { Button } from "@/components/ui/button";
 import {
-  DEFAULT_COLLECTION,
-  isCollectionKind,
+  isReadyKind,
   pageHeading,
   playlistNote,
-  primaryTabFor,
+  sectionFor,
   readSavedTab,
   SAVED_TAB_KEY,
-  type CollectionKind,
-  type PrimaryTabId,
+  viewForSection,
+  type ReadyKind,
+  type SectionId,
   type SavedTab,
   type StudioView,
 } from "@/lib/app-nav";
@@ -536,6 +537,23 @@ function revealChoice(nav: HTMLElement) {
 
 type PlaylistMap = Record<FormPlaylistKind | "legendary" | "mythical", KidCard[]>;
 
+/** One picture for each set on the ready-made shelf. Who's That shows a shadow. */
+function shelfPicturesFor(lists: PlaylistMap): Partial<Record<ReadyKind, ShelfPicture>> {
+  const pictures: Partial<Record<ReadyKind, ShelfPicture>> = {
+    meet: { src: artworkSrc(25), fallback: artworkApi("species", 25) },
+    guess: { src: artworkSrc(133), fallback: artworkApi("species", 133), shadow: true },
+  };
+  for (const kind of Object.keys(lists) as Array<keyof PlaylistMap>) {
+    for (const card of lists[kind]) {
+      const first = playableChapters(card).find((chapter) => chapter.sprite);
+      if (!first?.sprite) continue;
+      pictures[kind] = { src: first.sprite, fallback: pictureFallback(first) };
+      break;
+    }
+  }
+  return pictures;
+}
+
 function readsSpeciesBiology(kind: KidCardKind): boolean {
   return kind === "meet" || kind === "legendary" || kind === "mythical";
 }
@@ -592,7 +610,6 @@ export function Studio({
   const [view, setView] = useState<StudioView>("cards");
   const [playback, setPlayback] = useState<PlaybackSettings>(defaultPlayback);
   const [kind, setKind] = useState<KidCardKind>("meet");
-  const [collectionKind, setCollectionKind] = useState<CollectionKind>(DEFAULT_COLLECTION);
   const [factsId, setFactsId] = useState(RANDOM_POKEDEX_ID);
   const [guessId, setGuessId] = useState(RANDOM_GUESS_ID);
   const [chapterKey, setChapterKey] = useState(randomCard.chapters[0]?.key ?? "start");
@@ -773,7 +790,6 @@ export function Studio({
     setRevealed(false);
     setQuery("");
     setKind(next.kind);
-    if (isCollectionKind(next.kind)) setCollectionKind(next.kind);
     if (next.kind === "meet") setFactsId(next.id);
     else if (next.kind === "guess") setGuessId(next.id);
     else if (isFormPlaylistKind(next.kind) || isSpeciesPlaylistKind(next.kind)) {
@@ -833,7 +849,6 @@ export function Studio({
     }
     setView("cards");
     setKind(nextKind);
-    if (isCollectionKind(nextKind)) setCollectionKind(nextKind);
     if (isFormPlaylistKind(nextKind) || isSpeciesPlaylistKind(nextKind)) {
       const next = activePlaylist(playlistsRef.current, nextKind, playlistId[nextKind]);
       setChapterKey(next ? (playableChapters(next)[0]?.key ?? "start") : "start");
@@ -854,27 +869,24 @@ export function Studio({
   }
 
 
-  function choosePrimary(id: PrimaryTabId) {
-    if (id === "facts") {
-      showKind("meet");
-      return;
-    }
-    if (id === "guess") {
-      showKind("guess");
-      return;
-    }
-    if (id === "collections") {
-      showKind(isCollectionKind(kind) ? kind : collectionKind);
+  function chooseSection(id: SectionId) {
+    if (id === "ready") {
+      // Back to the set that was open last.
+      showKind(isReadyKind(kind) ? kind : "meet");
       return;
     }
     stopDemo();
-    setView(id);
+    setView(viewForSection(id));
   }
 
   function restoreTab(saved: SavedTab) {
     if (saved.view === "cards") showKind(saved.kind);
     else if (saved.view === "setup") chooseHelp();
-    else choosePrimary(saved.view);
+    else {
+      // Keep the ready-made set, so Ready-made opens on it again.
+      setKind(saved.kind);
+      setView(saved.view);
+    }
   }
 
   function goHome() {
@@ -1840,6 +1852,13 @@ export function Studio({
       })
     : "";
   const playlistHref = job?.status === "completed" ? yotoPlaylistUrl(job.cardId) : undefined;
+  const shelfPictures = shelfPicturesFor(playlists);
+  const playable = card ? playableChapters(card) : [];
+  const place = chapter ? playable.findIndex((item) => item.key === chapter.key) : -1;
+  const before = place > 0 ? playable[place - 1] : undefined;
+  const after = place >= 0 ? playable[place + 1] : undefined;
+  const chapterLabel = (item: { title: string; overlay: string; dexId?: number }) =>
+    guessing ? `Riddle ${chapterNumber(item)}` : item.title;
 
   return (
     <div className={job ? "pk-page pk-page-docked" : "pk-page"}>
@@ -1854,23 +1873,14 @@ export function Studio({
         onDisconnect={disconnect}
       />
       <AppNav
-        selected={primaryTabFor(view, kind)}
-        collection={isCollectionKind(kind) ? kind : collectionKind}
-        onPrimary={choosePrimary}
-        onCollection={showKind}
+        section={sectionFor(view)}
+        kind={isReadyKind(kind) ? kind : "meet"}
+        pictures={shelfPictures}
+        onSection={chooseSection}
+        onCategory={showKind}
       />
-      {view !== "setup" && !cardPrompt ? (
-        <div className="mx-auto w-full min-w-0 max-w-5xl px-4 sm:px-6">
-          <PlaybackPanel
-            settings={playback}
-            onChange={setPlayback}
-            voiceId={voiceId}
-            onVoiceId={(id) => setVoiceId(writeVoiceId(localStorage, id))}
-          />
-        </div>
-      ) : null}
 
-      <main className="mx-auto w-full min-w-0 max-w-5xl px-4 py-6 sm:px-6">
+      <main className="mx-auto w-full min-w-0 max-w-5xl px-4 pt-5 pb-6 sm:px-6">
         <div key={view === "cards" ? `${view}-${kind}` : view} className="pk-view">
         {view === "setup" ? (
           <SetupGuide onConnect={() => setConnectOpen(true)} onHome={goHome} />
@@ -1895,216 +1905,233 @@ export function Studio({
         ) : view === "music" ? (
           <MusicPanel />
         ) : card && chapter ? (
-          <div className="grid min-w-0 gap-6 md:grid-cols-[17.5rem_minmax(0,1fr)]">
-            <section className="order-2 min-w-0 md:order-1 md:col-span-2" aria-labelledby="playlist-heading">
+          <div className="grid min-w-0 gap-5">
+            <section className="pk-panel min-w-0" aria-labelledby="playlist-heading">
               <h2 id="playlist-heading" className="pk-section-title">
-                This playlist
+                {rangeCards.length > 1 ? "Pick a playlist" : "This playlist"}
               </h2>
-              <div
-                className="pk-scroll mt-2 flex gap-2 overflow-x-auto pb-1"
-                role="listbox"
-                aria-label={
-                  guessing
-                    ? "Who's That Pokémon Cards playlists"
-                    : formMode || speciesSet
-                      ? `${card.title} playlists`
-                      : "Fact Cards playlists"
-                }
-              >
-                {rangeCards.map((item) => {
-                  const selected = item.id === card.id;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      role="option"
-                      aria-selected={selected}
-                      onClick={() => chooseCard(item)}
-                      className="pk-pill shrink-0"
-                    >
-                      {item.rangeLabel}
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="mt-2 flex flex-wrap items-center gap-3">
+              {rangeCards.length > 1 ? (
+                <ul
+                  className="pk-scroll mt-2 flex gap-2 overflow-x-auto pb-1"
+                  aria-label={
+                    guessing
+                      ? "Who's That Pokémon Cards playlists"
+                      : formMode || speciesSet
+                        ? `${card.title} playlists`
+                        : "Fact Cards playlists"
+                  }
+                >
+                  {rangeCards.map((item) => (
+                    <li key={item.id} className="shrink-0">
+                      <button
+                        type="button"
+                        aria-current={item.id === card.id ? "true" : undefined}
+                        onClick={() => chooseCard(item)}
+                        className="pk-pill"
+                      >
+                        {item.rangeLabel}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
                 <p className="text-sm leading-6 text-muted-foreground">{thisPlaylist}</p>
                 {randomFacts ? (
-                  <Button type="button" variant="outline" className="h-10 px-4" onClick={shufflePokedex}>
+                  <Button type="button" variant="outline" className="h-11 px-4" onClick={shufflePokedex}>
                     Shuffle
                   </Button>
                 ) : null}
                 {randomGuess ? (
-                  <Button type="button" variant="outline" className="h-10 px-4" onClick={shuffleGuess}>
+                  <Button type="button" variant="outline" className="h-11 px-4" onClick={shuffleGuess}>
                     Shuffle
                   </Button>
                 ) : null}
               </div>
+              {libraryNote ? (
+                <p className="mt-3 text-sm leading-5 pk-danger" role="status">
+                  {libraryNote}
+                </p>
+              ) : null}
+              <div className="pk-actions mt-3">
+                <Button
+                  type="button"
+                  className="h-11 px-4"
+                  disabled={sending || !ready}
+                  onClick={() =>
+                    askCardOptions(
+                      randomGuess
+                        ? "Send these 50 riddles"
+                        : randomFacts
+                          ? "Send these 100"
+                          : `Send ${card.rangeLabel} to Yoto`,
+                      card.libraryTitle,
+                      () => send(),
+                    )
+                  }
+                >
+                  {sending && !bulkActive ? "Recording in the background…" : "Create card"}
+                </Button>
+                <MyoCardButton
+                  onClick={() =>
+                    showMyoCard({
+                      title: card.libraryTitle,
+                      cardId: validYotoCardId(targetPlaylist) ?? job?.cardId,
+                      sending,
+                    })
+                  }
+                />
+                <Button type="button" variant="outline" className="h-11 px-4" onClick={() => setStickersOpen(true)}>
+                  Stickers
+                </Button>
+                {kind === "meet" ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-11 px-4"
+                    disabled={sending || !ready}
+                    onClick={() =>
+                      askCardOptions(
+                        `Send all ${factsPlaylists.length} playlists — ${factsPlaylists.length} blank cards`,
+                        "Pokefacts 1",
+                        () => sendAllFacts(),
+                      )
+                    }
+                  >
+                    {sending && bulkActive
+                      ? "Recording in the background…"
+                      : `Send all ${factsPlaylists.length} playlists`}
+                  </Button>
+                ) : null}
+              </div>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                Sends this whole list ({card.rangeLabel}), not only the Pokémon on screen. Paper stickers come after
+                the playlist is in Yoto.
+              </p>
+              {playlistHref ? (
+                <p className="mt-2 text-sm leading-6">
+                  <a
+                    className="font-bold text-poke-red underline decoration-2"
+                    href={playlistHref}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open this playlist in the Yoto app
+                  </a>
+                </p>
+              ) : null}
             </section>
 
-            <div className="order-3 grid min-w-0 content-start gap-2 self-start md:order-2">
-              <h2 className="pk-section-title">{guessing ? "Riddles" : "On this card"}</h2>
-              <label className="grid gap-1 text-sm" htmlFor="picker">
-                {guessing ? "Find a riddle" : "Find a Pokémon"}
-                <input
-                  id="picker"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder={guessing ? "Number" : "Name or number"}
-                  className="pk-field"
-                />
-              </label>
-              <select
-                aria-label={guessing ? "Choose a riddle" : "Choose a Pokémon"}
-                className="pk-field md:hidden"
-                value={listed.some((item) => item.key === chapter.key) ? chapter.key : ""}
-                onChange={(event) => {
-                  const next = listed.find((item) => item.key === event.target.value);
-                  if (next) chooseChapter(next.key);
-                }}
-              >
-                {listed.length === 0 ? <option value="">Nothing matches</option> : null}
-                {listed.some((item) => item.key === chapter.key) ? null : listed.length > 0 ? (
-                  <option value="">Choose a match</option>
-                ) : null}
-                {listed.map((item) => (
-                  <option key={item.key} value={item.key}>
-                    {guessing ? `Riddle ${chapterNumber(item)}` : `${chapterNumber(item)}. ${item.title}`}
-                  </option>
-                ))}
-              </select>
-              <nav
-                ref={choiceListRef}
-                aria-label={guessing ? "Riddles" : "Pokémon"}
-                className="pk-scroll hidden md:grid md:max-h-[70dvh] md:content-start md:grid-cols-1 md:overflow-y-auto"
-              >
-                {listed.length === 0 ? (
-                  <p className="px-1 py-3 text-sm text-muted-foreground">Nothing matches that search.</p>
-                ) : null}
-                {listed.map((item) => {
-                  const selected = item.key === chapter.key;
-                  const label = guessing ? `Riddle ${chapterNumber(item)}` : item.title;
-                  const thumb = !guessing ? yotoPixelSrc({ formId: item.formId, dexId: item.dexId }) : undefined;
-                  return (
-                    <button
-                      key={item.key}
-                      type="button"
-                      onClick={() => chooseChapter(item.key)}
-                      aria-current={selected ? "true" : undefined}
-                      className="pk-choice flex w-44 shrink-0 items-center gap-2 px-2.5 py-2 text-left text-sm md:w-auto md:shrink"
-                    >
-                      {thumb ? (
-                        <YotoScreen src={thumb} size="thumb" />
-                      ) : !guessing && item.sprite ? (
-                        <img
-                          src={item.sprite}
-                          alt=""
-                          width={44}
-                          height={44}
-                          data-fallback={pictureFallback(item)}
-                          onError={hideBrokenPicture}
-                          className="pk-artwork-thumb"
-                        />
-                      ) : null}
-                      <span className="min-w-0">{label}</span>
-                    </button>
-                  );
-                })}
-              </nav>
-            </div>
-
-            <article className="order-1 min-w-0 pk-card pk-dex px-4 py-6 sm:px-8 sm:py-8 md:order-3">
-                <div className="mb-4 md:hidden">
-                  {libraryNote ? (
-                    <p className="mb-2 text-sm leading-5 pk-danger" role="status">
-                      {libraryNote}
-                    </p>
+            <div className="pk-browse">
+              <div className="pk-browse-list grid min-w-0 content-start gap-2">
+                <h2 className="pk-section-title">{guessing ? "Riddles" : "On this card"}</h2>
+                <label className="grid gap-1 text-sm" htmlFor="picker">
+                  {guessing ? "Find a riddle" : "Find a Pokémon"}
+                  <input
+                    id="picker"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder={guessing ? "Number" : "Name or number"}
+                    className="pk-field"
+                  />
+                </label>
+                <select
+                  aria-label={guessing ? "Choose a riddle" : "Choose a Pokémon"}
+                  className="pk-field md:hidden"
+                  value={listed.some((item) => item.key === chapter.key) ? chapter.key : ""}
+                  onChange={(event) => {
+                    const next = listed.find((item) => item.key === event.target.value);
+                    if (next) chooseChapter(next.key);
+                  }}
+                >
+                  {listed.length === 0 ? <option value="">Nothing matches</option> : null}
+                  {listed.some((item) => item.key === chapter.key) ? null : listed.length > 0 ? (
+                    <option value="">Choose a match</option>
                   ) : null}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      type="button"
-                      className="h-11 px-4"
-                      disabled={sending || !ready}
-                      onClick={() =>
-                        askCardOptions(
-                          randomGuess
-                            ? "Send these 50 riddles"
-                            : randomFacts
-                              ? "Send these 100"
-                              : `Send ${card.rangeLabel} to Yoto`,
-                          card.libraryTitle,
-                          () => send(),
-                        )
-                      }
-                    >
-                      {sending && !bulkActive ? "Recording in the background…" : "Create card"}
-                    </Button>
-                    <MyoCardButton
-                      onClick={() =>
-                        showMyoCard({
-                          title: card.libraryTitle,
-                          cardId: validYotoCardId(targetPlaylist) ?? job?.cardId,
-                          sending,
-                        })
-                      }
-                    />
-                    <Button type="button" variant="outline" className="h-11 px-4" onClick={() => setStickersOpen(true)}>
-                      Stickers
-                    </Button>
-                  </div>
-                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                    Sends this whole list ({card.rangeLabel}), not only the Pokémon on screen. Paper stickers come after
-                    the playlist is in Yoto.
-                  </p>
-                  {playlistHref ? (
-                    <p className="mt-3 text-sm leading-6">
-                      <a
-                        className="font-bold text-poke-red underline decoration-2"
-                        href={playlistHref}
-                        target="_blank"
-                        rel="noreferrer"
+                  {listed.map((item) => (
+                    <option key={item.key} value={item.key}>
+                      {guessing ? `Riddle ${chapterNumber(item)}` : `${chapterNumber(item)}. ${item.title}`}
+                    </option>
+                  ))}
+                </select>
+                <nav
+                  ref={choiceListRef}
+                  aria-label={guessing ? "Riddles" : "Pokémon"}
+                  className="pk-scroll pk-choice-list hidden md:grid"
+                >
+                  {listed.length === 0 ? (
+                    <p className="px-1 py-3 text-sm text-muted-foreground">Nothing matches that search.</p>
+                  ) : null}
+                  {listed.map((item) => {
+                    const selected = item.key === chapter.key;
+                    const thumb = !guessing ? yotoPixelSrc({ formId: item.formId, dexId: item.dexId }) : undefined;
+                    return (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => chooseChapter(item.key)}
+                        aria-current={selected ? "true" : undefined}
+                        className="pk-choice flex items-center gap-2.5 px-2.5 py-2 text-left text-sm"
                       >
-                        Open this playlist in the Yoto app
-                      </a>
-                    </p>
-                  ) : null}
-                </div>
-                <div key={chapter.key} className="pk-swap">
-                <p className="pk-kicker">
-                  {guessing
-                    ? revealed
-                      ? "Answer"
-                      : "Clues"
-                    : `Number ${chapterNumber(chapter)}`}
-                </p>
-                <div className="pk-hero">
-                  <div className="pk-hero-pics">
-                    {portrait && mysteryId ? (
-                      <div className="pk-silhouette">
-                        <MysterySilhouette src={portrait} fallback={artworkApi("species", mysteryId)} />
-                      </div>
-                    ) : portrait ? (
-                      <img
-                        src={portrait}
-                        alt={chapter.title}
-                        width={176}
-                        height={176}
-                        data-fallback={pictureFallback({
-                          formId: chapter.formId,
-                          dexId: chapter.dexId,
-                          sprite: portrait,
-                        })}
-                        onError={hideBrokenPicture}
-                        className="pk-art"
-                      />
-                    ) : null}
-                    {yotoIcon ? <YotoScreen src={yotoIcon} /> : null}
-                  </div>
-                  <h2 className="font-display text-4xl leading-tight sm:text-5xl">
-                    {guessing && !revealed ? `Riddle ${chapter.overlay}` : chapter.title}
-                  </h2>
-                </div>
-                <div className="mt-6 max-w-prose space-y-3 text-base leading-7">
+                        {thumb ? (
+                          <YotoScreen src={thumb} size="thumb" />
+                        ) : !guessing && item.sprite ? (
+                          <img
+                            src={item.sprite}
+                            alt=""
+                            width={44}
+                            height={44}
+                            data-fallback={pictureFallback(item)}
+                            onError={hideBrokenPicture}
+                            className="pk-artwork-thumb"
+                          />
+                        ) : null}
+                        <span className="min-w-0">{chapterLabel(item)}</span>
+                      </button>
+                    );
+                  })}
+                </nav>
+              </div>
+
+              <EntryCard
+                swapKey={chapter.key}
+                top={
+                  playable.length > 1 ? (
+                    <EntryPager
+                      previous={before ? chapterLabel(before) : undefined}
+                      next={after ? chapterLabel(after) : undefined}
+                      position={`${place + 1} of ${playable.length}`}
+                      onPrevious={() => before && chooseChapter(before.key)}
+                      onNext={() => after && chooseChapter(after.key)}
+                    />
+                  ) : null
+                }
+                kicker={guessing ? (revealed ? "Answer" : "Clues") : `Number ${chapterNumber(chapter)}`}
+                title={guessing && !revealed ? `Riddle ${chapter.overlay}` : chapter.title}
+                picture={
+                  portrait && mysteryId ? (
+                    <div className="pk-silhouette pk-entry-art">
+                      <MysterySilhouette src={portrait} fallback={artworkApi("species", mysteryId)} />
+                    </div>
+                  ) : portrait ? (
+                    <img
+                      src={portrait}
+                      alt={chapter.title}
+                      width={192}
+                      height={192}
+                      data-fallback={pictureFallback({
+                        formId: chapter.formId,
+                        dexId: chapter.dexId,
+                        sprite: portrait,
+                      })}
+                      onError={hideBrokenPicture}
+                      className="pk-entry-art pk-entry-photo"
+                    />
+                  ) : null
+                }
+                yotoSrc={yotoIcon}
+              >
+                <div key={chapter.key} className="pk-swap max-w-prose space-y-3 text-base leading-7">
                   {readsSpeciesBiology(kind) && chapter.dexId ? (
                     factReading ? (
                       <>
@@ -2150,10 +2177,7 @@ export function Studio({
                     visibleTracks?.map((track) =>
                       entryLines(track.text, chapter.title).map((line) =>
                         isMeasure(line) ? (
-                          <p
-                            key={`${track.key}-${line}`}
-                            className="pk-measure px-4 py-3"
-                          >
+                          <p key={`${track.key}-${line}`} className="pk-measure px-4 py-3">
                             {line}
                           </p>
                         ) : (
@@ -2163,28 +2187,7 @@ export function Studio({
                     )
                   )}
                 </div>
-                {readsSpeciesBiology(kind) && factReading?.url && !factReading.notice ? (
-                  <WikiCredit url={factReading.url} />
-                ) : null}
-                {formMode &&
-                chapter.articleUrl &&
-                chapter.articleStatus &&
-                !chapter.articleNotice &&
-                !formSpeechIsNameOnly(chapter.title, formSpokenText(chapter)) ? (
-                  <WikiCredit url={chapter.articleUrl} />
-                ) : null}
-                {source && guessing ? (
-                  <p className="pk-quiet mt-4 text-xs">Pokédex, {source}</p>
-                ) : null}
-                {chapter.dexId ? (
-                  <p className="pk-quiet mt-4 text-xs leading-5">
-                    {guessing
-                      ? "Hear plays the cry, then the words. The clue never says the name. The answer does. The Yoto card plays that same order."
-                      : "Hear plays the cry, then the reading. The Yoto card plays that same order."}
-                  </p>
-                ) : null}
-                </div>
-                <div className="mt-6 flex flex-wrap gap-2">
+                <div className="mt-5 flex flex-wrap gap-2">
                   {guessing ? (
                     <>
                       <Button
@@ -2258,86 +2261,37 @@ export function Studio({
                   </p>
                 ) : null}
                 <audio ref={clipRef} controls className="mt-4 w-full max-w-md" preload="none" />
-              </article>
-            <div className="order-4 hidden min-w-0 md:col-span-2 md:block" aria-labelledby="yoto-send-heading">
-              <h3 id="yoto-send-heading" className="sr-only">
-                Create card
-              </h3>
-              {libraryNote ? (
-                <p className="mb-2 text-sm leading-5 pk-danger" role="status">
-                  {libraryNote}
-                </p>
-              ) : null}
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  className="h-11 px-4"
-                  disabled={sending || !ready}
-                  onClick={() =>
-                    askCardOptions(
-                      randomGuess
-                        ? "Send these 50 riddles"
-                        : randomFacts
-                          ? "Send these 100"
-                          : `Send ${card.rangeLabel} to Yoto`,
-                      card.libraryTitle,
-                      () => send(),
-                    )
-                  }
-                >
-                  {sending && !bulkActive ? "Recording in the background…" : "Create card"}
-                </Button>
-                <MyoCardButton
-                  onClick={() =>
-                    showMyoCard({
-                      title: card.libraryTitle,
-                      cardId: validYotoCardId(targetPlaylist) ?? job?.cardId,
-                      sending,
-                    })
-                  }
-                />
-                <Button type="button" variant="outline" className="h-11 px-4" onClick={() => setStickersOpen(true)}>
-                  Stickers
-                </Button>
-                {kind === "meet" ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-11 px-4"
-                    disabled={sending || !ready}
-                    onClick={() =>
-                      askCardOptions(
-                        `Send all ${factsPlaylists.length} playlists — ${factsPlaylists.length} blank cards`,
-                        "Pokefacts 1",
-                        () => sendAllFacts(),
-                      )
-                    }
-                  >
-                    {sending && bulkActive
-                      ? "Recording in the background…"
-                      : `Send all ${factsPlaylists.length} playlists`}
-                  </Button>
+                {chapter.dexId ? (
+                  <p className="pk-quiet mt-4 text-xs leading-5">
+                    {guessing
+                      ? "Hear plays the cry, then the words. The clue never says the name. The answer does. The Yoto card plays that same order."
+                      : "Hear plays the cry, then the reading. The Yoto card plays that same order."}
+                  </p>
                 ) : null}
-              </div>
-              <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                Paper stickers come after this list is in your Yoto app.
-              </p>
-              {playlistHref ? (
-                <p className="mt-3 text-sm leading-6">
-                  <a
-                    className="font-bold text-poke-red underline decoration-2"
-                    href={playlistHref}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Open this playlist in the Yoto app
-                  </a>
-                </p>
-              ) : null}
+                {source && guessing ? <p className="pk-quiet mt-2 text-xs">Pokédex, {source}</p> : null}
+                {readsSpeciesBiology(kind) && factReading?.url && !factReading.notice ? (
+                  <WikiCredit url={factReading.url} />
+                ) : null}
+                {formMode &&
+                chapter.articleUrl &&
+                chapter.articleStatus &&
+                !chapter.articleNotice &&
+                !formSpeechIsNameOnly(chapter.title, formSpokenText(chapter)) ? (
+                  <WikiCredit url={chapter.articleUrl} />
+                ) : null}
+              </EntryCard>
             </div>
           </div>
         ) : null}
         </div>
+        {view !== "setup" && !cardPrompt ? (
+          <PlaybackPanel
+            settings={playback}
+            onChange={setPlayback}
+            voiceId={voiceId}
+            onVoiceId={(id) => setVoiceId(writeVoiceId(localStorage, id))}
+          />
+        ) : null}
       </main>
 
       <footer className="mx-auto w-full max-w-5xl px-4 pb-8 text-xs leading-5 font-bold text-ink sm:px-6">

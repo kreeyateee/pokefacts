@@ -1,55 +1,88 @@
 "use client";
 
-import {
-  COLLECTION_TABS,
-  PRIMARY_TABS,
-  type CollectionKind,
-  type PrimaryTabId,
-} from "@/lib/app-nav";
+import { READY_CATEGORIES, SECTIONS, type ReadyKind, type SectionId } from "@/lib/app-nav";
 
+export type ShelfPicture = { src: string; fallback?: string; shadow?: boolean };
+
+function hideBrokenPicture(event: { currentTarget: HTMLImageElement }): void {
+  const image = event.currentTarget;
+  const fallback = image.dataset.fallback;
+  if (fallback && image.dataset.tried !== "1" && image.getAttribute("src") !== fallback) {
+    image.dataset.tried = "1";
+    image.src = fallback;
+    return;
+  }
+  image.style.visibility = "hidden";
+}
+
+/** Ready-made, Make your own and Music on top. Ready-made opens a shelf of sets, each with a picture. */
 export function AppNav({
-  selected,
-  collection,
-  onPrimary,
-  onCollection,
+  section,
+  kind,
+  pictures,
+  onSection,
+  onCategory,
 }: {
-  selected: PrimaryTabId | null;
-  collection: CollectionKind;
-  onPrimary: (id: PrimaryTabId) => void;
-  onCollection: (kind: CollectionKind) => void;
+  section: SectionId | null;
+  kind: ReadyKind;
+  pictures: Partial<Record<ReadyKind, ShelfPicture>>;
+  onSection: (id: SectionId) => void;
+  onCategory: (kind: ReadyKind) => void;
 }) {
   return (
-    <div className="pk-nav mx-auto w-full min-w-0 max-w-5xl px-4 sm:px-6">
-      <div className="pk-tabs pk-scroll" role="tablist" aria-label="Main menu">
-        {PRIMARY_TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={selected === tab.id}
-            onClick={() => onPrimary(tab.id)}
-            className="pk-tab"
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-      {selected === "collections" ? (
-        <div className="pk-subtabs pk-scroll" role="tablist" aria-label="Collection Cards">
-          {COLLECTION_TABS.map((tab) => (
+    <nav className="pk-nav mx-auto w-full min-w-0 max-w-5xl px-4 sm:px-6" aria-label="Main menu">
+      <ul className="pk-sections">
+        {SECTIONS.map((item) => (
+          <li key={item.id}>
             <button
-              key={tab.kind}
               type="button"
-              role="tab"
-              aria-selected={collection === tab.kind}
-              onClick={() => onCollection(tab.kind)}
-              className="pk-pill"
+              className="pk-section"
+              aria-current={section === item.id ? "page" : undefined}
+              onClick={() => onSection(item.id)}
             >
-              {tab.label}
+              {item.label}
             </button>
-          ))}
+          </li>
+        ))}
+      </ul>
+      {section === "ready" ? (
+        <div className="pk-shelf">
+          <h2 id="shelf-heading" className="pk-section-title">
+            Pick a set
+          </h2>
+          <ul className="pk-shelf-grid" aria-labelledby="shelf-heading">
+            {READY_CATEGORIES.map((item) => {
+              const picture = pictures[item.kind];
+              return (
+                <li key={item.kind}>
+                  <button
+                    type="button"
+                    className="pk-tile"
+                    aria-current={kind === item.kind ? "true" : undefined}
+                    onClick={() => onCategory(item.kind)}
+                  >
+                    <span className="pk-tile-pic" aria-hidden="true">
+                      {picture ? (
+                        <img
+                          src={picture.src}
+                          alt=""
+                          width={56}
+                          height={56}
+                          loading="lazy"
+                          data-fallback={picture.fallback}
+                          onError={hideBrokenPicture}
+                          className={picture.shadow ? "pk-tile-shadow" : undefined}
+                        />
+                      ) : null}
+                    </span>
+                    <span className="pk-tile-label">{item.label}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       ) : null}
-    </div>
+    </nav>
   );
 }

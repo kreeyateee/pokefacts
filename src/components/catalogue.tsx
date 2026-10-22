@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { PlaylistWindow } from "@/components/playlist-window";
 import { StatusBar } from "@/components/status-bar";
 import { StickerStudio } from "@/components/sticker-studio";
-import { YotoScreen } from "@/components/yoto-screen";
+import { EntryCard, EntryPager } from "@/components/entry-card";
 import { Button } from "@/components/ui/button";
 import { MyoCardButton, openAfterDialog } from "@/components/myo-card-dialog";
 import { useStoredState } from "@/components/use-stored-state";
@@ -167,6 +167,8 @@ function Fact({ label, children }: { label: string; children: string }) {
   );
 }
 
+type EntryTab = "pokedex" | "bulbapedia" | "evolutions" | "battle" | "details" | "forms";
+
 const PLAYLIST_KINDS: Array<{ id: SelectionKind; label: string; detail: string }> = [
   {
     id: "whos-that",
@@ -218,6 +220,7 @@ export function Catalogue({
     Array<{ formId: number; name: string; article: BiologyView }>
   >([]);
   const [showList, setShowList] = useState(false);
+  const [entryTab, setEntryTab] = useState<EntryTab>("pokedex");
   const [buildOpen, setBuildOpen] = useState(false);
   const [picks, setPicks] = useStoredState(CATALOGUE_PICKS_KEY, readCataloguePicks, serializeCataloguePicks);
   const { ids: picked, kind: playlistKind, title: playlistTitle } = picks;
@@ -349,6 +352,26 @@ export function Catalogue({
   const pageIds = list?.items.map((item) => item.id) ?? [];
   const pageAll = pageIds.length > 0 && pageIds.every((id) => picked.includes(id));
   const speciesLimit = selectionSpeciesLimit(playlistKind);
+
+  const entryTabs: Array<{ id: EntryTab; label: string }> = [
+    { id: "pokedex", label: "Pokédex" },
+    { id: "bulbapedia", label: "Bulbapedia" },
+    ...(lineMembers.length > 0 ? [{ id: "evolutions" as const, label: "Evolutions" }] : []),
+    { id: "battle", label: "Battle" },
+    { id: "details", label: "Details" },
+    ...(entry && entry.forms.length > 0 ? [{ id: "forms" as const, label: "Forms" }] : []),
+  ];
+  const shownTab: EntryTab = entryTabs.some((item) => item.id === entryTab) ? entryTab : "pokedex";
+
+  function openEntry(id: number) {
+    setSelected(id);
+    setShowList(false);
+  }
+
+  /** The name when it is on this page of the list, else the number. */
+  function nameNear(id: number): string {
+    return list?.items.find((item) => item.id === id)?.name ?? numberLabel(id);
+  }
 
   function togglePick(id: number) {
     setPicked((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
@@ -841,57 +864,35 @@ export function Catalogue({
         </div>
       </section>
 
-      <article className={`pk-card pk-dex min-w-0 self-start px-4 py-6 sm:px-8 sm:py-8 max-lg:order-1 ${showList ? "hidden lg:block" : "block"}`}>
-        <div className="mb-4 flex flex-wrap items-center gap-2 lg:hidden">
-          <button
-            type="button"
-            className="inline-flex min-h-11 items-center text-sm font-bold text-poke-red underline"
-            onClick={() => setShowList(true)}
-          >
-            Back to the list
-          </button>
+      <div className={`min-w-0 self-start max-lg:order-1 ${showList ? "hidden lg:block" : "block"}`}>
+        <div className="mb-3 flex flex-wrap items-center gap-2 lg:hidden">
+          <Button type="button" variant="outline" className="h-11 px-4" onClick={() => setShowList(true)}>
+            Find Pokémon
+          </Button>
           <Button type="button" className="h-11 px-4" onClick={() => setBuildOpen(true)}>
             Create card
           </Button>
           {onShowMyoCard ? <MyoCardButton onClick={showMyoCard} /> : null}
         </div>
-        {entryError?.id === selected ? (
-          <p className="text-sm pk-danger" role="alert">
-            {entryError.message}
-          </p>
-        ) : null}
-        {entry?.id !== selected && entryError?.id !== selected ? (
-          <p className="text-sm text-muted-foreground">Opening the entry…</p>
-        ) : null}
         {entry && entry.id === selected ? (
-          <div key={entry.id} className="pk-swap">
-            <div className="pk-hero">
-              <div className="pk-hero-pics">
-                <img
-                  src={artworkSrc(entry.id)}
-                  alt=""
-                  width={176}
-                  height={176}
-                  className="pk-art pk-art-entry"
-                  data-fallback={artworkApi("species", entry.id)}
-                  onError={hideBrokenPicture}
-                />
-                {entryYoto ? <YotoScreen src={entryYoto} /> : null}
-              </div>
-              <div className="pk-entry-name min-w-0">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="pk-kicker">
-                    {numberLabel(entry.id)} · {entry.region}
-                  </p>
-                </div>
-                <h2 className="font-display text-3xl leading-tight sm:text-5xl">{entry.name}</h2>
-              </div>
-              <div className="pk-entry-meta min-w-0">
+          <EntryCard
+            swapKey={entry.id}
+            top={
+              <EntryPager
+                previous={entry.id > 1 ? nameNear(entry.id - 1) : undefined}
+                next={list && entry.id < list.species ? nameNear(entry.id + 1) : undefined}
+                position={numberLabel(entry.id)}
+                onPrevious={() => openEntry(entry.id - 1)}
+                onNext={() => openEntry(entry.id + 1)}
+              />
+            }
+            kicker={`${numberLabel(entry.id)} · ${entry.region}`}
+            title={entry.name}
+            meta={
+              <div className="mt-2 grid justify-items-start gap-2">
                 <p className="text-sm text-muted-foreground">The {entry.genus}</p>
-                <div className="mt-2">
-                  <TypeChips types={entry.types} />
-                </div>
-                <label className="mt-3 flex items-center gap-2 text-sm font-bold">
+                <TypeChips types={entry.types} />
+                <label className="pk-pick mt-1">
                   <input
                     type="checkbox"
                     checked={picked.includes(entry.id)}
@@ -900,112 +901,180 @@ export function Catalogue({
                   Add {entry.name} to the playlist
                 </label>
               </div>
-            </div>
-            {lineMembers.length > 0 ? (
-              <section className="mt-6" aria-label="Evolutions">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="pk-kicker">Evolutions</h3>
+            }
+            picture={
+              <img
+                src={artworkSrc(entry.id)}
+                alt=""
+                width={192}
+                height={192}
+                className="pk-entry-art pk-entry-photo"
+                data-fallback={artworkApi("species", entry.id)}
+                onError={hideBrokenPicture}
+              />
+            }
+            yotoSrc={entryYoto}
+            tabs={
+              <div
+                className="pk-entry-tabs"
+                role="tablist"
+                aria-label={`About ${entry.name}`}
+                onKeyDown={(event) => {
+                  const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+                  if (!step) return;
+                  event.preventDefault();
+                  const index = entryTabs.findIndex((item) => item.id === shownTab);
+                  const next = entryTabs[(index + step + entryTabs.length) % entryTabs.length];
+                  setEntryTab(next.id);
+                  document.getElementById(`entry-tab-${next.id}`)?.focus();
+                }}
+              >
+                {entryTabs.map((item) => (
                   <button
+                    key={item.id}
+                    id={`entry-tab-${item.id}`}
                     type="button"
-                    className="text-sm font-bold text-poke-red underline decoration-poke-yellow decoration-2"
-                    onClick={toggleLine}
+                    role="tab"
+                    aria-selected={shownTab === item.id}
+                    aria-controls="entry-panel"
+                    tabIndex={shownTab === item.id ? 0 : -1}
+                    className="pk-tab"
+                    onClick={() => setEntryTab(item.id)}
                   >
-                    {lineAllPicked ? "Untick all evolutions" : "Tick all evolutions"}
+                    {item.label}
                   </button>
-                </div>
-                <EvolutionPicks
-                  members={entry.line.evolutions}
-                  picked={picked}
-                  onToggle={togglePick}
-                  onOpen={(id) => {
-                    setSelected(id);
-                    setShowList(false);
-                  }}
-                />
-                {entry.line.subevolutions.length > 0 ? (
-                  <>
-                    <h3 className="mt-4 pk-kicker">Subevolutions</h3>
-                    <EvolutionPicks
-                      members={entry.line.subevolutions}
-                      picked={picked}
-                      onToggle={togglePick}
-                      onOpen={(id) => {
-                        setSelected(id);
-                        setShowList(false);
-                      }}
-                    />
-                  </>
-                ) : null}
-              </section>
-            ) : null}
-            <p className="mt-6 max-w-prose text-base leading-7 text-foreground">{entry.info}</p>
-            {entry.infoVersion ? (
-              <p className="mt-2 text-xs pk-quiet">Pokédex line from {entry.infoVersion}.</p>
-            ) : null}
-            {entry.notes ? (
-              <>
-                <h3 className="mt-6 pk-kicker">
-                  Notes
-                </h3>
-                <p className="mt-2 max-w-prose text-sm leading-6 text-muted-foreground">{entry.notes}</p>
-              </>
-            ) : null}
-            <BiologyPanel biology={biologyFor === entry.id ? biology : null} />
-            <div className="mt-5 grid gap-2 sm:grid-cols-2">
-              <p className="pk-soft px-4 py-3">It weighs {weightForUnits(entry.weightLabel, units)}.</p>
-              <p className="pk-soft px-4 py-3">It is {heightForUnits(entry.heightLabel, units)} tall.</p>
-            </div>
-            <div className="mt-4">
-              <Fact label="Ability">{abilityText}</Fact>
-              <Fact label="Evolution">{evolutionText}</Fact>
-              <Fact label="Habitat">{entry.habitat ? habitatLabel(entry.habitat) : "Not recorded"}</Fact>
-              <Fact label="Gender">{entry.gender.replace(/\.$/, "")}</Fact>
-              <Fact label="Egg groups">{entry.eggGroups.join(", ")}</Fact>
-              <Fact label="Hatch">{entry.eggGroups.includes("No egg group") ? "No egg group" : `${entry.hatchCycles} egg cycles`}</Fact>
-              <Fact label="Catch rate">{String(entry.captureRate)}</Fact>
-              <Fact label="Growth">{entry.growth}</Fact>
-            </div>
-            <h3 className="mt-6 pk-kicker">Matchups</h3>
-            <div className="mt-2 grid gap-3 text-sm">
-              <MatchRow label="Weak" matches={entry.weak} empty="No extra weaknesses." />
-              <MatchRow label="Resists" matches={entry.resist} empty="No resistances." />
-              <MatchRow label="Immune" matches={entry.immune} empty="No immunities." />
-            </div>
-            <h3 className="mt-6 pk-kicker">Moves</h3>
-            {entry.moves.length === 0 ? (
-              <p className="mt-2 text-sm text-muted-foreground">No moves are on file.</p>
-            ) : (
-              <ul className="mt-2 flex max-h-40 flex-wrap gap-1.5 overflow-auto">
-                {entry.moves.map((move) => (
-                  <li key={move} className="rounded-full border-2 border-ink bg-white px-2 py-0.5 text-xs font-bold">
-                    {move}
-                  </li>
                 ))}
-              </ul>
-            )}
-            <h3 className="mt-6 pk-kicker">Base stats</h3>
-            <ul className="mt-2 grid gap-1.5">
-              {entry.stats.map((stat) => (
-                <li key={stat.name} className="grid grid-cols-[minmax(0,7.5rem)_minmax(0,1fr)_2.5rem] items-center gap-2 text-sm">
-                  <span>{stat.name}</span>
-                  <span className="h-3 overflow-hidden rounded-full border-2 border-ink bg-white">
-                    <span
-                      className={`block h-full ${statFill(stat.name)}`}
-                      style={{ width: `${Math.min(100, (stat.value / 255) * 100)}%` }}
-                    />
-                  </span>
-                  <span className="text-right tabular-nums">{stat.value}</span>
-                </li>
-              ))}
-            </ul>
-            {entry.forms.length > 0 ? (
-              <>
-                <h3 className="mt-6 pk-kicker">
-                  Other forms
-                </h3>
-                <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+              </div>
+            }
+          >
+            <div
+              key={`${entry.id}-${shownTab}`}
+              id="entry-panel"
+              role="tabpanel"
+              aria-labelledby={`entry-tab-${shownTab}`}
+              tabIndex={0}
+              className="pk-swap min-w-0"
+            >
+              {shownTab === "pokedex" ? (
+                <div className="grid gap-3">
+                  {entry.info ? (
+                    <figure className="pk-dex-line">
+                      <blockquote>{entry.info}</blockquote>
+                      {entry.infoVersion ? <figcaption>Pokédex, {entry.infoVersion}</figcaption> : null}
+                    </figure>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No Pokédex line is on file.</p>
+                  )}
+                  {entry.info2 ? (
+                    <figure className="pk-dex-line">
+                      <blockquote>{entry.info2}</blockquote>
+                      {entry.info2Version ? <figcaption>Pokédex, {entry.info2Version}</figcaption> : null}
+                    </figure>
+                  ) : null}
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <p className="pk-soft px-4 py-3">It weighs {weightForUnits(entry.weightLabel, units)}.</p>
+                    <p className="pk-soft px-4 py-3">It is {heightForUnits(entry.heightLabel, units)} tall.</p>
+                  </div>
+                  {entry.notes ? (
+                    <>
+                      <h3 className="mt-2 pk-kicker">Notes</h3>
+                      <p className="max-w-prose text-sm leading-6 text-muted-foreground">{entry.notes}</p>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+              {shownTab === "bulbapedia" ? (
+                <BiologyPanel biology={biologyFor === entry.id ? biology : null} />
+              ) : null}
+              {shownTab === "evolutions" ? (
+                <section aria-label="Evolutions">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="pk-kicker">Evolutions</h3>
+                    <button
+                      type="button"
+                      className="min-h-11 text-sm font-bold text-poke-red underline decoration-poke-yellow decoration-2"
+                      onClick={toggleLine}
+                    >
+                      {lineAllPicked ? "Untick all evolutions" : "Tick all evolutions"}
+                    </button>
+                  </div>
+                  <EvolutionPicks
+                    members={entry.line.evolutions}
+                    picked={picked}
+                    onToggle={togglePick}
+                    onOpen={openEntry}
+                  />
+                  {entry.line.subevolutions.length > 0 ? (
+                    <>
+                      <h3 className="mt-4 pk-kicker">Subevolutions</h3>
+                      <EvolutionPicks
+                        members={entry.line.subevolutions}
+                        picked={picked}
+                        onToggle={togglePick}
+                        onOpen={openEntry}
+                      />
+                    </>
+                  ) : null}
+                </section>
+              ) : null}
+              {shownTab === "battle" ? (
+                <>
+                  <h3 className="pk-kicker">Matchups</h3>
+                  <div className="mt-2 grid gap-3 text-sm">
+                    <MatchRow label="Weak" matches={entry.weak} empty="No extra weaknesses." />
+                    <MatchRow label="Resists" matches={entry.resist} empty="No resistances." />
+                    <MatchRow label="Immune" matches={entry.immune} empty="No immunities." />
+                  </div>
+                  <h3 className="mt-6 pk-kicker">Base stats</h3>
+                  <ul className="mt-2 grid gap-1.5">
+                    {entry.stats.map((stat) => (
+                      <li
+                        key={stat.name}
+                        className="grid grid-cols-[minmax(0,7.5rem)_minmax(0,1fr)_2.5rem] items-center gap-2 text-sm"
+                      >
+                        <span>{stat.name}</span>
+                        <span className="h-3 overflow-hidden rounded-full border-2 border-ink bg-white">
+                          <span
+                            className={`block h-full ${statFill(stat.name)}`}
+                            style={{ width: `${Math.min(100, (stat.value / 255) * 100)}%` }}
+                          />
+                        </span>
+                        <span className="text-right tabular-nums">{stat.value}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <h3 className="mt-6 pk-kicker">Moves</h3>
+                  {entry.moves.length === 0 ? (
+                    <p className="mt-2 text-sm text-muted-foreground">No moves are on file.</p>
+                  ) : (
+                    <ul className="mt-2 flex flex-wrap gap-1.5">
+                      {entry.moves.map((move) => (
+                        <li key={move} className="rounded-full border-2 border-ink bg-white px-2 py-0.5 text-xs font-bold">
+                          {move}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              ) : null}
+              {shownTab === "details" ? (
+                <div>
+                  <Fact label="Ability">{abilityText}</Fact>
+                  <Fact label="Evolution">{evolutionText}</Fact>
+                  <Fact label="Habitat">{entry.habitat ? habitatLabel(entry.habitat) : "Not recorded"}</Fact>
+                  <Fact label="Gender">{entry.gender.replace(/\.$/, "")}</Fact>
+                  <Fact label="Egg groups">{entry.eggGroups.join(", ")}</Fact>
+                  <Fact label="Hatch">
+                    {entry.eggGroups.includes("No egg group") ? "No egg group" : `${entry.hatchCycles} egg cycles`}
+                  </Fact>
+                  <Fact label="Catch rate">{String(entry.captureRate)}</Fact>
+                  <Fact label="Growth">{entry.growth}</Fact>
+                </div>
+              ) : null}
+              {shownTab === "forms" ? (
+                <ul className="grid gap-3 sm:grid-cols-2">
                   {entry.forms.map((form) => (
-                    <li key={form.id} className="pk-soft px-3 py-2 text-sm font-normal">
+                    <li key={form.id} className="pk-soft px-3 py-3 text-sm font-normal">
                       <img
                         src={artworkApi("form", form.id)}
                         alt=""
@@ -1044,35 +1113,21 @@ export function Catalogue({
                     </li>
                   ))}
                 </ul>
-              </>
-            ) : null}
-            <div className="mt-6 flex gap-2">
-              <button
-                type="button"
-                className="pk-pill text-sm disabled:opacity-40"
-                disabled={entry.id <= 1}
-                onClick={() => {
-                  setSelected(entry.id - 1);
-                  setShowList(false);
-                }}
-              >
-                Previous number
-              </button>
-              <button
-                type="button"
-                className="pk-pill text-sm disabled:opacity-40"
-                disabled={!list || entry.id >= list.species}
-                onClick={() => {
-                  setSelected(entry.id + 1);
-                  setShowList(false);
-                }}
-              >
-                Next number
-              </button>
+              ) : null}
             </div>
-          </div>
-        ) : null}
-      </article>
+          </EntryCard>
+        ) : (
+          <article className="pk-card pk-dex pk-entry-card">
+            {entryError?.id === selected ? (
+              <p className="text-sm pk-danger" role="alert">
+                {entryError.message}
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">Opening the entry…</p>
+            )}
+          </article>
+        )}
+      </div>
       {stickerCards?.[0] ? (
         <StickerStudio
           key={stickerCards.map((item) => item.id).join("|")}
@@ -1153,7 +1208,7 @@ function EvolutionPicks({
 
 function BiologyPanel({ biology }: { biology: BiologyView | null }) {
   return (
-    <section className="mt-6" aria-labelledby="biology-heading">
+    <section aria-labelledby="biology-heading">
       <h3
         id="biology-heading"
         className="pk-kicker"

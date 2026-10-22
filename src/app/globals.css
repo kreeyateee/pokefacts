@@ -368,24 +368,183 @@
 }
 
 .pk-nav {
-  margin-top: 0.75rem;
+  margin-top: 1.25rem;
 }
 
-.pk-tabs,
-.pk-subtabs {
+/* Ready-made, Make your own, Music. Equal thirds on a phone, side by side on a computer. */
+.pk-sections {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 0.6rem;
+}
+
+@media (min-width: 640px) {
+  .pk-sections {
+    display: flex;
+    flex-wrap: wrap;
+  }
+}
+
+.pk-section {
   display: flex;
-  gap: 0.5rem;
-  padding-bottom: 0.35rem;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 3.25rem;
+  padding: 0.35rem 0.4rem;
+  border: 3px solid var(--ink);
+  border-radius: 1rem;
+  background: white;
+  color: var(--ink);
+  font-family: var(--font-fredoka), sans-serif;
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  box-shadow: 3px 3px 0 var(--ink);
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
 }
 
-.pk-tabs {
+@media (min-width: 640px) {
+  .pk-section {
+    width: auto;
+    min-height: 3.25rem;
+    padding: 0.4rem 1.4rem;
+    font-size: 1.15rem;
+  }
+}
+
+.pk-section:hover {
+  background: #fff4c2;
+}
+
+.pk-section[aria-current="page"] {
+  background: var(--poke-yellow);
+}
+
+.pk-section:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+/* The ready-made shelf hangs under the section buttons. */
+.pk-shelf {
+  margin-top: 0.85rem;
+  padding: 0.85rem 0.85rem 1rem;
+  border: 3px solid var(--ink);
+  border-radius: 1.2rem;
+  background: var(--cream);
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+.pk-shelf-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+}
+
+/* Four across once every label fits on one line. */
+@media (min-width: 480px) {
+  .pk-shelf-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .pk-shelf {
+    padding: 1rem 1.1rem 1.15rem;
+  }
+
+  .pk-shelf-grid {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+}
+
+.pk-tile {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.3rem;
+  padding: 0.45rem 0.2rem 0.5rem;
+  border: 3px solid var(--ink);
+  border-radius: 1rem;
+  background: white;
+  color: var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.pk-tile:hover {
+  background: #fff4c2;
+}
+
+.pk-tile[aria-current="true"] {
+  background: var(--poke-yellow);
+}
+
+.pk-tile:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+.pk-tile-pic {
+  display: grid;
+  width: 3.25rem;
+  height: 3.25rem;
+  place-items: center;
+}
+
+.pk-tile-pic img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.pk-tile-shadow {
+  filter: brightness(0);
+}
+
+.pk-tile-label {
+  max-width: 100%;
+  font-family: var(--font-fredoka), sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  overflow-wrap: break-word;
+}
+
+@media (min-width: 640px) {
+  .pk-tile-pic {
+    width: 3.75rem;
+    height: 3.75rem;
+  }
+
+  .pk-tile-label {
+    font-size: 0.9rem;
+  }
+}
+
+/* Entry tabs in Make your own. They wrap rather than scroll, so every tab is in sight. */
+.pk-entry-tabs {
+  display: flex;
   flex-wrap: wrap;
-}
-
-.pk-subtabs {
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  margin-top: 0.5rem;
+  gap: 0.5rem;
+  padding: 0 0.25rem 0.25rem 0;
 }
 
 .pk-account-menu {
@@ -419,15 +578,9 @@
 }
 
 @media (max-width: 767px) {
-  .pk-nav {
-    padding-top: 0.45rem;
-    padding-bottom: 0.45rem;
-  }
-
   .pk-tab {
-    height: 2.5rem;
-    padding: 0 0.7rem;
-    font-size: 0.82rem;
+    padding: 0 0.75rem;
+    font-size: 0.85rem;
   }
 
   .pk-card {
@@ -468,7 +621,8 @@
 
 .pk-tab[aria-selected="true"],
 .pk-pill[aria-selected="true"],
-.pk-pill[aria-pressed="true"] {
+.pk-pill[aria-pressed="true"],
+.pk-pill[aria-current="true"] {
   background: var(--poke-yellow);
 }
 
@@ -798,14 +952,6 @@
   image-rendering: pixelated;
 }
 
-.pk-hero-pics {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.75rem;
-}
-
 .pk-yoto {
   flex: none;
   width: min(10.5rem, 100%);
@@ -890,104 +1036,278 @@
   object-fit: contain;
 }
 
-.pk-hero {
+/* Ready-made page: the playlist panel, then the list beside the entry. */
+.pk-panel {
+  padding: 1rem;
+  border: 3px solid var(--ink);
+  border-radius: 1.2rem;
+  background: var(--cream);
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+@media (min-width: 640px) {
+  .pk-panel {
+    padding: 1.1rem 1.25rem 1.2rem;
+  }
+}
+
+.pk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.pk-browse {
+  display: grid;
+  min-width: 0;
+  gap: 1.25rem;
+}
+
+@media (min-width: 768px) {
+  .pk-browse {
+    grid-template-columns: 15rem minmax(0, 1fr);
+    align-items: start;
+    gap: 1.5rem;
+  }
+
+  /* The list stays beside the entry and scrolls inside itself. */
+  .pk-browse-list {
+    position: sticky;
+    top: 1rem;
+  }
+
+  .pk-choice-list {
+    max-height: calc(100dvh - 9rem);
+    align-content: start;
+    gap: 0.5rem;
+    overflow-y: auto;
+    padding: 0.2rem 0.45rem 0.45rem 0.1rem;
+  }
+}
+
+.pk-entry-card {
+  container-type: inline-size;
+  padding: 1.75rem 1rem 1.25rem;
+}
+
+@media (min-width: 640px) {
+  .pk-entry-card {
+    padding: 2rem 1.75rem 1.75rem;
+  }
+}
+
+.pk-pager {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1.25rem;
+}
+
+.pk-pager-btn {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.pk-pager-btn:first-child {
+  justify-self: start;
+}
+
+.pk-pager-btn:last-child {
+  justify-self: end;
+}
+
+.pk-pager-btn > span[aria-hidden] {
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+.pk-pager-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pk-pager-count {
+  font-size: 0.8rem;
+  font-weight: 800;
+  white-space: nowrap;
+  color: #5d7494;
+}
+
+/* Phone and narrow card: title, then the two pictures side by side, then the words. */
+.pk-entry {
+  display: grid;
+  grid-template-areas:
+    "head"
+    "pics"
+    "body";
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+}
+
+.pk-entry-head {
+  grid-area: head;
+  min-width: 0;
+}
+
+.pk-entry-title {
+  margin-top: 0.2rem;
+  font-family: var(--font-fredoka), sans-serif;
+  font-size: 2rem;
+  line-height: 1.1;
+  text-wrap: balance;
+  overflow-wrap: break-word;
+}
+
+.pk-entry-pics {
+  grid-area: pics;
   display: flex;
   min-width: 0;
-  flex-direction: column;
   align-items: flex-start;
-  gap: 0.75rem;
-  margin-top: 0.75rem;
+  gap: 0.85rem;
 }
 
-.pk-hero h2 {
+.pk-entry-body {
+  grid-area: body;
   min-width: 0;
-  overflow-wrap: anywhere;
 }
 
-.pk-art {
-  width: min(16rem, 100%);
-  height: 12rem;
+.pk-entry-tabbed {
+  grid-template-areas:
+    "head"
+    "pics"
+    "tabs"
+    "body";
+}
+
+.pk-entry-tabs-slot {
+  grid-area: tabs;
+  min-width: 0;
+}
+
+.pk-entry-art {
+  width: min(11rem, calc(100% - 7.35rem));
+  height: auto;
+  aspect-ratio: 1;
   flex: none;
+}
+
+.pk-entry-photo {
   border: 3px solid var(--ink);
   border-radius: 1.25rem;
   object-fit: contain;
   background: radial-gradient(circle at 50% 42%, #fff 0 46%, #d7f0ff 78%);
   box-shadow: 3px 3px 0 var(--ink);
-  padding: 0.35rem;
+  padding: 0.5rem;
 }
 
-@media (max-width: 29.99rem) {
-  .pk-hero {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .pk-hero .pk-art,
-  .pk-hero .pk-sprite,
-  .pk-hero .pk-silhouette,
-  .pk-hero .pk-hero-pics {
-    order: 2;
-  }
-
-  .pk-hero .pk-art {
-    height: 9rem;
-  }
-
-  .pk-hero .pk-silhouette {
-    width: min(16rem, 100%);
-    height: auto;
-    aspect-ratio: 1;
-    justify-self: start;
-  }
-
-  .pk-hero h2 {
-    order: 1;
-    font-size: 1.7rem;
-    line-height: 1.15;
-  }
-
-  .pk-hero:has(.pk-art-entry) {
-    display: grid;
-  }
-
-  .pk-hero .pk-art-entry {
-    order: 2;
-    height: 7.5rem;
-  }
-
-  .pk-entry-name {
-    order: 1;
-  }
-
-  .pk-entry-meta {
-    order: 3;
-  }
+.pk-entry-pics .pk-silhouette {
+  padding: 0.5rem;
 }
 
-@media (min-width: 30rem) {
-  .pk-hero {
-    flex-direction: row;
-    align-items: flex-end;
+.pk-entry-pics .pk-yoto {
+  width: 6.5rem;
+}
+
+/* Wide card: a picture column on the left, title and words on the right. */
+@container (min-width: 34rem) {
+  .pk-entry {
+    grid-template-areas:
+      "pics head"
+      "pics body";
+    grid-template-columns: 12rem minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    gap: 1rem 1.75rem;
+  }
+
+  .pk-entry-pics {
+    flex-direction: column;
     gap: 1rem;
   }
 
-  .pk-hero:has(.pk-art-entry) {
-    flex-wrap: wrap;
+  .pk-entry-art {
+    width: 12rem;
   }
 
-  .pk-art {
-    width: 11rem;
-    height: 11rem;
+  .pk-entry-pics .pk-yoto {
+    width: 7.5rem;
   }
 
-  .pk-entry-name,
-  .pk-entry-meta {
-    flex: 1;
+  .pk-entry-title {
+    font-size: 2.75rem;
   }
 
-  .pk-entry-meta {
-    flex-basis: 100%;
+  .pk-entry-tabbed {
+    grid-template-areas:
+      "pics head"
+      "pics tabs"
+      "body body";
+    grid-template-rows: auto 1fr auto;
+    row-gap: 0;
   }
+
+  .pk-entry-tabbed .pk-entry-tabs {
+    margin-top: 1.25rem;
+  }
+
+  .pk-entry-tabbed .pk-entry-body {
+    margin-top: 1.5rem;
+  }
+}
+
+.pk-pick {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.85rem;
+  border: 3px solid var(--ink);
+  border-radius: 0.9rem;
+  background: white;
+  font-size: 0.9rem;
+  font-weight: 800;
+  box-shadow: 3px 3px 0 var(--ink);
+  cursor: pointer;
+}
+
+.pk-pick:has(input:checked) {
+  background: var(--poke-yellow);
+}
+
+.pk-pick:focus-within {
+  box-shadow:
+    3px 3px 0 var(--ink),
+    0 0 0 3px var(--poke-yellow);
+}
+
+.pk-dex-line {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border: 3px solid var(--ink);
+  border-radius: 0.9rem;
+  background: white;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.pk-dex-line blockquote {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+
+.pk-dex-line figcaption {
+  margin-top: 0.4rem;
+  font-family: var(--font-fredoka), sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--poke-red);
 }
 
 .pk-soft,

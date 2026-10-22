@@ -3,49 +3,54 @@ import { describe, it } from "node:test";
 
 import {
   COLLECTION_TABS,
-  DEFAULT_COLLECTION,
-  PRIMARY_TABS,
+  READY_CATEGORIES,
+  SECTIONS,
   isCollectionKind,
+  isReadyKind,
   pageHeading,
   playlistNote,
-  primaryTabFor,
   readSavedTab,
+  sectionFor,
+  viewForSection,
 } from "./app-nav";
 
 describe("app navigation", () => {
-  it("keeps the primary menu to five destinations", () => {
-    assert.equal(PRIMARY_TABS.length, 5);
+  it("splits the menu into ready-made, make your own, and music", () => {
     assert.deepEqual(
-      PRIMARY_TABS.map((tab) => tab.id),
-      ["facts", "guess", "collections", "catalogue", "music"],
+      SECTIONS.map((item) => item.id),
+      ["ready", "own", "music"],
+    );
+    assert.deepEqual(
+      SECTIONS.map((item) => item.label),
+      ["Ready-made", "Make your own", "Music"],
     );
   });
 
-  it("groups forms and special sets under Collection Cards", () => {
+  it("puts every ready-made set on one shelf", () => {
+    assert.deepEqual(
+      READY_CATEGORIES.map((item) => item.kind),
+      ["meet", "guess", "mega", "gmax", "alola", "hisui", "legendary", "mythical"],
+    );
     assert.equal(COLLECTION_TABS.length, 6);
-    assert.equal(DEFAULT_COLLECTION, "mega");
     assert.equal(isCollectionKind("mega"), true);
     assert.equal(isCollectionKind("mythical"), true);
     assert.equal(isCollectionKind("meet"), false);
-    assert.equal(isCollectionKind("guess"), false);
+    assert.equal(isReadyKind("guess"), true);
+    assert.equal(isReadyKind("meet"), true);
   });
 
-  it("maps the current page to one primary tab", () => {
-    assert.equal(primaryTabFor("cards", "meet"), "facts");
-    assert.equal(primaryTabFor("cards", "guess"), "guess");
-    assert.equal(primaryTabFor("cards", "alola"), "collections");
-    assert.equal(primaryTabFor("catalogue", "meet"), "catalogue");
-    assert.equal(primaryTabFor("music", "guess"), "music");
-    assert.equal(primaryTabFor("setup", "meet"), null);
+  it("maps each page to one section", () => {
+    assert.equal(sectionFor("cards"), "ready");
+    assert.equal(sectionFor("catalogue"), "own");
+    assert.equal(sectionFor("music"), "music");
+    assert.equal(sectionFor("setup"), null);
+    assert.equal(viewForSection("own"), "catalogue");
+    assert.equal(viewForSection("music"), "music");
   });
 
   it("uses short, matching page titles", () => {
-    assert.deepEqual(
-      PRIMARY_TABS.map((tab) => tab.label),
-      ["Fact Cards", "Who's That", "Collection Cards", "Pokédex Cards", "Music"],
-    );
     assert.equal(pageHeading({ view: "setup", kind: "meet" }).title, "How to connect Yoto");
-    assert.equal(pageHeading({ view: "catalogue", kind: "meet" }).title, "Pokédex Cards");
+    assert.equal(pageHeading({ view: "catalogue", kind: "meet" }).title, "Make your own");
     assert.equal(pageHeading({ view: "music", kind: "meet" }).title, "Music");
     assert.equal(pageHeading({ view: "music", kind: "meet" }).blurb, "Play songs from the games as YouTube videos.");
     assert.equal(pageHeading({ view: "cards", kind: "guess" }).title, "Who's That Pokémon Cards");
@@ -85,6 +90,7 @@ describe("app navigation", () => {
   it("brings back the saved tab and ignores anything it does not know", () => {
     assert.deepEqual(readSavedTab('{"view":"catalogue","kind":"meet"}'), { view: "catalogue", kind: "meet" });
     assert.deepEqual(readSavedTab('{"view":"cards","kind":"alola"}'), { view: "cards", kind: "alola" });
+    assert.deepEqual(readSavedTab('{"view":"music","kind":"hisui"}'), { view: "music", kind: "hisui" });
     assert.deepEqual(readSavedTab('{"view":"cards","kind":"nonsense"}'), { view: "cards", kind: "meet" });
     assert.equal(readSavedTab('{"view":"attic"}'), null);
     assert.equal(readSavedTab("nope"), null);

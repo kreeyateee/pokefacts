@@ -170,7 +170,7 @@ export function PlaylistWindow({
         <DialogBody className="pr-1">
           {ids.length === 0 ? (
             <p className="pk-soft px-4 py-6 text-sm text-muted-foreground">
-              Tick Pokémon on Pokédex Cards, including their evolutions, and they appear here in that order.
+              Tick Pokémon in Make your own, including their evolutions, and they appear here in that order.
             </p>
           ) : (
             <ul className="grid gap-2 sm:grid-cols-2">

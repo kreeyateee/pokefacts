@@ -95,23 +95,19 @@ export function SetupGuide({
         ) : null}
       </div>
 
-      <h3 className="pk-kicker mt-8">Which tab to use</h3>
+      <h3 className="pk-kicker mt-8">Where to look</h3>
       <ul className="mt-2 grid gap-2 text-sm leading-6">
         <li>
-          <span className="font-bold">Fact Cards</span> — ready-made fact playlists. Start
-          here.
+          <span className="font-bold">Ready-made</span> — finished playlists. Pick a set (Facts,
+          Who&apos;s That, Mega, Gigantamax, Alolan, Hisuian, Legendary, or Mythical), then a
+          playlist. Facts is a good place to start.
         </li>
         <li>
-          <span className="font-bold">Who&apos;s That</span> — guessing-game cards with
-          cries and clues.
+          <span className="font-bold">Make your own</span> — browse the Pokédex, tick your own
+          list, then send it.
         </li>
         <li>
-          <span className="font-bold">Collection Cards</span> — Mega, Gigantamax, Alolan,
-          Hisuian, Legendary, and Mythical sets.
-        </li>
-        <li>
-          <span className="font-bold">Pokédex Cards</span> — tick your own list, then send
-          it.
+          <span className="font-bold">Music</span> — songs from the games.
         </li>
       </ul>
 

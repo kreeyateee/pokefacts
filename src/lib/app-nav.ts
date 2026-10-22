@@ -2,21 +2,22 @@ import type { KidCardKind } from "@/lib/kid-cards";
 
 export type StudioView = "cards" | "catalogue" | "setup" | "music";
 
-export type PrimaryTabId = "facts" | "guess" | "collections" | "catalogue" | "music";
+/** Top of the menu: ready-made playlists, the Pokédex builder, then Music. Adventures slots in before Music. */
+export type SectionId = "ready" | "own" | "music";
 
 export type CollectionKind = Extract<
   KidCardKind,
   "mega" | "gmax" | "alola" | "hisui" | "legendary" | "mythical"
 >;
 
-export const PRIMARY_TABS: ReadonlyArray<{
-  id: PrimaryTabId;
+export type ReadyKind = "meet" | "guess" | CollectionKind;
+
+export const SECTIONS: ReadonlyArray<{
+  id: SectionId;
   label: string;
 }> = [
-  { id: "facts", label: "Fact Cards" },
-  { id: "guess", label: "Who's That" },
-  { id: "collections", label: "Collection Cards" },
-  { id: "catalogue", label: "Pokédex Cards" },
+  { id: "ready", label: "Ready-made" },
+  { id: "own", label: "Make your own" },
   { id: "music", label: "Music" },
 ];
 
@@ -33,10 +34,22 @@ export const COLLECTION_TABS: ReadonlyArray<{
   { kind: "mythical", label: "Mythical", title: "Mythical Pokémon" },
 ];
 
-export const DEFAULT_COLLECTION: CollectionKind = "mega";
+/** The ready-made shelf. Every set sits side by side, then its playlists. */
+export const READY_CATEGORIES: ReadonlyArray<{
+  kind: ReadyKind;
+  label: string;
+}> = [
+  { kind: "meet", label: "Facts" },
+  { kind: "guess", label: "Who's That" },
+  ...COLLECTION_TABS.map((tab) => ({ kind: tab.kind, label: tab.label })),
+];
 
 export function isCollectionKind(kind: KidCardKind): kind is CollectionKind {
   return COLLECTION_TABS.some((tab) => tab.kind === kind);
+}
+
+export function isReadyKind(kind: KidCardKind): kind is ReadyKind {
+  return READY_CATEGORIES.some((item) => item.kind === kind);
 }
 
 /** The open tab is kept per browser tab so a Yoto login redirect or a refresh comes back to it. */
@@ -58,17 +71,18 @@ export function readSavedTab(raw: string | null): SavedTab | null {
   const row = value as { view?: unknown; kind?: unknown };
   if (!STUDIO_VIEWS.includes(row.view as StudioView)) return null;
   const kind = row.kind as KidCardKind;
-  const knownKind = kind === "meet" || kind === "guess" || isCollectionKind(kind);
-  return { view: row.view as StudioView, kind: knownKind ? kind : "meet" };
+  return { view: row.view as StudioView, kind: isReadyKind(kind) ? kind : "meet" };
 }
 
-export function primaryTabFor(view: StudioView, kind: KidCardKind): PrimaryTabId | null {
-  if (view === "catalogue") return "catalogue";
+export function sectionFor(view: StudioView): SectionId | null {
+  if (view === "catalogue") return "own";
   if (view === "music") return "music";
   if (view === "setup") return null;
-  if (kind === "guess") return "guess";
-  if (isCollectionKind(kind)) return "collections";
-  return "facts";
+  return "ready";
+}
+
+export function viewForSection(section: Exclude<SectionId, "ready">): StudioView {
+  return section === "own" ? "catalogue" : "music";
 }
 
 export function pageHeading(input: {
@@ -85,8 +99,8 @@ export function pageHeading(input: {
   }
   if (input.view === "catalogue") {
     return {
-      title: "Pokédex Cards",
-      blurb: "Build your own list. Tick Pokémon, send the playlist, then print stickers if you want.",
+      title: "Make your own",
+      blurb: "Pick any Pokémon from the Pokédex, send your own playlist, then print stickers if you want.",
     };
   }
   if (input.view === "music") {

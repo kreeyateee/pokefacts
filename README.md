@@ -23,12 +23,12 @@ This is a fan project. It is not made by Nintendo, Game Freak, Creatures, or Yot
 
 ## What it can do
 
-The menu has five destinations. **Help** and **Connect Yoto** sit in the header. The wordmark goes home.
+The menu has three parts: **Ready-made**, **Make your own**, and **Music**. Ready-made opens a shelf of sets, each with a picture: Facts, Who's That, Mega, Gigantamax, Alolan, Hisuian, Legendary, and Mythical. Pick a set, then a playlist, then step through its Pokémon with **Previous** and **Next**. **Help** and **Connect Yoto** sit in the header. The wordmark goes home.
 
 - **Facts.** A short reading for all 1,025 Pokémon. The cry plays first, then the voice. The full set is 11 playlists, Pokefacts 1 through Pokefacts 11. There is also a random card of 100. Shuffle draws a new hundred. **This playlist** and **Create card** sit in the same place on every card page. **Send all** records every Pokefacts playlist so the whole dex is covered.
 - **Who's That.** Fifty riddles on one card. On the player the clue picture is a shadow that fades from grey to near-black, so it shows up on the dark screen without giving the answer away. You hear the colour and the type, two Pokédex lines with the name taken out, then size and weight. The clue never says the name. The next track plays the cry, says the name, and shows the colour pixel. Shuffle draws a new fifty.
 - **Collections.** Mega Evolutions, Gigantamax, Alolan, Hisuian, Legendary, and Mythical. One track for each form or Pokémon. The page and the Yoto icon use that form's picture. A regional, Mega, or Gigantamax track does not reuse the original species icon.
-- **Catalogue.** Look up any Pokémon from Kanto to Paldea. Tick the ones you want, in the order you want them, and build your own playlist. Facts reads the name and the first two biology paragraphs from Bulbapedia. Advanced facts also reads the size, the type, the ability, and how it evolves. Who's That Pokémon uses two tracks for each Pokémon, so 50 fit on a card.
+- **Make your own.** Look up any Pokémon from Kanto to Paldea. Each entry has tabs: the Pokédex lines from the games first, then the longer Bulbapedia description, then Evolutions, Battle, Details, and Forms. Tick the ones you want, in the order you want them, and build your own playlist. Facts reads the name and the first two biology paragraphs from Bulbapedia. Advanced facts also reads the size, the type, the ability, and how it evolves. Who's That Pokémon uses two tracks for each Pokémon, so 50 fit on a card.
 - **Music.** Songs from the games, with lyrics. Play, pause, skip, repeat, and shuffle on the page, tap a song in your playlist to play it, and drag to reorder. On a home computer, **Save to Yoto** turns the playlist into MP3s and sends it as a card. A song about one Pokémon uses that species' pixel.
 - **Make Your Own card.** A window opens as soon as a playlist starts sending, with the steps for linking it to a blank card in the Yoto app. It is also a button on every card page.
 - **Sending is safe to leave.** Each recorded track is saved as it finishes. If the page is refreshed or closed mid-send, it carries on from the same track next time you open Pokefacts. A failed send keeps its progress and offers **Retry**, and a running send can be cancelled. Your Pokédex pick and the tab you were on survive the Yoto login too.
@@ -177,7 +177,7 @@ Those permissions let Pokefacts create playlists in your library, see that libra
 
 ## 8. Send the fact cards
 
-1. Open **Facts**.
+1. Open **Ready-made**, then **Facts**.
 2. Click **Send all** to record every Pokefacts playlist.
 
 Leave the computer alone while this runs. Each Pokémon is recorded on its own, so the full set takes a long time. The page tells you how far along it is. The instruction window has to stay open until the page says the playlists are ready.
@@ -195,9 +195,9 @@ On your phone, open the Yoto app.
 
 Do the same for Pokefacts 2 through Pokefacts 11. Each playlist needs its own blank card. Together they cover every Pokémon.
 
-## Catalogue
+## Make your own
 
-Open **Catalogue** to look up one Pokémon, or to build a playlist from a pick.
+Open **Make your own** to look up one Pokémon, or to build a playlist from a pick.
 
 Tick the species in the order you want them played. Choose Facts, Advanced facts, or Who's That Pokémon. Type a title if you want one. Send that card to your Yoto library.
 
@@ -205,7 +205,7 @@ A Yoto playlist holds 100 tracks. Who's That Pokémon uses two tracks each, so 5
 
 ## Collections
 
-Open **Collections**, then pick Mega, Gigantamax, Alolan, Hisuian, Legendary, or Mythical. Hear one on the page, then **Create card**.
+Open **Ready-made**, then pick Mega, Gigantamax, Alolan, Hisuian, Legendary, or Mythical. Hear one on the page, then **Create card**.
 
 ## Music
 
@@ -225,7 +225,7 @@ Print at 100% or Actual size, not Fit to page. Each sheet has a 5 cm line to che
 
 ## Who's That
 
-Open **Who's That**. You get 50 riddles, which is one card. Shuffle draws a new fifty.
+Open **Ready-made**, then **Who's That**. You get 50 riddles, which is one card. Shuffle draws a new fifty.
 
 Each riddle is two tracks. The clue plays the cry and does not say the name. Its picture is a grey shadow. The answer plays the cry and says the name. Its picture is the real pixel.
 
@@ -234,7 +234,6 @@ Send it the same way as the fact cards, then link it to one blank card in the Yo
 ## Coming next
 
 - **Adventures.** Choose-your-own-adventure cards played with the two buttons on a Yoto Player. The first is an expert Safari Zone: track down rare Pokémon by their cries and habits, and choose the right throw. It needs a 3rd-generation Yoto Player or a Yoto Mini; Yoto has not added button stories to 4th-generation players yet.
-- **A tidier menu.** Ready-made playlists and make your own will sit apart, with a proper Pokédex view.
 
 ## When you want to stop
 
