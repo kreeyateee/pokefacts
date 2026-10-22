@@ -33,7 +33,7 @@ describe("saved covers", () => {
   it("starts as a group photo of everyone, with the first Pokémon as the star", () => {
     assert.equal(fresh.style, "photo");
     assert.equal(fresh.crowd, null);
-    assert.equal(fresh.pixels, false);
+    assert.equal(fresh.sprites, false);
     assert.equal(fresh.hero, "a");
     assert.equal(fresh.backMode, "steps");
   });
@@ -56,10 +56,10 @@ describe("saved covers", () => {
   });
 
   it("keeps the style, star, owner, and crowd, and drops anyone not on this card", () => {
-    const saved = JSON.stringify({ ...fresh, style: "pile", hero: "c", owner: "Ash", crowd: ["b", "zz", "b", 4], pixels: true, pileSeed: 3 });
+    const saved = JSON.stringify({ ...fresh, style: "pile", hero: "c", owner: "Ash", crowd: ["b", "zz", "b", 4], sprites: true, pileSeed: 3 });
     const cover = readCoverDraft(saved, fresh, keys);
     assert.equal(cover.style, "pile");
-    assert.equal(cover.pixels, true);
+    assert.equal(cover.sprites, true);
     assert.equal(cover.pileSeed, 3);
     assert.equal(cover.hero, "c");
     assert.equal(cover.owner, "Ash");

@@ -99,7 +99,7 @@ export function CrowdPicker({
   mons,
   chosen,
   hidden,
-  pixels,
+  sprites,
   onToggle,
   onEveryone,
   onNobody,
@@ -107,7 +107,7 @@ export function CrowdPicker({
   mons: readonly StickerMon[];
   chosen: ReadonlySet<string>;
   hidden: boolean;
-  pixels: boolean;
+  sprites: boolean;
   onToggle: (key: string) => void;
   onEveryone: () => void;
   onNobody: () => void;
@@ -140,7 +140,7 @@ export function CrowdPicker({
               aria-pressed={chosen.has(mon.key)}
               onClick={() => onToggle(mon.key)}
             >
-              <StickerPicture src={hidden ? mon.src : pixels ? mon.pixel : mon.art} size={64} />
+              <StickerPicture src={hidden ? mon.src : sprites ? mon.sprite : mon.art} size={64} />
               <span className="line-clamp-2 w-full text-sm leading-4">{mon.name}</span>
             </button>
           ))

@@ -121,8 +121,8 @@ function downloadPdf(bytes: Uint8Array, filename: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
-function pictureKey(mon: StickerMon, pixels: boolean): string {
-  return `picture:${pictureFor(mon, pixels)}`;
+function pictureKey(mon: StickerMon, sprites: boolean): string {
+  return `picture:${pictureFor(mon, sprites)}`;
 }
 
 function usesCrowd(style: CoverStyle): boolean {
@@ -139,7 +139,7 @@ function frontMons(item: KidCard, cover: CoverDraft): StickerMon[] {
 
 /** Every picture a card's faces need: everyone on the front, and the drawing. */
 function picturesFor(item: KidCard, cover: CoverDraft): ImageEntry[] {
-  const entries: ImageEntry[] = frontMons(item, cover).map((mon) => [pictureKey(mon, cover.pixels), pictureFor(mon, cover.pixels)]);
+  const entries: ImageEntry[] = frontMons(item, cover).map((mon) => [pictureKey(mon, cover.sprites), pictureFor(mon, cover.sprites)]);
   if (cover.painting) entries.push([cover.painting, cover.painting]);
   return entries;
 }
@@ -248,18 +248,18 @@ export function StickerStudio({ card, cards = [], onClose }: { card: KidCard; ca
       owner: itemCover.owner,
       hidden: itemHidden,
       crowd: crowdFor(itemMons, itemCover).map((mon) => ({
-        image: pictureKey(mon, itemCover.pixels),
+        image: pictureKey(mon, itemCover.sprites),
         heightDm: mon.dexId ? (sizes[mon.dexId]?.heightDm ?? 0) : 0,
         color: mon.dexId ? sizes[mon.dexId]?.color : undefined,
       })),
-      pixelated: itemCover.pixels,
+      pixelated: itemCover.sprites,
       pileSeed: pileSeed(item.id) + itemCover.pileSeed,
       images: pictures,
       fonts: fonts(),
       painting: live ?? (itemCover.painting ? (pictures.get(itemCover.painting) ?? null) : null),
       hero: star
         ? {
-            image: pictures.get(pictureKey(star, itemCover.pixels)) ?? null,
+            image: pictures.get(pictureKey(star, itemCover.sprites)) ?? null,
             info: heroInfo(star, itemHidden, star.dexId ? heroEntries[star.dexId] : null),
           }
         : null,
@@ -351,7 +351,7 @@ export function StickerStudio({ card, cards = [], onClose }: { card: KidCard; ca
 
   function startAgain() {
     if (!window.confirm("Start this card again? Its picture choices and drawing will be cleared.")) return;
-    change((current) => ({ ...suggestedCover(focus), style: current.style, owner: current.owner, pixels: current.pixels }));
+    change((current) => ({ ...suggestedCover(focus), style: current.style, owner: current.owner, sprites: current.sprites }));
   }
 
   function onPreviewPointerDown(event: React.PointerEvent<HTMLCanvasElement>) {
@@ -564,7 +564,7 @@ export function StickerStudio({ card, cards = [], onClose }: { card: KidCard; ca
             {step === "style" ? (
               <StyleStep
                 style={cover.style}
-                pixels={cover.pixels}
+                sprites={cover.sprites}
                 title={cover.title}
                 owner={cover.owner}
                 thumbRef={(style) => (canvas) => {
@@ -574,8 +574,8 @@ export function StickerStudio({ card, cards = [], onClose }: { card: KidCard; ca
                 onStyle={(style) => {
                   if (style !== cover.style) change((current) => ({ ...current, style }));
                 }}
-                onPixels={(pixels) => {
-                  if (pixels !== cover.pixels) change((current) => ({ ...current, pixels }));
+                onSprites={(sprites) => {
+                  if (sprites !== cover.sprites) change((current) => ({ ...current, sprites }));
                 }}
                 onTitle={(title) => change((current) => ({ ...current, title }), false)}
                 onOwner={(owner) => change((current) => ({ ...current, owner }), false)}

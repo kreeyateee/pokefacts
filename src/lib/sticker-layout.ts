@@ -65,8 +65,8 @@ export type CoverDraft = {
   backMode: BackMode;
   /** Chapter keys in the group photo and the pile, or null for everyone on the card. */
   crowd: string[] | null;
-  /** Draw the Pokémon as their 16×16 pixel art instead of the full artwork. */
-  pixels: boolean;
+  /** Draw the Pokémon as their game sprites instead of the full artwork. */
+  sprites: boolean;
   /** Shakes the pile into a new arrangement. */
   pileSeed: number;
   painting: string;
@@ -252,7 +252,7 @@ export function freshCover(input: {
     }),
     backMode: "steps",
     crowd: null,
-    pixels: false,
+    sprites: false,
     pileSeed: 0,
     painting: "",
     savedAt: 0,
@@ -300,7 +300,7 @@ export function readCoverDraft(raw: string | null, fresh: CoverDraft, keys: Read
     backText: text(parsed.backText, fresh.backText),
     backMode: backMode(parsed.backMode),
     crowd,
-    pixels: parsed.pixels === true,
+    sprites: parsed.sprites === true,
     pileSeed: typeof parsed.pileSeed === "number" && Number.isInteger(parsed.pileSeed) ? parsed.pileSeed : 0,
     painting: paintingUrl(parsed.painting),
     savedAt: typeof parsed.savedAt === "number" && Number.isFinite(parsed.savedAt) ? parsed.savedAt : 0,

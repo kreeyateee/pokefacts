@@ -17,8 +17,8 @@ export type StickerMon = {
   src: string;
   /** Big picture for the Pokédex and trading card fronts. */
   art: string;
-  /** 16×16 pixel art, for the pixel toggle. */
-  pixel: string;
+  /** The game sprite, for the Game sprites toggle. */
+  sprite: string;
   dexId?: number;
 };
 
@@ -49,7 +49,7 @@ export function monsFor(card: KidCard): StickerMon[] {
         name: guess ? `Riddle ${chapter.overlay}` : chapter.title,
         src: guess ? shadowPixelPath(chapter.dexId) : art,
         art,
-        pixel: `/pixels/${chapter.dexId}.png`,
+        sprite: `/sprites/${chapter.dexId}.png`,
         dexId: chapter.dexId,
       },
     ];
@@ -114,9 +114,9 @@ export function autoCover(card: KidCard, current: CoverDraft, random: () => numb
   return hero ? { ...current, hero } : current;
 }
 
-/** The picture a front draws for a Pokémon: pixel art or the full artwork. */
-export function pictureFor(mon: StickerMon, pixels: boolean): string {
-  return pixels ? mon.pixel : mon.art;
+/** The picture a front draws for a Pokémon: its game sprite or the full artwork. */
+export function pictureFor(mon: StickerMon, sprites: boolean): string {
+  return sprites ? mon.sprite : mon.art;
 }
 
 /** Everyone in the group photo, in the card's own order. */

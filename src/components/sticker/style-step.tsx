@@ -9,24 +9,24 @@ const THUMB = cardPixelSize(PREVIEW_DPI / 2.5);
 /** Step 1: pick a front, name the card, and say whose it is. */
 export function StyleStep({
   style,
-  pixels,
+  sprites,
   title,
   owner,
   thumbRef,
   onStyle,
-  onPixels,
+  onSprites,
   onTitle,
   onOwner,
   onTextFocus,
   onMakeIt,
 }: {
   style: CoverStyle;
-  pixels: boolean;
+  sprites: boolean;
   title: string;
   owner: string;
   thumbRef: (style: CoverStyle) => (canvas: HTMLCanvasElement | null) => void;
   onStyle: (style: CoverStyle) => void;
-  onPixels: (pixels: boolean) => void;
+  onSprites: (sprites: boolean) => void;
   onTitle: (title: string) => void;
   onOwner: (owner: string) => void;
   onTextFocus: () => void;
@@ -63,11 +63,11 @@ export function StyleStep({
       </div>
       <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Pokémon pictures">
         <span className="text-sm font-bold">Pictures</span>
-        <button type="button" role="radio" aria-checked={!pixels} className="pk-chip pk-chip-big" onClick={() => onPixels(false)}>
+        <button type="button" role="radio" aria-checked={!sprites} className="pk-chip pk-chip-big" onClick={() => onSprites(false)}>
           Full art
         </button>
-        <button type="button" role="radio" aria-checked={pixels} className="pk-chip pk-chip-big" onClick={() => onPixels(true)}>
-          Pixel art
+        <button type="button" role="radio" aria-checked={sprites} className="pk-chip pk-chip-big" onClick={() => onSprites(true)}>
+          Game sprites
         </button>
       </div>
       <Button type="button" variant="outline" className="h-12 justify-self-start px-5 text-base" onClick={onMakeIt}>

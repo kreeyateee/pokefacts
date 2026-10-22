@@ -141,7 +141,7 @@ export function DecorateStep({
           mons={mons}
           chosen={chosen}
           hidden={hidden}
-          pixels={cover.pixels}
+          sprites={cover.sprites}
           onToggle={(key) => {
             const next = new Set(chosen);
             if (next.has(key)) next.delete(key);
