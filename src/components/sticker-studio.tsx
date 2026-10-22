@@ -1105,7 +1105,7 @@ export function StickerStudio({
   }
 
   return (
-    <div className="pk-studio fixed inset-0 z-50 overflow-y-auto bg-[#16324f]/50 p-3 sm:p-6">
+    <div className="pk-studio fixed inset-0 z-50 overflow-y-auto bg-ink/45 p-3 sm:p-6">
       <div
         ref={panelRef}
         role="dialog"
@@ -1116,9 +1116,14 @@ export function StickerStudio({
       >
         <div className="flex flex-col items-start justify-between gap-3 sm:flex-row">
           <div>
-            <h2 id="sticker-heading" className="font-display text-3xl leading-tight">
-              Stickers for {focus.rangeLabel}
+            <h2 id="sticker-heading" className="font-display text-3xl leading-tight text-balance">
+              Print paper stickers
             </h2>
+            <p className="mt-1 max-w-xl text-sm leading-6">
+              Optional covers for the box. This does not put audio on the Yoto — sending the playlist already did
+              that.
+            </p>
+            <p className="mt-1 text-sm font-bold">{focus.rangeLabel}</p>
             {roster.length > 1 ? (
               <label className="mt-2 grid max-w-sm gap-1 text-sm" htmlFor="sticker-card">
                 Card to design

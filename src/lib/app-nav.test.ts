@@ -41,8 +41,9 @@ describe("app navigation", () => {
   it("uses short, matching page titles", () => {
     assert.deepEqual(
       PRIMARY_TABS.map((tab) => tab.label),
-      ["Fact Cards", "Who's That Pokémon Cards", "Collection Cards", "Pokédex Cards", "Music"],
+      ["Fact Cards", "Who's That", "Collection Cards", "Pokédex Cards", "Music"],
     );
+    assert.equal(pageHeading({ view: "setup", kind: "meet" }).title, "How to connect Yoto");
     assert.equal(pageHeading({ view: "catalogue", kind: "meet" }).title, "Pokédex Cards");
     assert.equal(pageHeading({ view: "music", kind: "meet" }).title, "Music");
     assert.equal(pageHeading({ view: "music", kind: "meet" }).blurb, "Play songs from the games as YouTube videos.");

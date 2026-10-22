@@ -17,6 +17,18 @@ def is_paper(rgb: tuple[int, int, int]) -> bool:
     return r >= 226 and g >= 226 and b >= 226 and max(r, g, b) - min(r, g, b) <= 22
 
 
+def knock_remaining_paper(im: Image.Image) -> Image.Image:
+    """Clear enclosed paper (letter holes) after the edge flood-fill."""
+    px = im.load()
+    width, height = im.size
+    for y in range(height):
+        for x in range(width):
+            red, green, blue, alpha = px[x, y]
+            if alpha > 0 and is_paper((red, green, blue)):
+                px[x, y] = (red, green, blue, 0)
+    return im
+
+
 def knock_out(src: Image.Image) -> Image.Image:
     rgb = src.convert("RGB")
     w, h = rgb.size
@@ -159,11 +171,11 @@ def main() -> None:
     if len(parts) < 3:
         raise SystemExit(f"expected wordmark, device, tagline; got {parts}")
 
-    word = crop(knocked, band_box(knocked, *parts[0], pad=10))
+    word = knock_remaining_paper(crop(knocked, band_box(knocked, *parts[0], pad=10)))
     mark = crop(knocked, band_box(knocked, *parts[1], pad=10))
     tag_y0 = parts[2][0]
     tag_y1 = parts[-1][1]
-    tag = crop(knocked, band_box(knocked, tag_y0, tag_y1, pad=10))
+    tag = knock_remaining_paper(crop(knocked, band_box(knocked, tag_y0, tag_y1, pad=10)))
 
     vertical_pad = 28
     gap_word = 28

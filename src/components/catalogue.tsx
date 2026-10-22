@@ -224,6 +224,7 @@ export function Catalogue({
   const [stickerBusy, setStickerBusy] = useState(false);
   const [stickerCards, setStickerCards] = useState<KidCard[] | null>(null);
   const [playlistOpen, setPlaylistOpen] = useState(false);
+  const [sentOk, setSentOk] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -412,6 +413,7 @@ export function Catalogue({
       if (cards.length === 0) throw new Error("Pick at least one Pokémon.");
       setStickerCards(cards);
       setBuildMessage("");
+      setBuildOpen(false);
     } catch (error: unknown) {
       setBuildFailed(true);
       setBuildMessage(error instanceof Error ? error.message : "The stickers could not be prepared.");
@@ -500,7 +502,9 @@ export function Catalogue({
       setBuildProgress(null);
       await onSendSelection(built.card);
       setBuildProgress({ done: rows.length, total: rows.length });
-      setBuildMessage(statusWithDexNote(`${built.title} is in your Yoto library.`, dexNote));
+      setBuildMessage(statusWithDexNote(`${built.title} is in your Yoto app. Link it to a blank card there.`, dexNote));
+      setSentOk(true);
+      setBuildOpen(true);
     } catch (error: unknown) {
       setBuildFailed(true);
       setBuildMessage(error instanceof Error ? error.message : "The playlist was not sent.");
@@ -593,10 +597,11 @@ export function Catalogue({
         <Dialog open={buildOpen} onOpenChange={setBuildOpen}>
           <DialogContent className="overflow-hidden sm:max-w-xl" showCloseButton>
             <DialogHeader>
-              <DialogTitle className="font-display text-2xl">Create card</DialogTitle>
+              <DialogTitle className="font-display text-2xl leading-tight text-balance">Create card</DialogTitle>
               <DialogDescription>
-                Tick Pokémon in the list, then send or print. The next step asks for the voice and where the playlist
-                goes.
+                {sentOk
+                  ? "This list is in your Yoto app. Link it to a blank card there. Paper stickers are optional next."
+                  : "Tick Pokémon in the list, then send. The next step asks for the voice and where the list goes."}
               </DialogDescription>
             </DialogHeader>
             <DialogBody>
@@ -642,6 +647,7 @@ export function Catalogue({
               onClick={() => {
                 setPicked([]);
                 setBuildMessage("");
+                setSentOk(false);
               }}
             >
               Clear the pick
@@ -658,6 +664,7 @@ export function Catalogue({
                 onClick={() => {
                   setPlaylistKind(option.id);
                   setBuildMessage("");
+                  setSentOk(false);
                 }}
               >
                 <span className="block text-left text-sm font-bold">{option.label}</span>
@@ -683,47 +690,52 @@ export function Catalogue({
             className="pk-field"
           />
           </label>
-          <Button
-            type="button"
-            variant="outline"
-            className="mt-3 h-11 w-full"
-            disabled={picked.length === 0 || stickerBusy || building}
-            onClick={() => void printStickers()}
-          >
-            {stickerBusy ? "Preparing stickers…" : "Print stickers"}
-          </Button>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            {picked.length === 0
-              ? "Pick Pokémon, then print a card for them."
-              : Math.ceil(picked.length / speciesLimit) === 1
-                ? "Prints one card for this pick, at Yoto card size."
-                : `Prints ${Math.ceil(picked.length / speciesLimit)} cards. Each row on the sheet is a different card.`}
-          </p>
-          <Button
-            type="button"
-            className="mt-3 h-11 w-full"
-            disabled={picked.length === 0 || building || sending}
-            onClick={() => {
-              const title =
-                playlistTitle.trim() ||
-                (playlistKind === "whos-that"
-                  ? "Who's That Pokémon Cards"
-                  : playlistKind === "advanced"
-                    ? "Advanced facts"
-                    : "Fact Cards");
-              if (onPrepareSend) {
-                setBuildOpen(false);
-                onPrepareSend("Send this pick", title, () => buildPlaylist());
-                return;
-              }
-              void buildPlaylist();
-            }}
-          >
-            {building || sending ? "Recording in the background…" : "Send this pick"}
-          </Button>
+          {sentOk ? (
+            <>
+              <Button
+                type="button"
+                className="mt-3 h-11 w-full"
+                disabled={picked.length === 0 || stickerBusy}
+                onClick={() => void printStickers()}
+              >
+                {stickerBusy ? "Preparing stickers…" : "Print stickers"}
+              </Button>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Optional paper covers for the box. This does not put audio on the Yoto.
+              </p>
+            </>
+          ) : (
+            <>
+              <Button
+                type="button"
+                className="mt-3 h-11 w-full"
+                disabled={picked.length === 0 || building || sending}
+                onClick={() => {
+                  const title =
+                    playlistTitle.trim() ||
+                    (playlistKind === "whos-that"
+                      ? "Who's That Pokémon Cards"
+                      : playlistKind === "advanced"
+                        ? "Advanced facts"
+                        : "Fact Cards");
+                  if (onPrepareSend) {
+                    setBuildOpen(false);
+                    onPrepareSend("Send this pick", title, () => buildPlaylist());
+                    return;
+                  }
+                  void buildPlaylist();
+                }}
+              >
+                {building || sending ? "Recording in the background…" : "Send this pick"}
+              </Button>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Paper stickers come after this list is in your Yoto app.
+              </p>
+            </>
+          )}
           {picked.length > speciesLimit ? (
             <p className="mt-2 text-xs leading-5 text-muted-foreground">
-              {`Send this pick sends one card of ${speciesLimit}. Print stickers splits this pick into ${Math.ceil(picked.length / speciesLimit)} cards.`}
+              {`A Yoto card holds about ${speciesLimit} of this type. This pick needs ${Math.ceil(picked.length / speciesLimit)} cards.`}
             </p>
           ) : null}
           {statusLabel ? (

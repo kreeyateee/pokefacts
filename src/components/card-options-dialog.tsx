@@ -50,9 +50,9 @@ export function CardOptionsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="overflow-hidden sm:max-w-xl" showCloseButton>
         <DialogHeader>
-          <DialogTitle className="font-display text-2xl">Before this card is made</DialogTitle>
+          <DialogTitle className="font-display text-2xl leading-tight text-balance">Send to Yoto</DialogTitle>
           <DialogDescription>
-            Hear the voice, pick where the playlist goes, then confirm. Nothing is recorded until then.
+            Hear the voice, pick where this list goes, then confirm. Nothing is recorded until then.
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="grid gap-4">
@@ -78,7 +78,7 @@ export function CardOptionsDialog({
                 2
               </span>
               <label className="grid min-w-0 gap-1 text-sm" htmlFor="card-options-playlist">
-                Where it goes
+                Where it goes in your Yoto app
                 <select
                   id="card-options-playlist"
                   aria-label="Yoto playlist"
@@ -86,7 +86,7 @@ export function CardOptionsDialog({
                   value={targetPlaylist}
                   onChange={(event) => onTargetPlaylist(event.target.value)}
                 >
-                  <option value="">Make a new playlist</option>
+                  <option value="">Make a new Yoto card list</option>
                   {library.map((item) => (
                     <option key={item.cardId} value={item.cardId}>
                       Add to {item.title}
@@ -95,8 +95,8 @@ export function CardOptionsDialog({
                 </select>
                 <span className="text-xs leading-5 text-muted-foreground">
                   {destination
-                    ? `Adds these tracks at the end of ${destination.title}. Tracks already there stay.`
-                    : `Makes a new playlist named ${newTitle}. Playlists you already have stay as they are.`}
+                    ? `Adds these entries at the end of ${destination.title}. What is already there stays.`
+                    : `Makes a new list named ${newTitle}. Lists you already have stay as they are.`}
                 </span>
               </label>
             </li>

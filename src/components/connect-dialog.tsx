@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -51,7 +52,7 @@ export function ConnectDialog({
   async function connect() {
     const id = clientId.trim();
     if (!id) {
-      toast.error("Paste the client ID from the Yoto developer dashboard.");
+      toast.error("Paste the long ID from Yoto’s developer page.");
       return;
     }
     setPending(true);
@@ -66,83 +67,89 @@ export function ConnectDialog({
   async function copyCallback() {
     try {
       await navigator.clipboard.writeText(callback);
-      toast.success("Redirect URL copied. Paste it into the Yoto app settings.");
+      toast.success("Return address copied. Paste it into the Yoto app settings.");
     } catch {
       toast.error("Could not copy. Select the address and copy it by hand.");
     }
   }
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={onOpenChange}
-    >
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Connect a Yoto account</DialogTitle>
+          <DialogTitle className="font-display text-2xl leading-tight text-balance">
+            Sign in with your Yoto account
+          </DialogTitle>
           <DialogDescription>
-            Pokefacts uses the public Yoto developer login. It never asks for a
-            client secret. The spoken card lands in your own Make Your Own library.
+            Yoto does not let this website use your password. Once, you make a free public
+            app on Yoto’s site, paste its long ID here, then sign in as usual.
           </DialogDescription>
         </DialogHeader>
-        <ol className="grid gap-3 text-sm leading-6 text-muted-foreground">
-          <li>
-            <span className="font-medium text-foreground">1. Create a public client.</span>{" "}
-            In the{" "}
-            <a
-              className="font-bold text-poke-red underline decoration-poke-yellow decoration-2 underline-offset-4"
-              href="https://dashboard.yoto.dev/"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Yoto developer dashboard
-            </a>
-            , make a public app and copy the client ID.
-          </li>
-          <li>
-            <span className="font-medium text-foreground">2. Allow this redirect.</span>{" "}
-            Add the address below to the app&apos;s callback URLs.
-            <div className="mt-2 flex gap-2">
-              <Input readOnly value={callback} aria-label="Redirect URL" />
-              <Button type="button" variant="outline" onClick={copyCallback}>
-                Copy
-              </Button>
-            </div>
-          </li>
-          <li>
-            <span className="font-medium text-foreground">3. Grant the field guide.</span>{" "}
-            Login asks for user:content:manage, user:content:view, user:icons:manage, family:library:view, offline_access, and profile.
-            That is permission to create and view Make Your Own content, upload a 16×16 icon, view your library, stay signed in, and read your name.
-            If you already connected, reconnect. A refresh keeps the old login and will not add user:icons:manage.
-          </li>
-        </ol>
-        <form
-          className="grid gap-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void connect();
-          }}
-        >
-          <label className="grid gap-1.5 text-sm" htmlFor="yoto-client-id">
-            <span className="font-medium">Client ID</span>
-            <Input
-              id="yoto-client-id"
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="From dashboard.yoto.dev"
-              value={clientId}
-              onChange={(event) => setDraft(event.target.value)}
-            />
-          </label>
-          {canConnect ? null : (
-            <p className="text-sm leading-6 text-foreground">
-              Open {LOCAL_APP_ORIGIN} in this browser, then connect. Yoto returns to {YOTO_REDIRECT_URI}.
+        <DialogBody className="grid gap-3">
+          <ol className="grid gap-3 text-sm leading-6">
+            <li>
+              <span className="font-bold">1. Make a public app.</span> Open{" "}
+              <a
+                className="font-bold text-poke-red underline decoration-poke-yellow decoration-2 underline-offset-4"
+                href="https://dashboard.yoto.dev/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                dashboard.yoto.dev
+              </a>
+              , sign in, and create a public app. Copy the long Client ID.
+            </li>
+            <li>
+              <span className="font-bold">2. Allow this return address.</span> Paste it into
+              the app’s callback list.
+              <div className="mt-2 flex min-w-0 flex-wrap gap-2">
+                <Input readOnly value={callback} aria-label="Return address for Yoto" className="min-w-0 flex-1" />
+                <Button type="button" variant="outline" onClick={copyCallback}>
+                  Copy
+                </Button>
+              </div>
+            </li>
+            <li>
+              <span className="font-bold">3. Paste the ID below</span>, then continue. Yoto
+              will ask you to allow playlists in your library.
+            </li>
+          </ol>
+          <details className="text-sm leading-6">
+            <summary className="cursor-pointer font-bold">What Pokefacts can do</summary>
+            <p className="mt-2 text-muted-foreground">
+              It can create and view Make Your Own playlists, upload a tiny icon, see your
+              library, stay signed in, and read your name. It never asks for your password.
             </p>
-          )}
-          <Button type="submit" className="h-10" disabled={pending || !canConnect}>
-            {pending ? "Opening Yoto…" : "Continue to Yoto"}
-          </Button>
-        </form>
+          </details>
+          <form
+            className="grid gap-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void connect();
+            }}
+          >
+            <label className="grid gap-1.5 text-sm" htmlFor="yoto-client-id">
+              <span className="font-medium">The long ID from Yoto</span>
+              <Input
+                id="yoto-client-id"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="From dashboard.yoto.dev"
+                value={clientId}
+                onChange={(event) => setDraft(event.target.value)}
+              />
+            </label>
+            {canConnect ? null : (
+              <p className="text-sm leading-6">
+                Open {LOCAL_APP_ORIGIN} in this browser, then connect. Yoto returns to{" "}
+                {YOTO_REDIRECT_URI}.
+              </p>
+            )}
+            <Button type="submit" className="h-11" disabled={pending || !canConnect}>
+              {pending ? "Opening Yoto…" : "Continue to Yoto"}
+            </Button>
+          </form>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

@@ -56,26 +56,43 @@ export function toastSendAllReady(count: number) {
 export function SendBanner({
   job,
   onDismiss,
+  onPrintStickers,
 }: {
   job: SendJobView | null;
   onDismiss?: () => void;
+  onPrintStickers?: () => void;
 }) {
   if (!job) return null;
   const failed = job.status === "failed";
   const done = job.status === "completed";
   const playlistHref = done ? yotoPlaylistUrl(job.cardId) : undefined;
-  const kicker = failed ? "Could not finish" : done ? "Ready to play" : "Recording in the background";
+  const kicker = failed
+    ? "Could not finish"
+    : done
+      ? "Almost done — link a blank card"
+      : "Recording in the background";
   return (
     <div className="pk-send-dock">
       <div className="pk-send-dock-card">
         <p className="pk-send-kicker">{kicker}</p>
         <StatusBar label={job.detail} done={job.done} total={job.total} failed={failed} />
+        {done ? (
+          <p className="mt-2 text-xs leading-5">
+            Open it in the Yoto app, choose Link to a card, then hold a blank Make Your Own card
+            to the player. Paper stickers are optional after that.
+          </p>
+        ) : null}
         {done || failed ? (
           <div className="pk-send-actions">
             {playlistHref ? (
               <a className="pk-banner-btn" href={playlistHref} target="_blank" rel="noreferrer">
                 Open in the Yoto app
               </a>
+            ) : null}
+            {done && onPrintStickers ? (
+              <button type="button" className="pk-banner-btn" onClick={onPrintStickers}>
+                Print stickers
+              </button>
             ) : null}
             {done ? (
               <a

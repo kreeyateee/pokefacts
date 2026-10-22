@@ -134,6 +134,7 @@
   }
   html {
     @apply font-sans;
+    color-scheme: light;
   }
   body {
     @apply bg-background text-foreground;
@@ -360,8 +361,8 @@
 .pk-tab {
   height: 2.75rem;
   flex: none;
-  padding: 0 1rem;
-  font-size: 0.95rem;
+  padding: 0 0.85rem;
+  font-size: 0.9rem;
   white-space: nowrap;
 }
 
@@ -420,6 +421,16 @@
   .pk-nav {
     padding-top: 0.45rem;
     padding-bottom: 0.45rem;
+  }
+
+  .pk-tab {
+    height: 2.5rem;
+    padding: 0 0.7rem;
+    font-size: 0.82rem;
+  }
+
+  h1 {
+    text-wrap: balance;
   }
 
   .pk-logo-compact-header {

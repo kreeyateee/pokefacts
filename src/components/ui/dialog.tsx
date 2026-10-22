@@ -31,7 +31,7 @@ function DialogOverlay({
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
       className={cn(
-        "fixed inset-0 z-50 min-h-dvh bg-[#16324f]/70 transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 supports-[-webkit-touch-callout:none]:absolute",
+        "fixed inset-0 z-50 bg-ink/45",
         className
       )}
       {...props}
@@ -47,7 +47,7 @@ function DialogViewport({
     <DialogPrimitive.Viewport
       data-slot="dialog-viewport"
       className={cn(
-        "fixed inset-0 z-50 flex items-end justify-center overflow-hidden p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pointer-events-none sm:items-center sm:p-4",
+        "fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pointer-events-none sm:p-4",
         className
       )}
       {...props}
@@ -70,7 +70,7 @@ function DialogContent({
         <DialogPrimitive.Popup
           data-slot="dialog-content"
           className={cn(
-            "relative flex max-h-full min-h-0 w-full max-w-lg pointer-events-auto flex-col gap-4 overflow-y-auto rounded-3xl border-4 border-ink bg-popover p-5 text-sm text-popover-foreground shadow-[8px_8px_0_var(--ink)] outline-none transition-[opacity,transform] duration-150 ease-out sm:max-w-sm data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:scale-[0.98] data-starting-style:opacity-0",
+            "relative my-auto flex max-h-[min(90dvh,42rem)] min-h-0 w-full max-w-[min(32rem,calc(100vw-1.5rem))] pointer-events-auto flex-col gap-4 overflow-y-auto rounded-3xl border-4 border-ink bg-cream p-5 text-sm text-ink shadow-[8px_8px_0_var(--ink)] outline-none sm:max-w-lg",
             className
           )}
           {...props}
@@ -102,7 +102,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex shrink-0 flex-col gap-2 pr-8", className)}
+        className={cn("flex shrink-0 flex-col gap-2 pr-8 text-balance", className)}
       {...props}
     />
   )

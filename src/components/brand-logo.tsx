@@ -3,7 +3,7 @@ import Link from "next/link";
 import { BRAND_LOGO } from "@/lib/brand-logo";
 import { APP_NAME } from "@/lib/site";
 
-const LABEL = `${APP_NAME}. Pokémon cards for Yoto MYO`;
+const LABEL = `${APP_NAME}. Pokémon cards for Yoto.`;
 
 export function BrandLogo({
   layout,

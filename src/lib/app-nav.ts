@@ -14,7 +14,7 @@ export const PRIMARY_TABS: ReadonlyArray<{
   label: string;
 }> = [
   { id: "facts", label: "Fact Cards" },
-  { id: "guess", label: "Who's That Pokémon Cards" },
+  { id: "guess", label: "Who's That" },
   { id: "collections", label: "Collection Cards" },
   { id: "catalogue", label: "Pokédex Cards" },
   { id: "music", label: "Music" },
@@ -56,14 +56,14 @@ export function pageHeading(input: {
 }): { title: string; blurb: string } {
   if (input.view === "setup") {
     return {
-      title: "Set up Pokefacts",
-      blurb: "Connect Yoto, send a playlist, then link it to a blank card in the Yoto app.",
+      title: "How to connect Yoto",
+      blurb: "A grown-up signs in once, sends a playlist, then links it to a blank card in the Yoto app.",
     };
   }
   if (input.view === "catalogue") {
     return {
       title: "Pokédex Cards",
-      blurb: "Look up any Pokémon, tick the ones you want, and build your own playlist.",
+      blurb: "Build your own list. Tick Pokémon, send the playlist, then print stickers if you want.",
     };
   }
   if (input.view === "music") {
@@ -75,21 +75,21 @@ export function pageHeading(input: {
   if (input.kind === "guess") {
     return {
       title: "Who's That Pokémon Cards",
-      blurb: "Fifty riddles. Hear the cry and clues, guess the name, then send the card.",
+      blurb: "Guessing-game cards. Hear the cry and clues, then send the list to Yoto.",
     };
   }
   if (isCollectionKind(input.kind)) {
     const tab = COLLECTION_TABS.find((item) => item.kind === input.kind);
     return {
       title: input.libraryTitle || tab?.title || "Collection Cards",
-      blurb: "Hear each one on this page, then send the set to a Yoto card.",
+      blurb: "Special forms and legendaries. Hear one, then send the set to Yoto.",
     };
   }
   return {
     title: "Fact Cards",
     blurb: input.randomFacts
-      ? "One hundred Pokémon, drawn at random. Hear one, then send this list to a card."
-      : "Hear a short fact, then send this playlist to a Yoto card.",
+      ? "A ready-made list of 100 Pokémon. Hear one, then send the whole list to Yoto."
+      : "Ready-made fact playlists. Hear a short fact, then send the list to Yoto.",
   };
 }
 

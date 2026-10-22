@@ -1713,7 +1713,7 @@ export function Studio({
                             ? "Send these 50 riddles"
                             : randomFacts
                               ? "Send these 100"
-                              : `Send ${card.rangeLabel}`,
+                              : `Send ${card.rangeLabel} to Yoto`,
                           card.libraryTitle,
                           () => send(),
                         )
@@ -1721,29 +1721,11 @@ export function Studio({
                     >
                       {sending && !bulkActive ? "Recording in the background…" : "Create card"}
                     </Button>
-                    <Button type="button" variant="outline" className="h-11 px-4" onClick={() => setStickersOpen(true)}>
-                      Print stickers
-                    </Button>
-                    {kind === "meet" ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-11 px-4"
-                        disabled={sending || !ready}
-                        onClick={() =>
-                          askCardOptions(
-                            `Send all ${factsPlaylists.length} playlists`,
-                            "Pokefacts 1",
-                            () => sendAllFacts(),
-                          )
-                        }
-                      >
-                        {sending && bulkActive
-                          ? "Recording in the background…"
-                          : `Send all ${factsPlaylists.length} playlists`}
-                      </Button>
-                    ) : null}
                   </div>
+                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                    Sends this whole list ({card.rangeLabel}), not only the Pokémon on screen. Paper stickers come after
+                    the playlist is in Yoto.
+                  </p>
                   {playlistHref ? (
                     <p className="mt-3 text-sm leading-6">
                       <a
@@ -1967,16 +1949,13 @@ export function Studio({
                         ? "Send these 50 riddles"
                         : randomFacts
                           ? "Send these 100"
-                          : `Send ${card.rangeLabel}`,
+                          : `Send ${card.rangeLabel} to Yoto`,
                       card.libraryTitle,
                       () => send(),
                     )
                   }
                 >
                   {sending && !bulkActive ? "Recording in the background…" : "Create card"}
-                </Button>
-                <Button type="button" variant="outline" className="h-11 px-4" onClick={() => setStickersOpen(true)}>
-                  Print stickers
                 </Button>
                 {kind === "meet" ? (
                   <Button
@@ -1986,7 +1965,7 @@ export function Studio({
                     disabled={sending || !ready}
                     onClick={() =>
                       askCardOptions(
-                        `Send all ${factsPlaylists.length} playlists`,
+                        `Send all ${factsPlaylists.length} playlists — ${factsPlaylists.length} blank cards`,
                         "Pokefacts 1",
                         () => sendAllFacts(),
                       )
@@ -1998,6 +1977,9 @@ export function Studio({
                   </Button>
                 ) : null}
               </div>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                Paper stickers come after this list is in your Yoto app.
+              </p>
               {playlistHref ? (
                 <p className="mt-3 text-sm leading-6">
                   <a
@@ -2023,13 +2005,25 @@ export function Studio({
           Buy me a coffee
         </a>
         {" · "}
+        <button type="button" className="underline decoration-poke-red decoration-2" onClick={chooseHelp}>
+          How to connect Yoto
+        </button>
+        {" · "}
+        <a className="underline decoration-poke-red decoration-2" href="/help">
+          Help page
+        </a>
+        {" · "}
         <a className="underline decoration-poke-red decoration-2" href={SOURCE_URL} target="_blank" rel="noreferrer">
           Source on GitHub
         </a>
         .
       </footer>
 
-      <SendBanner job={job} onDismiss={() => setJob(null)} />
+      <SendBanner
+        job={job}
+        onDismiss={() => setJob(null)}
+        onPrintStickers={view === "cards" && card ? () => setStickersOpen(true) : undefined}
+      />
       {stickersOpen && card ? (
         <StickerStudio key={card.id} card={card} cards={rangeCards} onClose={() => setStickersOpen(false)} />
       ) : null}
