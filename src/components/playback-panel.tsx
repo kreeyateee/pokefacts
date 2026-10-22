@@ -109,7 +109,7 @@ export function PlaybackPanel({
   }
 
   return (
-    <details className="pk-card mt-4 px-4 py-3">
+    <details className="pk-card pk-settings mt-4 px-4 py-3">
       <summary className="cursor-pointer text-left">
         <span className="inline-flex w-[calc(100%-1.5rem)] items-center justify-between gap-3 align-middle">
           <span className="font-display text-xl font-bold">Settings</span>

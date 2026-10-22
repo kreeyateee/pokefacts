@@ -518,7 +518,9 @@ export function Catalogue({
 
   return (
     <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-      <section className="flex min-w-0 flex-col self-start max-lg:order-2">
+      <section
+        className={`flex min-w-0 flex-col self-start max-lg:order-2 ${showList ? "" : "max-lg:hidden"}`}
+      >
         <h2 className="order-1 pk-section-title">Find Pokémon</h2>
         <label className="order-1 mt-2 grid gap-1 text-sm" htmlFor="catalogue-search">
           Search

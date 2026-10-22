@@ -1578,7 +1578,7 @@ export function Studio({
           <MusicPanel />
         ) : card && chapter ? (
           <div className="grid min-w-0 gap-6 md:grid-cols-[17.5rem_minmax(0,1fr)]">
-            <section className="order-1 min-w-0 md:col-span-2" aria-labelledby="playlist-heading">
+            <section className="order-2 min-w-0 md:order-1 md:col-span-2" aria-labelledby="playlist-heading">
               <h2 id="playlist-heading" className="pk-section-title">
                 This playlist
               </h2>
@@ -1658,7 +1658,7 @@ export function Studio({
               <nav
                 ref={choiceListRef}
                 aria-label={guessing ? "Riddles" : "Pokémon"}
-                className="pk-scroll flex gap-2 overflow-x-auto pb-1 md:grid md:max-h-[70dvh] md:content-start md:grid-cols-1 md:overflow-x-hidden md:overflow-y-auto"
+                className="pk-scroll hidden md:grid md:max-h-[70dvh] md:content-start md:grid-cols-1 md:overflow-y-auto"
               >
                 {listed.length === 0 ? (
                   <p className="px-1 py-3 text-sm text-muted-foreground">Nothing matches that search.</p>
@@ -1695,7 +1695,68 @@ export function Studio({
               </nav>
             </div>
 
-            <article className="order-2 min-w-0 pk-card pk-dex px-4 py-6 sm:px-8 sm:py-8 md:order-3">
+            <article className="order-1 min-w-0 pk-card pk-dex px-4 py-6 sm:px-8 sm:py-8 md:order-3">
+                <div className="mb-4 md:hidden">
+                  {libraryNote ? (
+                    <p className="mb-2 text-sm leading-5 pk-danger" role="status">
+                      {libraryNote}
+                    </p>
+                  ) : null}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      className="h-11 px-4"
+                      disabled={sending || !ready}
+                      onClick={() =>
+                        askCardOptions(
+                          randomGuess
+                            ? "Send these 50 riddles"
+                            : randomFacts
+                              ? "Send these 100"
+                              : `Send ${card.rangeLabel}`,
+                          card.libraryTitle,
+                          () => send(),
+                        )
+                      }
+                    >
+                      {sending && !bulkActive ? "Recording in the background…" : "Create card"}
+                    </Button>
+                    <Button type="button" variant="outline" className="h-11 px-4" onClick={() => setStickersOpen(true)}>
+                      Print stickers
+                    </Button>
+                    {kind === "meet" ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-11 px-4"
+                        disabled={sending || !ready}
+                        onClick={() =>
+                          askCardOptions(
+                            `Send all ${factsPlaylists.length} playlists`,
+                            "Pokefacts 1",
+                            () => sendAllFacts(),
+                          )
+                        }
+                      >
+                        {sending && bulkActive
+                          ? "Recording in the background…"
+                          : `Send all ${factsPlaylists.length} playlists`}
+                      </Button>
+                    ) : null}
+                  </div>
+                  {playlistHref ? (
+                    <p className="mt-3 text-sm leading-6">
+                      <a
+                        className="font-bold text-poke-red underline decoration-2"
+                        href={playlistHref}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open this playlist in the Yoto app
+                      </a>
+                    </p>
+                  ) : null}
+                </div>
                 <div key={chapter.key} className="pk-swap">
                 <p className="pk-kicker">
                   {guessing
@@ -1886,7 +1947,7 @@ export function Studio({
                 ) : null}
                 <audio ref={clipRef} controls className="mt-4 w-full max-w-md" preload="none" />
               </article>
-            <div className="order-4 min-w-0 md:col-span-2" aria-labelledby="yoto-send-heading">
+            <div className="order-4 hidden min-w-0 md:col-span-2 md:block" aria-labelledby="yoto-send-heading">
               <h3 id="yoto-send-heading" className="sr-only">
                 Create card
               </h3>
