@@ -4,7 +4,7 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { DecorateStep, type Tool } from "@/components/sticker/decorate-step";
-import { PrintStep, type PrintScope } from "@/components/sticker/print-step";
+import { PrintStep, type PrintKind, type PrintScope } from "@/components/sticker/print-step";
 import { StyleStep } from "@/components/sticker/style-step";
 import { useCoverStore } from "@/components/sticker/use-cover-store";
 import { useHeroEntries } from "@/components/sticker/use-hero-entries";
@@ -39,9 +39,11 @@ import {
   STICKER_PAPER_KEY,
   cardPixelSize,
   cardsPerSheet,
+  mmToPx,
   nameListPlan,
   pagePixelSize,
   paperId,
+  posterFilename,
   sheetSlots,
   showsNameList,
   stickerFilename,
@@ -49,9 +51,10 @@ import {
   type CoverStyle,
   type PaperId,
 } from "@/lib/sticker-layout";
-import { paintCard, paintSheet, type CardPaint } from "@/lib/sticker-paint";
+import { paintCard, paintPoster, paintSheet, type CardPaint } from "@/lib/sticker-paint";
 import { jpegPagesPdf } from "@/lib/sticker-pdf";
 import { pileSeed } from "@/lib/sticker-pile";
+import { POSTER_PAPER_MM, type PosterStyle } from "@/lib/sticker-styles";
 
 type Step = "style" | "decorate" | "print";
 
@@ -144,6 +147,10 @@ function picturesFor(item: KidCard, cover: CoverDraft): ImageEntry[] {
   return entries;
 }
 
+function posterPixelSize(dpi: number): { width: number; height: number } {
+  return { width: mmToPx(POSTER_PAPER_MM.width, dpi), height: mmToPx(POSTER_PAPER_MM.height, dpi) };
+}
+
 function dexIds(mons: readonly StickerMon[]): number[] {
   return mons.flatMap((mon) => (mon.dexId ? [mon.dexId] : []));
 }
@@ -175,6 +182,12 @@ export function StickerStudio({ card, cards = [], onClose }: { card: KidCard; ca
   const [sheetPage, setSheetPage] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
   const [strokes, setStrokes] = useState(0);
+  const [making, setMaking] = useState<PrintKind>("stickers");
+  const [posterPick, setPosterPick] = useState<PosterStyle | null>(null);
+  // A poster is a group photo or a pile. Cards with another front start on the group photo.
+  const posterStyle: PosterStyle = posterPick ?? (cover.style === "pile" ? "pile" : "photo");
+  const posterCover = useMemo(() => ({ ...cover, style: posterStyle }), [cover, posterStyle]);
+  const makingPoster = step === "print" && making === "poster";
 
   const history = useUndoHistory<CoverDraft>();
   const { images, version, loadAll: loadImages, put: putImage } = useImageCache();
@@ -202,8 +215,9 @@ export function StickerStudio({ card, cards = [], onClose }: { card: KidCard; ca
     if (step === "style") {
       for (const style of COVER_STYLES) entries.push(...picturesFor(focus, { ...cover, style }));
     }
+    if (makingPoster) entries.push(...picturesFor(focus, posterCover));
     return entries;
-  }, [shown, store.covers, step, focus, cover]);
+  }, [shown, store.covers, step, focus, cover, makingPoster, posterCover]);
 
   useEffect(() => {
     void loadImages(needed);
@@ -294,7 +308,12 @@ export function StickerStudio({ card, cards = [], onClose }: { card: KidCard; ca
     }
     const sheet = sheetRef.current;
     const sheetCtx = sheet?.getContext("2d");
-    if (step === "print" && sheet && sheetCtx) {
+    if (makingPoster && sheet && sheetCtx) {
+      const size = posterPixelSize(SHEET_PREVIEW_DPI);
+      if (sheet.width !== size.width) sheet.width = size.width;
+      if (sheet.height !== size.height) sheet.height = size.height;
+      paintPoster(sheetCtx, posterStyle, specFor(focus, posterCover, null));
+    } else if (step === "print" && sheet && sheetCtx) {
       const size = pagePixelSize(paper, SHEET_PREVIEW_DPI);
       if (sheet.width !== size.width) sheet.width = size.width;
       if (sheet.height !== size.height) sheet.height = size.height;
@@ -464,6 +483,31 @@ export function StickerStudio({ card, cards = [], onClose }: { card: KidCard; ca
     }
   }
 
+  async function savePoster() {
+    setBusy("Making the poster…");
+    try {
+      await document.fonts.ready;
+      await Promise.all([loadImages([...BRAND_FILES, ...picturesFor(focus, posterCover)]), loadSizes(dexIds(mons))]);
+      const pixels = posterPixelSize(PRINT_DPI);
+      const canvas = document.createElement("canvas");
+      canvas.width = pixels.width;
+      canvas.height = pixels.height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("No canvas");
+      paintPoster(ctx, posterStyle, specFor(focus, posterCover, null));
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", JPEG_QUALITY));
+      releaseCanvas(canvas);
+      if (!blob) throw new Error("No JPEG");
+      const page = { jpeg: new Uint8Array(await blob.arrayBuffer()), pixelWidth: pixels.width, pixelHeight: pixels.height };
+      downloadPdf(jpegPagesPdf([page], POSTER_PAPER_MM.width, POSTER_PAPER_MM.height), posterFilename(cover.title));
+      toast.success("Poster saved. Print it on A4 paper.");
+    } catch {
+      toast.error("The poster could not be saved. Try again.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   const stepIndex = STEPS.findIndex((item) => item.id === step);
 
   return (
@@ -607,6 +651,8 @@ export function StickerStudio({ card, cards = [], onClose }: { card: KidCard; ca
               />
             ) : (
               <PrintStep
+                making={making}
+                posterStyle={posterStyle}
                 backMode={cover.backMode}
                 backText={cover.backText}
                 hidden={hidden}
@@ -631,6 +677,9 @@ export function StickerStudio({ card, cards = [], onClose }: { card: KidCard; ca
                 }}
                 onSheet={setSheetPage}
                 onSave={() => void savePdf()}
+                onMaking={setMaking}
+                onPosterStyle={setPosterPick}
+                onSavePoster={() => void savePoster()}
               />
             )}
 

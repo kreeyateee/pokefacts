@@ -3,6 +3,11 @@ import { describe, it } from "node:test";
 
 import { CARD_MM, COVER_STYLES } from "./sticker-layout";
 import {
+  POSTER_PAPER_MM,
+  POSTER_PHOTO,
+  POSTER_PILE,
+  POSTER_SAFE_MM,
+  POSTER_UNITS,
   TEXT_SAFE_MM,
   heroKindLine,
   heroName,
@@ -34,6 +39,16 @@ describe("sticker styles", () => {
         assert.ok(CARD_MM.width - rect.x - rect.w >= TEXT_SAFE_MM - 0.001, `${style} text is too close to the right`);
         assert.ok(CARD_MM.height - rect.y - rect.h >= TEXT_SAFE_MM - 0.001, `${style} text is too close to the bottom`);
       }
+    }
+  });
+
+  it("keeps everything on an A4 poster at least 10 mm from the edge of the paper", () => {
+    assert.ok(Math.abs(POSTER_UNITS.height / POSTER_UNITS.width - POSTER_PAPER_MM.height / POSTER_PAPER_MM.width) < 1e-9);
+    const safe = (POSTER_SAFE_MM * POSTER_UNITS.width) / POSTER_PAPER_MM.width;
+    for (const rect of [...Object.values(POSTER_PHOTO), ...Object.values(POSTER_PILE)]) {
+      assert.ok(rect.x >= safe - 0.01 && rect.y >= safe - 0.01, "poster box is too close to the top or left");
+      assert.ok(POSTER_UNITS.width - rect.x - rect.w >= safe - 0.01, "poster box is too close to the right");
+      assert.ok(POSTER_UNITS.height - rect.y - rect.h >= safe - 0.01, "poster box is too close to the bottom");
     }
   });
 

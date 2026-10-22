@@ -28,6 +28,34 @@ export const PILE_FRONT = {
   ribbon: { x: 2.6, y: 75.4, w: 48.8, h: 8 },
 } as const;
 
+/** An A4 poster, portrait. */
+export const POSTER_PAPER_MM = { width: 210, height: 297 } as const;
+
+/**
+ * Posters are laid out in card units: the page is a card-wide 54 across, so every size in the
+ * card painters grows with it. The page is then this tall in those units.
+ */
+export const POSTER_UNITS = {
+  width: CARD_MM.width,
+  height: (CARD_MM.width * POSTER_PAPER_MM.height) / POSTER_PAPER_MM.width,
+} as const;
+
+/** Home printers leave about 5 mm blank at the edge. Everything on a poster stays 10 mm in. */
+export const POSTER_SAFE_MM = 10;
+
+export const POSTER_PHOTO = {
+  logo: { x: 15, y: 2.8, w: 24, h: 6.6 },
+  crowd: { x: 2.6, y: 10.4, w: 48.8, h: 55.2 },
+  ribbon: { x: 2.6, y: 66.6, w: 48.8, h: 7.2 },
+} as const;
+
+export const POSTER_PILE = {
+  crowd: { x: 2.6, y: 2.6, w: 48.8, h: 63.2 },
+  ribbon: { x: 2.6, y: 66.8, w: 48.8, h: 7 },
+} as const;
+
+export type PosterStyle = "photo" | "pile";
+
 /** A red Pokédex: lens and lights, a screen with the star, a title label, then the controls. */
 export const POKEDEX_FRONT = {
   lens: { x: 4.4, y: 3.8, w: 9.4, h: 9.4 },

@@ -23,6 +23,8 @@ import {
   PHOTO_FRONT,
   PILE_FRONT,
   POKEDEX_FRONT,
+  POSTER_PHOTO,
+  POSTER_PILE,
   TRADING_FRONT,
   heroKindLine,
   heroName,
@@ -31,6 +33,7 @@ import {
   playSteps,
   typeColor,
   type HeroInfo,
+  type PosterStyle,
   type Rect,
 } from "@/lib/sticker-styles";
 
@@ -319,7 +322,16 @@ function trimmedPicture(image: CanvasImageSource): TrimmedPicture {
   return result;
 }
 
-function paintPhotoFront(ctx: CanvasRenderingContext2D, spec: CardPaint, width: number, height: number) {
+type PhotoLayout = { logo: Rect; crowd: Rect; ribbon: Rect };
+type PileLayout = { crowd: Rect; ribbon: Rect };
+
+function paintPhotoFront(
+  ctx: CanvasRenderingContext2D,
+  spec: CardPaint,
+  width: number,
+  height: number,
+  layout: PhotoLayout = PHOTO_FRONT,
+) {
   const mm = scaleFor(ctx);
   const sky = ctx.createLinearGradient(0, 0, 0, height);
   sky.addColorStop(0, "#9fd3ff");
@@ -329,7 +341,7 @@ function paintPhotoFront(ctx: CanvasRenderingContext2D, spec: CardPaint, width: 
   ctx.fillRect(0, 0, width, height);
   paintDrawing(ctx, spec, width, height, "behind");
 
-  const area = box(PHOTO_FRONT.crowd, mm);
+  const area = box(layout.crowd, mm);
   const members = crowdPictures(spec);
   const byKey = new Map(members.map((member) => [member.key, member]));
   const photo = groupPhoto(members, area.w / mm, area.h / mm);
@@ -354,8 +366,8 @@ function paintPhotoFront(ctx: CanvasRenderingContext2D, spec: CardPaint, width: 
     drawMember(ctx, spec, member.trimmed.picture, x, y, item.width * mm, item.height * mm);
   }
 
-  paintLogoPill(ctx, spec, PHOTO_FRONT.logo, mm);
-  paintTitleRibbon(ctx, spec, PHOTO_FRONT.ribbon, mm, 5.2);
+  paintLogoPill(ctx, spec, layout.logo, mm);
+  paintTitleRibbon(ctx, spec, layout.ribbon, mm, 5.2);
   paintDrawing(ctx, spec, width, height, "front");
 }
 
@@ -385,12 +397,18 @@ function crowdPictures(spec: CardPaint) {
   });
 }
 
-function paintPileFront(ctx: CanvasRenderingContext2D, spec: CardPaint, width: number, height: number) {
+function paintPileFront(
+  ctx: CanvasRenderingContext2D,
+  spec: CardPaint,
+  width: number,
+  height: number,
+  layout: PileLayout = PILE_FRONT,
+) {
   const mm = scaleFor(ctx);
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, width, height);
   paintDrawing(ctx, spec, width, height, "behind");
-  const area = box(PILE_FRONT.crowd, mm);
+  const area = box(layout.crowd, mm);
   const members = crowdPictures(spec);
   const byKey = new Map(members.map((member) => [member.key, member]));
   for (const item of pilePhoto(members, area.w / mm, area.h / mm, spec.pileSeed)) {
@@ -402,7 +420,7 @@ function paintPileFront(ctx: CanvasRenderingContext2D, spec: CardPaint, width: n
     drawMember(ctx, spec, member.trimmed.picture, (-item.width / 2) * mm, (-item.height / 2) * mm, item.width * mm, item.height * mm);
     ctx.restore();
   }
-  paintTitleRibbon(ctx, spec, PILE_FRONT.ribbon, mm, 4.6);
+  paintTitleRibbon(ctx, spec, layout.ribbon, mm, 4.6);
   paintDrawing(ctx, spec, width, height, "front");
 }
 
@@ -967,6 +985,20 @@ export function paintCard(ctx: CanvasRenderingContext2D, face: "front" | "back",
   if (face === "front") paintFront(ctx, spec, width, height);
   else paintBack(ctx, spec, width, height);
   ctx.restore();
+}
+
+/**
+ * An A4 poster of the group photo or the pile. The canvas must have the A4 shape;
+ * the card painters draw it in card units, so everything grows to fill the page.
+ */
+export function paintPoster(ctx: CanvasRenderingContext2D, style: PosterStyle, spec: CardPaint) {
+  const { width, height } = ctx.canvas;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+  ctx.imageSmoothingEnabled = true;
+  ctx.shadowColor = "transparent";
+  if (style === "pile") paintPileFront(ctx, spec, width, height, POSTER_PILE);
+  else paintPhotoFront(ctx, spec, width, height, POSTER_PHOTO);
 }
 
 export type SheetCardLabel = { number: number; total: number; title: string };

@@ -74,8 +74,9 @@ describe("saved covers", () => {
     assert.equal(fresh.drawLayer, "behind");
     assert.equal(readCoverDraft(JSON.stringify({ ...fresh, drawLayer: "front" }), fresh, keys).drawLayer, "front");
     const old = (style: string) => {
-      const { drawLayer: _dropped, ...rest } = { ...fresh, style };
-      return readCoverDraft(JSON.stringify(rest), fresh, keys).drawLayer;
+      const saved: Record<string, unknown> = { ...fresh, style };
+      delete saved.drawLayer;
+      return readCoverDraft(JSON.stringify(saved), fresh, keys).drawLayer;
     };
     assert.equal(old("photo"), "behind");
     assert.equal(old("pile"), "front");

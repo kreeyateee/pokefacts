@@ -140,6 +140,10 @@ export function stickerFilename(title: string, paper: PaperId): string {
   return `${slug || "card"}-yoto-stickers-${paper}.pdf`;
 }
 
+export function posterFilename(title: string): string {
+  return stickerFilename(title, "a4").replace("-yoto-stickers-a4.pdf", "-poster-a4.pdf");
+}
+
 export function stickerStorageKey(cardId: string): string {
   return `pokefacts.stickers.v3.${cardId}`;
 }
