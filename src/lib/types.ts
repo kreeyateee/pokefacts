@@ -52,16 +52,6 @@ export type DexEntry = {
   name: string;
 };
 
-export type ChampTrack = {
-  key: string;
-  title: string;
-  text: string;
-};
-
-export type ChampBrief = {
-  tracks: ChampTrack[];
-};
-
 export const GENERATIONS = [
   { id: 1, name: "Kanto", start: 1, end: 151 },
   { id: 2, name: "Johto", start: 152, end: 251 },

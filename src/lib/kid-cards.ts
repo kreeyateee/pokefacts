@@ -4,7 +4,6 @@ import type { BiologyBlock } from "@/lib/catalogue-types";
 import { dexBlurb, guessSpoken, pickDexEntry, type MonSheet } from "@/lib/dex-facts";
 import { pronounce } from "@/lib/pronounce";
 import { spokenWiki } from "@/lib/spoken-wiki";
-import type { YotoContent } from "@/lib/yoto-card";
 import { chosenVoice, isPiperVoice } from "@/lib/piper-voice";
 import { iconForType, YOTO_ICONS } from "@/lib/yoto-icons";
 
@@ -313,6 +312,39 @@ export function kidCardsFromDex(sheets: MonSheet[]): KidCard[] {
     ...buildGroup(ordered, "guess", RIDDLES_PER_CARD),
   ];
 }
+
+/** The playlist body Yoto takes for a spoken Make Your Own card. */
+export type YotoContent = {
+  title: string;
+  cardId?: string;
+  content: {
+    chapters: Array<{
+      key: string;
+      title: string;
+      overlayLabel: string;
+      display: { icon16x16: string };
+      tracks: Array<{
+        key: string;
+        title: string;
+        trackUrl: string;
+        /** Spoken script, or a finished `yoto:#` recording. */
+        type: "elevenlabs" | "audio";
+        /** ElevenLabs voice. Lily is pFZP5JQG7iQjIQuC4Bku. Omitted once the track is audio. */
+        voiceId?: string;
+        overlayLabel: string;
+        display: { icon16x16: string };
+        duration?: number;
+        fileSize?: number;
+        format?: string;
+        channels?: string | number;
+      }>;
+    }>;
+  };
+  metadata: {
+    title: string;
+    description: string;
+  };
+};
 
 export function buildKidCard(card: KidCard, cardId?: string): YotoContent {
   const content: YotoContent = {

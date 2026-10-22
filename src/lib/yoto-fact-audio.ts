@@ -719,25 +719,6 @@ export async function uploadPlainMp3(
   return finishFactUpload(token, audio, label, fetchImpl);
 }
 
-/**
- * The media upload prepareFactTrack uses after a file is already a Yoto MP3.
- * Local music calls this directly. It does not record speech or attach a cry.
- */
-export async function uploadTrackAudio(
-  token: string,
-  label: string,
-  audio: Buffer,
-  fetchImpl: typeof fetch = fetch,
-): Promise<UploadedAudio> {
-  const safe = label.replace(/[^\w-]/g, "").slice(0, 40) || "track";
-  const uploadId = await openUpload(token, safe, audio, fetchImpl, 120_000);
-  const uploaded = await pollUpload(token, uploadId, safe, fetchImpl, 90, 1_000);
-  if (!uploaded?.trackUrl.startsWith("yoto:#")) {
-    throw new Error(`Yoto is still transcoding track ${safe}.`);
-  }
-  return uploaded;
-}
-
 function clipReason(text: string): string {
   const clean = text.replace(/\s+/g, " ").trim();
   if (!clean || /<!doctype|<html[\s>]/i.test(clean) || /^Command failed:/i.test(clean)) return "";
