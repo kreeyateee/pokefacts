@@ -16,6 +16,10 @@ const config = JSON.parse(
 );
 const checkOnly = process.argv.includes("--check");
 
+// Marks this server as a home computer. YouTube to MP3 (src/lib/youtube-mp3-site.ts)
+// also needs the page opened at a loopback address. The public server never sets this.
+process.env.POKEFACTS_LOCAL = "1";
+
 function fail(message) {
   console.error(`\n${message}\n`);
   process.exit(1);

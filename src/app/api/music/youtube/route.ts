@@ -1,5 +1,6 @@
 import rawIndex from "@/data/music-index.json";
 import { readMusicIndex } from "@/lib/music-index";
+import { localToolsAllowed } from "@/lib/youtube-mp3-site";
 import { youtubeIdForSong } from "@/lib/youtube-search";
 import { jsonError } from "@/lib/yoto-proxy";
 
@@ -15,7 +16,9 @@ export async function GET(request: Request) {
   const song = index.songs.find((item) => item.page === page);
   if (!song) return jsonError("That song is not in the music list.");
   try {
-    const youtubeId = await youtubeIdForSong(page, song.title, song.youtubeId);
+    const youtubeId = await youtubeIdForSong(page, song.title, song.youtubeId, {
+      local: localToolsAllowed(request),
+    });
     return Response.json({ page, title: song.title, youtubeId });
   } catch (caught) {
     const message = caught instanceof Error ? caught.message : "That song could not be found on YouTube.";

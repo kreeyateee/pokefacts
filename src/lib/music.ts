@@ -1,4 +1,5 @@
 import { wikiSectionHtml } from "./bulbapedia";
+import { isYoutubeVideoId } from "./youtube-link";
 
 export type { MusicAlbum, MusicGap, MusicIndex, MusicSong } from "./music-index";
 export { emptyMusicIndex, readMusicIndex } from "./music-index";
@@ -376,7 +377,7 @@ function videoIdFromUrl(raw: string): string | null {
 }
 
 function validVideoId(id: string): string | null {
-  return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
+  return isYoutubeVideoId(id) ? id : null;
 }
 
 /** First embedded YouTube video on a song page. Channel links are ignored. */

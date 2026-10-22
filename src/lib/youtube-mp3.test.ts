@@ -15,9 +15,10 @@ import {
   parseDownloadedAudio,
   ytdlpLaunch,
   ytdlpMp3Args,
+  ytdlpOutput,
   ytdlpStoppedAfterLimit,
 } from "./youtube-mp3";
-import { YOUTUBE_MP3_PUBLIC } from "./youtube-mp3-site";
+import { LOCAL_MODE_ENV } from "./youtube-mp3-site";
 
 function ffmpeg(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -29,8 +30,14 @@ function ffmpeg(args: string[]): Promise<void> {
 }
 
 describe("public site", () => {
-  it("does not convert YouTube to MP3 on Pokefacts", () => {
-    assert.equal(YOUTUBE_MP3_PUBLIC, false);
+  it("does not start yt-dlp unless the home launcher started the server", async () => {
+    const before = process.env[LOCAL_MODE_ENV];
+    delete process.env[LOCAL_MODE_ENV];
+    try {
+      await assert.rejects(() => ytdlpOutput(["--version"], 5_000), /works only when Pokefacts runs on this computer/);
+    } finally {
+      if (before !== undefined) process.env[LOCAL_MODE_ENV] = before;
+    }
   });
 });
 

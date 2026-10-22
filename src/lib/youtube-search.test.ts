@@ -7,6 +7,7 @@ import {
   parseYoutubeSearchLines,
   pickYoutubeSearchHit,
   replacementSearchId,
+  storedYoutubeId,
   youtubeSearchArgs,
   youtubeSearchQuery,
   type YoutubeSearchHit,
@@ -86,5 +87,12 @@ describe("youtube song search", () => {
       action: "probe",
       youtubeId: "8xxgBFYQTL4",
     });
+  });
+
+  it("answers the public site from the stored id or the cache, never a search", () => {
+    assert.equal(storedYoutubeId(cachedYoutubeId({ youtubeId: "abcdefghijk", replaced: "8xxgBFYQTL4" }, "8xxgBFYQTL4")), "abcdefghijk");
+    assert.equal(storedYoutubeId(cachedYoutubeId(undefined, "8xxgBFYQTL4")), "8xxgBFYQTL4");
+    assert.equal(storedYoutubeId(cachedYoutubeId({ youtubeId: "4kJ9wp-mog8" }, null)), "4kJ9wp-mog8");
+    assert.equal(storedYoutubeId(cachedYoutubeId(undefined, null)), null);
   });
 });
