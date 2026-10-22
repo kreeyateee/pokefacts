@@ -508,8 +508,16 @@
   background: #fff4c2;
 }
 
-.pk-chip[aria-pressed="true"] {
+.pk-chip[aria-pressed="true"],
+.pk-chip[aria-checked="true"] {
   background: var(--poke-yellow);
+}
+
+/* Bigger chips for small hands in the sticker studio. */
+.pk-chip-big {
+  height: 2.75rem;
+  padding: 0 1.1rem;
+  font-size: 1rem;
 }
 
 .pk-chip:active {
@@ -532,6 +540,11 @@
   border-radius: 999px;
   box-shadow: 2px 2px 0 var(--ink);
   cursor: pointer;
+}
+
+.pk-swatch-big {
+  width: 2.6rem;
+  height: 2.6rem;
 }
 
 .pk-swatch[aria-pressed="true"] {
@@ -604,7 +617,8 @@
 
 .pk-choice[aria-current="true"],
 .pk-choice[aria-selected="true"],
-.pk-choice[aria-pressed="true"] {
+.pk-choice[aria-pressed="true"],
+.pk-choice[aria-checked="true"] {
   background: var(--poke-yellow);
 }
 
@@ -1088,6 +1102,67 @@
 
 .pk-sticker-tile {
   position: relative;
+}
+
+.pk-studio-step {
+  display: flex;
+  min-height: 3.25rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  background: white;
+  color: var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  font-family: var(--font-fredoka), sans-serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pk-studio-step[aria-current="step"] {
+  background: var(--poke-yellow);
+}
+
+.pk-studio-step-number {
+  display: grid;
+  width: 1.7rem;
+  height: 1.7rem;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--ink);
+  color: white;
+  font-size: 0.9rem;
+}
+
+.pk-card-preview {
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+.pk-style-choice[aria-checked="true"] canvas {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.pk-print-only {
+  display: none;
+}
+
+/* Ctrl+P in the sticker studio would print the screen. Point to the PDF, which prints at the right size. */
+@media print {
+  body:has(.pk-studio) * {
+    visibility: hidden;
+  }
+
+  body:has(.pk-studio) .pk-print-only {
+    display: block;
+    visibility: visible;
+    position: fixed;
+    inset: 2rem 0 auto;
+    text-align: center;
+    font-size: 18pt;
+  }
 }
 
 .pk-sticker-count {

@@ -718,43 +718,29 @@ export function Catalogue({
             className="pk-field"
           />
           </label>
-          {sentOk ? (
-            <>
-              <Button
-                type="button"
-                className="mt-3 h-11 w-full"
-                disabled={picked.length === 0 || stickerBusy}
-                onClick={() => void printStickers()}
-              >
-                {stickerBusy ? "Preparing stickers…" : "Print stickers"}
-              </Button>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                Optional paper covers for the box. This does not put audio on the Yoto.
-              </p>
-            </>
-          ) : (
-            <>
-              <Button
-                type="button"
-                className="mt-3 h-11 w-full"
-                disabled={picked.length === 0 || building || sending}
-                onClick={() => {
-                  const title = pickTitle();
-                  if (onPrepareSend) {
-                    setBuildOpen(false);
-                    openAfterDialog(() => onPrepareSend("Send this pick", title, () => buildPlaylist()));
-                    return;
-                  }
-                  void buildPlaylist();
-                }}
-              >
-                {building || sending ? "Recording in the background…" : "Send this pick"}
-              </Button>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                Paper stickers come after this list is in your Yoto app.
-              </p>
-            </>
-          )}
+          <Button
+            type="button"
+            className="mt-3 h-11 w-full"
+            disabled={picked.length === 0 || building || sending}
+            onClick={() => {
+              setBuildOpen(false);
+              openAfterDialog(() => onPrepareSend?.("Send this pick", pickTitle(), () => buildPlaylist()));
+            }}
+          >
+            {building || sending ? "Recording in the background…" : "Send this pick"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-2 h-11 w-full"
+            disabled={picked.length === 0 || stickerBusy}
+            onClick={() => void printStickers()}
+          >
+            {stickerBusy ? "Getting stickers ready…" : "Make stickers"}
+          </Button>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            Stickers are paper covers for the Yoto card. You can make them before or after sending.
+          </p>
           {picked.length > speciesLimit ? (
             <p className="mt-2 text-xs leading-5 text-muted-foreground">
               {`A Yoto card holds about ${speciesLimit} of this type. This pick needs ${Math.ceil(picked.length / speciesLimit)} cards.`}

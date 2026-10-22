@@ -1,215 +1,75 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { DecorateStep, type Tool } from "@/components/sticker/decorate-step";
+import { PrintStep, type PrintScope } from "@/components/sticker/print-step";
+import { StyleStep } from "@/components/sticker/style-step";
+import { useCoverStore } from "@/components/sticker/use-cover-store";
+import { useHeroEntries } from "@/components/sticker/use-hero-entries";
+import { useImageCache, type ImageEntry } from "@/components/sticker/use-image-cache";
+import { usePaintLayer, type Point } from "@/components/sticker/use-paint-layer";
+import { useSpeciesSizes } from "@/components/sticker/use-species-sizes";
+import { useUndoHistory } from "@/components/sticker/use-undo-history";
+import { useStoredState } from "@/components/use-stored-state";
 import { Button } from "@/components/ui/button";
-import { shadowPixelPath, type KidCard, type KidChapter } from "@/lib/kid-cards";
-import { artworkSrc } from "@/lib/page-artwork";
 import { BRAND_IMAGE_KEY, BRAND_LOGO } from "@/lib/brand-logo";
+import type { KidCard } from "@/lib/kid-cards";
 import { APP_NAME } from "@/lib/site";
 import {
+  autoCover,
+  cardCountLabel,
+  cardRangeText,
+  crowdFor,
+  heroInfo,
+  heroMon,
+  hidesNames,
+  linesFor,
+  monsFor,
+  pictureFor,
+  suggestedCover,
+  type StickerMon,
+} from "@/lib/sticker-cover";
+import {
+  COVER_STYLES,
   PREVIEW_DPI,
   PRINT_DPI,
   SHEET_PREVIEW_DPI,
-  READABLE_LIST_PT,
-  arrangeTiles,
-  backMode,
-  bringToFront,
+  STICKER_PAPER_KEY,
   cardPixelSize,
-  clampRotation,
-  clampTileScale,
-  coverListsNames,
-  freshCover,
-  isNumberRun,
+  cardsPerSheet,
   nameListPlan,
-  nearestTileIndex,
   pagePixelSize,
   paperId,
-  playlistDetail,
-  playlistLine,
-  sanitizeStickers,
   sheetSlots,
+  showsNameList,
   stickerFilename,
-  stickerStorageKey,
-  stickerStyle,
-  tileGrid,
-  tileLayout,
-  topStickerAt,
   type CoverDraft,
+  type CoverStyle,
   type PaperId,
-  type PlacedSticker,
-  type StickerShape,
-  type TileLayout,
 } from "@/lib/sticker-layout";
-import { decorationArt } from "@/lib/sticker-decor";
-import { isShadowPicture, paintCard, paintSheet, type CardPaint } from "@/lib/sticker-paint";
+import { paintCard, paintSheet, type CardPaint } from "@/lib/sticker-paint";
 import { jpegPagesPdf } from "@/lib/sticker-pdf";
+import { pileSeed } from "@/lib/sticker-pile";
 
-type StickerMon = {
-  key: string;
-  name: string;
-  src: string;
-};
+type Step = "style" | "decorate" | "print";
 
-const BRUSHES = ["#16324f", "#e10600", "#ffcb05", "#2a75bb", "#7ac74c", "#f95587", "#9b5de5", "#ff8c42", "#fffdf6"] as const;
-const BRUSH_SIZES = [
-  { id: 10, label: "Small" },
-  { id: 18, label: "Medium" },
-  { id: 32, label: "Big" },
-] as const;
-const SHAPE_LABELS: { id: StickerShape; label: string }[] = [
-  { id: "circle", label: "Circle" },
-  { id: "round", label: "Square" },
-  { id: "hex", label: "Hex" },
-  { id: "star", label: "Star" },
-  { id: "diamond", label: "Diamond" },
-];
-const PATTERN_LABELS: { id: TileLayout; label: string }[] = [
-  { id: "square", label: "Square" },
-  { id: "rectangle", label: "Rectangle" },
-  { id: "circle", label: "Circle" },
-  { id: "hex", label: "Hex" },
+const STEPS: { id: Step; label: string }[] = [
+  { id: "style", label: "Style" },
+  { id: "decorate", label: "Decorate" },
+  { id: "print", label: "Print" },
 ];
 
-function paintingUrl(value: unknown): string {
-  if (typeof value !== "string" || !value.startsWith("data:image/png;base64,")) return "";
-  if (value.length > 1_800_000) return "";
-  return value;
-}
+const JPEG_QUALITY = 0.93;
+const BRAND_FILES = [
+  [BRAND_IMAGE_KEY.compact, BRAND_LOGO.compact],
+  [BRAND_IMAGE_KEY.vertical, BRAND_LOGO.vertical],
+  [BRAND_IMAGE_KEY.horizontal, BRAND_LOGO.horizontal],
+] as const satisfies readonly ImageEntry[];
 
-function nounFor(kind: KidCard["kind"]): string {
-  if (kind === "guess") return "riddles";
-  if (kind === "mega" || kind === "gmax" || kind === "alola" || kind === "hisui") return "forms";
-  return "Pokémon";
-}
-
-function crispPicture(src: string): boolean {
-  return src.includes("/pixels/") || src.includes("/sprites/");
-}
-
-function stickerSrc(chapter: KidChapter, guess: boolean): string {
-  if (guess && chapter.dexId) return shadowPixelPath(chapter.dexId);
-  if (chapter.sprite?.includes("/artwork/")) return chapter.sprite;
-  if (chapter.dexId) return artworkSrc(chapter.dexId);
-  return chapter.sprite ?? "";
-}
-
-function monsFor(card: KidCard): StickerMon[] {
-  const guess = card.kind === "guess";
-  return card.chapters.flatMap((chapter) => {
-    if (!chapter.dexId) return [];
-    return [
-      {
-        key: chapter.key,
-        name: guess ? `Riddle ${chapter.overlay}` : chapter.title,
-        src: stickerSrc(chapter, guess),
-      },
-    ];
-  });
-}
-
-function linesFor(card: KidCard): string[] {
-  if (card.kind === "guess") return [];
-  return card.chapters.flatMap((chapter) =>
-    chapter.dexId ? [playlistLine(chapter.overlay, chapter.title)] : [],
-  );
-}
-
-function detailFor(card: KidCard, count: number): string {
-  const names = card.kind === "guess" ? [] : card.chapters.flatMap((chapter) => (chapter.dexId ? [chapter.title] : []));
-  const ids = card.chapters.flatMap((chapter) => (chapter.dexId ? [chapter.dexId] : []));
-  return playlistDetail({
-    count,
-    noun: nounFor(card.kind),
-    names,
-    hideNames: card.kind === "guess",
-    ordered: isNumberRun(ids),
-  });
-}
-
-function countLabel(count: number, noun: string): string {
-  if (count === 1) {
-    const one = noun === "Pokémon" ? "Pokémon" : noun.replace(/s$/, "");
-    return `1 ${one}`;
-  }
-  return `${count} ${noun}`;
-}
-
-function kickerFor(card: KidCard): string {
-  if (card.kind === "guess") return "Who's That Pokémon";
-  if (card.kind === "meet") return APP_NAME;
-  return card.title;
-}
-
-function suggestedCover(item: KidCard): CoverDraft {
-  const itemMons = monsFor(item);
-  return freshCover({
-    libraryTitle: item.libraryTitle,
-    rangeLabel: item.rangeLabel,
-    blurb: item.blurb,
-    childDoes: item.childDoes,
-    detail: detailFor(item, itemMons.length),
-    keys: itemMons.map((mon) => mon.key),
-  });
-}
-
-function savedCover(item: KidCard): CoverDraft {
-  const fresh = suggestedCover(item);
-  return loadDraft(item.id, fresh, new Set(monsFor(item).map((mon) => mon.key)));
-}
-
-function paintFor(
-  item: KidCard,
-  cover: CoverDraft,
-  images: Map<string, CanvasImageSource | null>,
-  fonts: { display: string; body: string },
-  selectedId: string | null,
-  painting: CanvasImageSource | null,
-): CardPaint {
-  const itemMons = monsFor(item);
-  const lines = linesFor(item);
-  return {
-    title: cover.title,
-    kicker: kickerFor(item),
-    description: cover.description,
-    backText: cover.backText,
-    countLabel: countLabel(itemMons.length, nounFor(item.kind)),
-    lines,
-    showNames: coverListsNames(lines, cover.backMode, item.kind === "guess"),
-    stickers: cover.stickers,
-    images,
-    fonts,
-    selectedId,
-    painting,
-  };
-}
-
-function loadDraft(cardId: string, fresh: CoverDraft, keys: ReadonlySet<string>): CoverDraft {
-  if (typeof window === "undefined") return fresh;
-  try {
-    const raw = localStorage.getItem(stickerStorageKey(cardId));
-    if (!raw) return fresh;
-    const parsed = JSON.parse(raw) as Partial<CoverDraft>;
-    const rawCount = Array.isArray(parsed.stickers) ? parsed.stickers.length : 0;
-    const cleaned = sanitizeStickers(parsed.stickers, keys);
-    let stickers = fresh.stickers;
-    if (cleaned) stickers = cleaned.length === 0 && rawCount > 0 ? fresh.stickers : cleaned;
-    return {
-      title: typeof parsed.title === "string" ? parsed.title : fresh.title,
-      description: typeof parsed.description === "string" ? parsed.description : fresh.description,
-      backText: typeof parsed.backText === "string" ? parsed.backText : fresh.backText,
-      backMode: backMode(parsed.backMode),
-      paper: paperId(parsed.paper),
-      pattern: tileLayout(parsed.pattern),
-      tileScale: clampTileScale(parsed.tileScale),
-      stickers: arrangeTiles(stickers, tileLayout(parsed.pattern), clampTileScale(parsed.tileScale)),
-      painting: paintingUrl(parsed.painting),
-    };
-  } catch {
-    return fresh;
-  }
-}
+const parsePaper = (raw: string | null): PaperId => paperId(raw);
+const writePaper = (paper: PaperId): string => paper;
 
 function canvasFamily(variable: string, fallback: string): string {
   const raw = getComputedStyle(document.documentElement).getPropertyValue(variable).trim();
@@ -217,62 +77,40 @@ function canvasFamily(variable: string, fallback: string): string {
   return first || fallback;
 }
 
-function pointOn(canvas: HTMLCanvasElement, event: { clientX: number; clientY: number }) {
-  const rect = canvas.getBoundingClientRect();
+function fonts() {
   return {
-    x: (event.clientX - rect.left) / rect.width,
-    y: (event.clientY - rect.top) / rect.height,
+    display: canvasFamily("--font-fredoka", "Fredoka, sans-serif"),
+    body: canvasFamily("--font-nunito", "Nunito, sans-serif"),
   };
 }
 
-function trackPointer(
-  pointerId: number,
-  onMove: (event: PointerEvent) => void,
-  onUp: (event: PointerEvent) => void,
-): () => void {
+function pointOn(canvas: HTMLCanvasElement, event: { clientX: number; clientY: number }): Point {
+  const rect = canvas.getBoundingClientRect();
+  return { x: (event.clientX - rect.left) / rect.width, y: (event.clientY - rect.top) / rect.height };
+}
+
+function trackPointer(pointerId: number, onMove: (event: PointerEvent) => void, onEnd: () => void) {
   function move(event: PointerEvent) {
-    if (event.pointerId !== pointerId) return;
-    onMove(event);
+    if (event.pointerId === pointerId) onMove(event);
   }
-  function up(event: PointerEvent) {
+  function end(event: PointerEvent) {
     if (event.pointerId !== pointerId) return;
     stop();
-    onUp(event);
+    onEnd();
   }
   function stop() {
     window.removeEventListener("pointermove", move);
-    window.removeEventListener("pointerup", up);
-    window.removeEventListener("pointercancel", up);
+    window.removeEventListener("pointerup", end);
+    window.removeEventListener("pointercancel", end);
   }
   window.addEventListener("pointermove", move);
-  window.addEventListener("pointerup", up);
-  window.addEventListener("pointercancel", up);
+  window.addEventListener("pointerup", end);
+  window.addEventListener("pointercancel", end);
   return stop;
 }
 
-function swapTile(
-  current: CoverDraft,
-  id: string,
-  direction: "left" | "right" | "up" | "down",
-): CoverDraft {
-  const index = current.stickers.findIndex((sticker) => sticker.id === id);
-  if (index < 0) return current;
-  const columns = Math.max(1, tileGrid(current.pattern, current.stickers.length).columns);
-  const delta = direction === "left" ? -1 : direction === "right" ? 1 : direction === "up" ? -columns : columns;
-  const target = index + delta;
-  if (target < 0 || target >= current.stickers.length) return current;
-  const next = current.stickers.slice();
-  const from = next[index];
-  const to = next[target];
-  if (!from || !to) return current;
-  next[index] = to;
-  next[target] = from;
-  return { ...current, stickers: arrangeTiles(next, current.pattern, current.tileScale) };
-}
-
-function downloadBytes(bytes: Uint8Array, filename: string) {
-  const blob = new Blob([Uint8Array.from(bytes)], { type: "application/pdf" });
-  const url = URL.createObjectURL(blob);
+function downloadPdf(bytes: Uint8Array, filename: string) {
+  const url = URL.createObjectURL(new Blob([Uint8Array.from(bytes)], { type: "application/pdf" }));
   const link = document.createElement("a");
   link.href = url;
   link.download = filename;
@@ -283,279 +121,103 @@ function downloadBytes(bytes: Uint8Array, filename: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
-export function StickerStudio({
-  card,
-  cards = [],
-  onClose,
-}: {
-  card: KidCard;
-  cards?: KidCard[];
-  onClose: () => void;
-}) {
+function pictureKey(mon: StickerMon, pixels: boolean): string {
+  return `picture:${pictureFor(mon, pixels)}`;
+}
+
+function usesCrowd(style: CoverStyle): boolean {
+  return style === "photo" || style === "pile";
+}
+
+/** Who appears on a card's front: its crowd, or its star. */
+function frontMons(item: KidCard, cover: CoverDraft): StickerMon[] {
+  const mons = monsFor(item);
+  if (usesCrowd(cover.style)) return crowdFor(mons, cover);
+  const star = heroMon(mons, cover);
+  return star ? [star] : [];
+}
+
+/** Every picture a card's faces need: everyone on the front, and the drawing. */
+function picturesFor(item: KidCard, cover: CoverDraft): ImageEntry[] {
+  const entries: ImageEntry[] = frontMons(item, cover).map((mon) => [pictureKey(mon, cover.pixels), pictureFor(mon, cover.pixels)]);
+  if (cover.painting) entries.push([cover.painting, cover.painting]);
+  return entries;
+}
+
+function dexIds(mons: readonly StickerMon[]): number[] {
+  return mons.flatMap((mon) => (mon.dexId ? [mon.dexId] : []));
+}
+
+function releaseCanvas(canvas: HTMLCanvasElement) {
+  // iPad Safari runs out of canvas memory on a long PDF unless finished canvases are emptied.
+  canvas.width = 0;
+  canvas.height = 0;
+}
+
+export function StickerStudio({ card, cards = [], onClose }: { card: KidCard; cards?: KidCard[]; onClose: () => void }) {
+  // The studio is opened for one card and its playlist, so the list of cards is read once.
+  const [roster] = useState(() => (cards.some((item) => item.id === card.id) ? cards : [card, ...cards]));
   const [focusId, setFocusId] = useState(card.id);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
-  const [tray, setTray] = useState<"all" | "placed" | "spare">("all");
-  const [busy, setBusy] = useState(false);
-  const [loaded, setLoaded] = useState(0);
-  const [ghost, setGhost] = useState<{ src: string; x: number; y: number } | null>(null);
-  const [sheetPage, setSheetPage] = useState(0);
-  const rosterIds = (cards.length > 0 ? cards : [card]).map((item) => item.id).join("|");
-  const cardsRef = useRef(cards);
-  cardsRef.current = cards;
-  const roster = useMemo(() => {
-    const list = cardsRef.current.length > 0 ? cardsRef.current : [card];
-    return list.some((item) => item.id === card.id) ? list : [card, ...list];
-  }, [rosterIds, card]);
-  const focus = roster.find((item) => item.id === focusId) ?? roster[0] ?? card;
+  const focus = roster.find((item) => item.id === focusId) ?? card;
+  const store = useCoverStore(roster);
+  const cover = store.covers[focus.id] ?? suggestedCover(focus);
   const mons = useMemo(() => monsFor(focus), [focus]);
+  const hidden = hidesNames(focus);
   const lines = useMemo(() => linesFor(focus), [focus]);
-  const noun = nounFor(focus.kind);
-  const hideNames = focus.kind === "guess";
-  const fresh = useMemo(
-    () =>
-      freshCover({
-        libraryTitle: focus.libraryTitle,
-        rangeLabel: focus.rangeLabel,
-        blurb: focus.blurb,
-        childDoes: focus.childDoes,
-        detail: detailFor(focus, mons.length),
-        keys: mons.map((mon) => mon.key),
-      }),
-    [focus, mons],
-  );
-  const [draft, setDraft] = useState<CoverDraft>(() => loadDraft(focus.id, fresh, new Set(mons.map((mon) => mon.key))));
-  const frontRef = useRef<HTMLCanvasElement>(null);
-  const backRef = useRef<HTMLCanvasElement>(null);
+
+  const [step, setStep] = useState<Step>("style");
+  const [face, setFace] = useState<"front" | "back">("front");
+  const [tool, setTool] = useState<Tool>("pictures");
+  const [brush, setBrush] = useState("#e10600");
+  const [brushSize, setBrushSize] = useState(2.6);
+  const [paper, setPaper] = useStoredState(STICKER_PAPER_KEY, parsePaper, writePaper);
+  const [scope, setScope] = useState<PrintScope>(roster.length > 1 ? "all" : "card");
+  const [sheetPage, setSheetPage] = useState(0);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [strokes, setStrokes] = useState(0);
+
+  const history = useUndoHistory<CoverDraft>();
+  const { images, version, loadAll: loadImages, put: putImage } = useImageCache();
+  const { entries: heroEntries, loadAll: loadHeroes } = useHeroEntries();
+  const { sizes, loadAll: loadSizes } = useSpeciesSizes();
+  const paint = usePaintLayer();
+  const previewRef = useRef<HTMLCanvasElement>(null);
   const sheetRef = useRef<HTMLCanvasElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const images = useRef(new Map<string, CanvasImageSource | null>());
-  const closeRef = useRef<() => void>(() => {});
-  const draftRef = useRef(draft);
-  const draftCard = useRef(focus.id);
-  const storageReady = useRef(false);
-  const dragCleanup = useRef<(() => void) | null>(null);
-  const suppressClick = useRef(false);
-  const pastRef = useRef<{ draft: CoverDraft; selected: string | null }[]>([]);
-  const futureRef = useRef<{ draft: CoverDraft; selected: string | null }[]>([]);
-  const selectedRef = useRef<string | null>(null);
-  const undoRef = useRef<() => void>(() => {});
-  const redoRef = useRef<() => void>(() => {});
-  const pushRef = useRef<() => void>(() => {});
-  const removeRef = useRef<() => void>(() => {});
-  const [canUndo, setCanUndo] = useState(false);
-  const [canRedo, setCanRedo] = useState(false);
-  const [tool, setTool] = useState<"move" | "draw">("move");
-  const [brush, setBrush] = useState<string>("#e10600");
-  const [brushSize, setBrushSize] = useState(18);
-  const [decor, setDecor] = useState<StickerMon[]>([]);
-  const [drawSerial, setDrawSerial] = useState(0);
-  const paintCanvas = useRef<HTMLCanvasElement | null>(null);
-  const paintReady = useRef(false);
-  const paintedFor = useRef<string | null>(null);
-  const paintCache = useRef(new Map<string, CanvasImageSource>());
-  const paintLoading = useRef(new Set<string>());
-  const drawingRef = useRef(false);
-  const fontsReady = useRef(false);
-  draftRef.current = draft;
+  const thumbs = useRef(new Map<CoverStyle, HTMLCanvasElement>());
+  const dragStop = useRef<(() => void) | null>(null);
 
   const preview = cardPixelSize(PREVIEW_DPI);
-  const plan = nameListPlan(lines);
-  const showNames = coverListsNames(lines, draft.backMode, hideNames);
-  const layout = sheetSlots(draft.paper);
-  const capacity = Math.max(1, layout.slots.filter((slot) => slot.face === "front").length);
-  const pageCount = Math.max(1, Math.ceil(roster.length / capacity));
-  const page = Math.min(sheetPage, pageCount - 1);
-  const pageCards = roster.slice(page * capacity, page * capacity + capacity);
-  const pageKey = `${page}:${pageCards.map((item) => item.id).join("|")}`;
-  const stickerCount = pageCards.length * 2;
-  const libraryMons = useMemo(() => {
-    const byKey = new Map<string, StickerMon>();
-    for (const item of roster) {
-      for (const mon of monsFor(item)) byKey.set(mon.key, mon);
-    }
-    return [...byKey.values()];
-  }, [roster]);
-  const placedByKey = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const sticker of draft.stickers) counts.set(sticker.key, (counts.get(sticker.key) ?? 0) + 1);
-    return counts;
-  }, [draft.stickers]);
-  selectedRef.current = selected;
-  const selectedSticker = draft.stickers.find((sticker) => sticker.id === selected) ?? null;
-  const selectedMon = selectedSticker
-    ? (mons.find((mon) => mon.key === selectedSticker.key) ?? decor.find((mon) => mon.key === selectedSticker.key) ?? null)
-    : null;
-  const coverMons = mons.filter((mon) => (placedByKey.get(mon.key) ?? 0) > 0);
-  const visible = mons.filter((mon) => {
-    if (!mon.name.toLowerCase().includes(query.trim().toLowerCase())) return false;
-    const count = placedByKey.get(mon.key) ?? 0;
-    if (tray === "placed") return count > 0;
-    if (tray === "spare") return count === 0;
-    return true;
-  });
+  const printed = useMemo(() => (scope === "all" ? roster : [focus]), [scope, roster, focus]);
+  const perSheet = cardsPerSheet(paper);
+  const pages = Math.max(1, Math.ceil(printed.length / perSheet));
+  const page = Math.min(sheetPage, pages - 1);
+  const pageCards = printed.slice(page * perSheet, page * perSheet + perSheet);
+  const shown = useMemo(() => (step === "print" ? printed : [focus]), [step, printed, focus]);
+
   const needed = useMemo(() => {
-    const keys = new Set<string>();
-    for (const item of roster) {
-      const cover = item.id === focus.id ? draft : savedCover(item);
-      for (const sticker of cover.stickers) keys.add(sticker.key);
+    const entries: ImageEntry[] = [...BRAND_FILES];
+    for (const item of shown) entries.push(...picturesFor(item, store.covers[item.id] ?? suggestedCover(item)));
+    // The style thumbnails show every look at once, so they need the crowd and the star.
+    if (step === "style") {
+      for (const style of COVER_STYLES) entries.push(...picturesFor(focus, { ...cover, style }));
     }
-    return [...keys].sort().join("|");
-  }, [roster, draft, focus.id]);
+    return entries;
+  }, [shown, store.covers, step, focus, cover]);
 
-  function remember(next: CoverDraft = draft) {
-    try {
-      localStorage.setItem(stickerStorageKey(focus.id), JSON.stringify(next));
-    } catch {
-      // The cover still prints if the browser cannot store it.
-    }
-  }
+  useEffect(() => {
+    void loadImages(needed);
+  }, [needed, loadImages]);
 
-  function close() {
-    remember();
-    onClose();
-  }
-  closeRef.current = close;
-
-  function fonts() {
-    return {
-      display: canvasFamily("--font-fredoka", "Fredoka, sans-serif"),
-      body: canvasFamily("--font-nunito", "Nunito, sans-serif"),
-    };
-  }
-
-  function chooseCard(id: string) {
-    if (id === focus.id) return;
-    remember();
-    setSelected(null);
-    setQuery("");
-    setTray("all");
-    pastRef.current = [];
-    futureRef.current = [];
-    setCanUndo(false);
-    setCanRedo(false);
-    setFocusId(id);
-  }
-
-  function syncHistory() {
-    setCanUndo(pastRef.current.length > 0);
-    setCanRedo(futureRef.current.length > 0);
-  }
-
-  function pushHistory() {
-    pastRef.current.push({ draft: draftRef.current, selected: selectedRef.current });
-    if (pastRef.current.length > 40) pastRef.current.shift();
-    futureRef.current = [];
-    syncHistory();
-  }
-
-  function undo() {
-    const prev = pastRef.current.pop();
-    if (!prev) return;
-    futureRef.current.push({ draft: draftRef.current, selected: selectedRef.current });
-    setDraft(prev.draft);
-    setSelected(prev.selected);
-    syncHistory();
-  }
-
-  function redo() {
-    const next = futureRef.current.pop();
-    if (!next) return;
-    pastRef.current.push({ draft: draftRef.current, selected: selectedRef.current });
-    setDraft(next.draft);
-    setSelected(next.selected);
-    syncHistory();
-  }
-  undoRef.current = undo;
-  redoRef.current = redo;
-  pushRef.current = pushHistory;
-
-  function cachePainting(url: string) {
-    if (!url || paintCache.current.has(url) || paintLoading.current.has(url)) return;
-    paintLoading.current.add(url);
-    const image = new Image();
-    image.onload = () => {
-      paintCache.current.set(url, image);
-      paintLoading.current.delete(url);
-      setLoaded((count) => count + 1);
-    };
-    image.onerror = () => {
-      paintLoading.current.delete(url);
-    };
-    image.src = url;
-  }
-
-  function activePainting(url: string): CanvasImageSource | null {
-    if (drawingRef.current && paintCanvas.current) return paintCanvas.current;
-    if (!url) return null;
-    cachePainting(url);
-    return paintCache.current.get(url) ?? null;
-  }
-
-  function specFor(selectedId: string | null): CardPaint {
-    return paintFor(focus, draft, images.current, fonts(), selectedId, activePainting(draft.painting));
-  }
-
-  function renderFaces(items: readonly KidCard[], dpi: number, selectedId: string | null) {
-    const size = cardPixelSize(dpi);
-    const drawn = fonts();
-    return items.flatMap((item) => {
-      const cover = item.id === focus.id ? draft : savedCover(item);
-      const spec = paintFor(
-        item,
-        cover,
-        images.current,
-        drawn,
-        item.id === focus.id ? selectedId : null,
-        item.id === focus.id ? activePainting(cover.painting) : cover.painting ? (paintCache.current.get(cover.painting) ?? null) : null,
-      );
-      if (item.id !== focus.id && cover.painting) cachePainting(cover.painting);
-      return (["front", "back"] as const).map((which) => {
-        const canvas = document.createElement("canvas");
-        canvas.width = size.width;
-        canvas.height = size.height;
-        const ctx = canvas.getContext("2d");
-        if (ctx) paintCard(ctx, which, { ...spec, selectedId: which === "front" ? (spec.selectedId ?? null) : null });
-        return canvas;
-      });
+  useEffect(() => {
+    void loadSizes(dexIds(shown.flatMap((item) => monsFor(item))));
+    const stars = shown.flatMap((item) => {
+      if (hidesNames(item)) return [];
+      const star = heroMon(monsFor(item), store.covers[item.id] ?? suggestedCover(item));
+      return star?.dexId ? [star.dexId] : [];
     });
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-    const files = [
-      [BRAND_IMAGE_KEY.compact, BRAND_LOGO.compact],
-      [BRAND_IMAGE_KEY.vertical, BRAND_LOGO.vertical],
-      [BRAND_IMAGE_KEY.horizontal, BRAND_LOGO.horizontal],
-    ] as const;
-    for (const [key, src] of files) {
-      if (images.current.has(key)) continue;
-      const image = new Image();
-      image.onload = () => {
-        images.current.set(key, image);
-        if (!cancelled) setLoaded((count) => count + 1);
-      };
-      image.onerror = () => {
-        images.current.set(key, null);
-        if (!cancelled) setLoaded((count) => count + 1);
-      };
-      image.src = src;
-    }
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    const made = decorationArt();
-    const next: StickerMon[] = [];
-    for (const item of made) {
-      images.current.set(item.key, item.canvas);
-      next.push({ key: item.key, name: item.name, src: item.canvas.toDataURL("image/png") });
-    }
-    setDecor(next);
-    setLoaded((count) => count + 1);
-  }, []);
+    void loadHeroes(stars);
+  }, [shown, store.covers, loadSizes, loadHeroes]);
 
   useEffect(() => {
     const previous = document.body.style.overflow;
@@ -563,1043 +225,441 @@ export function StickerStudio({
     panelRef.current?.focus();
     return () => {
       document.body.style.overflow = previous;
-      dragCleanup.current?.();
+      dragStop.current?.();
     };
   }, []);
 
-  useEffect(() => {
-    const next = roster.find((item) => item.id === focusId);
-    if (!next) return;
-    // The first client render still has the server draft. Read this card once window exists,
-    // otherwise a saved cover is replaced by the suggestion.
-    if (storageReady.current && draftCard.current === focusId) return;
-    draftCard.current = next.id;
-    storageReady.current = true;
-    const nextMons = monsFor(next);
-    setDraft(loadDraft(next.id, suggestedCover(next), new Set(nextMons.map((mon) => mon.key))));
-  }, [focusId, roster]);
-
-  useEffect(() => {
-    const index = Math.max(0, roster.findIndex((item) => item.id === focus.id));
-    setSheetPage(Math.floor(index / capacity));
-  }, [focus.id, draft.paper, capacity, roster]);
-
-  useEffect(() => {
-    return () => {
-      if (!storageReady.current) return;
-      try {
-        localStorage.setItem(stickerStorageKey(draftCard.current), JSON.stringify(draftRef.current));
-      } catch {
-        // The cover still prints if the browser cannot store it.
-      }
+  function specFor(item: KidCard, itemCover: CoverDraft, live: CanvasImageSource | null): CardPaint {
+    const pictures = images.current;
+    const itemMons = monsFor(item);
+    const itemHidden = hidesNames(item);
+    const itemLines = linesFor(item);
+    const star = heroMon(itemMons, itemCover);
+    return {
+      style: itemCover.style,
+      kind: item.kind,
+      title: itemCover.title,
+      countLabel: cardCountLabel(item),
+      rangeText: cardRangeText(item),
+      backText: itemCover.backText,
+      backMode: itemCover.backMode,
+      showNames: showsNameList(itemLines, itemCover.backMode, itemHidden),
+      lines: itemLines,
+      owner: itemCover.owner,
+      hidden: itemHidden,
+      crowd: crowdFor(itemMons, itemCover).map((mon) => ({
+        image: pictureKey(mon, itemCover.pixels),
+        heightDm: mon.dexId ? (sizes[mon.dexId]?.heightDm ?? 0) : 0,
+        color: mon.dexId ? sizes[mon.dexId]?.color : undefined,
+      })),
+      pixelated: itemCover.pixels,
+      pileSeed: pileSeed(item.id) + itemCover.pileSeed,
+      images: pictures,
+      fonts: fonts(),
+      painting: live ?? (itemCover.painting ? (pictures.get(itemCover.painting) ?? null) : null),
+      hero: star
+        ? {
+            image: pictures.get(pictureKey(star, itemCover.pixels)) ?? null,
+            info: heroInfo(star, itemHidden, star.dexId ? heroEntries[star.dexId] : null),
+          }
+        : null,
     };
-  }, []);
+  }
 
-  useEffect(() => {
-    if (!storageReady.current) return;
-    const id = focus.id;
-    const snapshot = draft;
-    const timer = window.setTimeout(() => {
-      try {
-        localStorage.setItem(stickerStorageKey(id), JSON.stringify(snapshot));
-      } catch {
-        // The cover still prints if the browser cannot store it.
-      }
-    }, 300);
-    return () => window.clearTimeout(timer);
-  }, [draft, focus.id]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const keys = new Set(needed.split("|").filter(Boolean));
-    for (const mon of libraryMons) {
-      if (!keys.has(mon.key) || images.current.has(mon.key)) continue;
-      const image = new Image();
-      image.onload = () => {
-        images.current.set(mon.key, image);
-        if (!cancelled) setLoaded((count) => count + 1);
-      };
-      image.onerror = () => {
-        images.current.set(mon.key, null);
-        if (!cancelled) setLoaded((count) => count + 1);
-      };
-      image.src = mon.src;
-    }
-    return () => {
-      cancelled = true;
-    };
-  }, [needed, libraryMons]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const draw = () => {
-      if (cancelled) return;
-      const front = frontRef.current?.getContext("2d");
-      const back = backRef.current?.getContext("2d");
-      const spec = specFor(selected);
-      if (front) paintCard(front, "front", spec);
-      if (back) paintCard(back, "back", { ...spec, selectedId: null });
-      const sheet = sheetRef.current;
-      const sheetCtx = sheet?.getContext("2d");
-      if (sheet && sheetCtx) {
-        const size = pagePixelSize(draft.paper, SHEET_PREVIEW_DPI);
-        if (sheet.width !== size.width) sheet.width = size.width;
-        if (sheet.height !== size.height) sheet.height = size.height;
-        paintSheet(sheetCtx, {
-          paper: draft.paper,
-          dpi: SHEET_PREVIEW_DPI,
-          images: renderFaces(pageCards, SHEET_PREVIEW_DPI, null),
-          fonts: fonts(),
-          brand: APP_NAME,
-          logo: images.current.get(BRAND_IMAGE_KEY.compact),
-        });
-      }
-    };
-    draw();
-    if (!fontsReady.current) {
-      void document.fonts.ready.then(() => {
-        fontsReady.current = true;
-        draw();
+  function renderFaces(items: readonly KidCard[], dpi: number): HTMLCanvasElement[] {
+    const size = cardPixelSize(dpi);
+    return items.flatMap((item) => {
+      const spec = specFor(item, store.covers[item.id] ?? suggestedCover(item), null);
+      return (["front", "back"] as const).map((which) => {
+        const canvas = document.createElement("canvas");
+        canvas.width = size.width;
+        canvas.height = size.height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) paintCard(ctx, which, spec);
+        return canvas;
       });
-    }
-    return () => {
-      cancelled = true;
-    };
-  }, [draft, loaded, selected, showNames, focus, pageKey, roster, drawSerial]);
-
-  useEffect(() => {
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        closeRef.current();
-        return;
-      }
-      const target = event.target;
-      const typing =
-        target instanceof HTMLElement &&
-        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
-      if (typing) return;
-      if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "z") {
-        event.preventDefault();
-        if (event.shiftKey) redoRef.current();
-        else undoRef.current();
-        return;
-      }
-      if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "y") {
-        event.preventDefault();
-        redoRef.current();
-        return;
-      }
-      if (!selected) return;
-      if (event.key === "Delete" || event.key === "Backspace") {
-        event.preventDefault();
-        removeRef.current();
-        return;
-      }
-      const direction =
-        event.key === "ArrowLeft"
-          ? "left"
-          : event.key === "ArrowRight"
-            ? "right"
-            : event.key === "ArrowUp"
-              ? "up"
-              : event.key === "ArrowDown"
-                ? "down"
-                : null;
-      if (!direction) return;
-      event.preventDefault();
-      pushRef.current();
-      setDraft((current) => swapTile(current, selected, direction));
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [selected]);
-
-  function place(key: string, at?: { x: number; y: number }) {
-    pushHistory();
-    const id = `sticker-${crypto.randomUUID()}`;
-    setSelected(id);
-    setDraft((current) => {
-      const style = stickerStyle(current.stickers.length);
-      const sticker: PlacedSticker = { id, key, x: 0.5, y: 0.5, scale: 0.3, ...style };
-      const next = [...current.stickers, sticker];
-      if (at && next.length > 1) {
-        const index = nearestTileIndex(next.length, current.pattern, at.x, at.y);
-        next.pop();
-        next.splice(Math.min(index, next.length), 0, sticker);
-      }
-      return { ...current, stickers: arrangeTiles(next, current.pattern, current.tileScale) };
     });
   }
 
-  function selectPlaced(key: string) {
-    const matches = draft.stickers.filter((sticker) => sticker.key === key);
-    if (matches.length === 0) {
-      place(key);
-      return;
-    }
-    const currentIndex = matches.findIndex((sticker) => sticker.id === selected);
-    const next = currentIndex === -1 ? matches[matches.length - 1] : matches[(currentIndex + 1) % matches.length];
-    if (!next) return;
-    if (next.id === selected && draft.stickers.at(-1)?.id === next.id) return;
-    pushHistory();
-    setSelected(next.id);
-    setDraft((current) => ({ ...current, stickers: bringToFront(current.stickers, next.id) }));
-  }
-
-  function onTrayPointerDown(event: React.PointerEvent<HTMLButtonElement>, mon: StickerMon) {
-    if (event.button !== 0) return;
-    const startX = event.clientX;
-    const startY = event.clientY;
-    setGhost({ src: mon.src, x: startX, y: startY });
-    dragCleanup.current?.();
-    dragCleanup.current = trackPointer(
-      event.pointerId,
-      (move) => setGhost({ src: mon.src, x: move.clientX, y: move.clientY }),
-      (up) => {
-        setGhost(null);
-        const moved = Math.hypot(up.clientX - startX, up.clientY - startY) > 6;
-        const canvas = frontRef.current;
-        const rect = canvas?.getBoundingClientRect();
-        const over =
-          rect &&
-          up.clientX >= rect.left &&
-          up.clientX <= rect.right &&
-          up.clientY >= rect.top &&
-          up.clientY <= rect.bottom;
-        if (moved && canvas && over) {
-          suppressClick.current = true;
-          place(mon.key, pointOn(canvas, up));
-          return;
-        }
-        if (moved) suppressClick.current = true;
-      },
-    );
-  }
-
-  function ensurePaint() {
-    const size = cardPixelSize(PREVIEW_DPI);
-    if (!paintCanvas.current) {
-      const surface = document.createElement("canvas");
-      surface.width = size.width;
-      surface.height = size.height;
-      paintCanvas.current = surface;
-    }
-    const surface = paintCanvas.current;
-    const url = draftRef.current.painting;
-    if (!paintReady.current || paintedFor.current !== url) {
-      const ctx = surface.getContext("2d");
-      const saved = url ? paintCache.current.get(url) : null;
-      if (url && !saved) {
-        paintReady.current = false;
-        paintedFor.current = null;
-        cachePainting(url);
-      } else {
-        if (ctx) {
-          ctx.clearRect(0, 0, surface.width, surface.height);
-          if (saved) ctx.drawImage(saved, 0, 0, surface.width, surface.height);
-        }
-        paintReady.current = true;
-        paintedFor.current = url;
+  const drawPreviews = useEffectEvent(() => {
+    const live = paint.drawing.current ? paint.surface.current : null;
+    const ctx = previewRef.current?.getContext("2d");
+    if (ctx) paintCard(ctx, face, specFor(focus, cover, live));
+    if (step === "style") {
+      for (const style of COVER_STYLES) {
+        const thumb = thumbs.current.get(style)?.getContext("2d");
+        if (thumb) paintCard(thumb, "front", specFor(focus, { ...cover, style }, null));
       }
     }
-    return surface;
-  }
-
-  function strokeTo(from: { x: number; y: number }, to: { x: number; y: number }) {
-    const surface = ensurePaint();
-    const ctx = surface.getContext("2d");
-    if (!ctx) return;
-    const erase = brush === "erase";
-    ctx.save();
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.lineWidth = brushSize;
-    ctx.globalCompositeOperation = erase ? "destination-out" : "source-over";
-    ctx.strokeStyle = erase ? "rgba(0,0,0,1)" : brush;
-    ctx.fillStyle = ctx.strokeStyle;
-    ctx.beginPath();
-    ctx.moveTo(from.x * surface.width, from.y * surface.height);
-    ctx.lineTo(to.x * surface.width, to.y * surface.height);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(to.x * surface.width, to.y * surface.height, brushSize / 2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  function finishStroke() {
-    const surface = paintCanvas.current;
-    drawingRef.current = false;
-    if (!surface) return;
-    const copy = document.createElement("canvas");
-    copy.width = surface.width;
-    copy.height = surface.height;
-    copy.getContext("2d")?.drawImage(surface, 0, 0);
-    const url = copy.toDataURL("image/png");
-    paintCache.current.set(url, copy);
-    paintReady.current = false;
-    setDraft((current) => ({ ...current, painting: url }));
-  }
-
-  function clearPainting() {
-    if (!draftRef.current.painting) return;
-    pushHistory();
-    const surface = ensurePaint();
-    surface.getContext("2d")?.clearRect(0, 0, surface.width, surface.height);
-    paintReady.current = false;
-    setDraft((current) => ({ ...current, painting: "" }));
-  }
-
-  function restyle(patch: Partial<Pick<PlacedSticker, "shape" | "color" | "rotation">>) {
-    const id = selectedRef.current;
-    if (!id) return;
-    pushHistory();
-    setDraft((current) => ({
-      ...current,
-      stickers: arrangeTiles(
-        current.stickers.map((sticker) => (sticker.id === id ? { ...sticker, ...patch } : sticker)),
-        current.pattern,
-        current.tileScale,
-      ),
-    }));
-  }
-
-  function onFrontPointerDown(event: React.PointerEvent<HTMLCanvasElement>) {
-    if (event.button !== 0) return;
-    if (tool === "draw") {
-      pushHistory();
-      drawingRef.current = true;
-      const start = pointOn(event.currentTarget, event);
-      strokeTo(start, start);
-      setDrawSerial((count) => count + 1);
-      let last = start;
-      dragCleanup.current?.();
-      dragCleanup.current = trackPointer(
-        event.pointerId,
-        (move) => {
-          const canvas = frontRef.current;
-          if (!canvas) return;
-          const next = pointOn(canvas, move);
-          strokeTo(last, next);
-          last = next;
-          setDrawSerial((count) => count + 1);
-        },
-        () => finishStroke(),
-      );
-      return;
+    const sheet = sheetRef.current;
+    const sheetCtx = sheet?.getContext("2d");
+    if (step === "print" && sheet && sheetCtx) {
+      const size = pagePixelSize(paper, SHEET_PREVIEW_DPI);
+      if (sheet.width !== size.width) sheet.width = size.width;
+      if (sheet.height !== size.height) sheet.height = size.height;
+      const faces = renderFaces(pageCards, SHEET_PREVIEW_DPI);
+      paintSheet(sheetCtx, {
+        paper,
+        dpi: SHEET_PREVIEW_DPI,
+        images: faces,
+        labels: pageCards.map((item, index) => ({
+          number: page * perSheet + index + 1,
+          total: printed.length,
+          title: item.rangeLabel,
+        })),
+        fonts: fonts(),
+        logo: images.current.get(BRAND_IMAGE_KEY.compact),
+      });
+      faces.forEach(releaseCanvas);
     }
-    const point = pointOn(event.currentTarget, event);
-    const hit = topStickerAt(draft.stickers, point.x, point.y);
-    if (!hit) {
-      if (selectedRef.current) {
-        pushHistory();
-        setSelected(null);
-      }
-      return;
-    }
-    pushHistory();
-    setSelected(hit.id);
-    setDraft((current) => ({ ...current, stickers: bringToFront(current.stickers, hit.id) }));
-    dragCleanup.current?.();
-    dragCleanup.current = trackPointer(
-      event.pointerId,
-      (move) => {
-        const canvas = frontRef.current;
-        if (!canvas) return;
-        const next = pointOn(canvas, move);
-        setDraft((current) => ({
-          ...current,
-          stickers: current.stickers.map((sticker) =>
-            sticker.id === hit.id ? { ...sticker, x: next.x, y: next.y } : sticker,
-          ),
-        }));
-      },
-      (up) => {
-        const canvas = frontRef.current;
-        if (!canvas) return;
-        const point = pointOn(canvas, up);
-        setDraft((current) => {
-          const index = current.stickers.findIndex((sticker) => sticker.id === hit.id);
-          if (index < 0) return current;
-          const target = nearestTileIndex(current.stickers.length, current.pattern, point.x, point.y);
-          const next = current.stickers.slice();
-          const item = next[index];
-          const other = next[target];
-          if (!item || !other || target === index) {
-            return { ...current, stickers: arrangeTiles(next, current.pattern, current.tileScale) };
-          }
-          next[index] = other;
-          next[target] = item;
-          return { ...current, stickers: arrangeTiles(next, current.pattern, current.tileScale) };
-        });
-      },
-    );
+  });
+
+  useEffect(() => {
+    drawPreviews();
+    let cancelled = false;
+    void document.fonts.ready.then(() => {
+      if (!cancelled) drawPreviews();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [cover, focus, step, face, version, heroEntries, sizes, strokes, paper, scope, sheetPage, store.covers]);
+
+  function change(next: (current: CoverDraft) => CoverDraft, remember = true) {
+    if (remember) history.push(cover);
+    store.update(focus.id, next);
   }
 
-  function resize(delta: number) {
-    const before = draftRef.current;
-    if (before.stickers.length === 0) return;
-    const tileScale = clampTileScale(before.tileScale + delta);
-    if (tileScale === before.tileScale) return;
-    pushHistory();
-    setDraft((current) => ({
-      ...current,
-      tileScale,
-      stickers: arrangeTiles(current.stickers, current.pattern, tileScale),
-    }));
+  function undo() {
+    const previous = history.undo(cover);
+    if (previous) store.update(focus.id, () => previous);
   }
 
-  function setPattern(pattern: TileLayout) {
-    if (draftRef.current.pattern === pattern) return;
-    pushHistory();
-    setDraft((current) => ({
-      ...current,
-      pattern,
-      stickers: arrangeTiles(current.stickers, pattern, current.tileScale),
-    }));
+  function redo() {
+    const next = history.redo(cover);
+    if (next) store.update(focus.id, () => next);
   }
 
-  async function savePdf() {
-    setBusy(true);
-    try {
-      await document.fonts.ready;
-      remember();
-      const drawn = fonts();
-      const pixelPage = pagePixelSize(draft.paper, PRINT_DPI);
-      const sheets = [];
-      for (let index = 0; index < roster.length; index += capacity) {
-        const group = roster.slice(index, index + capacity);
-        const sheet = document.createElement("canvas");
-        sheet.width = pixelPage.width;
-        sheet.height = pixelPage.height;
-        const ctx = sheet.getContext("2d");
-        if (!ctx) throw new Error("canvas");
-        paintSheet(ctx, {
-          paper: draft.paper,
-          dpi: PRINT_DPI,
-          images: renderFaces(group, PRINT_DPI, null),
-          fonts: drawn,
-          brand: APP_NAME,
-          logo: images.current.get(BRAND_IMAGE_KEY.compact),
-        });
-        const blob = await new Promise<Blob | null>((resolve) => sheet.toBlob(resolve, "image/jpeg", 0.93));
-        if (!blob) throw new Error("jpeg");
-        sheets.push({
-          jpeg: new Uint8Array(await blob.arrayBuffer()),
-          pixelWidth: sheet.width,
-          pixelHeight: sheet.height,
-        });
-      }
-      const pdf = jpegPagesPdf(sheets, layout.width, layout.height);
-      const fileTitle = roster.length > 1 ? `${APP_NAME} cards` : draft.title;
-      downloadBytes(pdf, stickerFilename(fileTitle, draft.paper));
-      toast.success(
-        sheets.length > 1
-          ? `PDF saved with ${sheets.length} sheets. Print it at 100% size, not Fit to page.`
-          : "PDF saved on this computer. Print it at 100% size, not Fit to page.",
-      );
-    } catch {
-      toast.error("The PDF could not be saved.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function setPaper(paper: PaperId) {
-    if (draftRef.current.paper === paper) return;
-    pushHistory();
-    setDraft((current) => ({ ...current, paper }));
-  }
-
-  function setBackMode(mode: "note" | "names") {
-    if (draftRef.current.backMode === mode) return;
-    pushHistory();
-    setDraft((current) => ({ ...current, backMode: mode }));
-  }
-
-  function useSuggestedPictures() {
-    pushHistory();
-    setSelected(null);
-    setDraft((current) => ({
-      ...current,
-      stickers: arrangeTiles(
-        fresh.stickers.map((sticker) => ({ ...sticker })),
-        current.pattern,
-        current.tileScale,
-      ),
-    }));
+  function chooseCard(id: string) {
+    if (id === focus.id) return;
+    setFocusId(id);
+    setFace("front");
+    history.reset();
+    const index = scope === "all" ? roster.findIndex((item) => item.id === id) : -1;
+    if (index >= 0) setSheetPage(Math.floor(index / perSheet));
   }
 
   function startAgain() {
-    pushHistory();
-    setSelected(null);
-    setDraft((current) => ({ ...fresh, paper: current.paper }));
+    if (!window.confirm("Start this card again? Its picture choices and drawing will be cleared.")) return;
+    change((current) => ({ ...suggestedCover(focus), style: current.style, owner: current.owner, pixels: current.pixels }));
   }
 
-  function clearCover() {
-    if (draftRef.current.stickers.length === 0) return;
-    pushHistory();
-    setSelected(null);
-    setDraft((current) => ({ ...current, stickers: [] }));
-  }
-
-  function removeSelected() {
-    const id = selectedRef.current;
-    if (!id) return;
-    pushHistory();
-    setSelected(null);
-    setDraft((current) => ({
-      ...current,
-      stickers: arrangeTiles(
-        current.stickers.filter((sticker) => sticker.id !== id),
-        current.pattern,
-        current.tileScale,
-      ),
-    }));
-  }
-  removeRef.current = removeSelected;
-
-  function stickerButton(mon: StickerMon, shelf: boolean) {
-    const count = placedByKey.get(mon.key) ?? 0;
-    const pressed = selectedSticker?.key === mon.key;
-    return (
-      <button
-        key={mon.key}
-        type="button"
-        className={
-          shelf
-            ? "pk-choice pk-sticker-tile flex w-[4.5rem] shrink-0 flex-col items-center px-1 py-1"
-            : "pk-choice pk-sticker-tile flex min-h-24 flex-col items-center gap-1 px-2 py-2 text-center"
-        }
-        aria-pressed={pressed}
-        aria-label={
-          count === 0
-            ? `Add ${mon.name}`
-            : pressed
-              ? `${mon.name}, selected, ${count} on the cover`
-              : `Select ${mon.name}, ${count} on the cover`
-        }
-        onClick={() => {
-          if (suppressClick.current) {
-            suppressClick.current = false;
-            return;
-          }
-          if (count === 0) place(mon.key);
-          else selectPlaced(mon.key);
-        }}
-        onPointerDown={(event) => onTrayPointerDown(event, mon)}
-      >
-        {count > 0 ? <span className="pk-sticker-count">{count}</span> : null}
-        <img
-          src={mon.src}
-          alt=""
-          width={shelf ? 56 : 64}
-          height={shelf ? 56 : 64}
-          draggable={false}
-          className={shelf ? "h-14 w-14 object-contain" : "h-16 w-16 object-contain"}
-          style={{
-            imageRendering: crispPicture(mon.src) ? "pixelated" : "auto",
-            filter: isShadowPicture(mon.src) ? "brightness(0)" : undefined,
-          }}
-        />
-        {shelf ? null : <span className="line-clamp-2 w-full text-sm leading-4">{mon.name}</span>}
-      </button>
+  function onPreviewPointerDown(event: React.PointerEvent<HTMLCanvasElement>) {
+    if (event.button !== 0 || step !== "decorate" || face !== "front" || tool !== "draw") return;
+    const base = cover.painting ? (images.current.get(cover.painting) ?? null) : null;
+    if (cover.painting && !base) {
+      toast("The drawing is still loading. Try again in a moment.");
+      return;
+    }
+    history.push(cover);
+    paint.begin(base);
+    let last = pointOn(event.currentTarget, event);
+    paint.stroke(last, last, brush, brushSize);
+    setStrokes((count) => count + 1);
+    dragStop.current?.();
+    dragStop.current = trackPointer(
+      event.pointerId,
+      (move) => {
+        const canvas = previewRef.current;
+        if (!canvas) return;
+        const next = pointOn(canvas, move);
+        paint.stroke(last, next, brush, brushSize);
+        last = next;
+        setStrokes((count) => count + 1);
+      },
+      () => {
+        const url = paint.finish();
+        if (url && paint.surface.current) putImage(url, paint.surface.current);
+        store.update(focus.id, (current) => ({ ...current, painting: url }));
+      },
     );
   }
 
+  const onKey = useEffectEvent((event: KeyboardEvent) => {
+    const target = event.target;
+    const typing =
+      target instanceof HTMLElement &&
+      (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable);
+    if (event.key === "Escape") {
+      if (!busy && !typing) onClose();
+      return;
+    }
+    if (typing) return;
+    const key = event.key.toLowerCase();
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && (key === "z" || key === "y")) {
+      event.preventDefault();
+      if (key === "y" || event.shiftKey) redo();
+      else undo();
+    }
+  });
+
+  useEffect(() => {
+    const listener = (event: KeyboardEvent) => onKey(event);
+    window.addEventListener("keydown", listener);
+    return () => window.removeEventListener("keydown", listener);
+  }, []);
+
+  async function savePdf() {
+    const items = printed;
+    setBusy("Getting the pictures ready…");
+    try {
+      await document.fonts.ready;
+      const covers = items.map((item) => store.covers[item.id] ?? suggestedCover(item));
+      await Promise.all([
+        loadImages([...BRAND_FILES, ...items.flatMap((item, index) => picturesFor(item, covers[index] ?? suggestedCover(item)))]),
+        loadSizes(dexIds(items.flatMap((item) => monsFor(item)))),
+        loadHeroes(
+          items.flatMap((item, index) => {
+            const star = hidesNames(item) ? undefined : heroMon(monsFor(item), covers[index] ?? suggestedCover(item));
+            return star?.dexId ? [star.dexId] : [];
+          }),
+        ),
+      ]);
+      const layout = sheetSlots(paper);
+      const pixels = pagePixelSize(paper, PRINT_DPI);
+      const sheets = [];
+      for (let start = 0, number = 1; start < items.length; start += perSheet, number += 1) {
+        setBusy(`Making sheet ${number} of ${Math.ceil(items.length / perSheet)}…`);
+        const group = items.slice(start, start + perSheet);
+        const sheet = document.createElement("canvas");
+        sheet.width = pixels.width;
+        sheet.height = pixels.height;
+        const ctx = sheet.getContext("2d");
+        if (!ctx) throw new Error("No canvas");
+        const faces = renderFaces(group, PRINT_DPI);
+        paintSheet(ctx, {
+          paper,
+          dpi: PRINT_DPI,
+          images: faces,
+          labels: group.map((item, index) => ({ number: start + index + 1, total: items.length, title: item.rangeLabel })),
+          fonts: fonts(),
+          logo: images.current.get(BRAND_IMAGE_KEY.compact),
+        });
+        faces.forEach(releaseCanvas);
+        const blob = await new Promise<Blob | null>((resolve) => sheet.toBlob(resolve, "image/jpeg", JPEG_QUALITY));
+        releaseCanvas(sheet);
+        if (!blob) throw new Error("No JPEG");
+        sheets.push({ jpeg: new Uint8Array(await blob.arrayBuffer()), pixelWidth: pixels.width, pixelHeight: pixels.height });
+      }
+      downloadPdf(
+        jpegPagesPdf(sheets, layout.width, layout.height),
+        stickerFilename(items.length > 1 ? `${APP_NAME} cards` : cover.title, paper),
+      );
+      toast.success(`PDF saved${sheets.length > 1 ? ` with ${sheets.length} sheets` : ""}. Print it at 100% size, not Fit to page.`);
+    } catch {
+      toast.error("The PDF could not be saved. Try again, or print fewer cards at once.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const stepIndex = STEPS.findIndex((item) => item.id === step);
+
   return (
-    <div className="pk-studio fixed inset-0 z-50 overflow-y-auto bg-ink/45 p-3 sm:p-6">
+    <div className="pk-studio fixed inset-0 z-50 overflow-y-auto bg-ink/45 p-2 sm:p-6">
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="sticker-heading"
         tabIndex={-1}
-        className="pk-studio-panel pk-card mx-auto w-full max-w-6xl bg-cream px-4 py-4 outline-none sm:px-6 sm:py-5"
+        className="pk-studio-panel pk-card mx-auto w-full max-w-6xl bg-cream px-3 py-4 outline-none sm:px-6 sm:py-5"
       >
-        <div className="flex flex-col items-start justify-between gap-3 sm:flex-row">
-          <div>
-            <h2 id="sticker-heading" className="font-display text-3xl leading-tight text-balance">
-              Print paper stickers
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 id="sticker-heading" className="font-display text-3xl leading-tight">
+              Make stickers
             </h2>
-            <p className="mt-1 max-w-xl text-sm leading-6">
-              Optional covers for the box. This does not put audio on the Yoto — sending the playlist already did
-              that.
-            </p>
-            <p className="mt-1 text-sm font-bold">{focus.rangeLabel}</p>
-            {roster.length > 1 ? (
-              <label className="mt-2 grid max-w-sm gap-1 text-sm" htmlFor="sticker-card">
-                Card to design
-                <select
-                  id="sticker-card"
-                  className="pk-field"
-                  value={focus.id}
-                  onChange={(event) => chooseCard(event.target.value)}
-                >
-                  {roster.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.rangeLabel}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-            <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-              Pick a tile pattern, then tap a Pokémon, a Poké Ball, or a berry. Each one fills the next tile.
-              Drag a sticker to swap its place in the pattern.
-            </p>
+            <p className="mt-1 text-sm leading-6">A front and a back for {focus.rangeLabel}. Print them and stick them on the Yoto card.</p>
           </div>
-          <Button type="button" variant="outline" className="h-10 shrink-0 px-4" onClick={close}>
-            Close
+          <Button type="button" variant="outline" className="h-11 shrink-0 px-4" onClick={onClose}>
+            Done
           </Button>
         </div>
 
-        <div className="mt-5 grid items-start gap-5 lg:grid-cols-[20rem_minmax(0,1fr)]">
-          <div className="order-2 lg:order-1">
-            <div className="grid gap-1 text-sm">
-              <label htmlFor="sticker-search">{hideNames ? "Riddles" : "Pokémon"}</label>
-              <div className="flex gap-2">
-                <input
-                  id="sticker-search"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder={hideNames ? "Riddle number" : "Name"}
-                  className="pk-field"
-                  autoComplete="off"
-                />
-                {query ? (
-                  <button type="button" className="pk-chip shrink-0" onClick={() => setQuery("")}>
-                    Clear
-                  </button>
-                ) : null}
-              </div>
-            </div>
-            <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Which stickers to show">
-              {(
-                [
-                  ["all", "All"],
-                  ["placed", "On cover"],
-                  ["spare", "Not yet"],
-                ] as const
-              ).map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  className="pk-chip"
-                  aria-pressed={tray === id}
-                  onClick={() => setTray(id)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <div className="mt-3">
-              <p className="pk-kicker">Poké Balls and berries</p>
-              <div className="mt-1 flex gap-2 overflow-x-auto pb-1">
-                {decor.map((mon) => stickerButton(mon, true))}
-              </div>
-            </div>
-            <p className="mt-2 text-sm leading-5">
-              {coverMons.length} of {mons.length} on the cover.
-            </p>
-            {coverMons.length > 0 ? (
-              <div className="mt-3">
-                <p className="pk-kicker">On the cover</p>
-                <div className="mt-1 flex gap-2 overflow-x-auto pb-1">
-                  {coverMons.map((mon) => stickerButton(mon, true))}
-                </div>
-              </div>
-            ) : null}
-            <div className="mt-3 grid max-h-[28rem] grid-cols-3 content-start gap-2 overflow-y-auto sm:grid-cols-4 lg:max-h-[70dvh] lg:grid-cols-2">
-              {visible.length === 0 ? (
-                <p className="col-span-full px-1 py-3 text-sm leading-6 text-muted-foreground">
-                  {query.trim()
-                    ? "Nothing matches that name."
-                    : tray === "placed"
-                      ? "Nothing is on the cover yet."
-                      : "Every one is already on the cover."}
-                </p>
-              ) : (
-                visible.map((mon) => stickerButton(mon, false))
-              )}
-            </div>
+        {roster.length > 1 ? (
+          <div className="mt-3 flex gap-2 overflow-x-auto pb-1" role="radiogroup" aria-label="Card to make">
+            {roster.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                role="radio"
+                aria-checked={item.id === focus.id}
+                className="pk-chip shrink-0"
+                onClick={() => chooseCard(item.id)}
+              >
+                {item.rangeLabel}
+              </button>
+            ))}
           </div>
+        ) : null}
 
-          <div className="order-1 lg:order-2">
-            <p className="pk-kicker">Pattern</p>
-            <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Tile pattern">
-              {PATTERN_LABELS.map((pattern) => (
-                <button
-                  key={pattern.id}
-                  type="button"
-                  className="pk-chip"
-                  aria-pressed={draft.pattern === pattern.id}
-                  onClick={() => setPattern(pattern.id)}
-                >
-                  {pattern.label}
-                </button>
-              ))}
-            </div>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              {draft.stickers.length === 0
-                ? "This pattern is empty. Tap a Pokémon to place the first tile."
-                : `${draft.stickers.length} ${draft.stickers.length === 1 ? "tile" : "tiles"} in a ${draft.pattern} pattern.`}
-            </p>
-            <p className="pk-kicker mt-4">Front</p>
-            <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Card tools">
-              <button type="button" className="pk-chip" aria-pressed={tool === "move"} onClick={() => setTool("move")}>
-                Move
-              </button>
-              <button type="button" className="pk-chip" aria-pressed={tool === "draw"} onClick={() => setTool("draw")}>
-                Draw
-              </button>
-            </div>
-            {tool === "draw" ? (
-              <div className="mt-2 grid gap-2">
-                <div className="flex flex-wrap gap-1.5" role="group" aria-label="Paint colours">
-                  {BRUSHES.map((color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      className="pk-swatch"
-                      style={{ background: color }}
-                      aria-label={`Paint ${color}`}
-                      aria-pressed={brush === color}
-                      onClick={() => setBrush(color)}
-                    />
-                  ))}
-                  <button
-                    type="button"
-                    className="pk-chip"
-                    aria-pressed={brush === "erase"}
-                    onClick={() => setBrush("erase")}
-                  >
-                    Eraser
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-1.5" role="group" aria-label="Brush size">
-                  {BRUSH_SIZES.map((size) => (
-                    <button
-                      key={size.id}
-                      type="button"
-                      className="pk-chip"
-                      aria-pressed={brushSize === size.id}
-                      onClick={() => setBrushSize(size.id)}
-                    >
-                      {size.label}
-                    </button>
-                  ))}
-                  <button type="button" className="pk-chip" onClick={clearPainting} disabled={!draft.painting}>
-                    Clear drawing
-                  </button>
-                </div>
-              </div>
-            ) : null}
+        <nav className="mt-4 grid grid-cols-3 gap-2" aria-label="Steps">
+          {STEPS.map((item, index) => (
+            <button
+              key={item.id}
+              type="button"
+              className="pk-studio-step"
+              aria-current={item.id === step ? "step" : undefined}
+              onClick={() => {
+                setStep(item.id);
+                setFace("front");
+              }}
+            >
+              <span className="pk-studio-step-number" aria-hidden="true">
+                {index + 1}
+              </span>
+              {item.label}
+            </button>
+          ))}
+        </nav>
+
+        {store.saveFailed ? (
+          <p className="mt-3 rounded-lg border-2 border-ink bg-white px-3 py-2 text-sm leading-6" role="status">
+            This browser is full, so changes to this card will not be kept after you close it. Printing still works.
+          </p>
+        ) : null}
+
+        <div className="mt-4 grid items-start gap-5 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
+          <div className="grid gap-3 lg:sticky lg:top-4">
             <canvas
-              ref={frontRef}
+              ref={previewRef}
               width={preview.width}
               height={preview.height}
               aria-label={
-                tool === "draw"
-                  ? "Card front. Draw on the painting."
-                  : `Card front. ${draft.stickers.length === 0 ? "The pattern is empty." : `Drag a tile to swap it in the ${draft.pattern} pattern.`}`
+                face === "back"
+                  ? "Back of the card"
+                  : step === "decorate" && tool === "draw"
+                    ? "Front of the card. Draw on it."
+                    : "Front of the card"
               }
-              className="mx-auto mt-2 h-auto w-full max-w-96 touch-none shadow-[4px_4px_0_#16324f]"
+              className="pk-card-preview mx-auto h-auto w-full max-w-80 touch-none"
               style={{ borderRadius: "5.9% / 3.7%" }}
-              onPointerDown={onFrontPointerDown}
+              onPointerDown={onPreviewPointerDown}
             />
-            <div className="mt-3 flex items-center gap-3">
-              {selectedMon ? (
-                <img
-                  src={selectedMon.src}
-                  alt=""
-                  width={48}
-                  height={48}
-                  className="h-12 w-12 shrink-0 object-contain"
-                  style={{
-                    imageRendering: crispPicture(selectedMon.src) ? "pixelated" : "auto",
-                    filter: isShadowPicture(selectedMon.src) ? "brightness(0)" : undefined,
-                  }}
-                />
-              ) : null}
-              <p className="text-sm leading-6">
-                {tool === "draw"
-                  ? "Draw on the card. Move lets you swap tiles in the pattern again."
-                  : draft.stickers.length === 0
-                    ? "Tap a picture to fill the first tile."
-                    : selectedMon
-                      ? `${selectedMon.name} is selected. Drag it onto another tile to swap.`
-                      : "Tap a picture to add a tile, or drag a tile to swap it."}
-              </p>
-            </div>
-            {selectedSticker ? (
-              <div className="mt-3 grid gap-2">
-                <div className="flex flex-wrap gap-1.5" role="group" aria-label="Sticker shape">
-                  {SHAPE_LABELS.map((shape) => (
-                    <button
-                      key={shape.id}
-                      type="button"
-                      className="pk-chip"
-                      aria-pressed={selectedSticker.shape === shape.id}
-                      onClick={() => restyle({ shape: shape.id })}
-                    >
-                      {shape.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Sticker colour">
-                  <button
-                    type="button"
-                    className="pk-chip"
-                    aria-pressed={selectedSticker.color === "transparent"}
-                    onClick={() => restyle({ color: "transparent" })}
-                  >
-                    No colour
-                  </button>
-                  {BRUSHES.map((color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      className="pk-swatch"
-                      style={{ background: color }}
-                      aria-label={`Colour ${color}`}
-                      aria-pressed={selectedSticker.color === color}
-                      onClick={() => restyle({ color })}
-                    />
-                  ))}
-                  <button
-                    type="button"
-                    className="pk-chip"
-                    onClick={() => restyle({ rotation: clampRotation(selectedSticker.rotation - Math.PI / 12) })}
-                  >
-                    Turn left
-                  </button>
-                  <button
-                    type="button"
-                    className="pk-chip"
-                    onClick={() => restyle({ rotation: clampRotation(selectedSticker.rotation + Math.PI / 12) })}
-                  >
-                    Turn right
-                  </button>
-                </div>
-              </div>
-            ) : null}
-            <div className="mt-2 flex flex-wrap gap-2">
-              <Button type="button" variant="outline" className="h-10 px-4" disabled={!canUndo} onClick={undo}>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button type="button" variant="outline" className="h-11 px-4" onClick={() => setFace(face === "front" ? "back" : "front")}>
+                {face === "front" ? "Turn it over" : "Show the front"}
+              </Button>
+              <Button type="button" variant="outline" className="h-11 px-4" disabled={!history.canUndo} onClick={undo}>
                 Undo
               </Button>
-              <Button type="button" variant="outline" className="h-10 px-4" disabled={!canRedo} onClick={redo}>
+              <Button type="button" variant="outline" className="h-11 px-4" disabled={!history.canRedo} onClick={redo}>
                 Redo
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-10 px-4"
-                disabled={draft.stickers.length === 0 || draft.tileScale >= 1.4}
-                onClick={() => resize(0.08)}
-              >
-                Bigger
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-10 px-4"
-                disabled={draft.stickers.length === 0 || draft.tileScale <= 0.7}
-                onClick={() => resize(-0.08)}
-              >
-                Smaller
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-10 px-4"
-                disabled={!selectedSticker}
-                onClick={() => {
-                  if (selectedSticker) place(selectedSticker.key);
-                }}
-              >
-                Add another
-              </Button>
-              <Button type="button" variant="outline" className="h-10 px-4" disabled={!selected} onClick={removeSelected}>
-                Remove
-              </Button>
-              <Button type="button" variant="outline" className="h-10 px-4" onClick={clearCover}>
-                Clear cover
-              </Button>
             </div>
-            <label className="mt-4 grid gap-1 text-sm" htmlFor="sticker-title">
-              Cover title
-              <input
-                id="sticker-title"
-                value={draft.title}
-                maxLength={80}
-                onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
-                className="pk-field"
+          </div>
+
+          <div className="min-w-0">
+            {step === "style" ? (
+              <StyleStep
+                style={cover.style}
+                pixels={cover.pixels}
+                title={cover.title}
+                owner={cover.owner}
+                thumbRef={(style) => (canvas) => {
+                  if (canvas) thumbs.current.set(style, canvas);
+                  else thumbs.current.delete(style);
+                }}
+                onStyle={(style) => {
+                  if (style !== cover.style) change((current) => ({ ...current, style }));
+                }}
+                onPixels={(pixels) => {
+                  if (pixels !== cover.pixels) change((current) => ({ ...current, pixels }));
+                }}
+                onTitle={(title) => change((current) => ({ ...current, title }), false)}
+                onOwner={(owner) => change((current) => ({ ...current, owner }), false)}
+                onTextFocus={() => history.push(cover)}
+                onMakeIt={() => {
+                  setFace("front");
+                  change((current) => autoCover(focus, current));
+                }}
               />
-            </label>
+            ) : step === "decorate" ? (
+              <DecorateStep
+                cover={cover}
+                mons={mons}
+                hidden={hidden}
+                tool={tool}
+                brush={brush}
+                brushSize={brushSize}
+                onTool={setTool}
+                onBrush={setBrush}
+                onBrushSize={setBrushSize}
+                onClearDrawing={() => change((current) => ({ ...current, painting: "" }))}
+                onHero={(key) => {
+                  if (key !== cover.hero) change((current) => ({ ...current, hero: key }));
+                }}
+                onCrowd={(crowd) => change((current) => ({ ...current, crowd }))}
+                onShake={() => change((current) => ({ ...current, pileSeed: current.pileSeed + 1 }))}
+              />
+            ) : (
+              <PrintStep
+                backMode={cover.backMode}
+                backText={cover.backText}
+                hidden={hidden}
+                namesFit={nameListPlan(lines) !== null}
+                paper={paper}
+                scope={scope}
+                cardCount={roster.length}
+                sheet={{ page, pages, titles: pageCards.map((item) => item.rangeLabel) }}
+                busy={busy}
+                sheetRef={sheetRef}
+                onBackMode={(backMode) => {
+                  setFace("back");
+                  if (backMode !== cover.backMode) change((current) => ({ ...current, backMode }));
+                }}
+                onBackText={(backText) => change((current) => ({ ...current, backText }), false)}
+                onSuggestedNote={() => change((current) => ({ ...current, backText: suggestedCover(focus).backText }))}
+                onTextFocus={() => history.push(cover)}
+                onPaper={setPaper}
+                onScope={(next) => {
+                  setScope(next);
+                  setSheetPage(0);
+                }}
+                onSheet={setSheetPage}
+                onSave={() => void savePdf()}
+              />
+            )}
+
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-2 border-t-2 border-ink/20 pt-4">
+              <Button type="button" variant="outline" className="h-11 px-4" onClick={startAgain}>
+                Start again
+              </Button>
+              <div className="flex gap-2">
+                {stepIndex > 0 ? (
+                  <Button type="button" variant="outline" className="h-11 px-4" onClick={() => setStep(STEPS[stepIndex - 1]?.id ?? "style")}>
+                    Back
+                  </Button>
+                ) : null}
+                {stepIndex < STEPS.length - 1 ? (
+                  <Button
+                    type="button"
+                    className="h-11 px-5"
+                    onClick={() => {
+                      setStep(STEPS[stepIndex + 1]?.id ?? "print");
+                      setFace("front");
+                    }}
+                  >
+                    Next: {STEPS[stepIndex + 1]?.label}
+                  </Button>
+                ) : null}
+              </div>
+            </div>
           </div>
         </div>
-
-        <section className="mt-6 border-t-4 border-ink pt-4" aria-labelledby="sticker-print-heading">
-          <h3 id="sticker-print-heading" className="font-display text-2xl leading-tight">
-            Printing
-          </h3>
-          <ol className="mt-2 grid list-decimal gap-1 pl-5 text-sm leading-6">
-            <li>Check the sheet. Each row is one card, front on the left and back on the right.</li>
-            <li>Save the PDF.</li>
-            <li>
-              Print at 100% size on {draft.paper === "a4" ? "A4" : "US Letter"}, not Fit to page. Cut on the corner
-              marks.
-            </li>
-          </ol>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <div className="flex gap-2" role="group" aria-label="Paper size">
-              {(["a4", "letter"] as const).map((paper) => (
-                <button
-                  key={paper}
-                  type="button"
-                  className="pk-chip"
-                  aria-pressed={draft.paper === paper}
-                  onClick={() => setPaper(paper)}
-                >
-                  {paper === "a4" ? "A4" : "US Letter"}
-                </button>
-              ))}
-            </div>
-            {hideNames ? (
-              <p className="text-sm leading-6 text-muted-foreground">
-                The back leaves the names off, so the card does not give away the answers.
-              </p>
-            ) : (
-              <div className="flex gap-2" role="group" aria-label="Back of the sticker">
-                <button type="button" className="pk-chip" aria-pressed={!showNames} onClick={() => setBackMode("note")}>
-                  Note
-                </button>
-                <button
-                  type="button"
-                  className="pk-chip"
-                  aria-pressed={showNames}
-                  disabled={!plan}
-                  title={plan ? "Print every name" : "Too many names to fit on the sticker"}
-                  onClick={() => setBackMode("names")}
-                >
-                  Name list
-                </button>
-              </div>
-            )}
-            <Button type="button" className="h-10 px-4" disabled={busy} onClick={() => void savePdf()}>
-              {busy ? "Saving PDF…" : "Save PDF"}
-            </Button>
-            <Button type="button" variant="outline" className="h-10 px-4" onClick={useSuggestedPictures}>
-              Suggested pictures
-            </Button>
-            <Button type="button" variant="outline" className="h-10 px-4" onClick={startAgain}>
-              Start again
-            </Button>
-          </div>
-          {!hideNames && !plan ? (
-            <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              The names will not fit on the back of a card this size, so the note is printed there.
-            </p>
-          ) : null}
-          {!hideNames && plan && plan.fontPt < READABLE_LIST_PT && !showNames ? (
-            <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              The names fit only in small type. The note is easier to read.
-            </p>
-          ) : null}
-          <div className="mt-4 grid items-start gap-5 lg:grid-cols-2">
-            <div>
-            <p className="pk-kicker">Back</p>
-            <canvas
-              ref={backRef}
-              width={preview.width}
-              height={preview.height}
-              aria-label="Card back"
-              className="mt-2 h-auto w-full max-w-[280px] shadow-[4px_4px_0_#16324f]"
-              style={{ borderRadius: "5.9% / 3.7%" }}
-            />
-            <label className="mt-3 grid gap-1 text-sm" htmlFor="sticker-note">
-              Note on the back
-              <textarea
-                id="sticker-note"
-                value={draft.backText}
-                maxLength={700}
-                onChange={(event) => setDraft((current) => ({ ...current, backText: event.target.value }))}
-                className="pk-field py-2"
-                style={{ height: "auto", minHeight: "8rem" }}
-              />
-            </label>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              {showNames
-                ? "The name list is on the sticker. This note stays here if you switch back."
-                : "This note is printed on the back."}
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              className="mt-2 h-10 px-4"
-                onClick={() => {
-                  if (draft.backText === fresh.backText) return;
-                  pushHistory();
-                  setDraft((current) => ({ ...current, backText: fresh.backText }));
-                }}
-            >
-              Use the suggested note
-            </Button>
-            </div>
-            <div>
-              <p className="pk-kicker">The sheet</p>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                Sheet {page + 1} of {pageCount}
-                {pageCount > 1 ? ` on ${layout.label}` : `, ${layout.label}`}.{" "}
-                {pageCards.map((item) => item.rangeLabel).join(", ")}. Each row is a different card, front
-                on the left and back on the right. {stickerCount} stickers, marked 1 of {stickerCount} through{" "}
-                {stickerCount} of {stickerCount}.
-              </p>
-              {pageCount > 1 ? (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-10 px-4"
-                    disabled={page <= 0}
-                    onClick={() => setSheetPage(page - 1)}
-                  >
-                    Previous sheet
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-10 px-4"
-                    disabled={page >= pageCount - 1}
-                    onClick={() => setSheetPage(page + 1)}
-                  >
-                    Next sheet
-                  </Button>
-                </div>
-              ) : null}
-              <canvas
-                ref={sheetRef}
-                aria-label={`${layout.label} print layout, sheet ${page + 1} of ${pageCount}, ${pageCards.map((item) => item.rangeLabel).join(", ")}`}
-                className="mt-2 h-auto w-full max-w-[420px] bg-white shadow-[4px_4px_0_#16324f]"
-              />
-            </div>
-          </div>
-        </section>
+        <p className="pk-print-only">Use Save PDF to print stickers at the right size.</p>
       </div>
-      {ghost ? (
-        <img
-          src={ghost.src}
-          alt=""
-          className="pk-sticker-ghost pointer-events-none fixed z-[60] h-16 w-16 object-contain"
-          style={{
-            left: ghost.x,
-            top: ghost.y,
-            imageRendering: crispPicture(ghost.src) ? "pixelated" : "auto",
-            filter: isShadowPicture(ghost.src) ? "brightness(0)" : undefined,
-          }}
-        />
-      ) : null}
     </div>
   );
 }

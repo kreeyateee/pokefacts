@@ -2,109 +2,114 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
-  arrangeTiles,
-  clampRotation,
-  defaultStickers,
-  isDecorationKey,
-  nearestTileIndex,
-  sanitizeStickers,
-  stickerHits,
+  CARD_MM,
+  CHECK_RULER_MM,
+  MIN_MARGIN_MM,
+  PAPERS,
+  cardsPerSheet,
+  freshCover,
+  readCoverDraft,
+  sheetSlots,
+  showsNameList,
+  staleCoverIds,
   stickerStorageKey,
-  stickerStyle,
-  tileCells,
-  tileGrid,
 } from "./sticker-layout";
 
-describe("sticker looks", () => {
-  it("does not reuse a hex-grid draft from the old cover", () => {
+const fresh = freshCover({
+  libraryTitle: "Pokefacts 1",
+  rangeLabel: "Pokefacts 1 (1-3)",
+  blurb: "",
+  childDoes: "",
+  detail: "",
+  keys: ["a", "b", "c"],
+});
+const keys = new Set(["a", "b", "c"]);
+
+describe("saved covers", () => {
+  it("keeps the same storage key so earlier covers are found", () => {
     assert.match(stickerStorageKey("facts-1"), /^pokefacts\.stickers\.v3\./);
   });
 
-  it("gives each suggested picture a different shape", () => {
-    const stickers = defaultStickers(["a", "b", "c", "d", "e"]);
-    const shapes = new Set(stickers.map((sticker) => sticker.shape));
-    assert.equal(shapes.size, 5);
-    assert.equal(stickers[0]?.rotation, 0);
-    assert.notEqual(stickers[0]?.color, stickers[1]?.color);
+  it("starts as a group photo of everyone, with the first Pokémon as the star", () => {
+    assert.equal(fresh.style, "photo");
+    assert.equal(fresh.crowd, null);
+    assert.equal(fresh.pixels, false);
+    assert.equal(fresh.hero, "a");
+    assert.equal(fresh.backMode, "steps");
   });
 
-  it("keeps a saved decoration, its turn, and its colour", () => {
-    const cleaned = sanitizeStickers(
-      [{ id: "s1", key: "deco:poke", x: 0.4, y: 0.5, scale: 0.3, rotation: Math.PI / 2, shape: "star", color: "#2A75BB" }],
-      new Set(["bulba"]),
-    );
-    assert.equal(cleaned?.length, 1);
-    assert.equal(cleaned?.[0]?.key, "deco:poke");
-    assert.equal(cleaned?.[0]?.shape, "star");
-    assert.equal(cleaned?.[0]?.color, "#2a75bb");
-    assert.ok(Math.abs((cleaned?.[0]?.rotation ?? 0) - Math.PI / 2) < 0.001);
+  it("opens a cover saved before the three styles as a group photo with the how-to-play back", () => {
+    const old = JSON.stringify({
+      title: "My card",
+      style: "grid",
+      backMode: "auto",
+      paper: "letter",
+      pattern: "hex",
+      stickers: [{ id: "s1", key: "b", x: 0.5, y: 0.5, scale: 0.3 }],
+    });
+    const cover = readCoverDraft(old, fresh, keys);
+    assert.equal(cover.style, "photo");
+    assert.equal(cover.backMode, "steps");
+    assert.equal(cover.title, "My card");
+    assert.equal(cover.crowd, null);
+    assert.equal(cover.hero, "a");
   });
 
-  it("drops a sticker that is not on the card and not a decoration", () => {
-    const cleaned = sanitizeStickers([{ id: "s1", key: "missing", x: 0.5, y: 0.5, scale: 0.3 }], new Set(["bulba"]));
-    assert.deepEqual(cleaned, []);
+  it("keeps the style, star, owner, and crowd, and drops anyone not on this card", () => {
+    const saved = JSON.stringify({ ...fresh, style: "pile", hero: "c", owner: "Ash", crowd: ["b", "zz", "b", 4], pixels: true, pileSeed: 3 });
+    const cover = readCoverDraft(saved, fresh, keys);
+    assert.equal(cover.style, "pile");
+    assert.equal(cover.pixels, true);
+    assert.equal(cover.pileSeed, 3);
+    assert.equal(cover.hero, "c");
+    assert.equal(cover.owner, "Ash");
+    assert.deepEqual(cover.crowd, ["b"]);
+    assert.equal(readCoverDraft(JSON.stringify({ ...fresh, hero: "zz" }), fresh, keys).hero, "a");
+    assert.equal(readCoverDraft(JSON.stringify({ ...fresh, crowd: ["zz"] }), fresh, keys).crowd, null);
+    assert.deepEqual(readCoverDraft(JSON.stringify({ ...fresh, crowd: [] }), fresh, keys).crowd, []);
+    assert.deepEqual(readCoverDraft("{", fresh, keys), fresh);
   });
 
-  it("hits the middle of a turned sticker and misses a corner that rotated away", () => {
-    const sticker = { x: 0.5, y: 0.5, scale: 0.4, ...stickerStyle(0) };
-    assert.equal(stickerHits(sticker, 0.5, 0.5), true);
-    const half = sticker.scale / 2;
-    const along = half * 0.9;
-    const aspect = 85.6 / 54;
-    const corner = { x: sticker.x + along, y: sticker.y + along / aspect };
-    assert.equal(stickerHits(sticker, corner.x, corner.y), true);
-    const turned = { ...sticker, rotation: Math.PI / 4 };
-    assert.equal(stickerHits(turned, corner.x, corner.y), false);
-    assert.equal(stickerHits(turned, 0.5, 0.5), true);
+  it("only lists names on the back when asked and when they fit", () => {
+    assert.equal(showsNameList(["001 Bulbasaur"], "names", false), true);
+    assert.equal(showsNameList(["001 Bulbasaur"], "steps", false), false);
+    assert.equal(showsNameList(["001 Bulbasaur"], "names", true), false);
   });
 
-  it("wraps a full turn back to zero", () => {
-    assert.ok(Math.abs(clampRotation(Math.PI * 2)) < 0.001);
-    assert.equal(isDecorationKey("deco:oran"), true);
-    assert.equal(isDecorationKey("bulba"), false);
+  it("tidies the oldest Pokédex pick covers and never a ready-made card", () => {
+    const saved = [
+      { id: "meet-1", savedAt: 1 },
+      { id: "selection-a", savedAt: 5 },
+      { id: "selection-b", savedAt: 9 },
+      { id: "selection-c", savedAt: 7 },
+    ];
+    assert.deepEqual(staleCoverIds(saved, 2), ["selection-a"]);
   });
 });
 
-describe("sticker tiles", () => {
-  it("leaves an empty pattern empty", () => {
-    assert.deepEqual(tileCells("square", 0), []);
-    assert.deepEqual(arrangeTiles([], "hex"), []);
-    assert.equal(nearestTileIndex(0, "circle", 0.5, 0.5), 0);
+describe("print sheet", () => {
+  it("keeps every card inside the printable area and pairs each front with its back", () => {
+    for (const paper of ["a4", "letter"] as const) {
+      const layout = sheetSlots(paper);
+      const page = PAPERS[paper];
+      assert.ok(layout.slots.length >= 4, `${paper} fits at least two cards`);
+      for (const [index, slot] of layout.slots.entries()) {
+        assert.equal(slot.face, index % 2 === 0 ? "front" : "back");
+        assert.ok(slot.x >= MIN_MARGIN_MM && slot.y >= MIN_MARGIN_MM);
+        assert.ok(slot.x + CARD_MM.width <= page.width - MIN_MARGIN_MM + 0.001);
+        assert.ok(slot.y + CARD_MM.height <= page.height - MIN_MARGIN_MM + 0.001);
+      }
+    }
+    assert.equal(cardsPerSheet("a4"), 3);
+    assert.equal(cardsPerSheet("letter"), 2);
   });
 
-  it("fills a square grid and a wider rectangle", () => {
-    const square = tileGrid("square", 4);
-    const rectangle = tileGrid("rectangle", 4);
-    assert.deepEqual(square, { columns: 2, rows: 2 });
-    assert.equal(rectangle.columns, 3);
-    assert.equal(rectangle.rows, 2);
-    const squareCells = tileCells("square", 4);
-    assert.equal(squareCells.length, 4);
-    assert.ok((squareCells[0]?.x ?? 1) < (squareCells[1]?.x ?? 0));
-    assert.ok((squareCells[0]?.y ?? 1) < (squareCells[2]?.y ?? 0));
-    const placed = defaultStickers(["a", "b", "c", "d"]);
-    const tiled = arrangeTiles(placed, "rectangle");
-    assert.deepEqual(
-      tiled.map((sticker) => sticker.key),
-      ["a", "b", "c", "d"],
-    );
-    assert.notEqual(tiled[0]?.x, placed[0]?.x);
-  });
-
-  it("offsets the next hex row and rings a circle", () => {
-    const hex = tileCells("hex", 6);
-    const columns = tileGrid("hex", 6).columns;
-    assert.ok(columns >= 2);
-    assert.ok((hex[columns]?.x ?? 0) > (hex[0]?.x ?? 1));
-    const circle = tileCells("circle", 6);
-    assert.equal(circle.length, 6);
-    const centerX = circle.reduce((sum, cell) => sum + cell.x, 0) / circle.length;
-    const centerY = circle.reduce((sum, cell) => sum + cell.y, 0) / circle.length;
-    const distances = circle.map((cell) => Math.hypot(cell.x - centerX, cell.y - centerY));
-    const nearest = Math.min(...distances);
-    const farthest = Math.max(...distances);
-    assert.ok(farthest - nearest < 0.08);
-    const hit = nearestTileIndex(6, "circle", circle[2]?.x ?? 0, circle[2]?.y ?? 0);
-    assert.equal(hit, 2);
+  it("leaves room beside the cards for the print steps and a 5 cm check line", () => {
+    for (const paper of ["a4", "letter"] as const) {
+      const { guide } = sheetSlots(paper);
+      assert.ok(guide.x >= MIN_MARGIN_MM);
+      assert.ok(guide.width >= 28, `${paper} guide column is too narrow`);
+      assert.ok(guide.height >= CHECK_RULER_MM + 40, `${paper} guide column is too short for the ruler`);
+    }
   });
 });

@@ -242,23 +242,26 @@ export function evolutionLine(speciesId: number): CatalogueLine {
   };
 }
 
-/** Names for a catalogue pick, in the order the ids were given. Unknown ids are skipped. */
-export function cataloguePick(ids: readonly number[]): Array<{ id: number; name: string }> {
+/** Name, Pokédex height, and colour for each picked id, in the order given. Unknown ids are skipped. */
+export function cataloguePick(
+  ids: readonly number[],
+): Array<{ id: number; name: string; heightDm: number; color: string }> {
   const wanted = ids.filter((id) => Number.isInteger(id) && id > 0).slice(0, 1025);
   if (wanted.length === 0) return [];
-  const found = new Map<number, string>();
+  type Row = { id: number; name: string; height_dm: number; color: string };
+  const found = new Map<number, Row>();
   const unique = [...new Set(wanted)];
   for (let index = 0; index < unique.length; index += 200) {
     const chunk = unique.slice(index, index + 200);
     const marks = chunk.map(() => "?").join(", ");
     const rows = db()
-      .prepare(`SELECT id, name FROM species WHERE id IN (${marks})`)
-      .all(...chunk) as Array<{ id: number; name: string }>;
-    for (const row of rows) found.set(row.id, row.name);
+      .prepare(`SELECT id, name, height_dm, color FROM species WHERE id IN (${marks})`)
+      .all(...chunk) as Row[];
+    for (const row of rows) found.set(row.id, row);
   }
   return wanted.flatMap((id) => {
-    const name = found.get(id);
-    return name ? [{ id, name }] : [];
+    const row = found.get(id);
+    return row ? [{ id, name: row.name, heightDm: row.height_dm, color: row.color }] : [];
   });
 }
 

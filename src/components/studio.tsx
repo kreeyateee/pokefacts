@@ -2048,6 +2048,9 @@ export function Studio({
                         })
                       }
                     />
+                    <Button type="button" variant="outline" className="h-11 px-4" onClick={() => setStickersOpen(true)}>
+                      Stickers
+                    </Button>
                   </div>
                   <p className="mt-2 text-xs leading-5 text-muted-foreground">
                     Sends this whole list ({card.rangeLabel}), not only the Pokémon on screen. Paper stickers come after
@@ -2293,6 +2296,9 @@ export function Studio({
                     })
                   }
                 />
+                <Button type="button" variant="outline" className="h-11 px-4" onClick={() => setStickersOpen(true)}>
+                  Stickers
+                </Button>
                 {kind === "meet" ? (
                   <Button
                     type="button"
