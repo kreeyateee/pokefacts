@@ -13,7 +13,7 @@ export type { BiologyBlock, BiologyView };
  */
 export const BULBAPEDIA_API = "https://bulbapedia.bulbagarden.net/w/api.php";
 
-export const BULBAPEDIA_USER_AGENT = "Pokefacts/0.1 (private household; mjlane90@gmail.com)";
+export const BULBAPEDIA_USER_AGENT = "Pokefacts/0.1 (+https://pokefacts.online)";
 
 const CACHE_FILE = path.join(/* turbopackIgnore: true */ process.cwd(), "data", "bulbapedia", "biology.json");
 
