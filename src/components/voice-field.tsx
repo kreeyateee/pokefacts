@@ -3,12 +3,19 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { isPiperVoice, PICKER_VOICES } from "@/lib/piper-voice";
+import { isPiperVoice, PICKER_VOICES, pickerVoice } from "@/lib/piper-voice";
 import { voiceSampleBody } from "@/lib/voice-choice";
 import { YOTO_VOICES } from "@/lib/yoto-icons";
 import { yotoFetch } from "@/lib/yoto-session";
 
 const sampleUrls = new Map<string, string>();
+
+/** Short rows of names instead of one long list. The note shows for the chosen voice. */
+const VOICE_GROUPS = [
+  { label: "Women", voices: PICKER_VOICES.filter((voice) => /\bwoman\b/i.test(voice.note)) },
+  { label: "Men", voices: PICKER_VOICES.filter((voice) => /\bman\b/i.test(voice.note)) },
+  { label: "Other", voices: PICKER_VOICES.filter((voice) => !/\b(wo)?man\b/i.test(voice.note)) },
+];
 
 export function VoiceField({
   id,
@@ -104,48 +111,52 @@ export function VoiceField({
     }
   }
 
+  const chosen = pickerVoice(value);
+  const chosenBusy = loadingId === chosen.id;
+  const chosenPlaying = hearingId === chosen.id;
+
   return (
     <fieldset className="grid gap-2 text-sm" disabled={disabled}>
       <legend className="pk-section-title">Voice</legend>
-      <div className="grid gap-2">
-        {PICKER_VOICES.map((voice) => {
-          const selected = value === voice.id;
-          const busy = loadingId === voice.id;
-          const playing = hearingId === voice.id;
-          return (
-            <div
-              key={voice.id}
-              className="pk-voice"
-              data-checked={selected ? "true" : undefined}
-            >
-              <label className="pk-voice-copy">
+      {VOICE_GROUPS.map((group) => (
+        <div key={group.label} className="grid gap-1">
+          <span className="text-xs font-bold text-muted-foreground">{group.label}</span>
+          <div className="flex flex-wrap gap-1.5">
+            {group.voices.map((voice) => (
+              <label key={voice.id} className="pk-voice-chip" title={voice.note}>
                 <input
                   type="radio"
                   name={id}
                   value={voice.id}
-                  checked={selected}
+                  checked={value === voice.id}
                   onChange={() => onChange(voice.id)}
+                  className="sr-only"
                 />
-                <span className="pk-voice-name">
-                  {voice.name}
-                  {voice.id === YOTO_VOICES[0].id ? <span className="pk-badge">Usual</span> : null}
-                  {isPiperVoice(voice.id) ? <span className="pk-badge pk-badge-lite">On this site</span> : null}
-                </span>
-                <span className="pk-voice-note">{voice.note}</span>
+                {voice.name}
               </label>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-9 px-3"
-                disabled={disabled}
-                aria-label={playing || busy ? `Stop ${voice.name}` : `Hear ${voice.name}`}
-                onClick={() => void hearSample(voice.id)}
-              >
-                {busy ? "Hearing…" : playing ? "Stop" : "Hear"}
-              </Button>
-            </div>
-          );
-        })}
+            ))}
+          </div>
+        </div>
+      ))}
+      <div className="pk-voice" data-checked="true">
+        <div className="pk-voice-copy">
+          <span className="pk-voice-name">
+            {chosen.name}
+            {chosen.id === YOTO_VOICES[0].id ? <span className="pk-badge">Usual</span> : null}
+            {isPiperVoice(chosen.id) ? <span className="pk-badge pk-badge-lite">On this site</span> : null}
+          </span>
+          <span className="pk-voice-note">{chosen.note}</span>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-9 px-3"
+          disabled={disabled}
+          aria-label={chosenPlaying || chosenBusy ? `Stop ${chosen.name}` : `Hear ${chosen.name}`}
+          onClick={() => void hearSample(chosen.id)}
+        >
+          {chosenBusy ? "Hearing…" : chosenPlaying ? "Stop" : "Hear"}
+        </Button>
       </div>
       <audio
         ref={audioRef}
@@ -160,7 +171,7 @@ export function VoiceField({
       ) : isPiperVoice(value) ? (
         <p className="text-xs leading-5 pk-quiet">
           Cori, British, in a Pokédex cadence. Hear works before you connect Yoto. Sending the card still needs a
-          login. Lily, George, Brian, and Adam are Yoto voices.
+          login. The other voices are recorded by Yoto.
         </p>
       ) : (
         <p className="text-xs leading-5 pk-quiet">

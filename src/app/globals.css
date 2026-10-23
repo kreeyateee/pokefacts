@@ -667,6 +667,41 @@
   background: var(--poke-yellow);
 }
 
+/* A voice name in the Settings picker. The radio inside is hidden; the chip shows the choice. */
+.pk-voice-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.25rem;
+  padding: 0 0.8rem;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  background: white;
+  color: var(--ink);
+  font-family: var(--font-fredoka), sans-serif;
+  font-size: 0.85rem;
+  font-weight: 700;
+  box-shadow: 2px 2px 0 var(--ink);
+  cursor: pointer;
+}
+
+.pk-voice-chip:hover {
+  background: #fff4c2;
+}
+
+.pk-voice-chip:has(input:checked) {
+  background: var(--poke-yellow);
+}
+
+.pk-voice-chip:has(input:focus-visible) {
+  outline: 3px solid var(--poke-red, #e10600);
+  outline-offset: 2px;
+}
+
+fieldset:disabled .pk-voice-chip {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 /* Bigger chips for small hands in the sticker studio. */
 .pk-chip-big {
   height: 2.75rem;
