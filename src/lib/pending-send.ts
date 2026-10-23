@@ -1,3 +1,4 @@
+import type { StickerCard } from "@/lib/sticker-cover";
 import { isScene, type Scene } from "@/lib/sticker-scenes";
 import { clampMix, type MixSettings } from "@/lib/playback-settings";
 import type { FinishedAudio, PlaylistUpload, RenderJob } from "@/lib/yoto-send";
@@ -24,11 +25,14 @@ export type PendingPlaylist = {
   libraryTitle: string;
   headline: string;
   rangeLabel: string;
+  /** The first Pokémon's artwork, the bare cover used when drawing the cover fails. */
   coverId?: number;
-  /** The cover's background, for a cover with nobody on it. */
+  /** The cover's background, in place of the one chosen for the set. */
   coverScene?: Scene;
   /** The cover's Pokémon is a silhouette, so a Who's That card does not give its first answer away. */
   coverHidden?: boolean;
+  /** The card the cover is drawn from: its sticker front, as the child designed it or as made for it. */
+  coverCard?: StickerCard;
   upload: PlaylistUpload;
   jobs: RenderJob[];
 };
@@ -107,6 +111,27 @@ function isStringList(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
+function isCoverCard(value: unknown): value is StickerCard {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.kind === "string" &&
+    typeof value.libraryTitle === "string" &&
+    typeof value.rangeLabel === "string" &&
+    typeof value.blurb === "string" &&
+    typeof value.childDoes === "string" &&
+    Array.isArray(value.chapters) &&
+    value.chapters.every(
+      (chapter) =>
+        isRecord(chapter) &&
+        typeof chapter.key === "string" &&
+        typeof chapter.title === "string" &&
+        typeof chapter.overlay === "string" &&
+        (chapter.dexId === undefined || typeof chapter.dexId === "number"),
+    )
+  );
+}
+
 function isPendingPlaylist(value: unknown): value is PendingPlaylist {
   if (!isRecord(value)) return false;
   return (
@@ -117,6 +142,7 @@ function isPendingPlaylist(value: unknown): value is PendingPlaylist {
     (value.coverId === undefined || typeof value.coverId === "number") &&
     (value.coverScene === undefined || isScene(value.coverScene)) &&
     (value.coverHidden === undefined || typeof value.coverHidden === "boolean") &&
+    (value.coverCard === undefined || isCoverCard(value.coverCard)) &&
     isRecord(value.upload) &&
     isRecord(value.upload.content) &&
     Array.isArray(value.jobs) &&

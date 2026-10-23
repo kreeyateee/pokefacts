@@ -9,6 +9,34 @@ import {
 } from "@/lib/sticker-layout";
 import { rangeLine, type HeroInfo } from "@/lib/sticker-styles";
 
+/**
+ * The parts of a card its stickers and its playlist cover are made from. A KidCard is one; a send in
+ * progress keeps just these, so a resumed send can still draw its cover.
+ */
+export type StickerCard = Pick<KidCard, "id" | "kind" | "rangeLabel" | "libraryTitle" | "blurb" | "childDoes"> & {
+  chapters: ReadonlyArray<Pick<KidChapter, "key" | "title" | "overlay" | "dexId" | "formId" | "sprite">>;
+};
+
+/** A card cut down to what its stickers need, without the spoken text. */
+export function stickerCard(card: StickerCard): StickerCard {
+  return {
+    id: card.id,
+    kind: card.kind,
+    rangeLabel: card.rangeLabel,
+    libraryTitle: card.libraryTitle,
+    blurb: card.blurb,
+    childDoes: card.childDoes,
+    chapters: card.chapters.map((chapter) => ({
+      key: chapter.key,
+      title: chapter.title,
+      overlay: chapter.overlay,
+      ...(chapter.dexId ? { dexId: chapter.dexId } : {}),
+      ...(chapter.formId ? { formId: chapter.formId } : {}),
+      ...(chapter.sprite ? { sprite: chapter.sprite } : {}),
+    })),
+  };
+}
+
 /** One Pokémon a child can put on a card. */
 export type StickerMon = {
   key: string;
@@ -32,13 +60,13 @@ export function hidesNames(card: Pick<KidCard, "kind">): boolean {
   return card.kind === "guess";
 }
 
-function artFor(chapter: KidChapter): string {
+function artFor(chapter: StickerCard["chapters"][number]): string {
   if (chapter.sprite?.includes("/artwork/")) return chapter.sprite;
   if (chapter.dexId) return artworkSrc(chapter.dexId);
   return chapter.sprite ?? "";
 }
 
-export function monsFor(card: KidCard): StickerMon[] {
+export function monsFor(card: Pick<StickerCard, "kind" | "chapters">): StickerMon[] {
   const guess = hidesNames(card);
   return card.chapters.flatMap((chapter) => {
     if (!chapter.dexId) return [];
@@ -56,7 +84,7 @@ export function monsFor(card: KidCard): StickerMon[] {
   });
 }
 
-export function linesFor(card: KidCard): string[] {
+export function linesFor(card: Pick<StickerCard, "kind" | "chapters">): string[] {
   if (hidesNames(card)) return [];
   return card.chapters.flatMap((chapter) => (chapter.dexId ? [playlistLine(chapter.overlay, chapter.title)] : []));
 }
@@ -66,23 +94,23 @@ export function countLabel(count: number, noun: string): string {
   return `${count} ${noun}`;
 }
 
-export function cardCountLabel(card: KidCard): string {
+export function cardCountLabel(card: Pick<StickerCard, "kind" | "chapters">): string {
   return countLabel(monsFor(card).length, nounFor(card.kind));
 }
 
-export function cardRangeText(card: KidCard): string {
+export function cardRangeText(card: Pick<StickerCard, "kind" | "chapters" | "rangeLabel">): string {
   const ids = card.chapters.flatMap((chapter) => (chapter.dexId ? [chapter.dexId] : []));
   return rangeLine({ ids, rangeLabel: card.rangeLabel, hidden: hidesNames(card) });
 }
 
-function detailFor(card: KidCard, count: number): string {
+function detailFor(card: StickerCard, count: number): string {
   const guess = hidesNames(card);
   const names = guess ? [] : card.chapters.flatMap((chapter) => (chapter.dexId ? [chapter.title] : []));
   const ids = card.chapters.flatMap((chapter) => (chapter.dexId ? [chapter.dexId] : []));
   return playlistDetail({ count, noun: nounFor(card.kind), names, hideNames: guess, ordered: isNumberRun(ids) });
 }
 
-export function suggestedCover(card: KidCard): CoverDraft {
+export function suggestedCover(card: StickerCard): CoverDraft {
   const mons = monsFor(card);
   return freshCover({
     libraryTitle: card.libraryTitle,
@@ -108,7 +136,7 @@ export function heroInfo(
 }
 
 /** "Make it for me": a new star from the card. Style, crowd, title, back, and owner stay as they are. */
-export function autoCover(card: KidCard, current: CoverDraft, random: () => number = Math.random): CoverDraft {
+export function autoCover(card: StickerCard, current: CoverDraft, random: () => number = Math.random): CoverDraft {
   const others = monsFor(card).filter((mon) => mon.key !== current.hero);
   const hero = others[Math.floor(random() * others.length)]?.key;
   return hero ? { ...current, hero } : current;

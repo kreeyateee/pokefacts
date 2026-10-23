@@ -2,7 +2,9 @@
 
 import { useCallback, useRef, useState } from "react";
 
-export type ImageEntry = readonly [key: string, src: string];
+import type { ImageEntry } from "@/lib/sticker-spec";
+
+export type { ImageEntry };
 
 /**
  * Pictures for the canvas, loaded once and kept by key. A picture that fails to load is kept as null,
