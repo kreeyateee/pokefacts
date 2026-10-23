@@ -11,6 +11,7 @@ import { Catalogue } from "@/components/catalogue";
 import { PlaybackPanel } from "@/components/playback-panel";
 import { CoffeeNudge } from "@/components/coffee-nudge";
 import { FavouritesBar, FavouritesDialog, useFavourites } from "@/components/favourites";
+import { JokeBox } from "@/components/joke-box";
 import { FAVOURITES_ASKED_KEY } from "@/lib/favourites";
 import { coverPng } from "@/components/cover-art";
 import { SendBanner, toastSendAllReady, toastSendReady, toastSendStarted } from "@/components/send-banner";
@@ -52,6 +53,7 @@ import {
   guessPoolFromCards,
   isFormPlaylistKind,
   isSpeciesPlaylistKind,
+  jokePlaylist,
   speciesPlaylists,
   guessUpload,
   mulberry32,
@@ -567,7 +569,7 @@ function revealChoice(nav: HTMLElement) {
   nav.scrollLeft += itemRect.left - navRect.left - (nav.clientWidth - selected.clientWidth) / 2;
 }
 
-type PlaylistMap = Record<FormPlaylistKind | "legendary" | "mythical" | "starter", KidCard[]>;
+type PlaylistMap = Record<FormPlaylistKind | "legendary" | "mythical" | "starter" | "joke", KidCard[]>;
 
 /** One picture for each set on the ready-made shelf. Who's That shows a shadow. */
 function shelfPicturesFor(lists: PlaylistMap): Partial<Record<ReadyKind, ShelfPicture>> {
@@ -590,6 +592,11 @@ function readsSpeciesBiology(kind: KidCardKind): boolean {
   return kind === "meet" || isSpeciesPlaylistKind(kind);
 }
 
+/** A set whose cards are kept in the playlist map: the forms, the species sets, and the Joke Book. */
+function isPlaylistMapKind(kind: KidCardKind): kind is keyof PlaylistMap {
+  return kind === "joke" || isFormPlaylistKind(kind) || isSpeciesPlaylistKind(kind);
+}
+
 function activePlaylist(lists: PlaylistMap, kind: keyof PlaylistMap, id: string): KidCard | undefined {
   return lists[kind].find((item) => item.id === id) ?? lists[kind][0];
 }
@@ -603,6 +610,7 @@ export function Studio({
   legendary = speciesPlaylists("legendary", []),
   mythical = speciesPlaylists("mythical", []),
   starter = speciesPlaylists("starter", []),
+  joke = [jokePlaylist([])],
 }: {
   cards: KidCard[];
   mega?: KidCard;
@@ -612,6 +620,7 @@ export function Studio({
   legendary?: KidCard[];
   mythical?: KidCard[];
   starter?: KidCard[];
+  joke?: KidCard[];
 }) {
   const factsCards = cards.filter((card) => card.kind === "meet");
   const factPool = factPoolFromCards(cards);
@@ -629,6 +638,7 @@ export function Studio({
     legendary,
     mythical,
     starter,
+    joke,
   };
   const [playlists, setPlaylists] = useState(initialPlaylists);
   const playlistsRef = useRef(initialPlaylists);
@@ -641,6 +651,7 @@ export function Studio({
     legendary: legendary[0]?.id ?? "legendary",
     mythical: mythical[0]?.id ?? "mythical",
     starter: starter[0]?.id ?? "starters",
+    joke: joke[0]?.id ?? "jokes",
   });
   const [factSpeech, setFactSpeech] = useState<{ id: number; speech: string; url: string; notice: string } | null>(
     null,
@@ -695,7 +706,7 @@ export function Studio({
 
   const cardId = kind === "meet" ? factsId : guessId;
   const playlistCard =
-    isFormPlaylistKind(kind) || isSpeciesPlaylistKind(kind)
+    isPlaylistMapKind(kind)
       ? activePlaylist(playlists, kind, playlistId[kind])
       : undefined;
   const card =
@@ -711,7 +722,7 @@ export function Studio({
     card?.chapters.find((item) => item.key === chapterKey) ??
     (card ? playableChapters(card)[0] : undefined);
   const rangeCards =
-    isFormPlaylistKind(kind) || isSpeciesPlaylistKind(kind)
+    isPlaylistMapKind(kind)
       ? playlists[kind]
       : kind === "meet"
         ? [randomCard, ...factsCards]
@@ -834,7 +845,7 @@ export function Studio({
     setKind(next.kind);
     if (next.kind === "meet") setFactsId(next.id);
     else if (next.kind === "guess") setGuessId(next.id);
-    else if (isFormPlaylistKind(next.kind) || isSpeciesPlaylistKind(next.kind)) {
+    else if (isPlaylistMapKind(next.kind)) {
       const playlistKind = next.kind;
       setPlaylistId((current) => ({ ...current, [playlistKind]: next.id }));
     }
@@ -891,7 +902,7 @@ export function Studio({
     }
     setView("cards");
     setKind(nextKind);
-    if (isFormPlaylistKind(nextKind) || isSpeciesPlaylistKind(nextKind)) {
+    if (isPlaylistMapKind(nextKind)) {
       const next = activePlaylist(playlistsRef.current, nextKind, playlistId[nextKind]);
       setChapterKey(next ? (playableChapters(next)[0]?.key ?? "start") : "start");
       if (isFormPlaylistKind(nextKind)) void ensureFormProse(nextKind);
@@ -1892,7 +1903,8 @@ export function Studio({
         const formKind = isFormPlaylistKind(card.kind);
         let dexNote = "";
         let spokenCard = card;
-        if (!formKind && card.kind !== "guess") {
+        // Facts and species cards read Bulbapedia's description; the Joke Book reads its jokes.
+        if (!formKind && card.kind !== "guess" && card.kind !== "joke") {
           const readings = await speechesFor(card, (done, total, notice) => {
             if (notice) dexNote = notice;
             setJob({
@@ -2534,6 +2546,7 @@ export function Studio({
         ) : null}
         </div>
         {view !== "setup" && !cardPrompt ? <FavouritesBar ids={favourites} onEdit={() => setFavouritesOpen(true)} /> : null}
+        {view !== "setup" && !cardPrompt ? <JokeBox /> : null}
         {view !== "setup" && !cardPrompt ? (
           <PlaybackPanel
             settings={playback}

@@ -99,7 +99,7 @@ export function SetupGuide({
       <ul className="mt-2 grid gap-2 text-sm leading-6">
         <li>
           <span className="font-bold">Ready-made</span> — finished playlists. Pick a set (Facts,
-          Who&apos;s That, Starters, Mega, Gigantamax, Alolan, Hisuian, Legendary, or Mythical), then a
+          Who&apos;s That, Starters, Jokes, Mega, Gigantamax, Alolan, Hisuian, Legendary, or Mythical), then a
           playlist. Facts is a good place to start.
         </li>
         <li>

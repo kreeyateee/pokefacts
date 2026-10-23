@@ -481,8 +481,8 @@
   }
 
   .pk-shelf-grid {
-    /* Every set on one row. */
-    grid-template-columns: repeat(9, minmax(0, 1fr));
+    /* Every set on one row, with the labels a touch smaller so "Gigantamax" fits. */
+    grid-template-columns: repeat(10, minmax(0, 1fr));
     gap: 0.6rem;
   }
 }
@@ -556,6 +556,12 @@
 
   .pk-tile-label {
     font-size: 0.9rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .pk-tile-label {
+    font-size: 0.8rem;
   }
 }
 

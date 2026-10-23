@@ -2,6 +2,7 @@ import { artworkSrc as formArtworkSrc } from "@/lib/artwork-path";
 import { artworkSrc } from "@/lib/page-artwork";
 import type { BiologyBlock } from "@/lib/catalogue-types";
 import { dexBlurb, guessSpoken, pickDexEntry, type MonSheet } from "@/lib/dex-facts";
+import { JOKES } from "@/lib/jokes";
 import { pronounce } from "@/lib/pronounce";
 import { spokenWiki } from "@/lib/spoken-wiki";
 import { chosenVoice, isPiperVoice } from "@/lib/piper-voice";
@@ -81,6 +82,7 @@ export type KidCardKind =
   | "legendary"
   | "mythical"
   | "starter"
+  | "joke"
   | "story";
 
 export type FormPlaylistKind = "mega" | "gmax" | "alola" | "hisui";
@@ -207,6 +209,7 @@ export function rangeLabel(kind: KidCardKind, first: number, last: number, index
   if (kind === "legendary") return "Legendary Pokémon";
   if (kind === "mythical") return "Mythical Pokémon";
   if (kind === "starter") return "Starter Pokémon";
+  if (kind === "joke") return "Pokémon Joke Book";
   const span = first === last ? String(first) : `${first}-${last}`;
   if (kind === "meet") return `${pokefactsTitle(index)} (${span})`;
   return `Who's That Pokémon ${span}`;
@@ -859,6 +862,36 @@ function speciesPlaylistChapter(sheet: MonSheet): KidChapter {
     ...chapter,
     icon,
     tracks: chapter.tracks.map((track) => ({ ...track, icon })),
+  };
+}
+
+export const JOKE_PLAYLIST_ID = "jokes";
+
+/** The Joke Book: one track per joke, each the Pokémon's cry, the question, a pause, then the punchline. */
+export function jokePlaylist(sheets: readonly MonSheet[]): KidCard {
+  const byId = new Map(sheets.map((sheet) => [sheet.id, sheet]));
+  const chapters = JOKES.flatMap((joke) => {
+    const sheet = byId.get(joke.dexId);
+    if (!sheet) return [];
+    const number = String(sheet.id);
+    const icon = `/pixels/${sheet.id}.png`;
+    const text = `Here's a joke about ${sheet.name}. ${joke.setup} ... ${joke.punchline}`;
+    return [
+      picture(`joke-${sheet.slug}`, sheet.name, number, "this Pokémon", number, icon, [talk("joke", sheet.name, text, icon, number, undefined, "cry")], {
+        sprite: artworkSrc(sheet.id),
+        dexId: sheet.id,
+      }),
+    ];
+  });
+  return {
+    id: JOKE_PLAYLIST_ID,
+    kind: "joke",
+    title: "Pokémon Joke Book",
+    rangeLabel: "Pokémon Joke Book",
+    libraryTitle: "Pokémon Joke Book",
+    blurb: "The cry, then a joke about that Pokémon.",
+    childDoes: "Turn to a picture and press play. You hear the cry, then a joke about that Pokémon.",
+    chapters,
   };
 }
 

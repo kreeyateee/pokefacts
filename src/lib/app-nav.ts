@@ -7,7 +7,7 @@ export type SectionId = "ready" | "own" | "adventures" | "printables" | "music";
 
 export type CollectionKind = Extract<
   KidCardKind,
-  "starter" | "mega" | "gmax" | "alola" | "hisui" | "legendary" | "mythical"
+  "starter" | "joke" | "mega" | "gmax" | "alola" | "hisui" | "legendary" | "mythical"
 >;
 
 export type ReadyKind = "meet" | "guess" | CollectionKind;
@@ -29,6 +29,7 @@ export const COLLECTION_TABS: ReadonlyArray<{
   title: string;
 }> = [
   { kind: "starter", label: "Starters", title: "Starter Pokémon" },
+  { kind: "joke", label: "Jokes", title: "Pokémon Joke Book" },
   { kind: "mega", label: "Mega", title: "Mega Evolutions" },
   { kind: "gmax", label: "Gigantamax", title: "Gigantamax" },
   { kind: "alola", label: "Alolan", title: "Alolan forms" },
@@ -140,7 +141,9 @@ export function pageHeading(input: {
       blurb:
         input.kind === "starter"
           ? "Every region's starter Pokémon, all three steps of each. Hear one, then send the set to Yoto."
-          : "Special forms and legendaries. Hear one, then send the set to Yoto.",
+          : input.kind === "joke"
+            ? "Fifty Pokémon jokes, each with the Pokémon's cry. Hear one, then send the book to Yoto."
+            : "Special forms and legendaries. Hear one, then send the set to Yoto.",
     };
   }
   return {

@@ -11,6 +11,7 @@
  * goes. `planGym` does the picking; `buildGym` turns a plan into the story map.
  */
 import { listBaseTotals, listMonSheets, listSpecialSpecies } from "@/lib/catalogue-db";
+import { jokesFor, toldBy, type Joke } from "@/lib/jokes";
 import type { AdventureInput } from "@/lib/story/adventure-route";
 import type { MonSheet } from "@/lib/dex-facts";
 import { drawSample, mulberry32 } from "@/lib/kid-cards";
@@ -342,6 +343,7 @@ function cast(): StoryCharacter[] {
 /** Turns a plan into the story map. Pure: the same plan always gives the same story. */
 export function buildGym(plan: GymPlan): StoryGraph {
   const words = decks(mulberry32((plan.seed ^ 0x6a4d21) >>> 0));
+  const jokes = jokesFor(mulberry32((plan.seed ^ 0x70e) >>> 0));
   const owner = plan.owner;
   const nodes: StoryNode[] = [];
   const team = plan.team.map((mon) =>
@@ -421,7 +423,13 @@ export function buildGym(plan: GymPlan): StoryGraph {
       title: `${gym.badge} Badge`,
       icon: { pixel: `badge-${gym.type.toLowerCase()}` as StoryPixel },
       bed: { ambience: "stadium", music: "bright" },
-      text: join(winText(ace, words), gym.farewell, fill(words.badge(), { count: W.badgeCount(number) })),
+      text: join(
+        winText(ace, words),
+        gym.farewell,
+        fill(words.badge(), { count: W.badgeCount(number) }),
+        // Ronnie celebrates two of the badges with a joke.
+        number === 2 || number === 6 ? toldBy("Ronnie", jokes[number === 2 ? 0 : 1] as Joke) : "",
+      ),
       next,
     });
   });

@@ -11,6 +11,7 @@
  * each starter's journey is laid out once for none, one, and two or more misses: 89 tracks in all.
  */
 import { mulberry32 } from "@/lib/kid-cards";
+import { jokesFor, toldBy } from "@/lib/jokes";
 import type { AdventureInput, Partner } from "@/lib/story/adventure-route";
 import type { StoryGraph, StoryNode } from "@/lib/story/story-graph";
 import type { StoryBed } from "@/lib/story/story-sound";
@@ -268,6 +269,7 @@ export function buildPaldea(plan: PaldeaPlan, ownerName = "", partner?: Partner)
   const you = owner || "new student";
   const nodes: StoryNode[] = [];
   const pfx: Record<Starter["key"], string> = { grass: "g", fire: "f", water: "w" };
+  const joke = jokesFor(mulberry32((plan.seed ^ 0x70e) >>> 0))[0] as NonNullable<ReturnType<typeof jokesFor>[number]>;
 
   nodes.push({
     id: "start",
@@ -339,6 +341,7 @@ export function buildPaldea(plan: PaldeaPlan, ownerName = "", partner?: Partner)
           text: [
             goodText(stage, mine, mine.happy[index % mine.happy.length] as string),
             partner && index === 1 ? `${P} cheers ${mine.name} on from right beside you.` : "",
+            index === 0 ? toldBy("Juno", joke) : "",
             cheer(index, false, misses, mine),
           ]
             .filter(Boolean)

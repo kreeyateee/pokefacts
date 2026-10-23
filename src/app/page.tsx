@@ -5,10 +5,11 @@ import {
   listHisuianForms,
   listLegendarySheets,
   listMegaForms,
+  listMonSheets,
   listMythicalSheets,
   listStarterSheets,
 } from "@/lib/catalogue-db";
-import { formPlaylist, formPlaylists, speciesPlaylists } from "@/lib/kid-cards";
+import { formPlaylist, formPlaylists, jokePlaylist, speciesPlaylists } from "@/lib/kid-cards";
 import { loadKidCards } from "@/lib/load-kid-cards";
 
 export default async function Home() {
@@ -20,6 +21,7 @@ export default async function Home() {
   const legendary = speciesPlaylists("legendary", listLegendarySheets());
   const mythical = speciesPlaylists("mythical", listMythicalSheets());
   const starter = speciesPlaylists("starter", listStarterSheets());
+  const joke = [jokePlaylist(listMonSheets())];
   return (
     <Studio
       cards={cards}
@@ -30,6 +32,7 @@ export default async function Home() {
       legendary={legendary}
       mythical={mythical}
       starter={starter}
+      joke={joke}
     />
   );
 }

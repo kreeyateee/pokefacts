@@ -29,9 +29,9 @@ describe("app navigation", () => {
   it("puts every ready-made set on one shelf", () => {
     assert.deepEqual(
       READY_CATEGORIES.map((item) => item.kind),
-      ["meet", "guess", "starter", "mega", "gmax", "alola", "hisui", "legendary", "mythical"],
+      ["meet", "guess", "starter", "joke", "mega", "gmax", "alola", "hisui", "legendary", "mythical"],
     );
-    assert.equal(COLLECTION_TABS.length, 7);
+    assert.equal(COLLECTION_TABS.length, 8);
     assert.equal(isCollectionKind("starter"), true);
     assert.match(pageHeading({ view: "cards", kind: "starter" }).blurb, /starter Pokémon, all three steps/);
     assert.equal(isCollectionKind("mega"), true);
