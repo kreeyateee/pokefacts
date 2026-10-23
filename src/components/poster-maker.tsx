@@ -4,6 +4,7 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { BRAND_FILES, canvasFonts, downloadPdf, jpegPage } from "@/components/sticker/print-kit";
+import { SceneChooser } from "@/components/sticker/scene-chooser";
 import { useImageCache, type ImageEntry } from "@/components/sticker/use-image-cache";
 import { useSpeciesSizes } from "@/components/sticker/use-species-sizes";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import { posterCollection, REGION_POSTERS, STARTER_POSTERS, type PosterCollectio
 import { hidesNames, monsFor } from "@/lib/sticker-cover";
 import { mmToPx, posterFilename, PRINT_DPI, SHEET_PREVIEW_DPI } from "@/lib/sticker-layout";
 import { paintPoster, type CrowdPaint } from "@/lib/sticker-paint";
+import type { Scene } from "@/lib/sticker-scenes";
 import { jpegPagesPdf } from "@/lib/sticker-pdf";
 import { POSTER_PAPER_MM, type PosterStyle } from "@/lib/sticker-styles";
 
@@ -92,6 +94,8 @@ export function PosterMaker({ playlist, onOwnPick }: { playlist: KidCard; onOwnP
   const [sourceId, setSourceId] = useStoredState(SOURCE_KEY, keepSource, writeSource);
   const [style, setStyle] = useState<PosterStyle>("photo");
   const [sprites, setSprites] = useState(false);
+  const [pickedScene, setPickedScene] = useState<Scene | null>(null);
+  const scene: Scene = pickedScene ?? (style === "pile" ? "plain" : "sky");
   const [shake, setShake] = useState(0);
   const [titles, setTitles] = useState<Record<string, string>>({});
   const [mine, setMine] = useState<number[] | null>(null);
@@ -147,6 +151,7 @@ export function PosterMaker({ playlist, onOwnPick }: { playlist: KidCard; onOwnP
         color: sizes[dexId]?.color,
       })),
       pixelated: sprites,
+      scene,
       pileSeed: 7919 * (crowd?.dexIds[0] ?? 1) + shake,
       images: images.current,
       fonts: canvasFonts(),
@@ -174,7 +179,7 @@ export function PosterMaker({ playlist, onOwnPick }: { playlist: KidCard; onOwnP
     return () => {
       cancelled = true;
     };
-  }, [crowd, style, sprites, shake, title, version, sizes]);
+  }, [crowd, style, sprites, scene, shake, title, version, sizes]);
 
   function choose(id: string) {
     setSourceId(id);
@@ -272,6 +277,7 @@ export function PosterMaker({ playlist, onOwnPick }: { playlist: KidCard; onOwnP
             chosen={sprites ? "sprites" : "art"}
             onChoose={(id) => setSprites(id === "sprites")}
           />
+          <SceneChooser scene={scene} onScene={setPickedScene} />
 
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" className="h-12 px-6 text-base" disabled={busy || total === 0} onClick={() => void save()}>

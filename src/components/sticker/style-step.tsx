@@ -1,7 +1,9 @@
 "use client";
 
+import { SceneChooser } from "@/components/sticker/scene-chooser";
 import { Button } from "@/components/ui/button";
 import { PREVIEW_DPI, cardPixelSize, type CoverStyle } from "@/lib/sticker-layout";
+import type { Scene } from "@/lib/sticker-scenes";
 import { STYLE_CHOICES } from "@/lib/sticker-styles";
 
 const THUMB = cardPixelSize(PREVIEW_DPI / 2.5);
@@ -10,11 +12,13 @@ const THUMB = cardPixelSize(PREVIEW_DPI / 2.5);
 export function StyleStep({
   style,
   sprites,
+  scene,
   title,
   owner,
   thumbRef,
   onStyle,
   onSprites,
+  onScene,
   onTitle,
   onOwner,
   onTextFocus,
@@ -22,11 +26,14 @@ export function StyleStep({
 }: {
   style: CoverStyle;
   sprites: boolean;
+  /** Behind the group photo or the pile. */
+  scene: Scene;
   title: string;
   owner: string;
   thumbRef: (style: CoverStyle) => (canvas: HTMLCanvasElement | null) => void;
   onStyle: (style: CoverStyle) => void;
   onSprites: (sprites: boolean) => void;
+  onScene: (scene: Scene) => void;
   onTitle: (title: string) => void;
   onOwner: (owner: string) => void;
   onTextFocus: () => void;
@@ -70,6 +77,7 @@ export function StyleStep({
           Game sprites
         </button>
       </div>
+      {style === "photo" || style === "pile" ? <SceneChooser scene={scene} onScene={onScene} /> : null}
       <Button type="button" variant="outline" className="h-12 justify-self-start px-5 text-base" onClick={onMakeIt}>
         Make it for me
       </Button>

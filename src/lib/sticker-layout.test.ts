@@ -53,6 +53,13 @@ describe("saved covers", () => {
     assert.equal(cover.title, "My card");
     assert.equal(cover.crowd, null);
     assert.equal(cover.hero, "a");
+    assert.equal(cover.scene, null, "an old cover keeps its usual background");
+  });
+
+  it("keeps a chosen background, and drops one it does not know", () => {
+    assert.equal(readCoverDraft(JSON.stringify({ ...fresh, scene: "cave" }), fresh, keys).scene, "cave");
+    assert.equal(readCoverDraft(JSON.stringify({ ...fresh, scene: "lava" }), fresh, keys).scene, null);
+    assert.equal(fresh.scene, null);
   });
 
   it("keeps the style, star, owner, and crowd, and drops anyone not on this card", () => {

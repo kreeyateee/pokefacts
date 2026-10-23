@@ -1,3 +1,5 @@
+import { isScene, type Scene } from "@/lib/sticker-scenes";
+
 /** Yoto Make Your Own cards are credit-card size, portrait, with rounded corners. */
 export const CARD_MM = { width: 54, height: 85.6, radius: 3.18 } as const;
 
@@ -72,6 +74,8 @@ export type CoverDraft = {
   sprites: boolean;
   /** Shakes the pile into a new arrangement. */
   pileSeed: number;
+  /** Behind the group photo or the pile, or null for its usual one: blue sky behind the photo, white behind the pile. */
+  scene: Scene | null;
   painting: string;
   drawLayer: DrawLayer;
   /** When this cover was last saved, so old picks can be tidied away. */
@@ -265,6 +269,7 @@ export function freshCover(input: {
     crowd: null,
     sprites: false,
     pileSeed: 0,
+    scene: null,
     painting: "",
     drawLayer: "behind",
     savedAt: 0,
@@ -320,6 +325,7 @@ export function readCoverDraft(raw: string | null, fresh: CoverDraft, keys: Read
     crowd,
     sprites: parsed.sprites === true,
     pileSeed: typeof parsed.pileSeed === "number" && Number.isInteger(parsed.pileSeed) ? parsed.pileSeed : 0,
+    scene: isScene(parsed.scene) ? parsed.scene : null,
     painting: paintingUrl(parsed.painting),
     drawLayer: drawLayer(parsed.drawLayer, coverStyle(parsed.style)),
     savedAt: typeof parsed.savedAt === "number" && Number.isFinite(parsed.savedAt) ? parsed.savedAt : 0,

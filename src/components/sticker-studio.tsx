@@ -224,6 +224,7 @@ export function StickerStudio({
         color: mon.dexId ? sizes[mon.dexId]?.color : undefined,
       })),
       pixelated: itemCover.sprites,
+      scene: itemCover.scene ?? undefined,
       pileSeed: pileSeed(item.id) + itemCover.pileSeed,
       images: pictures,
       fonts: fonts(),
@@ -534,6 +535,7 @@ export function StickerStudio({
               <StyleStep
                 style={cover.style}
                 sprites={cover.sprites}
+                scene={cover.scene ?? (cover.style === "pile" ? "plain" : "sky")}
                 title={cover.title}
                 owner={cover.owner}
                 thumbRef={(style) => (canvas) => {
@@ -545,6 +547,9 @@ export function StickerStudio({
                 }}
                 onSprites={(sprites) => {
                   if (sprites !== cover.sprites) change((current) => ({ ...current, sprites }));
+                }}
+                onScene={(scene) => {
+                  if (scene !== cover.scene) change((current) => ({ ...current, scene }));
                 }}
                 onTitle={(title) => change((current) => ({ ...current, title }), false)}
                 onOwner={(owner) => change((current) => ({ ...current, owner }), false)}

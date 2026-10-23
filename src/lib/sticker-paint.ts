@@ -18,6 +18,7 @@ import {
 } from "@/lib/sticker-layout";
 import { maskFromAlpha, pilePhoto, type PileMask } from "@/lib/sticker-pile";
 import { groupPhoto } from "@/lib/sticker-photo";
+import { paintScene, type Scene } from "@/lib/sticker-scenes";
 import {
   BACK_FACE,
   PHOTO_FRONT,
@@ -67,6 +68,8 @@ export type CardPaint = {
   /** Where the drawing goes. Each front paints it at one of two points. */
   drawLayer: DrawLayer;
   hero: { image: CanvasImageSource | null; info: HeroInfo } | null;
+  /** Behind the group photo or the pile. The photo starts on the blue sky, the pile on plain white. */
+  scene?: Scene;
 };
 
 /**
@@ -75,7 +78,7 @@ export type CardPaint = {
  */
 export type CrowdPaint = Pick<
   CardPaint,
-  "title" | "hidden" | "crowd" | "pixelated" | "pileSeed" | "images" | "fonts" | "painting" | "drawLayer"
+  "title" | "hidden" | "crowd" | "pixelated" | "pileSeed" | "images" | "fonts" | "painting" | "drawLayer" | "scene"
 >;
 
 type Fonts = CardPaint["fonts"];
@@ -342,12 +345,8 @@ function paintPhotoFront(
   layout: PhotoLayout = PHOTO_FRONT,
 ) {
   const mm = scaleFor(ctx);
-  const sky = ctx.createLinearGradient(0, 0, 0, height);
-  sky.addColorStop(0, "#9fd3ff");
-  sky.addColorStop(0.55, "#e6f4ff");
-  sky.addColorStop(1, "#fff1c9");
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, width, height);
+  const scene = spec.scene ?? "sky";
+  paintScene(ctx, scene, width, height);
   paintDrawing(ctx, spec, width, height, "behind");
 
   const area = box(layout.crowd, mm);
@@ -355,8 +354,8 @@ function paintPhotoFront(
   const byKey = new Map(members.map((member) => [member.key, member]));
   const photo = groupPhoto(members, area.w / mm, area.h / mm);
 
-  // Risers: one step under each row, back to front.
-  const rows = [...new Set(photo.map((item) => item.row))];
+  // Risers: one step under each row, back to front. A scene has its own ground, so they stand on that.
+  const rows = scene === "sky" ? [...new Set(photo.map((item) => item.row))] : [];
   for (const row of rows) {
     const baseline = photo.find((item) => item.row === row)?.baseline ?? 0;
     ctx.fillStyle = row % 2 === 0 ? "rgba(201, 164, 58, 0.28)" : "rgba(201, 164, 58, 0.18)";
@@ -414,8 +413,7 @@ function paintPileFront(
   layout: PileLayout = PILE_FRONT,
 ) {
   const mm = scaleFor(ctx);
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, width, height);
+  paintScene(ctx, spec.scene ?? "plain", width, height);
   paintDrawing(ctx, spec, width, height, "behind");
   const area = box(layout.crowd, mm);
   const members = crowdPictures(spec);
