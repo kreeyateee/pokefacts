@@ -327,7 +327,7 @@ function writeStill(file: string, frame: Scene) {
 }
 
 /** The 16×16 pictures for the Yoto screen, drawn pixel by pixel. */
-const PIXEL_ART: Record<StoryPixel, string[]> = {
+const PIXEL_ART: Record<"pokeball" | "pokeball-caught" | "pokeball-broken", string[]> = {
   pokeball: [
     "................",
     ".....KKKKKK.....",
@@ -385,6 +385,76 @@ const PIXEL_ART: Record<StoryPixel, string[]> = {
     "................",
   ],
 };
+/** A gym badge: an eight-sided gem with a sparkle, in each gym's colours (C main, L light, D dark). */
+const BADGE_ART = [
+  "................",
+  ".....KKKKKK.....",
+  "....KLLCCCCK....",
+  "...KLLCCCCCDK...",
+  "..KLLCCCCCCCDK..",
+  "..KLCCCCCCCCDK..",
+  "..KCCCCWCCCCDK..",
+  "..KCCCWWWCCCDK..",
+  "..KCCCCWCCCCDK..",
+  "..KCCCCCCCCDDK..",
+  "..KDCCCCCCCDDK..",
+  "...KDDCCCCDDK...",
+  "....KDDDDDDK....",
+  ".....KKKKKK.....",
+  "................",
+  "................",
+];
+
+type RGBA = [number, number, number, number];
+const hex = (value: string): RGBA => [
+  Number.parseInt(value.slice(1, 3), 16),
+  Number.parseInt(value.slice(3, 5), 16),
+  Number.parseInt(value.slice(5, 7), 16),
+  255,
+];
+
+const BADGE_COLOURS: Record<string, [string, string, string]> = {
+  "badge-rock": ["#b8a038", "#e0d080", "#7a6a20"],
+  "badge-water": ["#3890f0", "#9fd0ff", "#1f5fb0"],
+  "badge-grass": ["#48b848", "#a8e8a0", "#2a7a2a"],
+  "badge-electric": ["#f8d030", "#fff4a0", "#b89010"],
+  "badge-flying": ["#a890f0", "#d8ccff", "#6a58b0"],
+  "badge-fire": ["#f08030", "#ffc090", "#b04a10"],
+  "badge-ground": ["#d8a050", "#f0d0a0", "#8a6020"],
+  "badge-dragon": ["#7038f8", "#b8a0ff", "#4010a8"],
+};
+
+const TROPHY_ART = [
+  "................",
+  "..KKKKKKKKKKKK..",
+  ".KYLLYYYYYYYDYK.",
+  "KYKYLYYYYYYYDKYK",
+  "KYKYYYYYYYYYDKYK",
+  ".KKYYYYYYYYYDKK.",
+  "...KYYYYYYYDK...",
+  "....KYYYYYDK....",
+  ".....KYYYDK.....",
+  "......KYDK......",
+  "......KYDK......",
+  ".....KYYYDK.....",
+  "....KKKKKKKK....",
+  "....KDDDDDDK....",
+  "....KKKKKKKK....",
+  "................",
+];
+
+function artFor(name: StoryPixel): { art: string[]; colours: Record<string, RGBA> } {
+  const badge = BADGE_COLOURS[name];
+  if (badge) {
+    const [main, light, dark] = badge;
+    return { art: BADGE_ART, colours: { ...PIXEL_COLOURS, C: hex(main), L: hex(light), D: hex(dark) } };
+  }
+  if (name === "trophy") {
+    return { art: TROPHY_ART, colours: { ...PIXEL_COLOURS, Y: hex("#f8c838"), L: hex("#fff0a0"), D: hex("#b08010") } };
+  }
+  return { art: PIXEL_ART[name as keyof typeof PIXEL_ART], colours: PIXEL_COLOURS };
+}
+
 const PIXEL_COLOURS: Record<string, [number, number, number, number]> = {
   ".": [0, 0, 0, 0],
   K: [24, 24, 30, 255],
@@ -395,12 +465,12 @@ const PIXEL_COLOURS: Record<string, [number, number, number, number]> = {
 };
 
 function writePixel(name: StoryPixel) {
-  const art = PIXEL_ART[name];
+  const { art, colours } = artFor(name);
   if (art.length !== 16 || art.some((row) => row.length !== 16)) throw new Error(`${name} is not 16 by 16.`);
   const output = path.join(process.cwd(), "public", STORY_PIXELS[name]);
   mkdirSync(path.dirname(output), { recursive: true });
   const raw = Buffer.alloc(16 * 16 * 4);
-  art.forEach((row, y) => [...row].forEach((cell, x) => raw.set(PIXEL_COLOURS[cell] ?? [0, 0, 0, 0], (y * 16 + x) * 4)));
+  art.forEach((row, y) => [...row].forEach((cell, x) => raw.set(colours[cell] ?? [0, 0, 0, 0], (y * 16 + x) * 4)));
   execFileSync(
     ffmpegCommand(),
     ["-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgba", "-s", "16x16", "-i", "pipe:0", "-frames:v", "1", output],
@@ -425,4 +495,4 @@ for (const [name, make] of [
   const still = name === "caught" ? POKEBALL_STILLS.caught : name === "broke-free" ? POKEBALL_STILLS.brokeFree : undefined;
   if (still) writeStill(still, frames.at(-1) as Scene);
 }
-for (const name of Object.keys(PIXEL_ART) as StoryPixel[]) writePixel(name);
+for (const name of Object.keys(STORY_PIXELS) as StoryPixel[]) writePixel(name);

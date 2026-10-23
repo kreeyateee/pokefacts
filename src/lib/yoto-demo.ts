@@ -271,6 +271,7 @@ async function partsDemo(
           : recordVoice(token, part.text, title, part.voiceId, fetchImpl, options),
       options.sounds,
       bed,
+      options.loadCry ?? ((id: number) => ensureCry(id, fetchImpl)),
     );
   let joined: { wav: Buffer; cues: SoundCue[] };
   try {

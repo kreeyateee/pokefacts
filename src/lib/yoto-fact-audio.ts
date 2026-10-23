@@ -1124,7 +1124,9 @@ export async function prepareFactTrack(
     for (const part of spoken) if (!stats.recorded.has(speechKey(part.text, part.voiceId))) stats.cached += 1;
     stats.tracks += 1;
     logSend(sendId, stats);
-    const joined = await joinTrackParts(lines, (part) => readFile(fileFor(part)), roots.sounds, bed);
+    const joined = await joinTrackParts(lines, (part) => readFile(fileFor(part)), roots.sounds, bed, (id) =>
+      ensureCry(id, fetchImpl, roots.cries ?? CRY_CACHE),
+    );
     return finishSpeech(joined.wav, true);
   };
 

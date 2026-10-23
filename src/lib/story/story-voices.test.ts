@@ -34,7 +34,9 @@ const [LILY, GEORGE, ALICE, MATILDA, LIAM, WILL] = ["Lily", "George", "Alice", "
 ];
 
 function who(lines: SpeakerLine[]): string[] {
-  return lines.map((line) => ("sound" in line ? `[${line.sound}]` : `${line.speaker}: ${line.text}`));
+  return lines.map((line) =>
+    "sound" in line ? `[${line.sound}]` : "cry" in line ? `[cry ${line.cry}]` : `${line.speaker}: ${line.text}`,
+  );
 }
 
 describe("story lines by speaker", () => {
@@ -113,6 +115,19 @@ describe("story lines by speaker", () => {
 
   it("leaves an unknown cue as words", () => {
     assert.deepEqual(who(speakerLines("A [mystery] noise.", SAFARI_CAST)), ["narrator: A [mystery] noise."]);
+  });
+
+  it("plays a cry where it is cued, and only for a real Pokédex number", () => {
+    const lines = speakerLines("Basil sends out [cry:74] Geodude! 'Go,' says Marigold.", SAFARI_CAST);
+    assert.deepEqual(who(lines), [
+      "narrator: Basil sends out",
+      "[cry 74]",
+      "narrator: Geodude!",
+      "marigold: Go,",
+      "narrator: says Marigold.",
+    ]);
+    assert.equal(withoutCues("Out comes [cry:25] Pikachu! [hit]"), "Out comes Pikachu!");
+    assert.deepEqual(who(speakerLines("A [cry:0] and a [cry:9999].", SAFARI_CAST)), ["narrator: A [cry:0] and a [cry:9999]."]);
   });
 });
 
@@ -274,6 +289,11 @@ describe("track parts", () => {
     assert.equal(readTrackParts([]), null);
     assert.equal(readTrackParts([{ sound: "explosion" }]), null);
     assert.equal(readTrackParts([{ sound: "catch" }]), null, "a track needs at least one spoken line");
+    const withCry = trackParts("Out comes [cry:25] Pikachu!", voices, SAFARI_CAST) ?? [];
+    assert.deepEqual(withCry[1], { cry: 25 });
+    assert.deepEqual(readTrackParts(JSON.parse(JSON.stringify(withCry))), withCry);
+    assert.equal(readTrackParts([{ cry: 2000 }, { text: "Hi", voiceId: LILY }]), null);
+    assert.equal(readTrackParts([{ cry: "25" }, { text: "Hi", voiceId: LILY }]), null);
     assert.equal(readTrackParts([{ text: "Hi", voiceId: 7 }]), null);
     assert.equal(readTrackParts([{ text: "x".repeat(3001), voiceId: LILY }]), null);
     const clamped = readTrackParts([{ text: "Hi", voiceId: "nobody", pitch: 40, tempo: 9 }]);

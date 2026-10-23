@@ -27,6 +27,14 @@ export const FANFARE_SOUND_PATH = "/sounds/catch-fanfare.mp3";
 export const ENDING_SOUND_PATH = "/sounds/ending-sting.mp3";
 /** The big one, for the golden ending. */
 export const GOLDEN_SOUND_PATH = "/sounds/golden-fanfare.mp3";
+/** A move that lands hard: a rush of air and a thump. */
+export const HIT_SOUND_PATH = "/sounds/super-effective.mp3";
+/** A move that does nothing much: a sad little slide down. */
+export const FIZZLE_SOUND_PATH = "/sounds/not-very-effective.mp3";
+/** The crowd cheering. */
+export const CHEER_SOUND_PATH = "/sounds/crowd-cheer.mp3";
+/** A badge pinned on: a bright chime. */
+export const BADGE_SOUND_PATH = "/sounds/badge-chime.mp3";
 
 export const STORY_SOUNDS = {
   catch: CATCH_SOUND_PATH,
@@ -39,6 +47,10 @@ export const STORY_SOUNDS = {
   fanfare: FANFARE_SOUND_PATH,
   ending: ENDING_SOUND_PATH,
   golden: GOLDEN_SOUND_PATH,
+  hit: HIT_SOUND_PATH,
+  fizzle: FIZZLE_SOUND_PATH,
+  cheer: CHEER_SOUND_PATH,
+  badge: BADGE_SOUND_PATH,
 } as const;
 
 export type StorySound = keyof typeof STORY_SOUNDS;
@@ -58,6 +70,7 @@ export const STORY_AMBIENCE = {
   sea: "/sounds/ambience-sea.mp3",
   lake: "/sounds/ambience-lake.mp3",
   house: "/sounds/ambience-rest-house.mp3",
+  stadium: "/sounds/ambience-stadium.mp3",
 } as const;
 
 export type StoryAmbience = keyof typeof STORY_AMBIENCE;
@@ -71,6 +84,8 @@ export const STORY_MUSIC = {
   tense: "/sounds/music-tense.mp3",
   homely: "/sounds/music-homely.mp3",
   magical: "/sounds/music-magical.mp3",
+  battle: "/sounds/music-battle.mp3",
+  champion: "/sounds/music-champion.mp3",
 } as const;
 
 export type StoryMusic = keyof typeof STORY_MUSIC;
@@ -109,7 +124,21 @@ export function readStoryBed(value: unknown): StoryBed | null {
 /** A cue in story text: [catch]. */
 export const SOUND_CUE = /\[(\w+)\]/g;
 
-/** The text with its sound cues taken out, for reading on the page and counting length. */
+/** A Pokémon's cry at a point in the story: [cry:25]. */
+export const CRY_CUE = /\[cry:(\d{1,4})\]/g;
+
+/** Highest national Pokédex number with a cry. */
+export const LAST_CRY = 1025;
+
+export function isCryId(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= LAST_CRY;
+}
+
+/** The text with its sound and cry cues taken out, for reading on the page and counting length. */
 export function withoutCues(text: string): string {
-  return text.replace(SOUND_CUE, (cue, name: string) => (isStorySound(name) ? " " : cue)).replace(/\s+/g, " ").trim();
+  return text
+    .replace(CRY_CUE, " ")
+    .replace(SOUND_CUE, (cue, name: string) => (isStorySound(name) ? " " : cue))
+    .replace(/\s+/g, " ")
+    .trim();
 }

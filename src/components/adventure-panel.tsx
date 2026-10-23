@@ -15,6 +15,32 @@ import { withoutCues } from "@/lib/story/story-sound";
 import { castVoices, NARRATOR, speakerLines, type VoiceStyle } from "@/lib/story/story-voices";
 
 const OWNER_KEY = "pokefacts.adventure-owner";
+const KIND_KEY = "pokefacts.adventure-kind";
+
+/** The adventures this panel can make, each served by /api/adventure/<id>. */
+const ADVENTURES = {
+  safari: {
+    title: "Safari Zone",
+    blurb:
+      "Warden Marigold takes your child round five stops, Barnaby the rival is always one step ahead, and the left and right buttons on the Yoto Player pick what happens next.",
+    ownerNote: "Marigold says it out loud.",
+    opening: "Opening the gate…",
+    failed: "The Safari Zone could not be opened.",
+  },
+  gym: {
+    title: "Gym Challenge",
+    blurb:
+      "Eight gyms and the Champion, with Ronnie Rumble commentating. At every battle your child picks which Pokémon to send out with the left and right buttons, and learns which types win, and why.",
+    ownerNote: "Ronnie announces it to the crowd.",
+    opening: "Warming up the stadium…",
+    failed: "The Gym Challenge could not be set up.",
+  },
+} as const;
+
+type AdventureKind = keyof typeof ADVENTURES;
+
+const parseKind = (raw: string | null): AdventureKind => (raw === "gym" ? "gym" : "safari");
+const keepKind = (kind: AdventureKind) => kind;
 
 function newSeed(): number {
   return Math.floor(Math.random() * 2 ** 31);
@@ -23,12 +49,12 @@ function newSeed(): number {
 const parseOwner = (raw: string | null) => (raw ?? "").slice(0, 40);
 const keepOwner = (owner: string) => owner;
 
-async function fetchSafari(seed: number, owner: string, signal: AbortSignal): Promise<StoryGraph> {
+async function fetchAdventure(kind: AdventureKind, seed: number, owner: string, signal: AbortSignal): Promise<StoryGraph> {
   const query = new URLSearchParams({ seed: String(seed) });
   if (owner.trim()) query.set("owner", owner.trim());
-  const response = await fetch(`/api/adventure/safari?${query}`, { signal });
+  const response = await fetch(`/api/adventure/${kind}?${query}`, { signal });
   const payload = (await response.json().catch(() => null)) as { story?: StoryGraph; error?: string } | null;
-  if (!response.ok || !payload?.story) throw new Error(payload?.error ?? "The Safari Zone could not be opened.");
+  if (!response.ok || !payload?.story) throw new Error(payload?.error ?? ADVENTURES[kind].failed);
   return payload.story;
 }
 
@@ -73,7 +99,7 @@ function SpokenText({ text, story }: { text: string; story: StoryGraph }) {
     <>
       {lines.map((line, index) => {
         // Sounds are heard, not read: the text stays clean sentences, and the Poké Ball shows the catch.
-        if ("sound" in line) return null;
+        if ("sound" in line || "cry" in line) return null;
         const character = cast.findIndex((item) => item.id === line.speaker);
         if (line.speaker === NARRATOR || character < 0) return <span key={index}>{line.text} </span>;
         return (
@@ -100,7 +126,7 @@ function styleNote(style: VoiceStyle | undefined): string {
 }
 
 /**
- * The Safari Zone adventure: a child's name, a new draw, a play-through preview with Left and Right
+ * The adventure cards, Safari Zone and Gym Challenge: a child's name, a new draw, a play-through preview with Left and Right
  * that can be listened to, and Send to Yoto. The studio owns sending; this panel only hands it the story.
  */
 export function AdventurePanel({
@@ -120,6 +146,8 @@ export function AdventurePanel({
 }) {
   const listener = useAdventureListen({ voiceId, connected, mix });
   const [owner, setOwner] = useStoredState(OWNER_KEY, parseOwner, keepOwner);
+  const [kind, setKind] = useStoredState(KIND_KEY, parseKind, keepKind);
+  const adventure = ADVENTURES[kind];
   // The panel only opens after the page has loaded, so a random first draw cannot upset hydration.
   const [seed, setSeed] = useState<number>(newSeed);
   const [story, setStory] = useState<StoryGraph | null>(null);
@@ -132,7 +160,7 @@ export function AdventurePanel({
   useEffect(() => {
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      fetchSafari(seed, owner, controller.signal)
+      fetchAdventure(kind, seed, owner, controller.signal)
         .then((next) => {
           setStory(next);
           setError("");
@@ -140,14 +168,14 @@ export function AdventurePanel({
         })
         .catch((reason: unknown) => {
           if (controller.signal.aborted) return;
-          setError(reason instanceof Error ? reason.message : "The Safari Zone could not be opened.");
+          setError(reason instanceof Error ? reason.message : ADVENTURES[kind].failed);
         });
     }, 300);
     return () => {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [seed, owner]);
+  }, [kind, seed, owner]);
 
   const byId = useMemo(() => new Map((story?.nodes ?? []).map((node) => [node.id, node])), [story]);
   const endings = story ? endingCount(story) : 0;
@@ -181,16 +209,38 @@ export function AdventurePanel({
     setOwner(value);
   }
 
+  function chooseKind(next: AdventureKind) {
+    if (next === kind) return;
+    listener.stop();
+    setStory(null);
+    setError("");
+    setFound(new Set());
+    setNodeId("");
+    setKind(next);
+  }
+
   return (
     <div className="grid min-w-0 gap-6 md:grid-cols-[17.5rem_minmax(0,1fr)]">
       <section className="min-w-0" aria-labelledby="adventure-setup">
+        <div className="mb-3 grid grid-cols-2 gap-2" role="group" aria-label="Adventure">
+          {(Object.keys(ADVENTURES) as AdventureKind[]).map((option) => (
+            <Button
+              key={option}
+              type="button"
+              variant={option === kind ? "default" : "outline"}
+              className="h-10 w-full"
+              aria-pressed={option === kind}
+              onClick={() => chooseKind(option)}
+            >
+              {ADVENTURES[option].title}
+            </Button>
+          ))}
+        </div>
         <h2 id="adventure-setup" className="pk-section-title">
-          Safari Zone
+          {adventure.title}
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          A choose-your-own-adventure card for ages 8 to 12. Warden Marigold takes your child round six stops,
-          Barnaby the rival is always one step ahead, and the left and right buttons on the Yoto Player pick what
-          happens next.
+          A choose-your-own-adventure card for ages 8 to 12. {adventure.blurb}
         </p>
         <label className="mt-4 block">
           <span className="text-sm font-medium">Child&apos;s name (optional)</span>
@@ -204,7 +254,7 @@ export function AdventurePanel({
           />
         </label>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          Letters, spaces, hyphens and apostrophes. Marigold says it out loud.
+          Letters, spaces, hyphens and apostrophes. {adventure.ownerNote}
         </p>
         <div className="mt-4 grid gap-2">
           <Button type="button" variant="outline" className="h-11 w-full" onClick={freshAdventure}>
@@ -238,7 +288,7 @@ export function AdventurePanel({
         </h2>
         {error ? <p className="mt-2 text-sm pk-danger">{error}</p> : null}
         {!story || !node || !lines ? (
-          error ? null : <p className="mt-2 text-sm text-muted-foreground">Opening the gate…</p>
+          error ? null : <p className="mt-2 text-sm text-muted-foreground">{adventure.opening}</p>
         ) : (
           <div className="pk-card mt-2 px-4 py-4">
             <div className="flex items-center gap-3">

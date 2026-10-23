@@ -425,7 +425,15 @@ export async function assertCryFirst(
  * `speech` trims the silence a voice leaves at each end; `tight` joins the clip straight on to the one
  * before, for a name recorded on its own in the middle of a sentence.
  */
-export type JoinClip = { audio: Buffer; pitch?: number; tempo?: number; speech?: boolean; tight?: boolean };
+export type JoinClip = {
+  audio: Buffer;
+  pitch?: number;
+  tempo?: number;
+  speech?: boolean;
+  tight?: boolean;
+  /** Gain, for a cry brought level with the voices. */
+  volume?: number;
+};
 
 /** Silence after each clip, so lines do not run into each other. */
 const JOIN_GAP_SECONDS = 0.22;
@@ -442,8 +450,9 @@ const TRIM_SILENCE =
  * and a pitch shift that resamples the clip and then corrects its speed, so a character can sound
  * higher or lower without talking faster.
  */
-export function clipFilter(clip: { pitch?: number; tempo?: number; speech?: boolean }): string {
+export function clipFilter(clip: { pitch?: number; tempo?: number; speech?: boolean; volume?: number }): string {
   const filters = ["aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=mono"];
+  if (clip.volume !== undefined && clip.volume !== 1) filters.push(`volume=${clip.volume.toFixed(3)}`);
   if (clip.speech) filters.push(TRIM_SILENCE);
   const pitch = clip.pitch ?? 0;
   const tempo = clip.tempo ?? 1;

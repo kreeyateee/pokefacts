@@ -7,7 +7,7 @@
  * whole paragraph still becomes one track.
  */
 import { chosenVoice, isPiperVoice, PIPER_VOICE_ID } from "@/lib/piper-voice";
-import { isStorySound, SOUND_CUE, type StorySound } from "@/lib/story/story-sound";
+import { CRY_CUE, isCryId, isStorySound, SOUND_CUE, type StorySound } from "@/lib/story/story-sound";
 import { YOTO_VOICES } from "@/lib/yoto-icons";
 
 export const NARRATOR = "narrator";
@@ -30,7 +30,7 @@ export type StoryCharacter = {
   piper?: { pitch?: number; tempo?: number };
 };
 
-export type SpeakerLine = { speaker: string; text: string } | { sound: StorySound };
+export type SpeakerLine = { speaker: string; text: string } | { sound: StorySound } | { cry: number };
 
 /** One voice: a Yoto Labs or Piper voice id, shifted in pitch and speed. */
 export type VoiceStyle = { voiceId: string; pitch: number; tempo: number };
@@ -40,7 +40,10 @@ export type VoiceStyle = { voiceId: string; pitch: number; tempo: number };
  * with no pause: a name recorded on its own. `fallback` is the Piper voice it is read in if Yoto's
  * voice service turns it away.
  */
-export type TrackPart = ({ text: string; tight?: boolean; fallback?: VoiceStyle } & VoiceStyle) | { sound: StorySound };
+export type TrackPart =
+  | ({ text: string; tight?: boolean; fallback?: VoiceStyle } & VoiceStyle)
+  | { sound: StorySound }
+  | { cry: number };
 
 const PITCH_LIMIT = 6;
 const TEMPO_MIN = 0.8;
@@ -60,7 +63,11 @@ function isQuoteMark(text: string, index: number): boolean {
   return !(isLetter(text[index - 1]) && isLetter(text[index + 1]));
 }
 
-type Chunk = { kind: "narration"; text: string } | { kind: "quote"; text: string } | { kind: "sound"; sound: StorySound };
+type Chunk =
+  | { kind: "narration"; text: string }
+  | { kind: "quote"; text: string }
+  | { kind: "sound"; sound: StorySound }
+  | { kind: "cry"; dexId: number };
 
 /** Narration, quotes and sound cues, in order. Throws on a quote that never closes. */
 export function storyChunks(text: string): Chunk[] {
@@ -79,6 +86,15 @@ export function storyChunks(text: string): Chunk[] {
       continue;
     }
     if (!quoted && text[index] === "[") {
+      const cry = new RegExp(CRY_CUE.source, "y");
+      cry.lastIndex = index;
+      const heard = cry.exec(text);
+      if (heard && isCryId(Number(heard[1]))) {
+        flush();
+        chunks.push({ kind: "cry", dexId: Number(heard[1]) });
+        index += heard[0].length - 1;
+        continue;
+      }
       const cue = new RegExp(SOUND_CUE.source, "y");
       cue.lastIndex = index;
       const match = cue.exec(text);
@@ -143,6 +159,10 @@ export function speakerLines(text: string, cast: readonly StoryCharacter[]): Spe
   chunks.forEach((chunk, index) => {
     if (chunk.kind === "sound") {
       lines.push({ sound: chunk.sound });
+      return;
+    }
+    if (chunk.kind === "cry") {
+      lines.push({ cry: chunk.dexId });
       return;
     }
     if (chunk.kind === "narration") {
@@ -260,6 +280,10 @@ export function trackParts(
       parts.push({ sound: line.sound });
       continue;
     }
+    if ("cry" in line) {
+      parts.push({ cry: line.cry });
+      continue;
+    }
     const style = voices[line.speaker] ?? narrator;
     const backup = options.fallback?.[line.speaker] ?? options.fallback?.[NARRATOR];
     slotPieces(line.text, options.slots ?? []).forEach((piece, index) => {
@@ -302,6 +326,11 @@ export function readTrackParts(value: unknown): TrackPart[] | null {
     if ("sound" in row) {
       if (!isStorySound(row.sound)) return null;
       parts.push({ sound: row.sound });
+      continue;
+    }
+    if ("cry" in row) {
+      if (!isCryId(row.cry)) return null;
+      parts.push({ cry: row.cry });
       continue;
     }
     const text = typeof row.text === "string" ? row.text.replace(/\s+/g, " ").trim() : "";

@@ -26,6 +26,9 @@ export const MUSIC_VOLUME = 0.1;
 
 export type SpokenPart = Extract<TrackPart, { text: string }>;
 
+/** How loud a cry in the middle of a scene plays: about as loud as a voice reading (Lily is about -19 LUFS). */
+const CRY_TARGET_LUFS = -18;
+
 export function isSpokenPart(part: TrackPart): part is SpokenPart {
   return "text" in part;
 }
@@ -59,9 +62,18 @@ export async function joinTrackParts(
   speechFor: (part: SpokenPart) => Promise<Buffer>,
   soundRoot = PUBLIC_ROOT,
   bed?: StoryBed | null,
+  cryFor: (dexId: number) => Promise<Buffer> = () => Promise.reject(new Error("This story plays a cry, but no cry was found.")),
 ): Promise<{ wav: Buffer; cues: SoundCue[] }> {
   const clips = [];
   for (const part of parts) {
+    if ("cry" in part) {
+      // A cry in the middle of a scene, brought level with the voices around it.
+      const cry = await cryFor(part.cry);
+      const loudness = await integratedLoudness(cry);
+      const volume = loudness === null ? 1 : Math.max(0.05, Math.min(4, 10 ** ((CRY_TARGET_LUFS - loudness) / 20)));
+      clips.push({ audio: cry, volume });
+      continue;
+    }
     clips.push(
       isSpokenPart(part)
         ? { audio: await speechFor(part), pitch: part.pitch, tempo: part.tempo, speech: true, tight: part.tight }

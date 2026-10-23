@@ -28,6 +28,15 @@ export const STORY_PIXELS = {
   pokeball: "/story/pokeball-16.png",
   "pokeball-caught": "/story/pokeball-caught-16.png",
   "pokeball-broken": "/story/pokeball-broken-16.png",
+  "badge-rock": "/story/badge-rock-16.png",
+  "badge-water": "/story/badge-water-16.png",
+  "badge-grass": "/story/badge-grass-16.png",
+  "badge-electric": "/story/badge-electric-16.png",
+  "badge-flying": "/story/badge-flying-16.png",
+  "badge-fire": "/story/badge-fire-16.png",
+  "badge-ground": "/story/badge-ground-16.png",
+  "badge-dragon": "/story/badge-dragon-16.png",
+  trophy: "/story/trophy-16.png",
 } as const;
 
 export type StoryPixel = keyof typeof STORY_PIXELS;

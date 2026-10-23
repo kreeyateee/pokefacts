@@ -553,6 +553,22 @@ export function listMonSheets(): MonSheet[] {
   });
 }
 
+/** Species that are legendary, mythical or a baby, by national number. The gym battles leave them out. */
+export function listSpecialSpecies(): Set<number> {
+  const rows = db()
+    .prepare("SELECT id FROM species WHERE is_legendary = 1 OR is_mythical = 1 OR is_baby = 1")
+    .all() as Array<{ id: number }>;
+  return new Set(rows.map((row) => row.id));
+}
+
+/** Each species' base stat total, by national dex number. */
+export function listBaseTotals(): Map<number, number> {
+  const rows = db()
+    .prepare("SELECT species_id AS id, SUM(base) AS total FROM species_stats GROUP BY species_id")
+    .all() as Array<{ id: number; total: number }>;
+  return new Map(rows.map((row) => [row.id, row.total]));
+}
+
 export type SafariSpeciesRow = {
   id: number;
   /** PokéAPI habitat slug, such as "waters-edge". Never "rare". */

@@ -324,6 +324,48 @@ const EFFECTS: Record<StorySound, () => Float32Array> = {
     }
     return edges(normalise(reverb(out, 0.3), 0.75), 0.002, 0.5);
   },
+  hit() {
+    const out = buffer(0.9);
+    const air = bandNoise(rng(61), 800, 6000);
+    add(out, 0, 0.25, (t) => 0.5 * air() * swell(t, 0.25));
+    const thump = lowNoise(rng(67), 200);
+    add(out, 0.22, 0.6, (t) => 1.4 * thump() * decay(t, 9) + 0.8 * Math.sin(TAU * (90 - 40 * t) * t) * decay(t, 7));
+    add(out, 0.22, 0.4, (t) => 0.25 * bandNoise(rng(71), 2000, 8000)() * decay(t, 25));
+    return edges(normalise(reverb(out, 0.15), 0.85), 0.002, 0.15);
+  },
+  fizzle() {
+    const out = buffer(1.3);
+    // A slide whistle going down, then a little wobble: a move that did nothing much.
+    add(out, 0, 1.1, (t) => 0.5 * Math.sin(TAU * (900 * t - 260 * t * t)) * swell(t, 1.1) * (1 + 0.15 * Math.sin(TAU * 7 * t)));
+    add(out, 1.0, 0.25, (t) => 0.3 * Math.sin(TAU * 180 * t) * decay(t, 12));
+    return edges(normalise(out, 0.55), 0.005, 0.15);
+  },
+  cheer() {
+    const out = buffer(2.6);
+    const random = rng(73);
+    // Many voices of noise with their own swells, then whoops on top.
+    for (let n = 0; n < 6; n += 1) {
+      const voice = bandNoise(random, 300 + n * 120, 2600 + n * 200);
+      const start = Math.abs(random()) * 0.2;
+      add(out, start, 2.3, (t) => 0.4 * voice() * swell(t, 2.3) * (0.7 + 0.3 * Math.sin(TAU * (3 + n) * t)));
+    }
+    for (let n = 0; n < 8; n += 1) {
+      const at = 0.2 + Math.abs(random()) * 1.6;
+      const pitch = 500 + Math.abs(random()) * 500;
+      add(out, at, 0.35, (t) => 0.12 * Math.sin(TAU * (pitch * t + 600 * t * t)) * swell(t, 0.35));
+    }
+    return edges(normalise(out, 0.7), 0.05, 0.4);
+  },
+  badge() {
+    const out = buffer(1.8);
+    ["E6", "G6", "C7"].forEach((name, index) => add(out, index * 0.08, 1.4, (t) => 0.4 * bell(note(name), t)));
+    const random = rng(79);
+    for (let n = 0; n < 10; n += 1) {
+      const pitch = 3000 + Math.abs(random()) * 3000;
+      add(out, 0.25 + n * 0.08, 0.3, (t) => 0.06 * Math.sin(TAU * pitch * t) * decay(t, 14));
+    }
+    return edges(normalise(reverb(out, 0.3), 0.6), 0.002, 0.3);
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -470,6 +512,21 @@ const AMBIENCE: Record<StoryAmbience, () => Float32Array> = {
     chirps(out, random, 4, 0.04);
     return out;
   },
+  stadium() {
+    const out = buffer(BED_SECONDS);
+    const random = rng(151);
+    // A big crowd talking, with a ripple of cheering now and then.
+    for (let n = 0; n < 5; n += 1) {
+      const murmur = bandNoise(random, 250 + n * 80, 1500 + n * 150);
+      const offset = Math.abs(random()) * 10;
+      add(out, 0, BED_SECONDS, (t) => 0.35 * murmur() * (0.7 + 0.3 * Math.sin(TAU * 0.2 * (t + offset))));
+    }
+    for (const at of [3.5, 10.2]) {
+      const roar = bandNoise(random, 400, 3000);
+      add(out, at, 1.6, (t) => 0.5 * roar() * swell(t, 1.6));
+    }
+    return out;
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -547,6 +604,24 @@ const MUSIC: Record<StoryMusic, () => Float32Array> = {
     play(out, repeat([[0, "C5", 1], [1, "G5", 1], [2, "E6", 1], [3, "G5", 1], [4, "B4", 1], [5, "G5", 1], [6, "D6", 1], [7, "G5", 1]], 8, 4), chime(0.11), 0.25);
     play(out, [[0, "C4", 16], [0, "E4", 16], [0, "G4", 16], [16, "A3", 16], [16, "E4", 16], [16, "C5", 16]], pad(0.12), 0.25 * 2);
     return loopable(reverb(out, 0.4));
+  },
+  battle() {
+    const out = buffer(16.5);
+    // A driving bass ostinato, a snare tick, and a short brassy hook.
+    play(out, repeat([[0, "A2", 0.5], [0.5, "A2", 0.5], [1, "C3", 0.5], [1.5, "A2", 0.5], [2, "D3", 0.5], [2.5, "A2", 0.5], [3, "E3", 0.5], [3.5, "G2", 0.5]], 4, 8), pluck(0.3), 0.5);
+    const snare = bandNoise(rng(223), 1500, 7000);
+    for (let at = 0.5; at < 16; at += 1) add(out, at, 0.08, (t) => 0.12 * snare() * decay(t, 40));
+    for (let at = 0; at < 16; at += 1) add(out, at, 0.12, (t) => 0.35 * Math.sin(TAU * (110 - 200 * t) * t) * decay(t, 25));
+    play(out, [[0, "E4", 1], [1, "A4", 1], [2, "C5", 2], [8, "D5", 1], [9, "C5", 1], [10, "A4", 2], [16, "E4", 1], [17, "A4", 1], [18, "E5", 2], [24, "D5", 1], [25, "C5", 1], [26, "B4", 3]], pad(0.12), 0.5);
+    return loopable(reverb(out, 0.15), 1);
+  },
+  champion() {
+    const out = buffer(17.5);
+    play(out, repeat([[0, "D3", 1], [1, "D3", 0.5], [1.5, "D3", 0.5], [2, "F3", 1], [3, "G3", 1]], 4, 8), pluck(0.28), 0.55);
+    for (let at = 0; at < 17; at += 0.55 * 2) add(out, at, 0.15, (t) => 0.4 * Math.sin(TAU * (90 - 160 * t) * t) * decay(t, 18));
+    play(out, [[0, "D4", 8], [0, "A4", 8], [8, "Bb3", 8], [8, "F4", 8], [16, "C4", 8], [16, "G4", 8], [24, "A3", 8], [24, "E4", 8]], pad(0.12), 0.55);
+    play(out, [[2, "A5", 2], [6, "F5", 2], [10, "D6", 3], [18, "E5", 2], [22, "C6", 2], [26, "A5", 4]], chime(0.1), 0.55);
+    return loopable(reverb(out, 0.25));
   },
 };
 

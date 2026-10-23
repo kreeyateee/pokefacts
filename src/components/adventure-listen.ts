@@ -257,6 +257,8 @@ export function useAdventureListen(options: { voiceId: string; connected: boolea
             if ("sound" in line) {
               onSound?.(line.sound);
               await playUrl(audio, STORY_SOUNDS[line.sound], signal);
+            } else if ("cry" in line) {
+              await playUrl(audio, `/api/cry/${line.cry}`, signal).catch(() => undefined);
             } else if ("speechSynthesis" in window) {
               const style = voices[line.speaker] ?? (voices[NARRATOR] as VoiceStyle);
               duckBed(true);

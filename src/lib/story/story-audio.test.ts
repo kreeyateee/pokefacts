@@ -16,7 +16,7 @@ import { factTrackBody } from "../voice-choice";
 import { SAFARI_CAST } from "./safari";
 import { storyCard } from "./story-card";
 import type { StoryGraph } from "./story-graph";
-import { bedClips } from "../story-audio";
+import { bedClips, joinTrackParts } from "../story-audio";
 import { POKEBALL_PIXEL } from "./pokeball";
 import { CATCH_SOUND_PATH, readStoryBed, STORY_AMBIENCE, STORY_MUSIC, STORY_SOUNDS } from "./story-sound";
 import { PIPER_VOICE_ID } from "../piper-voice";
@@ -125,6 +125,31 @@ async function drive(fetchImpl: typeof fetch, roots: Parameters<typeof prepareFa
 }
 
 describe("adventure track audio", () => {
+  it("plays a cry in the middle of a scene, where it is cued, and says when", async () => {
+    const asked: number[] = [];
+    const parts: TrackPart[] = [
+      { text: "Basil sends out", voiceId: LILY, pitch: 0, tempo: 1 },
+      { cry: 74 },
+      { sound: "hit" },
+      { text: "Geodude!", voiceId: LILY, pitch: 0, tempo: 1 },
+    ];
+    const speech = await tone(440);
+    const joined = await joinTrackParts(
+      parts,
+      () => Promise.resolve(speech),
+      undefined,
+      null,
+      async (dexId) => {
+        asked.push(dexId);
+        return tone(880);
+      },
+    );
+    assert.deepEqual(asked, [74]);
+    assert.equal(joined.cues.length, 1);
+    assert.ok((joined.cues[0]?.at ?? 0) > 1.9, "the hit comes after the line and the cry");
+    assert.ok((await audioDurationSeconds(joined.wav)) > 3.5);
+  });
+
   it("shifts a character's pitch without changing how fast they talk", () => {
     assert.match(clipFilter({ pitch: 12, tempo: 1 }), /asetrate=88200,aresample=44100,atempo=0\.5000$/);
     assert.doesNotMatch(clipFilter({ pitch: 0, tempo: 1 }), /asetrate|atempo/);
@@ -251,7 +276,7 @@ describe("adventure track audio", () => {
     assert.match(first?.text ?? "", /^The ball flies\. 'Well thrown,' says Marigold\.$/);
     assert.doesNotMatch(first?.text ?? "", /\[catch\]/, "the cue is never read out");
     assert.deepEqual(
-      first?.parts?.map((part) => ("sound" in part ? part.sound : part.voiceId)),
+      first?.parts?.map((part) => ("sound" in part ? part.sound : "cry" in part ? part.cry : part.voiceId)),
       [LILY, "catch", ALICE, LILY],
     );
     assert.ok(first?.parts?.every((part) => !("text" in part) || part.fallback?.voiceId === PIPER), "every line has a Piper fallback");
