@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { useAdventureListen } from "@/components/adventure-listen";
+import { useFavourites } from "@/components/favourites";
 import { pokeballOutcome, PokeballShow } from "@/components/pokeball-show";
 import { Button } from "@/components/ui/button";
 import { useStoredState } from "@/components/use-stored-state";
@@ -66,9 +67,16 @@ function newSeed(): number {
 const parseOwner = (raw: string | null) => (raw ?? "").slice(0, 40);
 const keepOwner = (owner: string) => owner;
 
-async function fetchAdventure(kind: AdventureKind, seed: number, owner: string, signal: AbortSignal): Promise<StoryGraph> {
+async function fetchAdventure(
+  kind: AdventureKind,
+  seed: number,
+  owner: string,
+  partner: number | undefined,
+  signal: AbortSignal,
+): Promise<StoryGraph> {
   const query = new URLSearchParams({ seed: String(seed) });
   if (owner.trim()) query.set("owner", owner.trim());
+  if (partner) query.set("partner", String(partner));
   const response = await fetch(`/api/adventure/${kind}?${query}`, { signal });
   const payload = (await response.json().catch(() => null)) as { story?: StoryGraph; error?: string } | null;
   if (!response.ok || !payload?.story) throw new Error(payload?.error ?? ADVENTURES[kind].failed);
@@ -164,6 +172,9 @@ export function AdventurePanel({
   const listener = useAdventureListen({ voiceId, connected, mix });
   const [owner, setOwner] = useStoredState(OWNER_KEY, parseOwner, keepOwner);
   const [kind, setKind] = useStoredState(KIND_KEY, parseKind, keepKind);
+  // The child's partner Pokémon comes along on every adventure.
+  const [favourites] = useFavourites();
+  const partner = favourites[0];
   const adventure = ADVENTURES[kind];
   // The panel only opens after the page has loaded, so a random first draw cannot upset hydration.
   const [seed, setSeed] = useState<number>(newSeed);
@@ -177,7 +188,7 @@ export function AdventurePanel({
   useEffect(() => {
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      fetchAdventure(kind, seed, owner, controller.signal)
+      fetchAdventure(kind, seed, owner, partner, controller.signal)
         .then((next) => {
           setStory(next);
           setError("");
@@ -192,7 +203,7 @@ export function AdventurePanel({
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [kind, seed, owner]);
+  }, [kind, seed, owner, partner]);
 
   const byId = useMemo(() => new Map((story?.nodes ?? []).map((node) => [node.id, node])), [story]);
   const endings = story ? endingCount(story) : 0;

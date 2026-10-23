@@ -11,6 +11,7 @@
  * each starter's journey is laid out once for none, one, and two or more misses: 89 tracks in all.
  */
 import { mulberry32 } from "@/lib/kid-cards";
+import type { AdventureInput, Partner } from "@/lib/story/adventure-route";
 import type { StoryGraph, StoryNode } from "@/lib/story/story-graph";
 import type { StoryBed } from "@/lib/story/story-sound";
 import type { StoryCharacter } from "@/lib/story/story-voices";
@@ -261,8 +262,9 @@ const id = {
 };
 
 /** Turns a plan into the story map, with the child's name where the friends call to them. */
-export function buildPaldea(plan: PaldeaPlan, ownerName = ""): StoryGraph {
+export function buildPaldea(plan: PaldeaPlan, ownerName = "", partner?: Partner): StoryGraph {
   const owner = ownerName.trim();
+  const P = partner?.name ?? "";
   const you = owner || "new student";
   const nodes: StoryNode[] = [];
   const pfx: Record<Starter["key"], string> = { grass: "g", fire: "f", water: "w" };
@@ -273,7 +275,7 @@ export function buildPaldea(plan: PaldeaPlan, ownerName = ""): StoryGraph {
     title: "The Academy",
     icon: { dexId: 915 },
     bed: { ambience: "house", music: "bright" },
-    text: `Welcome to your first week at the academy, in the sunny land of Paldea! The head of the academy, Ms Olwen, is a tall woman with a clipboard, and a little pig Pokémon called Lechonk is following her everywhere. [cry:915] 'Good morning, ${you},' says Ms Olwen. 'This is Juno, and this is Arlo. You three are in the same class.' Juno waves so hard she nearly falls over. 'Hi! I'm going to be the best trainer in the whole academy,' says Juno. Arlo pushes up his glasses. 'I've read every Pokédex entry there is,' says Arlo. 'Twice.' 'This week,' says Ms Olwen, 'there is the Great Picnic. Each of you will choose a partner Pokémon, and together you will gather the ingredients for the Great Picnic Sandwich: tomatoes from the orchard, cheese from the cave, and Herba Mystica from the top of the cliffs.' She opens a basket. Inside are three little Pokémon, looking up at you. 'You choose first,' says Ms Olwen.`,
+    text: `Welcome to your first week at the academy, in the sunny land of Paldea! The head of the academy, Ms Olwen, is a tall woman with a clipboard, and a little pig Pokémon called Lechonk is following her everywhere. [cry:915] 'Good morning, ${you},' says Ms Olwen. 'This is Juno, and this is Arlo. You three are in the same class.' Juno waves so hard she nearly falls over. 'Hi! I'm going to be the best trainer in the whole academy,' says Juno. Arlo pushes up his glasses. 'I've read every Pokédex entry there is,' says Arlo. 'Twice.' 'This week,' says Ms Olwen, 'there is the Great Picnic. Each of you will choose a partner Pokémon, and together you will gather the ingredients for the Great Picnic Sandwich: tomatoes from the orchard, cheese from the cave, and Herba Mystica from the top of the cliffs.' She opens a basket. Inside are three little Pokémon, looking up at you. ${partner ? `Your partner ${P}, who came with you from home, peeks into the basket too. [cry:${partner.id}] ` : ""}'You choose first,' says Ms Olwen.`,
     next: "pick1",
   });
   nodes.push({
@@ -307,7 +309,7 @@ export function buildPaldea(plan: PaldeaPlan, ownerName = ""): StoryGraph {
       title: `${mine.name}!`,
       icon: { dexId: mine.id },
       bed: { ambience: "house", music: "bright" },
-      text: `You choose ${mine.name}. [cry:${mine.id}] It jumps into your arms. Straight away, Juno grabs ${juno.name}. 'I'll have this one,' says Juno. 'It's the one that beats yours, obviously.' That leaves ${arlo.name} for Arlo. 'Good,' says Arlo. 'That's the one I wanted anyway.' Ms Olwen ticks something on her clipboard. 'Off you go, then,' says Ms Olwen. 'Meet me at the top of the hill for the picnic, with all three ingredients.'`,
+      text: `You choose ${mine.name}. [cry:${mine.id}] It jumps into your arms. ${partner ? `${P} sniffs ${mine.name}, and the two of them are friends at once. ` : ""}Straight away, Juno grabs ${juno.name}. 'I'll have this one,' says Juno. 'It's the one that beats yours, obviously.' That leaves ${arlo.name} for Arlo. 'Good,' says Arlo. 'That's the one I wanted anyway.' Ms Olwen ticks something on her clipboard. 'Off you go, then,' says Ms Olwen. 'Meet me at the top of the hill for the picnic, with all three ingredients.'`,
       next: id.stage(p, 0, 0),
     });
     stages.forEach((stage, index) => {
@@ -334,7 +336,13 @@ export function buildPaldea(plan: PaldeaPlan, ownerName = ""): StoryGraph {
           title: `${stage.title}: Got It`,
           icon: { dexId: mine.id },
           bed: stage.bed,
-          text: `${goodText(stage, mine, mine.happy[index % mine.happy.length] as string)} ${cheer(index, false, misses, mine)}`,
+          text: [
+            goodText(stage, mine, mine.happy[index % mine.happy.length] as string),
+            partner && index === 1 ? `${P} cheers ${mine.name} on from right beside you.` : "",
+            cheer(index, false, misses, mine),
+          ]
+            .filter(Boolean)
+            .join(" "),
           next: last ? id.ending(p, misses) : id.stage(p, index + 1, misses),
         });
         nodes.push({
@@ -358,7 +366,7 @@ export function buildPaldea(plan: PaldeaPlan, ownerName = ""): StoryGraph {
         title: `Ending ${number}: ${mine.name}, ${name}`,
         icon: { dexId: band === 2 ? mine.final.id : band === 1 ? mine.mid.id : mine.id },
         bed: { ambience: "grass", music: band === 2 ? "magical" : "bright" },
-        text: endingText(band, mine, juno, arlo, owner),
+        text: withPartner(endingText(band, mine, juno, arlo, owner), band, mine, partner),
         ending: { number, name: `${mine.name}: ${name}`, golden: band === 2 },
       });
     }
@@ -376,6 +384,17 @@ export function buildPaldea(plan: PaldeaPlan, ownerName = ""): StoryGraph {
   };
 }
 
-export function paldeaAdventure(input: { seed: number; owner?: string }): StoryGraph {
-  return buildPaldea(planPaldea(input.seed), input.owner ?? "");
+/** Your partner at the picnic, just before the closing sound. */
+function withPartner(text: string, band: number, mine: Starter, partner?: Partner): string {
+  if (!partner) return text;
+  const line = [
+    `${partner.name} looks at ${mine.name}'s round tummy, and laughs so much it gets hiccups.`,
+    `${partner.name} and ${mine.name} play tag round the picnic blanket until the sun goes down.`,
+    `${partner.name} and ${mine.name} share the very last bite, and fall asleep in the sunshine, side by side. [cry:${partner.id}]`,
+  ][band] as string;
+  return text.replace(/ (\[(?:ending|golden)\])$/, ` ${line} $1`);
+}
+
+export function paldeaAdventure(input: AdventureInput): StoryGraph {
+  return buildPaldea(planPaldea(input.seed), input.owner ?? "", input.partner);
 }

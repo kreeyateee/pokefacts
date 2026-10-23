@@ -10,6 +10,8 @@ import { EntryCard, EntryPager } from "@/components/entry-card";
 import { Catalogue } from "@/components/catalogue";
 import { PlaybackPanel } from "@/components/playback-panel";
 import { CoffeeNudge } from "@/components/coffee-nudge";
+import { FavouritesBar, FavouritesDialog, useFavourites } from "@/components/favourites";
+import { FAVOURITES_ASKED_KEY } from "@/lib/favourites";
 import { coverPng } from "@/components/cover-art";
 import { SendBanner, toastSendAllReady, toastSendReady, toastSendStarted } from "@/components/send-banner";
 import { SetupGuide } from "@/components/setup-guide";
@@ -617,6 +619,8 @@ export function Studio({
   const factsPlaylists = factsBulkPlaylists(cards);
   const [randomCard, setRandomCard] = useState(() => randomPokedexCard(factPool, mulberry32(20261018)));
   const [guessCard, setGuessCard] = useState(() => randomGuessCard(guessPool, mulberry32(20261018)));
+  const [favourites, setFavourites] = useFavourites();
+  const [favouritesOpen, setFavouritesOpen] = useState(false);
   const initialPlaylists: PlaylistMap = {
     mega: [mega],
     gmax: [gmax],
@@ -945,7 +949,7 @@ export function Studio({
   // gets its own.
   const reshuffleOnArrival = useEffectEvent(() => {
     const nextFacts = randomPokedexCard(factPool);
-    const nextGuess = randomGuessCard(guessPool);
+    const nextGuess = randomGuessCard(guessPool, Math.random, favourites);
     const firstFacts = randomCard.chapters[0]?.key;
     const firstGuess = guessCard.chapters[0]?.key;
     setRandomCard(nextFacts);
@@ -962,6 +966,37 @@ export function Studio({
     return () => cancelAnimationFrame(frame);
   }, []);
 
+  // New favourites join the random Who's That card straight away.
+  const favouritesKey = favourites.join(",");
+  const keepFavouritesInGuess = useEffectEvent(() => {
+    if (favourites.every((id) => guessCard.chapters.some((chapter) => chapter.dexId === id))) return;
+    const next = randomGuessCard(guessPool, Math.random, favourites);
+    const shown = guessCard.chapters.some((chapter) => chapter.key === chapterKey);
+    setGuessCard(next);
+    if (shown) setChapterKey(next.chapters[0]?.key ?? "start");
+  });
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => keepFavouritesInGuess());
+    return () => cancelAnimationFrame(frame);
+  }, [favouritesKey]);
+
+  // Ask once, a moment after the first visit, who the child's favourite Pokémon is.
+  const askFavouritesOnce = useEffectEvent(() => {
+    try {
+      if (favourites.length > 0 || localStorage.getItem(FAVOURITES_ASKED_KEY)) return;
+      localStorage.setItem(FAVOURITES_ASKED_KEY, "1");
+    } catch {
+      return;
+    }
+    setFavouritesOpen(true);
+  });
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => askFavouritesOnce(), 2500);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   function shufflePokedex() {
     const next = randomPokedexCard(factPool);
     stopDemo();
@@ -975,7 +1010,7 @@ export function Studio({
   }
 
   function shuffleGuess() {
-    const next = randomGuessCard(guessPool);
+    const next = randomGuessCard(guessPool, Math.random, favourites);
     stopDemo();
     setRevealed(false);
     setQuery("");
@@ -2498,6 +2533,7 @@ export function Studio({
           </div>
         ) : null}
         </div>
+        {view !== "setup" && !cardPrompt ? <FavouritesBar ids={favourites} onEdit={() => setFavouritesOpen(true)} /> : null}
         {view !== "setup" && !cardPrompt ? (
           <PlaybackPanel
             settings={playback}
@@ -2562,6 +2598,7 @@ export function Studio({
         cardId={myoCard?.cardId}
         sending={myoCard?.sending ?? sending}
       />
+      <FavouritesDialog open={favouritesOpen} onOpenChange={setFavouritesOpen} ids={favourites} onIds={setFavourites} />
       <CardOptionsDialog
         open={Boolean(cardPrompt)}
         onOpenChange={(open) => {

@@ -15,6 +15,7 @@ import { listMonSheets, listSafariSpecies } from "@/lib/catalogue-db";
 import type { MonSheet } from "@/lib/dex-facts";
 import { drawSample, mulberry32 } from "@/lib/kid-cards";
 import { pronounce } from "@/lib/pronounce";
+import type { AdventureInput, Partner } from "@/lib/story/adventure-route";
 import { FIELD_NOTES, GOLDEN_STOPS, type FieldNotes } from "@/lib/story/safari-roster";
 import * as W from "@/lib/story/safari-words";
 import type { StoryGraph, StoryIcon, StoryNode } from "@/lib/story/story-graph";
@@ -300,6 +301,8 @@ export type SafariPlan = {
   golden: GoldenStop;
   /** Stop numbers, from 1, where Barnaby turns up. */
   barnaby: number[];
+  /** The child's partner Pokémon, who walks round with them. Never one of the Pokémon to catch. */
+  partner?: Partner;
 };
 
 function relatives(mon: MonSheet): string[] {
@@ -319,7 +322,8 @@ function isArea(value: string): value is SafariArea {
 }
 
 /** Chooses the Pokémon and the layout for one adventure. Same pool and seed, same plan. */
-export function planSafari(pool: readonly SafariMon[], seed: number, owner = ""): SafariPlan {
+export function planSafari(pool: readonly SafariMon[], seed: number, owner = "", partner?: Partner): SafariPlan {
+  if (partner) return { ...planSafari(pool.filter((mon) => mon.id !== partner.id), seed, owner), partner };
   const random = mulberry32(seed);
   const counts = habitatCounts(pool.filter((mon) => isArea(mon.area)));
   const eligible = pool.filter((mon) => isArea(mon.area) && mon.notes);
@@ -679,7 +683,7 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
     title: "The Safari Gate",
     icon: { yoto: iconForType("grass") },
     bed: { ambience: "gate", music: "bright" },
-    text: join(W.introText(owner)),
+    text: join(W.introText(owner, plan.partner)),
     left: { to: "lesson", label: W.LESSON_LABELS.hear },
     right: { to: ID.find(1, 0), label: W.LESSON_LABELS.skip },
   });
@@ -846,12 +850,18 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
         ...base,
         dexId: gold.id,
         icon: picture(gold.id),
-        text: join(revealed(gold, true), W.goldenText(capital(owner)), "[golden]"),
+        text: join(
+          revealed(gold, true),
+          W.goldenText(capital(owner)),
+          plan.partner ? `${plan.partner.name} does a little victory dance all round you. [cry:${plan.partner.id}]` : "",
+          "[golden]",
+        ),
         ending: { number, name, golden: true },
       });
     } else {
       const text = join(
         number === 1 ? join(W.goodDayText(owner), words.tip()) : number === 2 ? W.dayEndText(owner) : W.masterText(owner),
+        plan.partner ? `${plan.partner.name} yawns a big yawn, and you walk home together.` : "",
         "[ending]",
       );
       nodes.push({
@@ -894,8 +904,8 @@ export function safariPool(
 }
 
 /** Plans and builds one adventure from a species pool. Same pool and seed, same story. */
-export function safariFromPool(pool: readonly SafariMon[], input: { seed: number; owner?: string }): StoryGraph {
-  return buildSafari(planSafari(pool, input.seed, input.owner ?? ""));
+export function safariFromPool(pool: readonly SafariMon[], input: AdventureInput): StoryGraph {
+  return buildSafari(planSafari(pool, input.seed, input.owner ?? "", input.partner));
 }
 
 let cachedPool: SafariMon[] | null = null;
@@ -907,6 +917,6 @@ export function loadSafariPool(): SafariMon[] {
 }
 
 /** A fresh Safari Zone adventure for this seed, read from the catalogue. */
-export function safariAdventure(input: { seed: number; owner?: string }): StoryGraph {
+export function safariAdventure(input: AdventureInput): StoryGraph {
   return safariFromPool(loadSafariPool(), input);
 }

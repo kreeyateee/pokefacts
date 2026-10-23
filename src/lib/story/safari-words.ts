@@ -236,12 +236,16 @@ export const SLOW_LINES = [
 // ---------------------------------------------------------------------------
 // The start
 
-export function introText(owner: string): string {
+/** `partner` is the child's partner Pokémon, if they have one. It walks the Safari with them. */
+export function introText(owner: string, partner?: { id: number; name: string }): string {
   return [
     "Welcome to the Safari Zone!",
     "[gate] The big wooden gate creaks open, and there it all is: long grass, dark woods, a glittering lake, and a mountain with its head in the clouds.",
     "A woman in an enormous hat comes stomping over, with mud up to her knees.",
     `'Marigold,' she says, shaking your hand very hard. 'Head warden. Forty years. Morning, ${owner}.'`,
+    partner
+      ? `Then she spots ${partner.name} beside you. [cry:${partner.id}] 'And who's this? Your partner! It can come along,' says Marigold, 'as long as it stays close and doesn't chase anything.'`
+      : "",
     "Behind her, a boy in a spotless jacket is polishing a gold Safari Ball.",
     "'That's Barnaby,' Marigold mutters. 'He says he'll catch more than you today.'",
     "Barnaby gives you a very smug smile. 'I don't say it,' he says. 'I know it.'",

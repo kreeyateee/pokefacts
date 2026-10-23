@@ -17,6 +17,7 @@
  * line is read in that character's voice.
  */
 import { drawSample, mulberry32 } from "@/lib/kid-cards";
+import type { AdventureInput, Partner } from "@/lib/story/adventure-route";
 import type { StoryGraph, StoryIcon, StoryNode } from "@/lib/story/story-graph";
 import type { StoryBed } from "@/lib/story/story-sound";
 import type { StoryCharacter } from "@/lib/story/story-voices";
@@ -63,7 +64,7 @@ const BEACH: Stage = {
   title: "Driftwood Beach",
   icon: { dexId: 321 },
   bed: { ambience: "sea", music: "bright" },
-  text: `[footsteps] It's early in the morning on Driftwood Beach, and something enormous is lying on the sand. It's a Wailord, as big as a house, and she's singing. ${MABEL} Next to her stands an old sailor with a white beard and a Pelipper sitting on his hat. 'Morning,' says Captain Brine. 'This here is Mabel. She got lost in the night, and the tide went out without her. Her family lives on Moonshell Island, far across the sea, and every evening when the moon comes up, they sing and leap in the lagoon. If we get her home before moonrise, she'll be leaping with them.' Mabel blinks one huge, gentle eye at you, and blows a little fountain of hello. The Pelipper flaps its wings crossly. 'And that's Gulliver,' says Brine. 'He delivers the post. Don't call him a seagull. Now then, {shipmate}, first things first. How do we get her back in the water?'`,
+  text: `[footsteps] It's early in the morning on Driftwood Beach, and something enormous is lying on the sand. It's a Wailord, as big as a house, and she's singing. ${MABEL} Next to her stands an old sailor with a white beard and a Pelipper sitting on his hat. 'Morning,' says Captain Brine. 'This here is Mabel. She got lost in the night, and the tide went out without her. Her family lives on Moonshell Island, far across the sea, and every evening when the moon comes up, they sing and leap in the lagoon. If we get her home before moonrise, she'll be leaping with them.' Mabel blinks one huge, gentle eye at you, and blows a little fountain of hello. {partner}The Pelipper flaps its wings crossly. 'And that's Gulliver,' says Brine. 'He delivers the post. Don't call him a seagull. Now then, {shipmate}, first things first. How do we get her back in the water?'`,
   good: {
     label: "wait for high tide",
     text: `So you wait. You build a sandcastle, and Gulliver knocks it over. Mabel watches the whole time, humming. Then, slowly, the sea comes creeping back up the beach until she is floating. She sings for joy. ${MABEL} 'All aboard!' says Brine. You climb up her side and sit on her broad blue back, and off you go.`,
@@ -376,6 +377,13 @@ const MABEL_MOMENTS = [
   "Mabel balances Gulliver on the tip of her nose and tosses him up into the air. He pretends to be cross, but he isn't.",
 ];
 
+/** The child's partner Pokémon on the voyage, after some of the good choices. {P} is its name. */
+const PARTNER_MOMENTS: Record<number, string> = {
+  1: "{P} sits right at the front of Mabel's head, like a tiny captain.",
+  3: "{P} and Gulliver have a staring contest. {P} wins.",
+  5: "{P} leans over the side to watch the fish, and Mabel blows a bubble just for it.",
+};
+
 /** What Brine says after each choice, by how the voyage is going. */
 function progressLine(stage: number, slipped: boolean, slips: number): string {
   if (!slipped) {
@@ -436,8 +444,12 @@ function endingText(slips: number, owner: string, giant: Giant): string {
 }
 
 /** Turns a plan into the voyage, with the child's name where Brine calls to them. */
-export function buildIsland(plan: IslandPlan, seed: number, ownerName = ""): StoryGraph {
+export function buildIsland(plan: IslandPlan, seed: number, ownerName = "", partner?: Partner): StoryGraph {
   const owner = ownerName.trim();
+  const named = (line: string) => (partner ? line.replaceAll("{P}", partner.name) : "");
+  const greeting = partner
+    ? `${partner.name} peeks out from behind your legs, then waves hello. [cry:${partner.id}] Mabel blows another fountain, just for ${partner.name}. `
+    : "";
   const shipmate = owner || "shipmate";
   const nodes: StoryNode[] = [];
   const last = plan.stages.length - 1;
@@ -455,7 +467,7 @@ export function buildIsland(plan: IslandPlan, seed: number, ownerName = ""): Sto
         title: stage.title,
         icon: stage.icon,
         bed: stage.bed,
-        text: stage.text.replace("{shipmate}", shipmate),
+        text: stage.text.replace("{shipmate}", shipmate).replace("{partner}", greeting),
         left: stage.goodLeft ? good : slip,
         right: stage.goodLeft ? slip : good,
       });
@@ -465,7 +477,9 @@ export function buildIsland(plan: IslandPlan, seed: number, ownerName = ""): Sto
         title: `${stage.title}: Onwards`,
         icon: { dexId: 321 },
         bed: stage.bed,
-        text: [stage.good.text, moment, progressLine(index, false, slips)].filter(Boolean).join(" "),
+        text: [stage.good.text, moment, named(PARTNER_MOMENTS[index] ?? ""), progressLine(index, false, slips)]
+          .filter(Boolean)
+          .join(" "),
         next: index < last ? id.choice(index + 1, slips) : id.ending(slips),
       });
       nodes.push({
@@ -489,7 +503,7 @@ export function buildIsland(plan: IslandPlan, seed: number, ownerName = ""): Sto
       title: `Ending ${number}: ${name}`,
       icon: slips === 0 ? { formId: plan.giant.formId } : { dexId: 321 },
       bed: { ambience: "lake", music: slips === 0 ? "magical" : "calm" },
-      text: endingText(slips, owner, plan.giant),
+      text: withPartner(endingText(slips, owner, plan.giant), partner, slips === 0),
       ending: { number, name, golden: slips === 0 },
     });
   }
@@ -506,6 +520,15 @@ export function buildIsland(plan: IslandPlan, seed: number, ownerName = ""): Sto
   };
 }
 
-export function islandAdventure(input: { seed: number; owner?: string }): StoryGraph {
-  return buildIsland(planIsland(input.seed), input.seed, input.owner ?? "");
+/** The partner at the very end, just before the closing sound. */
+function withPartner(text: string, partner: Partner | undefined, golden: boolean): string {
+  if (!partner) return text;
+  const line = golden
+    ? `And ${partner.name}, right there beside you, has the best night of its whole life. [cry:${partner.id}]`
+    : `${partner.name} curls up beside you, very happy, and very sleepy.`;
+  return text.replace(/ (\[(?:ending|golden)\])$/, ` ${line} $1`);
+}
+
+export function islandAdventure(input: AdventureInput): StoryGraph {
+  return buildIsland(planIsland(input.seed), input.seed, input.owner ?? "", input.partner);
 }

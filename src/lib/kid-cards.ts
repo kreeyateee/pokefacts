@@ -605,12 +605,20 @@ export function shadowPixelPath(id: number): string {
  * One playlist of 50 riddles. Two tracks each fills the 100-track card.
  * Each clue is the number, the colour and type, two Pokédex lines, the size, and the count.
  */
-export function randomGuessCard(pool: KidChapter[], random: () => number = Math.random): KidCard {
-  const drawn = drawSample(
-    pool.filter((chapter) => chapter.dexId),
-    GUESS_RIDDLE_COUNT,
+export function randomGuessCard(
+  pool: KidChapter[],
+  random: () => number = Math.random,
+  favourites: readonly number[] = [],
+): KidCard {
+  // The child's favourites are always among the riddles, mixed in at random places.
+  const playable = pool.filter((chapter) => chapter.dexId);
+  const chosen = favourites.flatMap((id) => playable.find((chapter) => chapter.dexId === id) ?? []);
+  const others = drawSample(
+    playable.filter((chapter) => !favourites.includes(chapter.dexId as number)),
+    GUESS_RIDDLE_COUNT - chosen.length,
     random,
   );
+  const drawn = drawSample([...chosen, ...others], GUESS_RIDDLE_COUNT, random);
   const chapters = drawn.map((chapter) => {
     const dexId = chapter.dexId as number;
     const shadow = shadowPixelPath(dexId);

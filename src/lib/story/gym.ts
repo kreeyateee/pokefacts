@@ -11,6 +11,7 @@
  * goes. `planGym` does the picking; `buildGym` turns a plan into the story map.
  */
 import { listBaseTotals, listMonSheets, listSpecialSpecies } from "@/lib/catalogue-db";
+import type { AdventureInput } from "@/lib/story/adventure-route";
 import type { MonSheet } from "@/lib/dex-facts";
 import { drawSample, mulberry32 } from "@/lib/kid-cards";
 import * as W from "@/lib/story/gym-words";
@@ -43,6 +44,8 @@ export type GymPlan = {
   gyms: Array<{ gym: W.Gym; first: Round; ace: Round }>;
   champion: Round[];
   legend: BattleMon;
+  /** The child's partner Pokémon, on the team. */
+  partnerId?: number;
 };
 
 const ACE_TOTAL = 450;
@@ -110,7 +113,7 @@ function roundFor(
 }
 
 /** Chooses the team, the leaders' Pokémon, the Champion's team and the legend. Same pool and seed, same plan. */
-export function planGym(pool: readonly BattleMon[], seed: number, owner = ""): GymPlan {
+export function planGym(pool: readonly BattleMon[], seed: number, owner = "", partner?: BattleMon): GymPlan {
   const random = mulberry32(seed);
   const byId = new Map(pool.map((mon) => [mon.id, mon]));
   const team = W.TEAM_TYPES.map((type) => {
@@ -118,6 +121,12 @@ export function planGym(pool: readonly BattleMon[], seed: number, owner = ""): G
     if (choices.length === 0) throw new Error(`There is no ${type} Pokémon for your team.`);
     return pick(choices, random);
   });
+  // The child's partner joins the team: in place of the one of its type, or as a seventh.
+  if (partner && partner.types.length > 0) {
+    const same = team.findIndex((mon) => typeOf(mon) === typeOf(partner));
+    if (same >= 0) team[same] = partner;
+    else team.push(partner);
+  }
   // Nobody battles the legends: they are kept for the end.
   const used = new Set([...team.map((mon) => mon.id), ...Object.keys(W.LEGENDS).map(Number)]);
   const fresh = (mon: BattleMon) => !used.has(mon.id) && sayable(mon.name);
@@ -175,7 +184,7 @@ export function planGym(pool: readonly BattleMon[], seed: number, owner = ""): G
     .map((id) => byId.get(Number(id)))
     .filter((mon): mon is BattleMon => Boolean(mon));
   const legend = pick(legends, random);
-  return { seed, owner: cleanOwner(owner), team, gyms, champion, legend };
+  return { seed, owner: cleanOwner(owner), team, gyms, champion, legend, partnerId: partner?.id };
 }
 
 // ---------------------------------------------------------------------------
@@ -335,7 +344,9 @@ export function buildGym(plan: GymPlan): StoryGraph {
   const words = decks(mulberry32((plan.seed ^ 0x6a4d21) >>> 0));
   const owner = plan.owner;
   const nodes: StoryNode[] = [];
-  const team = plan.team.map((mon) => `${mon.name} the ${typeOf(mon)} type`);
+  const team = plan.team.map((mon) =>
+    mon.id === plan.partnerId ? `your partner ${mon.name}, the ${typeOf(mon)} type` : `${mon.name} the ${typeOf(mon)} type`,
+  );
   const teamList = `${team.slice(0, -1).join(", ")} and ${team.at(-1)}`;
 
   nodes.push({
@@ -344,7 +355,7 @@ export function buildGym(plan: GymPlan): StoryGraph {
     title: "The Gym Challenge",
     icon: { yoto: YOTO_ICONS.star },
     bed: { ambience: "stadium", music: "bright" },
-    text: join(W.introText(owner, [teamList])),
+    text: join(W.introText(owner, [teamList], plan.team.length === 7 ? "seven" : "six")),
     left: { to: "lesson", label: W.LESSON_LABELS.hear },
     right: { to: "g1a", label: W.LESSON_LABELS.skip },
   });
@@ -528,10 +539,17 @@ export function loadBattlePool(): BattleMon[] {
 }
 
 /** Plans and builds one Gym Challenge from a pool. Same pool and seed, same story. */
-export function gymFromPool(pool: readonly BattleMon[], input: { seed: number; owner?: string }): StoryGraph {
-  return buildGym(planGym(pool, input.seed, input.owner ?? ""));
+export function gymFromPool(pool: readonly BattleMon[], input: AdventureInput, partner?: BattleMon): StoryGraph {
+  return buildGym(planGym(pool, input.seed, input.owner ?? "", partner));
 }
 
-export function gymAdventure(input: { seed: number; owner?: string }): StoryGraph {
-  return gymFromPool(loadBattlePool(), input);
+/** The partner as a battler, from the whole catalogue: a legend or a baby can be a partner too. */
+function partnerMon(input: AdventureInput): BattleMon | undefined {
+  if (!input.partner) return undefined;
+  const sheet = listMonSheets().find((item) => item.id === input.partner?.id);
+  return sheet ? { ...battleMon(sheet, listBaseTotals()), name: input.partner.name } : undefined;
+}
+
+export function gymAdventure(input: AdventureInput): StoryGraph {
+  return gymFromPool(loadBattlePool(), input, partnerMon(input));
 }

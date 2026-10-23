@@ -1060,6 +1060,18 @@ describe("random Guess Who", () => {
   const cards = kidCardsFromDex(listMonSheets());
   const pool = guessPoolFromCards(cards);
 
+  it("always includes the child's favourites, mixed in among the fifty", () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const card = randomGuessCard(pool, mulberry32(seed), [25, 133, 7]);
+      const ids = card.chapters.map((chapter) => chapter.dexId);
+      assert.equal(ids.length, 50);
+      assert.equal(new Set(ids).size, 50);
+      for (const id of [25, 133, 7]) assert.ok(ids.includes(id), `seed ${seed} has ${id}`);
+    }
+    const spots = [1, 2, 3, 4, 5].map((seed) => randomGuessCard(pool, mulberry32(seed), [25]).chapters.findIndex((c) => c.dexId === 25));
+    assert.ok(new Set(spots).size > 1, "the favourite is not always in the same place");
+  });
+
   it("draws 50 unique riddles, hides the name, and uses the shadow then the real pixel", () => {
     const first = randomGuessCard(pool, mulberry32(7));
     const same = randomGuessCard(pool, mulberry32(7));

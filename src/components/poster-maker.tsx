@@ -4,6 +4,7 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { BRAND_FILES, canvasFonts, downloadPdf, jpegPage } from "@/components/sticker/print-kit";
+import { useFavourites } from "@/components/favourites";
 import { SceneChooser } from "@/components/sticker/scene-chooser";
 import { useImageCache, type ImageEntry } from "@/components/sticker/use-image-cache";
 import { useSpeciesSizes } from "@/components/sticker/use-species-sizes";
@@ -22,6 +23,7 @@ import { POSTER_PAPER_MM, type PosterStyle } from "@/lib/sticker-styles";
 
 const SOURCE_KEY = "pokefacts.poster-source";
 const MINE = "mine";
+const FAVOURITES = "favourites";
 const PLAYLIST = "playlist";
 
 const keepSource = (raw: string | null) => raw || "region-kanto";
@@ -92,6 +94,7 @@ function ChoiceRow({
 export function PosterMaker({ playlist, onOwnPick }: { playlist: KidCard; onOwnPick: () => void }) {
   const [picks] = useStoredState(CATALOGUE_PICKS_KEY, readCataloguePicks, serializeCataloguePicks);
   const [sourceId, setSourceId] = useStoredState(SOURCE_KEY, keepSource, writeSource);
+  const [favourites] = useFavourites();
   const [style, setStyle] = useState<PosterStyle>("photo");
   const [sprites, setSprites] = useState(false);
   const [pickedScene, setPickedScene] = useState<Scene | null>(null);
@@ -121,13 +124,17 @@ export function PosterMaker({ playlist, onOwnPick }: { playlist: KidCard; onOwnP
       const dexIds = monsFor(playlist).flatMap((mon) => (mon.dexId ? [mon.dexId] : []));
       return { title: playlist.title, dexIds, hidden: hidesNames(playlist) };
     }
+    if (sourceId === FAVOURITES) {
+      if (favourites.length === 0) return null;
+      return { title: "My Favourite Pokémon", dexIds: favourites, hidden: false };
+    }
     if (sourceId === MINE) {
       if (picks.ids.length === 0) return null;
       return { title: picks.title.trim() || "My Pokémon", dexIds: mine ?? [], hidden: false };
     }
     const collection: PosterCollection = posterCollection(sourceId) ?? REGION_POSTERS[0]!;
     return { title: collection.title, dexIds: collection.dexIds, hidden: false };
-  }, [sourceId, playlist, picks, mine]);
+  }, [sourceId, playlist, picks, mine, favourites]);
 
   const title = (titles[sourceId] ?? crowd?.title ?? "").slice(0, 60);
   const entries = useMemo(
@@ -211,6 +218,7 @@ export function PosterMaker({ playlist, onOwnPick }: { playlist: KidCard; onOwnP
 
   const total = crowd?.dexIds.length ?? 0;
   const yours = [
+    ...(favourites.length > 0 ? [{ id: FAVOURITES, label: "My favourites", count: favourites.length }] : []),
     ...(picks.ids.length > 0 ? [{ id: MINE, label: "My picks", count: picks.ids.length }] : []),
     { id: PLAYLIST, label: playlist.rangeLabel || playlist.title },
   ];

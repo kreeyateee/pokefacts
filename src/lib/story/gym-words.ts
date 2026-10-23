@@ -154,12 +154,12 @@ export const GYMS: readonly Gym[] = [
 // The start
 
 /** `owner` is the child's name, or "" for none. */
-export function introText(owner: string, team: readonly string[]): string {
+export function introText(owner: string, team: readonly string[], count = "six"): string {
   return [
     "Welcome to the Gym Challenge!",
     "A huge banner flaps over the road: Eight Gyms. Eight Badges. One Champion.",
     `A young man in a shiny tracksuit leaps out from behind it. 'And here they are, folks!' says Ronnie, into a microphone that isn't plugged in. 'Ronnie Rumble here, and ${owner ? `this is ${owner}, ` : "here comes "}our newest challenger!'`,
-    `'Your team,' says Ronnie, counting your six Poké Balls. 'You've got ${team.join(", ")}.'`,
+    `'Your team,' says Ronnie, counting your ${count} Poké Balls. 'You've got ${team.join(", ")}.'`,
     "'Here's how it works,' says Ronnie. 'Every gym leader sends out a Pokémon. You pick which of yours to send out. Get the type right, and boom! Get it wrong, and the leader lets you try again, because they're nice like that.'",
     "'Then it's the Champion. And the Champion,' says Ronnie, lowering his voice, 'does not let you try again.'",
     "'Want my quick lesson on types first?'",
