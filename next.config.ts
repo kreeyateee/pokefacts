@@ -1,5 +1,15 @@
 import type { NextConfig } from "next";
+import { execSync } from "node:child_process";
 import path from "node:path";
+
+/** The commit this build was made from. An open page compares it with /api/version to spot an update. */
+function buildStamp(): string {
+  try {
+    return execSync("git rev-parse --short=12 HEAD", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim() || "dev";
+  } catch {
+    return "dev";
+  }
+}
 
 const nextConfig: NextConfig = {
   // The live server deploys by building into a spare folder, then swapping it in (scripts/deploy-vm.sh),
@@ -11,6 +21,7 @@ const nextConfig: NextConfig = {
   outputFileTracingExcludes: {
     "/*": ["./data/**/*"],
   },
+  env: { NEXT_PUBLIC_POKEFACTS_BUILD: buildStamp() },
   cacheComponents: true,
   partialPrefetching: true,
   poweredByHeader: false,

@@ -343,7 +343,7 @@ describe("cards for ages 8 to 12", () => {
       assert.doesNotMatch(riddle.tracks[0]?.text ?? "", new RegExp(riddle.title, "i"));
       assert.equal(riddle.tracks[0]?.icon, riddle.icon);
       assert.notEqual(riddle.tracks[1]?.icon, riddle.tracks[0]?.icon);
-      assert.match(riddle.tracks[1]?.text ?? "", /^It is /);
+      assert.match(riddle.tracks[1]?.text ?? "", /^It's /);
     }
     assertGuessScriptsStayShort(guess.chapters);
   });
@@ -459,7 +459,7 @@ describe("every national species", () => {
     assert.equal(riddle.tracks[0]?.icon, riddle.icon);
     assert.match(riddle.tracks[0]?.text ?? "", /One\. Two\. Three\./);
     assert.doesNotMatch(riddle.tracks[0]?.text ?? "", /Bulbasaur/i);
-    assert.match(riddle.tracks[1]?.text ?? "", /^It is Bulbasaur\./);
+    assert.match(riddle.tracks[1]?.text ?? "", /^It's Bulbasaur!/);
     assert.notEqual(riddle.tracks[1]?.icon, riddle.tracks[0]?.icon);
     for (const card of guess) {
       assertGuessScriptsStayShort(card.chapters);
@@ -473,7 +473,7 @@ describe("every national species", () => {
         for (const name of hidden) assert.equal(clueNamesPokemon(name, clue), false, `${chapter.dexId} ${name}`);
         assert.match(clue, /\btype\b/i);
         assert.match(clue, /tall as|shorter than|taller than|heavy as|heavier than|lighter than/);
-        assert.match(chapter.tracks[1]?.text ?? "", /^It is /);
+        assert.match(chapter.tracks[1]?.text ?? "", /^It's /);
         assert.equal(chapter.tracks[0]?.lead, "cry");
         assert.equal(chapter.tracks[1]?.lead, "cry");
       }
@@ -494,9 +494,9 @@ describe("every national species", () => {
     assert.match(parts.clues[0] ?? "", /Water type/);
     assert.match(parts.clues.at(-1) ?? "", /tall|heavy|lighter|shorter/);
     assert.ok((parts.clues[1] ?? "").length > 20);
-    assert.equal(answer, "It is Croconaw. It grows from Totodile and becomes Feraligatr.");
+    assert.equal(answer, "It's Croconaw! It grows from Totodile and becomes Feraligatr.");
     assert.doesNotMatch(clue, /\bCroconaw\b/i);
-    assert.match(answer, /^It is Croconaw\./);
+    assert.match(answer, /^It's Croconaw!/);
     assert.equal(answer.includes(flavor), false);
     assert.doesNotMatch(`${clue} ${answer}`, GUESS_LECTURE);
     assert.equal(riddle.tracks[0]?.lead, "cry");
@@ -1101,7 +1101,7 @@ describe("random Guess Who", () => {
       assert.ok(answer);
       assert.match(clue.text, /One\. Two\. Three\./);
       assert.equal(clueNamesPokemon(name, clue.text), false);
-      assert.match(answer.text, new RegExp(`^It is ${escapeRegExp(name)}\\.`));
+      assert.match(answer.text, new RegExp(`^It's ${escapeRegExp(name.replace(/\.$/, ""))}!`));
       assert.doesNotMatch(`${clue.text} ${answer.text} ${clue.spoken} ${answer.spoken}`, GUESS_LECTURE);
       const parts = riddleParts(clue.text);
       assert.equal(parts.countdown, "Shout your guess. One. Two. Three.");
@@ -1140,7 +1140,7 @@ describe("random Guess Who", () => {
       assert.equal(chapter.tracks[1]?.voiceId, LILY_VOICE_ID);
       assert.equal(chapter.tracks[0]?.type, "elevenlabs");
       assert.equal(clueNamesPokemon(first.chapters[index]?.title ?? "XXXX", chapter.tracks[0]?.trackUrl ?? ""), false);
-      assert.match(chapter.tracks[1]?.trackUrl ?? "", /^It is /);
+      assert.match(chapter.tracks[1]?.trackUrl ?? "", /^\{[a-z]+\} It's /);
     });
   });
 
@@ -1154,7 +1154,7 @@ describe("random Guess Who", () => {
       assert.equal(order.clue[0], "cry");
       assert.equal(order.answer[0], "cry");
       assert.equal(clueNamesPokemon(name, order.clue[1] ?? ""), false);
-      assert.match(order.answer[1] ?? "", new RegExp(`^It is ${escapeRegExp(name)}\\.`));
+      assert.match(order.answer[1] ?? "", new RegExp(`^It's ${escapeRegExp(name.replace(/\.$/, ""))}!`));
       assert.equal(chapter.tracks[0]?.lead, "cry");
       assert.equal(chapter.tracks[1]?.lead, "cry");
       assert.equal(chapter.tracks[0]?.icon.includes("-shadow"), true);

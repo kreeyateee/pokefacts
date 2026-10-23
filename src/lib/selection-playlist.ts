@@ -272,6 +272,7 @@ function factChapter(species: SelectionSpecies, text: string, overlay: string): 
     tracks: [track("entry", species.name, text, icon, overlay)],
   };
   if (species.formId) chapter.formId = species.formId;
+  if (species.types.length > 0) chapter.types = species.types;
   return chapter;
 }
 
@@ -304,6 +305,7 @@ function riddleChapter(species: SelectionSpecies, overlay: string): KidChapter {
     ],
   };
   if (species.formId) chapter.formId = species.formId;
+  if (species.types.length > 0) chapter.types = species.types;
   return chapter;
 }
 

@@ -3,6 +3,7 @@ import { Fredoka, Nunito } from "next/font/google";
 
 import { LocalOrigin } from "@/components/local-origin";
 import { Toaster } from "@/components/ui/sonner";
+import { UpdateNotice } from "@/components/update-notice";
 import { APP_NAME, PUBLIC_SITE_ORIGIN } from "@/lib/site";
 
 import "./globals.css";
@@ -57,6 +58,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <LocalOrigin />
         {children}
         <Toaster />
+        <UpdateNotice />
       </body>
     </html>
   );
