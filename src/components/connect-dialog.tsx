@@ -98,7 +98,9 @@ export function ConnectDialog({
               >
                 dashboard.yoto.dev
               </a>
-              , sign in, and create a public app. Copy the long Client ID.
+              , sign in, and create a public app. Make sure it allows{" "}
+              <code className="rounded bg-white px-1">offline_access</code>, or Yoto turns the login away. Copy
+              the long Client ID.
             </li>
             <li>
               <span className="font-bold">2. Allow this return address.</span> Paste it into
