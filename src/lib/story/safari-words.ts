@@ -245,8 +245,8 @@ export function introText(owner: string): string {
     "Behind her, a boy in a spotless jacket is polishing a gold Safari Ball.",
     "'That's Barnaby,' Marigold mutters. 'He says he'll catch more than you today.'",
     "Barnaby gives you a very smug smile. 'I don't say it,' he says. 'I know it.'",
-    "'Five stops,' says Marigold. 'A Pokémon at every one. No battling. This is their home, not ours, so if two get away frightened, I blow my whistle and the day is done.'",
-    "She taps the whistle round her neck.",
+    "'Five stops,' says Marigold. 'A Pokémon at every one. No battling. This is their home, not ours. Every one you catch counts, and you get to see all five stops, whatever happens.'",
+    "She leans in. 'And they say that if you don't let a single one get away, something very special comes out to meet you at the end of the day.'",
     "'Now then. Do you want my quick lesson on throwing first?'",
   ].join(" ");
 }
@@ -295,10 +295,17 @@ export const LAST_OPENERS = [
 
 /** Said at the start of a stop when one Pokémon has already got away. */
 export const ONE_SLIP_OPENERS = [
-  "Marigold is still muttering about the one that got away. 'One more like that,' she says, 'and it's the whistle.'",
-  "'Steady now,' says Marigold. 'One got away. Two, and I blow the whistle.'",
-  "Your heart is still thumping from that last one. Careful. One more slip and the day is over.",
-  "Marigold's hand keeps drifting to the whistle round her neck. You'd better not give her a reason.",
+  "Marigold is still muttering about the one that got away. 'Never mind,' she says. 'Plenty more Pokémon in the Safari Zone.'",
+  "'Steady now,' says Marigold. 'One got away. Let's not make it two.'",
+  "Your heart is still thumping from that last one. Never mind. Every stop is a new chance.",
+  "Marigold gives you a thumbs up. 'Shake it off,' she says. 'Eyes on the next one.'",
+];
+
+/** Said at the start of a stop when two or more have got away. The day goes on all the same. */
+export const TWO_SLIP_OPENERS = [
+  "A few have got away today, but Marigold doesn't seem to mind. 'That's the Safari Zone,' she says. 'Sometimes the Pokémon win. That's what makes it fun.'",
+  "Barnaby jogs past, counting his Safari Balls out loud. Marigold rolls her eyes. 'Ignore him,' she says. 'The next one's yours.'",
+  "'Deep breaths,' says Marigold. 'Look for the clues, think about the throw. You know this.'",
 ];
 
 /** Barnaby, always one step ahead. Shown at some of the stops. */
@@ -476,16 +483,16 @@ export const RARE_GONE_LINES = [
 
 /** One gone, and the day goes on. */
 export const FIRST_SLIP_LINES = [
-  "That's one gone. Marigold taps the whistle round her neck. 'One more,' she says, 'and that's the day.'",
-  "One got away. 'It happens,' says Marigold. 'But not twice. Twice, and I blow the whistle.'",
-  "Well, that's one gone. Marigold's hand drifts to her whistle, then away again. 'Careful now.'",
+  "That's one gone. 'It happens,' says Marigold. 'Even to me. On we go.'",
+  "One got away. Marigold shrugs. 'They're wild,' she says. 'That's the whole point.'",
+  "Well, that's one gone. 'Never mind,' says Marigold. 'There's a whole Safari Zone left.'",
 ];
 
-/** Two gone: the whistle is next. */
+/** Another gone, after the first. The day still goes on. */
 export const SECOND_SLIP_LINES = [
-  "That's two gone. Marigold looks at you, a bit sadly, and lifts her whistle.",
-  "Two got away. Marigold sighs, and reaches for the whistle round her neck.",
-  "That's the second one. Marigold takes a big breath.",
+  "Another one got away. 'Never mind,' says Marigold. 'The day's not over yet.'",
+  "That one was quick. Marigold pats your shoulder. 'On to the next stop.'",
+  "Gone. Marigold smiles. 'The Pokémon have to win sometimes,' she says.",
 ];
 
 /** A slip at the last stop with nothing else lost. */
@@ -496,6 +503,13 @@ export const LAST_SLIP_LINES = [
 
 // ---------------------------------------------------------------------------
 // When it goes right
+
+/** After a catch when a few have got away, so the count is not said. */
+export const MORE_CATCH_LINES = [
+  "Another one in the bag!",
+  "Got it! Into the bag it goes.",
+  "That's another one for your bag. Barnaby will be furious.",
+];
 
 /** After the name, by how many are in the bag. */
 export const TALLY_LINES: Readonly<Record<number, readonly string[]>> = {
@@ -529,20 +543,13 @@ export const GOLDEN_FLED_AFTER =
   "Marigold puts a hand on your shoulder. 'Five from five is still the best day anyone has had here in years.'";
 
 // ---------------------------------------------------------------------------
-// Endings, numbered by how many you caught. Ending 8 is the golden one.
+// Endings, by how the day went: two or more got away, one got away, none got away but the secret
+// Pokémon did, and the golden one, where you catch it.
 
-export const ENDING_NAMES = [
-  "The Empty Bag",
-  "One in the Bag",
-  "Hot on His Heels",
-  "Neck and Neck",
-  "Barnaby's Bad Day",
-  "Safari Master",
-  "Golden Legend",
-];
+export const ENDING_NAMES = ["A Good Day Out", "Barnaby's Bad Day", "Safari Master", "Golden Legend"];
 
-/** Marigold's parting tips after the whistle. One per ending, chosen by seed. */
-export const WHISTLE_TIPS = [
+/** Marigold's parting tip at the gate, after a day when a few got away. Chosen by seed. */
+export const PARTING_TIPS = [
   "'Next time,' she says, 'listen to the cry first. It tells you more than your eyes do.'",
   "'Remember,' she says. 'Common ones, just throw the ball. Don't overthink it.'",
   "'Fidgety and rare?' says Marigold. 'Bait. Nobody runs off while they're chewing.'",
@@ -551,13 +558,15 @@ export const WHISTLE_TIPS = [
   "'Think about where it would like to live,' she says. 'A Fire type won't be paddling in the sea.'",
 ];
 
-/** Endings 1 to 4: the whistle has blown. Barnaby always finishes with three. */
-export const WHISTLE_ENDINGS = [
-  "[whistle] Marigold blows her whistle, and all across the Safari Zone, Pokémon dive for cover. Your bag is completely empty. On the bright side, the Pokémon had a lovely day. Barnaby strolls past with three Safari Balls, and for once he doesn't say a word, which is somehow worse. Marigold pats your shoulder. 'My first day,' she says, 'I fell in the lake. Twice.'",
-  "[whistle] That's the whistle. You've got one Pokémon in your bag, which is one more than none. Barnaby has three, and he tells everyone about each one of them, in great detail. Marigold rolls her eyes so hard her hat wobbles.",
-  "[whistle] Two Pokémon in your bag when the whistle goes. Barnaby has three. One more and you'd have tied with him, and he knows it. He's laughing a bit too loudly.",
-  "Just as Marigold blows the whistle, [whistle] you count your bag. Three. Barnaby counts his. Three. It's a draw! Barnaby says one of his should count as two, because it was quite big. Marigold says that is not how counting works.",
-];
+/** Ending 1: a few got away, and you still saw all five stops. */
+export function goodDayText(owner: string): string {
+  return [
+    "The sun sets over the Safari Zone, and Marigold walks you back to the gate.",
+    "A few Pokémon got away today, but you saw every single one of them up close, and you learnt something at every stop.",
+    "Barnaby is waiting at the gate with his three Safari Balls, looking very pleased with himself.",
+    `'Tomorrow, ${owner},' says Marigold, 'you'll beat him. I've seen how you think.'`,
+  ].join(" ");
+}
 
 export function dayEndText(owner: string): string {
   return [

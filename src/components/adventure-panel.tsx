@@ -22,7 +22,7 @@ const ADVENTURES = {
   safari: {
     title: "Safari Zone",
     blurb:
-      "Warden Marigold takes your child round five stops, Barnaby the rival is always one step ahead, and the left and right buttons on the Yoto Player pick what happens next.",
+      "Warden Marigold takes your child round all five stops, Barnaby the rival is always one step ahead, and every throw counts towards how the day ends. A perfect day brings a rare visitor.",
     ownerNote: "Marigold says it out loud.",
     opening: "Opening the gate…",
     failed: "The Safari Zone could not be opened.",

@@ -262,7 +262,7 @@ describe("safari builder with a fake species list", () => {
     for (let seed = 1; seed <= 40; seed += 1) {
       const graph = safariFromPool(pool, { seed, owner: "Mia" });
       assertSafariRules(graph, nameOf);
-      assert.equal(trackCount(graph), 99, `seed ${seed} uses ${trackCount(graph)} tracks`);
+      assert.equal(trackCount(graph), 98, `seed ${seed} uses ${trackCount(graph)} tracks`);
     }
   });
 
@@ -297,7 +297,33 @@ describe("safari adventure from the catalogue", () => {
     for (let seed = 1; seed <= 60; seed += 1) {
       const graph = safariAdventure({ seed });
       assertSafariRules(graph, nameOf);
-      assert.equal(trackCount(graph), 99, `seed ${seed} uses ${trackCount(graph)} tracks`);
+      assert.equal(trackCount(graph), 98, `seed ${seed} uses ${trackCount(graph)} tracks`);
+    }
+  });
+
+  it("never ends early: every day goes round all five stops, whatever you choose", () => {
+    for (const seed of [1, 2, 3]) {
+      const graph = safariAdventure({ seed });
+      const nodes = nodeMap(graph);
+      let state = seed;
+      const coin = () => {
+        state = (state * 1103515245 + 12345) % 2147483648;
+        return state % 2 === 0;
+      };
+      for (let walk = 0; walk < 40; walk += 1) {
+        let node = nodes.get(graph.start)!;
+        const stops = new Set<string>();
+        for (let steps = 0; steps < 80 && node.kind !== "ending"; steps += 1) {
+          if (/^s\da\d$/.test(node.id)) stops.add(node.id[1] as string);
+          node = nodes.get(node.kind === "scene" ? node.next : coin() ? node.left.to : node.right.to)!;
+        }
+        assert.equal(node.kind, "ending");
+        assert.equal(stops.size, 5, `walk ${walk} visited stops ${[...stops].join(",")}`);
+      }
+      assert.deepEqual(
+        graph.nodes.flatMap((item) => (item.kind === "ending" ? [item.ending.name] : [])).sort(),
+        ["A Good Day Out", "Barnaby's Bad Day", "Golden Legend", "Safari Master"],
+      );
     }
   });
 
@@ -371,30 +397,26 @@ describe("safari adventure from the catalogue", () => {
       for (const node of graph.nodes) {
         const catching = /^s\dc\d$/.test(node.id) || node.id === "goldc";
         if (/^s\da\d$/.test(node.id)) assert.match(node.text, /^\[footsteps\]/, `${node.id} starts with footsteps`);
-        if (catching) assert.match(node.text, /\[throw\] \[catch\] .*\[fanfare\]$/);
+        if (catching) assert.match(node.text, /\[throw\] \[catch\] .*\[fanfare\]/);
         if (node.kind === "ending") {
           assert.match(node.text, node.ending.golden ? /\[golden\]$/ : /\[ending\]$/);
-          if (node.ending.number <= 4) assert.match(node.text, /\[whistle\]/);
         } else {
           assert.ok(node.bed?.ambience && node.bed.music, `${node.id} has ambience and music`);
           // Where he can turn up (on the way in, beating you to a Pokémon), the music turns tense.
           // A tally that only mentions him, and the gate where you meet him, keep the scene's music.
-          const touring = /^s\d[awe]\d$/.test(node.id);
+          const touring = /^s\d[aw]\d$/.test(node.id);
           if (touring && /\bBarnaby\b/.test(node.text)) assert.equal(node.bed.music, "tense", `${node.id} is tense with Barnaby about`);
         }
       }
-      assert.doesNotMatch(graph.nodes.map((node) => node.text).join(" "), /Pheeeep/);
+      const all = graph.nodes.map((node) => node.text).join(" ");
+      assert.doesNotMatch(all, /Pheeeep|\[whistle\]|blows? (her|the|my) whistle/);
     }
   });
 
-  it("shows the shadow, then the Poké Ball, then how the throw went, then the Pokémon", () => {
+  it("shows the shadow, then the Poké Ball, then how the throw went, with the Pokémon's cry after a catch", () => {
     for (const seed of [1, 2, 3]) {
       const graph = safariAdventure({ seed });
       const byId = new Map(graph.nodes.map((node) => [node.id, node]));
-      const next = (id: string) => {
-        const node = byId.get(id);
-        return node?.kind === "scene" ? byId.get(node.next) : undefined;
-      };
       for (const meet of graph.nodes.filter((node) => /^(s\db\d|goldb)$/.test(node.id))) {
         assert.ok(meet.kind === "choice");
         if (meet.kind !== "choice") continue;
@@ -405,9 +427,11 @@ describe("safari adventure from the catalogue", () => {
         const caught = throws.find((node) => node?.icon && "pixel" in node.icon && node.icon.pixel === "pokeball-caught");
         const broke = throws.find((node) => node?.icon && "pixel" in node.icon && node.icon.pixel === "pokeball-broken");
         assert.ok(caught && broke, `${meet.id} leads to a caught ball and a broken one`);
-        for (const result of [caught, broke]) {
-          const reveal = next(result?.id ?? "") ?? byId.get(result?.kind === "scene" ? result.next : "");
-          assert.deepEqual(reveal?.icon, { dexId }, `${result?.id} is followed by the Pokémon`);
+        // The result and the reveal share a track now; a catch plays the cry after the ball clicks shut.
+        if (meet.id !== "goldb") {
+          const catchAt = caught?.text.indexOf("[catch]") ?? -1;
+          const cryAt = caught?.text.indexOf(`[cry:${dexId}]`) ?? -1;
+          assert.ok(catchAt >= 0 && cryAt > catchAt, `${caught?.id} plays the cry after the ball clicks shut`);
         }
       }
     }
@@ -421,7 +445,7 @@ describe("safari adventure from the catalogue", () => {
   it("walks the golden path through every stop", () => {
     const graph = safariAdventure({ seed: 1, owner: "Mia" });
     const walk = goldenWalk(graph);
-    assert.equal(walk.at(-1)?.node.id, "end7");
+    assert.equal(walk.at(-1)?.node.id, "end4");
     assert.ok(walk.some(({ node }) => node.id === "gold"));
     assert.equal(walk.filter(({ node }) => /^s\dc0$/.test(node.id)).length, 5);
   });

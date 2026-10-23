@@ -4,7 +4,8 @@
  * Marigold the warden takes the child round six stops while Barnaby, the rival, stays one step ahead.
  * At each stop the child first finds the Pokémon (follow its type to the right place, or spot the rare
  * one of two), then picks the right throw: a Safari Ball for a common one, bait for a rare fast one,
- * a rock for a rare slow one. Two slips and the whistle blows. A perfect run opens a secret stop.
+ * a rock for a rare slow one. Every day goes round all five stops: the more get away, the humbler the
+ * ending, and a perfect run opens a secret stop.
  *
  * The words are hand-written in safari-words.ts and safari-roster.ts. This file only picks which
  * Pokémon, which lines and which side each answer goes. `planSafari` does the picking from the catalogue;
@@ -40,8 +41,9 @@ export type SafariMon = MonSheet & { area: SafariArea; captureRate: number; spee
 export type SafariThrow = "ball" | "bait" | "rock";
 
 /**
- * Five stops. Two slips blow the whistle. Each throw ends on two tracks, so the Yoto screen can show the
- * result and then the Pokémon, and five stops is what fits in a card's hundred tracks.
+ * Five stops, and every day goes round all of them. A card cannot count, so each stop is laid out once
+ * for none, one, and two or more slips so far; with each throw and its result on one track, that is
+ * what fits in a card's hundred tracks.
  */
 export const SAFARI_STOPS = 5;
 
@@ -166,12 +168,12 @@ export function nameVariants(name: string): string[] {
   return [...new Set([name, plainName(name), spokenName(name), name.replace(/[♀♂]/g, "").trim()])].filter(Boolean);
 }
 
-/** Text for the ear: no digits, no stray symbols. Sound cues such as [catch] are kept. */
+/** Text for the ear: no digits, no stray symbols. Sound cues such as [catch] and cries such as [cry:25] are kept. */
 function speakable(text: string): string {
   return text
-    .split(/(\[\w+\])/)
+    .split(/(\[\w+\]|\[cry:\d{1,4}\])/)
     .map((piece) =>
-      /^\[\w+\]$/.test(piece) && isStorySound(piece.slice(1, -1))
+      (/^\[\w+\]$/.test(piece) && isStorySound(piece.slice(1, -1))) || /^\[cry:\d{1,4}\]$/.test(piece)
         ? piece
         : piece
             .replace(/(\d+)/g, (digits) => numberWords(Number(digits)))
@@ -447,13 +449,14 @@ const ID = {
   missed: (stop: number, slips: number) => `s${stop}w${slips}`,
   meet: (stop: number, slips: number) => `s${stop}b${slips}`,
   fled: (stop: number, slips: number) => `s${stop}f${slips}`,
-  fledReveal: (stop: number, slips: number) => `s${stop}e${slips}`,
   caught: (stop: number, slips: number) => `s${stop}c${slips}`,
-  caughtReveal: (stop: number, slips: number) => `s${stop}d${slips}`,
   ending: (number: number) => `end${number}`,
 };
 
-const GOLD = { find: "gold", missed: "goldw", meet: "goldb", fled: "goldf", fledReveal: "golde", caught: "goldc" };
+const GOLD = { find: "gold", missed: "goldw", meet: "goldb", fled: "goldf", caught: "goldc" };
+
+/** Slips are counted up to this. Two or more all come to the same ending, and the day always goes on. */
+export const MOST_SLIPS = 2;
 
 const shadow = (dexId: number): StoryIcon => ({ dexId, shadow: true });
 const picture = (dexId: number): StoryIcon => ({ dexId });
@@ -496,6 +499,7 @@ function decks(random: () => number) {
     middle: deck(W.MIDDLE_OPENERS, random),
     last: deck(W.LAST_OPENERS, random),
     oneSlip: deck(W.ONE_SLIP_OPENERS, random),
+    twoSlips: deck(W.TWO_SLIP_OPENERS, random),
     barnaby: deck(W.BARNABY_LINES, random),
     where: deck(W.WHERE_LINES, random),
     spot: deck(W.SPOT_LINES, random),
@@ -516,7 +520,8 @@ function decks(random: () => number) {
     secondSlip: deck(W.SECOND_SLIP_LINES, random),
     lastSlip: deck(W.LAST_SLIP_LINES, random),
     tally,
-    tip: deck(W.WHISTLE_TIPS, random),
+    tip: deck(W.PARTING_TIPS, random),
+    moreCaught: deck(W.MORE_CATCH_LINES, random),
   };
 }
 
@@ -665,7 +670,8 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
   const nodes: StoryNode[] = [];
   const stops = plan.stops.length;
   const total = W.ENDING_NAMES.length;
-  const endingFor = (caught: number) => ID.ending(caught + 1);
+  // Ending 1 after two or more slips, ending 2 after one. A perfect day goes to the secret stop instead.
+  const endingAfter = (slips: number) => ID.ending(slips >= MOST_SLIPS ? 1 : 2);
 
   nodes.push({
     id: "start",
@@ -695,13 +701,14 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
     // Before an area stop's choice you are still on the path; at a spot stop you are already there.
     const findBed = stop.kind === "area" ? PATH_SOUND : home;
     const missedBed = stop.kind === "area" ? PLACE_SOUND[stop.clue.decoy] : home;
-    for (const slips of number === 1 ? [0] : [0, 1]) {
-      const caughtSoFar = number - 1 - slips;
-      const onWin = number < stops ? ID.find(number + 1, slips) : slips === 0 ? GOLD.find : endingFor(stops - 1);
-      const onSlip =
-        slips === 0 ? (number < stops ? ID.find(number + 1, 1) : endingFor(stops - 1)) : endingFor(caughtSoFar);
+    // How many have got away so far: none, one, or two or more. Every day goes on to the last stop.
+    for (let slips = 0; slips <= Math.min(index, MOST_SLIPS); slips += 1) {
+      const after = Math.min(slips + 1, MOST_SLIPS);
+      const last = number === stops;
+      const onWin = last ? (slips === 0 ? GOLD.find : endingAfter(slips)) : ID.find(number + 1, slips);
+      const onSlip = last ? endingAfter(after) : ID.find(number + 1, after);
       const title = `Stop ${number}`;
-      const warning = slips === 1 ? words.oneSlip() : "";
+      const warning = slips === 1 ? words.oneSlip() : slips >= MOST_SLIPS ? words.twoSlips() : "";
       const findText = join("[footsteps]", warning, stopText.find);
       const missedText = join(stopText.missed, slipLine(number, slips, words));
       nodes.push({
@@ -734,42 +741,29 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
         text: stopText.meet,
         ...throwSides(stop, ID.caught(number, slips), ID.fled(number, slips)),
       });
+      // The throw and what came of it share a track: the Yoto screen shows the ball breaking open or clicking shut.
+      const fledText = join(stopText.fled, stopText.fledReveal, slipLine(number, slips, words));
       nodes.push({
         id: ID.fled(number, slips),
         kind: "scene",
         title: `${title}: The Throw`,
         icon: BROKE_FREE,
-        bed: home,
-        text: stopText.fled,
-        next: ID.fledReveal(number, slips),
-      });
-      const fledReveal = join(stopText.fledReveal, slipLine(number, slips, words));
-      nodes.push({
-        id: ID.fledReveal(number, slips),
-        kind: "scene",
-        title: `${title}: What Happened`,
-        icon: picture(stop.mon.id),
-        bed: underScene(home, fledReveal),
-        text: fledReveal,
+        bed: underScene(home, fledText),
+        text: fledText,
         next: onSlip,
       });
       nodes.push({
         id: ID.caught(number, slips),
         kind: "scene",
-        title: `${title}: The Throw`,
+        title: `${title}: Gotcha`,
         icon: CAUGHT,
         bed: home,
-        text: stopText.caught,
-        next: ID.caughtReveal(number, slips),
-      });
-      nodes.push({
-        id: ID.caughtReveal(number, slips),
-        kind: "scene",
-        title: `${title}: Gotcha`,
-        dexId: stop.mon.id,
-        icon: picture(stop.mon.id),
-        bed: home,
-        text: join(stopText.caughtReveal, tallyLine(number - slips, words)),
+        text: join(
+          stopText.caught,
+          `[cry:${stop.mon.id}]`,
+          stopText.caughtReveal,
+          slips >= MOST_SLIPS ? words.moreCaught() : tallyLine(number - slips, words),
+        ),
         next: onWin,
       });
     }
@@ -820,16 +814,12 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
     title: "The Secret Stop: The Throw",
     icon: BROKE_FREE,
     bed: goldBed,
-    text: join(words.fled[`${golden.wrongThrow}-${goldRight}` as W.WrongThrow]()),
-    next: GOLD.fledReveal,
-  });
-  nodes.push({
-    id: GOLD.fledReveal,
-    kind: "scene",
-    title: "The Secret Stop: What Happened",
-    icon: picture(gold.id),
-    bed: goldBed,
-    text: join(revealed(gold, false), words.rightThrow[goldRight](), W.GOLDEN_FLED_AFTER),
+    text: join(
+      words.fled[`${golden.wrongThrow}-${goldRight}` as W.WrongThrow](),
+      revealed(gold, false),
+      words.rightThrow[goldRight](),
+      W.GOLDEN_FLED_AFTER,
+    ),
     next: masterEnding,
   });
   nodes.push({
@@ -854,9 +844,8 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
         ending: { number, name, golden: true },
       });
     } else {
-      const whistle = W.WHISTLE_ENDINGS[number - 1];
       const text = join(
-        whistle ? join(whistle, words.tip()) : number === total - 1 ? W.masterText(owner) : W.dayEndText(owner),
+        number === 1 ? join(W.goodDayText(owner), words.tip()) : number === 2 ? W.dayEndText(owner) : W.masterText(owner),
         "[ending]",
       );
       nodes.push({
