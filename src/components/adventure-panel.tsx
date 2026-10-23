@@ -35,11 +35,20 @@ const ADVENTURES = {
     opening: "Warming up the stadium…",
     failed: "The Gym Challenge could not be set up.",
   },
+  island: {
+    title: "Island Adventure",
+    blurb:
+      "Mabel the Wailord is lost on the beach. Your child rides her across the sea with Captain Brine, through fog, storms and coral reefs, to the island where her family sings, choosing the way with the left and right buttons.",
+    ownerNote: "Captain Brine calls them by name.",
+    opening: "Hoisting the sails…",
+    failed: "The Island Adventure could not be opened.",
+  },
 } as const;
 
 type AdventureKind = keyof typeof ADVENTURES;
 
-const parseKind = (raw: string | null): AdventureKind => (raw === "gym" ? "gym" : "safari");
+const parseKind = (raw: string | null): AdventureKind =>
+  raw !== null && Object.hasOwn(ADVENTURES, raw) ? (raw as AdventureKind) : "safari";
 const keepKind = (kind: AdventureKind) => kind;
 
 function newSeed(): number {
@@ -222,13 +231,13 @@ export function AdventurePanel({
   return (
     <div className="grid min-w-0 gap-6 md:grid-cols-[17.5rem_minmax(0,1fr)]">
       <section className="min-w-0" aria-labelledby="adventure-setup">
-        <div className="mb-3 grid grid-cols-2 gap-2" role="group" aria-label="Adventure">
+        <div className="mb-3 flex flex-wrap gap-2" role="group" aria-label="Adventure">
           {(Object.keys(ADVENTURES) as AdventureKind[]).map((option) => (
             <Button
               key={option}
               type="button"
               variant={option === kind ? "default" : "outline"}
-              className="h-10 w-full"
+              className="h-10 grow px-3"
               aria-pressed={option === kind}
               onClick={() => chooseKind(option)}
             >
