@@ -88,10 +88,26 @@ export function isRateLimited(status: number, data: unknown): boolean {
   return /rate limit|too many requests|slow down/i.test(serialized(data));
 }
 
-/** A Cloudflare or origin gateway failure, including an HTML body on any status. */
+/**
+ * A Cloudflare or origin gateway failure, including an HTML body on any status, and our own
+ * "public link timed out" answer when Yoto's side gave one.
+ */
 export function looksLikeGateway(status: number, data: unknown): boolean {
   if (status === 502 || status === 504 || status === 524) return true;
-  return /<!doctype|<html[\s>]|<\/html>|trycloudflare|bad gateway|error code 50[24]/i.test(serialized(data));
+  return /<!doctype|<html[\s>]|<\/html>|trycloudflare|bad gateway|error code 50[24]|public link timed out/i.test(
+    serialized(data),
+  );
+}
+
+/**
+ * Waits between retries when the server or Yoto's gateway is briefly unreachable: a site restart or a
+ * Yoto blip. About a minute in all, so a send rides it out instead of stopping.
+ */
+const GATEWAY_RETRY_MS = [1_000, 2_000, 4_000, 8_000, 12_000, 15_000, 20_000] as const;
+
+/** The wait before gateway retry number `miss` (from 0), or null once it is time to give up. */
+export function gatewayRetryDelay(miss: number): number | null {
+  return GATEWAY_RETRY_MS[miss] ?? null;
 }
 
 /** Shown when the saved grant is older than the authorize URL. Never include the raw scope list. */
