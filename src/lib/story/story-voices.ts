@@ -9,6 +9,7 @@
 import { chosenVoice, isPiperVoice, PIPER_VOICE_ID } from "@/lib/piper-voice";
 import { CRY_CUE, isCryId, isStorySound, SOUND_CUE, type StorySound } from "@/lib/story/story-sound";
 import { YOTO_VOICES } from "@/lib/yoto-icons";
+import { withoutVoiceTags } from "@/lib/voice-tags";
 
 export const NARRATOR = "narrator";
 
@@ -133,9 +134,10 @@ function speakerIn(narration: string, cast: readonly StoryCharacter[]): string |
 /** The narration right after a quote, up to the end of its clause: " says Marigold" in "'Hello,' says Marigold." */
 function attributionAfter(quote: string, next: Chunk | undefined): string | undefined {
   if (next?.kind !== "narration") return undefined;
-  const ends = quote.at(-1) ?? "";
+  // Expression tags ({laughs}) are acted, not read, so they never decide where a sentence ends.
+  const ends = withoutVoiceTags(quote).at(-1) ?? "";
   // "'Bait.' Marigold sighs." starts a new sentence, so it does not name who spoke.
-  const carriesOn = ends === "," || ((ends === "!" || ends === "?") && /^[a-z]/.test(next.text));
+  const carriesOn = ends === "," || ((ends === "!" || ends === "?") && /^[a-z]/.test(withoutVoiceTags(next.text)));
   if (!carriesOn) return undefined;
   return next.text.split(/[.!?;]/)[0];
 }
@@ -260,6 +262,27 @@ export function slotPieces(text: string, slots: readonly string[]): Array<{ text
 }
 
 /**
+ * Joins a piece that is only an expression tag ("{gasps}" cut off before a name) onto the words after it,
+ * or before it at the end of a line, so the tag is acted on those words and no piece is left with nothing
+ * to say. Piper drops tags, and would otherwise be handed an empty line.
+ */
+function withTagsAttached(pieces: Array<{ text: string; slot: boolean }>): Array<{ text: string; slot: boolean }> {
+  const out: Array<{ text: string; slot: boolean }> = [];
+  let carried = "";
+  for (const piece of pieces) {
+    if (!withoutVoiceTags(piece.text).trim()) {
+      carried = `${carried} ${piece.text}`.trim();
+      continue;
+    }
+    out.push(carried ? { text: `${carried} ${piece.text}`, slot: piece.slot } : piece);
+    carried = "";
+  }
+  const last = out.at(-1);
+  if (carried && last) out[out.length - 1] = { ...last, text: `${last.text} ${carried}` };
+  return out.length > 0 ? out : pieces;
+}
+
+/**
  * What to record for one track: each line in its speaker's voice, and each sound, in order.
  * `say` respells names for the voice. Names listed in `slots` are recorded as their own short pieces,
  * joined tight to the words around them. Each spoken part carries its Piper fallback when `fallback`
@@ -286,7 +309,7 @@ export function trackParts(
     }
     const style = voices[line.speaker] ?? narrator;
     const backup = options.fallback?.[line.speaker] ?? options.fallback?.[NARRATOR];
-    slotPieces(line.text, options.slots ?? []).forEach((piece, index) => {
+    withTagsAttached(slotPieces(line.text, options.slots ?? [])).forEach((piece, index) => {
       parts.push({
         text: say(piece.text),
         ...style,

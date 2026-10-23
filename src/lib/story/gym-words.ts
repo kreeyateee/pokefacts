@@ -72,7 +72,7 @@ export const GYMS: readonly Gym[] = [
     intro:
       "The second gym is a swimming pool with a wave machine, and everything smells of chlorine. Leader Coral bounces off the diving board, does three somersaults, and lands right in front of you, dripping. 'Welcome to my pool!' says Coral. 'Are you ready to make a splash? Oh, I love saying that. I say it every day.' Coral sends out",
     ace: "Coral wrings out her ponytail. 'Okay, okay, that went swimmingly,' says Coral. 'Get it? Swimmingly? Now meet my best friend.' The water in the pool heaves, and up surges",
-    tease: "'Ooh, that sank like a stone,' says Coral. 'Dive back in and try again!'",
+    tease: "'{giggles} Ooh, that sank like a stone,' says Coral. 'Dive back in and try again!'",
     farewell:
       "'You were brilliant,' says Coral. 'Absolutely making waves.' She fishes the Cascade Badge out of her goggles case, gives it a quick polish on her towel, and hands it over.",
   },
@@ -82,7 +82,7 @@ export const GYMS: readonly Gym[] = [
     voices: ["EXAVITQu4vr4xnSDxMaL", "FGY2WhTYpPnrIDTdsKH5"],
     badge: "Rainbow",
     intro:
-      "The third gym is a huge glass greenhouse, warm and green, buzzing with bees. Leader Fern is watering a sunflower and humming to it. 'Oh, hello,' says Fern, softly. 'Sorry. I was just telling this sunflower how tall it's getting. Shall we battle? Gently, mind. The plants are listening.' Fern sends out",
+      "The third gym is a huge glass greenhouse, warm and green, buzzing with bees. Leader Fern is watering a sunflower and humming to it. '{whispers} Oh, hello,' says Fern, softly. 'Sorry. I was just telling this sunflower how tall it's getting. Shall we battle? Gently, mind. The plants are listening.' Fern sends out",
     ace: "Fern smiles at you, as if you were a seedling that had just sprouted. 'You're growing so fast,' says Fern. 'Now, careful. This one has very deep roots.' The leaves on the floor shiver, and out steps",
     tease: "'Oh dear,' says Fern, patting a fern. 'Never mind. Everything grows if you give it another go.'",
     farewell:
@@ -96,7 +96,7 @@ export const GYMS: readonly Gym[] = [
     intro:
       "The fourth gym is a workshop full of whirring machines, and the air smells like a thunderstorm. Leader Volta skids round a corner on roller skates, with her hair standing straight up. 'Hi hi hi!' says Volta, very fast. 'You're the challenger, brilliant, love it, I've just invented a toaster that makes the toast go faster, anyway, battle time!' Volta sends out",
     ace: "Volta's eyes light up, quite literally. 'Ooh, you're quick,' says Volta. 'But are you quicker than THIS?' Every light in the gym flickers, and with a crackle, out zaps",
-    tease: "'Bzzzt! Wrong wire!' says Volta. 'Don't worry, I blow things up all the time. Try again!'",
+    tease: "'{laughs} Bzzzt! Wrong wire!' says Volta. 'Don't worry, I blow things up all the time. Try again!'",
     farewell:
       "'You're electrifying,' says Volta, and she means it. She pulls the Thunder Badge out of a machine that goes ding, and it's still slightly warm.",
   },
@@ -106,7 +106,7 @@ export const GYMS: readonly Gym[] = [
     voices: ["cgSgspJ2msm6clMCkdW9", "hpp4J3VqNfWAUOO0d1Us"],
     badge: "Gale",
     intro:
-      "The fifth gym is on top of a very tall tower, and the wind up here could blow your hat off. Leader Skye swoops down on a glider and lands on the railing. 'Wahoo!' says Skye. 'Don't look down. Actually, do look down, it's amazing. Ready to fly?' Skye sends out",
+      "The fifth gym is on top of a very tall tower, and the wind up here could blow your hat off. Leader Skye swoops down on a glider and lands on the railing. '{excited} Wahoo!' says Skye. 'Don't look down. Actually, do look down, it's amazing. Ready to fly?' Skye sends out",
     ace: "Skye whistles, a long high whistle, and the clouds seem to whistle back. 'Here comes the big one,' says Skye. A great shadow sweeps over the tower, and down dives",
     tease: "'Whoops, that one got lost in the clouds,' says Skye. 'Try again, quick, before the wind changes!'",
     farewell:
@@ -158,10 +158,10 @@ export function introText(owner: string, team: readonly string[], count = "six")
   return [
     "Welcome to the Gym Challenge!",
     "A huge banner flaps over the road: Eight Gyms. Eight Badges. One Champion.",
-    `A young man in a shiny tracksuit leaps out from behind it. 'And here they are, folks!' says Ronnie, into a microphone that isn't plugged in. 'Ronnie Rumble here, and ${owner ? `this is ${owner}, ` : "here comes "}our newest challenger!'`,
+    `A young man in a shiny tracksuit leaps out from behind it. '{excited} And here they are, folks!' says Ronnie, into a microphone that isn't plugged in. 'Ronnie Rumble here, and ${owner ? `this is ${owner}, ` : "here comes "}our newest challenger!'`,
     `'Your team,' says Ronnie, counting your ${count} Poké Balls. 'You've got ${team.join(", ")}.'`,
     "'Here's how it works,' says Ronnie. 'Every gym leader sends out a Pokémon. You pick which of yours to send out. Get the type right, and boom! Get it wrong, and the leader lets you try again, because they're nice like that.'",
-    "'Then it's the Champion. And the Champion,' says Ronnie, lowering his voice, 'does not let you try again.'",
+    "'Then it's the Champion. And the Champion,' says Ronnie, lowering his voice, '{whispers} does not let you try again.'",
     "'Want my quick lesson on types first?'",
   ].join(" ");
 }
@@ -207,9 +207,9 @@ export const SEND_OUT_LINES = [
 
 /** The question before you choose. */
 export const WHICH_LINES = [
-  "'Who are you sending out?' says Ronnie, holding his breath.",
+  "'{nervously} Who are you sending out?' says Ronnie, holding his breath.",
   "'Choose carefully,' whispers Ronnie, a bit too loudly.",
-  "'The crowd goes quiet,' says Ronnie. 'Which Pokémon will it be?'",
+  "'{whispers} The crowd goes quiet,' says Ronnie. 'Which Pokémon will it be?'",
   "Your hand hovers over your Poké Balls.",
 ];
 
@@ -226,11 +226,11 @@ export const BIG_WIN_LINES = [
 ];
 
 export const RONNIE_WINS = [
-  "'WHAT a choice!' says Ronnie. 'The crowd is on its feet!'",
-  "'Textbook!' says Ronnie. 'Absolutely textbook!'",
-  "'Did you SEE that?' says Ronnie, to nobody in particular.",
-  "'Oh, I need to sit down,' says Ronnie. 'That was beautiful.'",
-  "'Ten out of ten,' says Ronnie. 'Eleven out of ten!'",
+  "'{shouts} WHAT a choice!' says Ronnie. 'The crowd is on its feet!'",
+  "'{excited} Textbook!' says Ronnie. 'Absolutely textbook!'",
+  "'{shouts} Did you SEE that?' says Ronnie, to nobody in particular.",
+  "'{gasps} Oh, I need to sit down,' says Ronnie. 'That was beautiful.'",
+  "'{excited} Ten out of ten,' says Ronnie. 'Eleven out of ten!'",
 ];
 
 /** It did nothing at all. */
@@ -263,9 +263,9 @@ export const BACK_IN_LINES = [
 ];
 
 export const RONNIE_MISSES = [
-  "'Oof,' says Ronnie. 'Happens to the best of us. Mostly to me.'",
+  "'{sighs} Oof,' says Ronnie. 'Happens to the best of us. Mostly to me.'",
   "'Not to worry, folks,' says Ronnie. 'The challenger gets another go!'",
-  "'I'd have done exactly the same,' says Ronnie. 'Which is why I'm a commentator.'",
+  "'{laughs} I'd have done exactly the same,' says Ronnie. 'Which is why I'm a commentator.'",
 ];
 
 /**
@@ -355,7 +355,7 @@ export const BADGE_LINES = [
 
 export const CHAMPION_INTRO = [
   "The Champion's stadium is the biggest place you have ever seen. Thousands of people are cheering, and the floor is polished so bright you can see yourself in it. [cheer]",
-  "'Eight badges, folks!' says Ronnie, and his voice echoes round the whole stadium. 'And now, the Champion!'",
+  "'{shouts} Eight badges, folks!' says Ronnie, and his voice echoes round the whole stadium. 'And now, the Champion!'",
   "Champion Aurelia walks out slowly, in a long cloak, and the crowd goes silent. She smiles at you, kindly. 'You've come a long way,' says Aurelia. 'I'm going to give you my very best, because you deserve it.'",
   "'Three Pokémon,' says Aurelia. 'And at this level, there are no second chances.'",
 ].join(" ");
@@ -375,7 +375,7 @@ export const CHAMPION_LOSSES = [
 ];
 
 export const CHAMPION_WIN =
-  "Aurelia's last Pokémon faints, and for a second nobody makes a sound. Then the whole stadium explodes. [fanfare] [cheer] 'A NEW CHAMPION!' yells Ronnie, so loud his microphone squeaks. Aurelia walks over and hangs a golden medal round your neck. 'Well done, Champion,' says Aurelia. 'I haven't had a battle like that in a very long time.'";
+  "Aurelia's last Pokémon faints, and for a second nobody makes a sound. Then the whole stadium explodes. [fanfare] [cheer] '{shouts} A NEW CHAMPION!' yells Ronnie, so loud his microphone squeaks. Aurelia walks over and hangs a golden medal round your neck. 'Well done, Champion,' says Aurelia. 'I haven't had a battle like that in a very long time.'";
 
 /** A legendary Pokémon arrives. Its cry plays where {cry} is. */
 export const LEGEND_ARRIVES =
@@ -405,8 +405,8 @@ export function restEnding(legend: string, owner: string): string {
   return [
     `You don't throw anything. You just let it rest. ${legend} looks at you for a long moment, and then it lowers its great head, very gently, until it touches your hand.`,
     "When it flies away, it leaves something behind: a tiny shining stone, warm to the touch.",
-    `Aurelia gasps. 'It chose you,' says Aurelia. 'It will come back${owner ? `, ${owner}` : ""}. Whenever you need it.'`,
-    "'I'm not crying,' says Ronnie, crying. 'Ladies and gentlemen, the Champion!'",
+    `Aurelia gasps. '{whispers} It chose you,' says Aurelia. 'It will come back${owner ? `, ${owner}` : ""}. Whenever you need it.'`,
+    "'{sighs} I'm not crying,' says Ronnie, crying. 'Ladies and gentlemen, the Champion!'",
   ].join(" ");
 }
 

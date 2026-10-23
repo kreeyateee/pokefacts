@@ -8,6 +8,32 @@
  */
 const VOICE_TAG = /\{\s*([a-z][a-z' -]{0,30}?)\s*\}/gi;
 
+/**
+ * The expressions the adventures and jokes use. A brace word not on this list is a story's template gap
+ * ({type}, {home}), which is filled in before anything is read, so the two never get confused.
+ */
+export const EXPRESSIONS = [
+  "excited",
+  "whispers",
+  "laughs",
+  "giggles",
+  "gasps",
+  "sighs",
+  "shouts",
+  "cheerfully",
+  "nervously",
+  "curious",
+  "smugly",
+  "sadly",
+  "proudly",
+  "surprised",
+] as const;
+
+/** True for a word on the list of expressions. */
+export function isExpression(word: string): boolean {
+  return (EXPRESSIONS as readonly string[]).includes(word.trim().toLowerCase());
+}
+
 /** The script as ElevenLabs should receive it: {excited} becomes [excited]. */
 export function forElevenLabs(text: string): string {
   return text.replace(VOICE_TAG, (_, tag: string) => `[${tag.trim().toLowerCase()}]`);
@@ -19,6 +45,8 @@ export function withoutVoiceTags(text: string): string {
     .replace(VOICE_TAG, " ")
     .replace(/[ \t]{2,}/g, " ")
     .replace(/ +([,.!?;:])/g, "$1")
+    // A tag just inside an opening quote ("'{gasps} Look!'") leaves no gap after the quote mark.
+    .replace(/(^|\s)(['‘“"]) +/g, "$1$2")
     .replace(/^ +| +$/gm, "");
 }
 

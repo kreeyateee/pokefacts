@@ -69,7 +69,15 @@ export function jokesFor(random: () => number, avoid: readonly number[] = []): J
   return order;
 }
 
-/** A character telling a joke, written so each line is read in their voice. */
+/**
+ * A character telling a joke, written so each line is read in their voice. The Yoto voices act the
+ * {cheerfully} and the {laughs}; Piper and the page drop them.
+ */
 export function toldBy(name: string, joke: Joke): string {
-  return `'Want to hear a joke?' says ${name}. '${joke.setup}' Nobody knows. '${joke.punchline}' says ${name}, and laughs so hard at it that everyone else laughs too.`;
+  return `'{cheerfully} Want to hear a joke?' says ${name}. '${joke.setup}' Nobody knows. '${joke.punchline} {laughs}' says ${name}, and laughs so hard at it that everyone else laughs too.`;
+}
+
+/** A Joke Book track: the Pokémon named, the question, a pause, then the punchline and a laugh. */
+export function jokeBookText(name: string, joke: Joke): string {
+  return `Here's a joke about ${name}. ${joke.setup} ... ${joke.punchline} {laughs}`;
 }

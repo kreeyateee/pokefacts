@@ -2,6 +2,7 @@ import { YOTO_TRACK_LIMIT } from "@/lib/kid-cards";
 import { pronounce } from "@/lib/pronounce";
 import type { StoryGraph, StoryIcon, StoryNode, StoryNodeId } from "@/lib/story/story-graph";
 import { isStoryAmbience, isStoryMusic, isStorySound, SOUND_CUE, withoutCues } from "@/lib/story/story-sound";
+import { isExpression, withoutVoiceTags } from "@/lib/voice-tags";
 import { storyChunks } from "@/lib/story/story-voices";
 
 /** Yoto reads at most this many characters of text to speech on one track. */
@@ -86,20 +87,29 @@ function nodeProblems(node: StoryNode, endings: number): string[] {
     problems.push(`${name} has no narration.`);
   } else {
     const lines = storyLines(node, endings);
-    const spoken = pronounce(withoutCues(lines.narration)).length;
+    // Counted as the words read, without expression tags, which the voice acts on but does not say.
+    const spoken = pronounce(withoutVoiceTags(withoutCues(lines.narration))).length;
     if (spoken > STORY_TEXT_LIMIT) {
       problems.push(`${name} narration is ${spoken} characters. Yoto reads at most ${STORY_TEXT_LIMIT}.`);
     }
-    if (lines.question && pronounce(lines.question).length > STORY_TEXT_LIMIT) {
+    if (lines.question && pronounce(withoutVoiceTags(lines.question)).length > STORY_TEXT_LIMIT) {
       problems.push(`${name} question is longer than Yoto reads.`);
     }
     for (const match of node.text.matchAll(SOUND_CUE)) {
       if (!isStorySound(match[1])) problems.push(`${name} plays [${match[1]}], which is not a story sound.`);
     }
+    for (const match of node.text.matchAll(/\{([^}]*)\}/g)) {
+      if (!isExpression(match[1] ?? "")) problems.push(`${name} has {${match[1]}}, which is not an expression the voices know.`);
+    }
     if (node.bed?.ambience && !isStoryAmbience(node.bed.ambience)) problems.push(`${name} has an unknown ambience.`);
     if (node.bed?.music && !isStoryMusic(node.bed.music)) problems.push(`${name} has unknown music.`);
     try {
-      storyChunks(node.text);
+      for (const chunk of storyChunks(node.text)) {
+        // A tag must sit with the words it colours ("'{gasps} Look!'"), never on its own by a sound cue.
+        if ("text" in chunk && !withoutVoiceTags(chunk.text).trim()) {
+          problems.push(`${name} has an expression tag with no words to act on: "${chunk.text}".`);
+        }
+      }
     } catch {
       problems.push(`${name} opens a quote and never closes it.`);
     }

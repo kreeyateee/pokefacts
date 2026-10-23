@@ -22,6 +22,7 @@ import * as W from "@/lib/story/safari-words";
 import type { StoryGraph, StoryIcon, StoryNode } from "@/lib/story/story-graph";
 import { isStorySound, type StoryBed } from "@/lib/story/story-sound";
 import type { StoryCharacter } from "@/lib/story/story-voices";
+import { isExpression } from "@/lib/voice-tags";
 import { iconForType, YOTO_ICONS, YOTO_VOICES } from "@/lib/yoto-icons";
 
 export const SAFARI_AREAS = [
@@ -170,12 +171,17 @@ export function nameVariants(name: string): string[] {
   return [...new Set([name, plainName(name), spokenName(name), name.replace(/[♀♂]/g, "").trim()])].filter(Boolean);
 }
 
-/** Text for the ear: no digits, no stray symbols. Sound cues such as [catch] and cries such as [cry:25] are kept. */
+/**
+ * Text for the ear: no digits, no stray symbols. Sound cues such as [catch], cries such as [cry:25] and
+ * expression tags such as {whispers} are kept.
+ */
 function speakable(text: string): string {
   return text
-    .split(/(\[\w+\]|\[cry:\d{1,4}\])/)
+    .split(/(\[\w+\]|\[cry:\d{1,4}\]|\{[a-z]+\})/)
     .map((piece) =>
-      (/^\[\w+\]$/.test(piece) && isStorySound(piece.slice(1, -1))) || /^\[cry:\d{1,4}\]$/.test(piece)
+      (/^\[\w+\]$/.test(piece) && isStorySound(piece.slice(1, -1))) ||
+      /^\[cry:\d{1,4}\]$/.test(piece) ||
+      (/^\{[a-z]+\}$/.test(piece) && isExpression(piece.slice(1, -1)))
         ? piece
         : piece
             .replace(/(\d+)/g, (digits) => numberWords(Number(digits)))
@@ -195,7 +201,11 @@ function join(...parts: string[]): string {
 function fill(template: string, gaps: Record<string, string>): string {
   return template.replace(/\{(\w+)\}/g, (_, key: string) => {
     const value = gaps[key];
-    if (value === undefined) throw new Error(`The Safari line "${template}" needs {${key}}.`);
+    if (value === undefined) {
+      // An expression tag ({whispers}) is for the voice, and stays as it is.
+      if (isExpression(key)) return `{${key}}`;
+      throw new Error(`The Safari line "${template}" needs {${key}}.`);
+    }
     return value;
   });
 }

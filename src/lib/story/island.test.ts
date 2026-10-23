@@ -8,6 +8,7 @@ import { checkStory, storyTrackCount } from "./story-check";
 import type { StoryGraph, StoryNode } from "./story-graph";
 import { withoutCues } from "./story-sound";
 import { speakerLines } from "./story-voices";
+import { withoutVoiceTags } from "../voice-tags";
 
 const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 42, 99, 1234];
 
@@ -106,7 +107,7 @@ describe("Island Adventure", () => {
       const speakers = new Set<string>();
       for (const node of graph.nodes) {
         for (const line of speakerLines(node.text, graph.cast ?? [])) if ("speaker" in line) speakers.add(line.speaker);
-        assert.doesNotMatch(withoutCues(node.text), /\[|\]|\{|\}/, `${node.id} has a cue or gap read as words`);
+        assert.doesNotMatch(withoutVoiceTags(withoutCues(node.text)), /\[|\]|\{|\}/, `${node.id} has a cue or gap read as words`);
       }
       assert.deepEqual([...speakers].sort(), ["brine", "narrator", "nell"]);
     }

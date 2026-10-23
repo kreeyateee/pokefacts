@@ -9,6 +9,7 @@ import { checkStory, storyTrackCount } from "./story-check";
 import type { StoryGraph, StoryNode } from "./story-graph";
 import { withoutCues } from "./story-sound";
 import { speakerLines } from "./story-voices";
+import { withoutVoiceTags } from "../voice-tags";
 
 const SEEDS = [1, 2, 3, 4, 5, 6, 7, 42, 99];
 
@@ -79,6 +80,31 @@ describe("Paldea Picnic", () => {
     assert.deepEqual(numbers.sort((a, b) => a - b), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
   });
 
+  it("has a secret ending when the child's favourite is the starter they choose: both evolve twice, and the picnic explodes", () => {
+    for (const [index, starter] of STARTERS.entries()) {
+      const graph = paldeaAdventure({ seed: 5, owner: "Mia", partner: { id: starter.id, name: starter.name } });
+      assert.deepEqual(checkStory(graph), []);
+      assert.ok(storyTrackCount(graph) <= 100);
+      const meeting = byId(graph).get(`${["g", "f", "w"][index]}0`)?.text ?? "";
+      assert.match(meeting, new RegExp(`Your ${starter.name} from home sniffs the new ${starter.name}`));
+      for (const missAt of [[], [1], [0, 2]]) {
+        const { ending } = play(graph, index as 0 | 1 | 2, missAt);
+        assert.ok(ending.kind === "ending" && ending.ending.name.includes("Secret"), `${starter.name} ${missAt}`);
+        assert.match(ending.text, new RegExp(`Two ${starter.mid.name}! .*Two ${starter.final.name}!`));
+        assert.match(ending.text, /\[hit\]/, "something explodes");
+        assert.match(ending.text, /\[cheer\]/, "and everyone cheers");
+        const { card } = storyCard(graph);
+        const shown = card.chapters.flatMap((chapter) => chapter.tracks).find((track) => track.title === ending.title)?.text ?? "";
+        assert.doesNotMatch(shown, /\{|\}|' Two/, "no tags or gaps on the page");
+      }
+      assert.match(play(graph, index as 0 | 1 | 2, []).ending.text, /both of them Terastallise/);
+      // Someone else's favourite gets the usual picnic.
+      const other = STARTERS[(index + 1) % 3] as (typeof STARTERS)[number];
+      const plain = paldeaAdventure({ seed: 5, partner: { id: other.id, name: other.name } });
+      assert.doesNotMatch(play(plain, index as 0 | 1 | 2, []).ending.text, /Secret|Two /);
+    }
+  });
+
   it("gives Juno the starter that beats yours, and Arlo the other", () => {
     const graph = paldeaAdventure({ seed: 1 });
     const meet = (prefix: string) => byId(graph).get(`${prefix}0`)?.text ?? "";
@@ -110,8 +136,9 @@ describe("Paldea Picnic", () => {
       const speakers = new Set<string>();
       for (const node of graph.nodes) {
         for (const line of speakerLines(node.text, graph.cast ?? [])) if ("speaker" in line) speakers.add(line.speaker);
-        assert.doesNotMatch(withoutCues(node.text), /\[|\]|\{|\}|undefined/, `${node.id}`);
-        assert.doesNotMatch(withoutCues(node.text), /\. [a-z]/, `${node.id} starts a sentence in lower case`);
+        const shown = withoutVoiceTags(withoutCues(node.text));
+        assert.doesNotMatch(shown, /\[|\]|\{|\}|undefined/, `${node.id}`);
+        assert.doesNotMatch(shown, /\. [a-z]/, `${node.id} starts a sentence in lower case`);
       }
       assert.deepEqual([...speakers].sort(), ["arlo", "juno", "narrator", "olwen"]);
     }

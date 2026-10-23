@@ -24,6 +24,7 @@ import {
   type TrackPart,
   type VoiceStyle,
 } from "@/lib/story/story-voices";
+import { withoutVoiceTags } from "@/lib/voice-tags";
 import { yotoFetch } from "@/lib/yoto-session";
 
 /** How loud the browser plays the beds, and how far they drop while someone speaks. */
@@ -134,7 +135,8 @@ function speakerGender(story: StoryGraph, speaker: string, voiceId: string): Gen
 
 function speak(text: string, style: VoiceStyle, gender: Gender, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
-    const utterance = new SpeechSynthesisUtterance(text);
+    // Browser voices read a tag out as a word, so expression is for the Yoto voices only.
+    const utterance = new SpeechSynthesisUtterance(withoutVoiceTags(text));
     utterance.lang = "en-GB";
     const voice = browserVoice(gender);
     if (voice) utterance.voice = voice;

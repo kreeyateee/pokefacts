@@ -9,6 +9,7 @@ import { checkStory, storyTrackCount } from "./story-check";
 import type { StoryGraph, StoryNode } from "./story-graph";
 import { CRY_CUE, withoutCues } from "./story-sound";
 import { speakerLines } from "./story-voices";
+import { withoutVoiceTags } from "../voice-tags";
 
 const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 42, 99, 1234, 31337];
 
@@ -170,7 +171,7 @@ describe("Gym Challenge", () => {
 
   it("says a and an properly, and leaves no gaps", () => {
     for (const seed of SEEDS) {
-      const all = gymAdventure({ seed, owner: "Mia" }).nodes.map((each) => withoutCues(each.text)).join(" ");
+      const all = gymAdventure({ seed, owner: "Mia" }).nodes.map((each) => withoutVoiceTags(withoutCues(each.text))).join(" ");
       assert.doesNotMatch(all, /\ba (Ice|Electric)\b/);
       assert.doesNotMatch(all, /[{}]/);
       assert.doesNotMatch(all, /\bundefined\b|\bnull\b/);

@@ -13,6 +13,7 @@ import { storyIconPath, storyQuestionIconPath } from "@/lib/story/story-card";
 import { endingCount, storyLines, storyTrackCount } from "@/lib/story/story-check";
 import type { StoryGraph, StoryNode } from "@/lib/story/story-graph";
 import { withoutCues } from "@/lib/story/story-sound";
+import { withoutVoiceTags } from "@/lib/voice-tags";
 import { castVoices, NARRATOR, speakerLines, type VoiceStyle } from "@/lib/story/story-voices";
 
 const OWNER_KEY = "pokefacts.adventure-owner";
@@ -118,7 +119,7 @@ function SpokenText({ text, story }: { text: string; story: StoryGraph }) {
   try {
     lines = speakerLines(text, cast);
   } catch {
-    return <>{withoutCues(text)}</>;
+    return <>{withoutVoiceTags(withoutCues(text))}</>;
   }
   return (
     <>
@@ -126,14 +127,14 @@ function SpokenText({ text, story }: { text: string; story: StoryGraph }) {
         // Sounds are heard, not read: the text stays clean sentences, and the Poké Ball shows the catch.
         if ("sound" in line || "cry" in line) return null;
         const character = cast.findIndex((item) => item.id === line.speaker);
-        if (line.speaker === NARRATOR || character < 0) return <span key={index}>{line.text} </span>;
+        if (line.speaker === NARRATOR || character < 0) return <span key={index}>{withoutVoiceTags(line.text)} </span>;
         return (
           <span
             key={index}
             className={`font-semibold ${SPEAKER_COLOURS[character % SPEAKER_COLOURS.length]}`}
             title={cast[character]?.name}
           >
-            ‘{line.text}’{" "}
+            ‘{withoutVoiceTags(line.text)}’{" "}
           </span>
         );
       })}

@@ -7,6 +7,7 @@ import { FIELD_NOTES, GOLDEN_STOPS } from "./safari-roster";
 import { storyTrackCount as trackCount, checkStory } from "./story-check";
 import { withoutCues } from "./story-sound";
 import { speakerLines } from "./story-voices";
+import { withoutVoiceTags } from "../voice-tags";
 import type { StoryGraph, StoryNode } from "./story-graph";
 import {
   cleanOwner,
@@ -147,7 +148,7 @@ function assertSafariRules(graph: StoryGraph, nameOf: (id: number) => string) {
 
   // Written for the ear: no digits or symbols, sensible lengths, labels read after "Press left to".
   for (const node of graph.nodes) {
-    assert.doesNotMatch(withoutCues(node.text), /[0-9♀♂&%#@*_<>{}[\]|~^$]/, `${node.id} has a symbol or digit`);
+    assert.doesNotMatch(withoutVoiceTags(withoutCues(node.text)), /[0-9♀♂&%#@*_<>{}[\]|~^$]/, `${node.id} has a symbol or digit`);
     assert.ok(node.text.length <= 1500, `${node.id} is ${node.text.length} characters`);
     assert.doesNotMatch(node.text, /\b(victims?|prey|blood|kill\w*|dead|death)\b|\bIt of\b/i, `${node.id} is not gentle`);
     if (node.kind === "choice") {

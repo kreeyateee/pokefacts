@@ -22,6 +22,7 @@ import type { StoryBed, StoryAmbience } from "@/lib/story/story-sound";
 import type { StoryGraph, StoryIcon, StoryNode } from "@/lib/story/story-graph";
 import type { StoryCharacter } from "@/lib/story/story-voices";
 import { bestHit, effectiveness, isPokemonType, type PokemonType } from "@/lib/type-chart";
+import { isExpression } from "@/lib/voice-tags";
 import { YOTO_ICONS } from "@/lib/yoto-icons";
 
 export type BattleMon = { id: number; name: string; types: string[]; total: number };
@@ -204,7 +205,11 @@ function deck(items: readonly string[], random: () => number): () => string {
 function fill(template: string, gaps: Record<string, string>): string {
   return template.replace(/\{(\w+)\}/g, (_, key: string) => {
     const value = gaps[key];
-    if (value === undefined) throw new Error(`The Gym line "${template}" needs {${key}}.`);
+    if (value === undefined) {
+      // An expression tag ({whispers}) is for the voice, and stays as it is.
+      if (isExpression(key)) return `{${key}}`;
+      throw new Error(`The Gym line "${template}" needs {${key}}.`);
+    }
     return value;
   });
 }

@@ -58,7 +58,7 @@ export type Giant = { name: string; formId: number; dexId: number; stage: Stage;
 const GLOW =
   "Then the sea starts to glow red. Clouds swirl up into the sky in a great red ring, and something rises out of the water, bigger than anything you've ever seen.";
 const LORE =
-  "'Gigantamax,' whispers Brine. 'Sailors from Galar tell of it. Near a place of power, a Pokémon can grow giant, glowing red, with clouds over its head. And there's an old story that something under Moonshell Island glows like that.'";
+  "'{whispers} Gigantamax,' whispers Brine. 'Sailors from Galar tell of it. Near a place of power, a Pokémon can grow giant, glowing red, with clouds over its head. And there's an old story that something under Moonshell Island glows like that.'";
 
 const BEACH: Stage = {
   key: "beach",
@@ -84,7 +84,7 @@ const OPEN_WATER: Stage[] = [
     title: "Open Sea",
     icon: { dexId: 278 },
     bed: { ambience: "sea", music: "adventure" },
-    text: "Soon there's no land anywhere, just sea and sky. A flock of Wingull swoops past, calling and diving. 'Which way, then?' says Brine. 'Those Wingull are heading somewhere in a hurry. But Mabel keeps looking out towards the deep blue water.'",
+    text: "Soon there's no land anywhere, just sea and sky. A flock of Wingull swoops past, calling and diving. '{curious} Which way, then?' says Brine. 'Those Wingull are heading somewhere in a hurry. But Mabel keeps looking out towards the deep blue water.'",
     good: {
       label: "head for the deep blue water",
       text: "You point Mabel at the deep blue water, and she's off like a rocket. Wailord live far out in the open sea, where the water is deep enough for a Pokémon their size.",
@@ -116,7 +116,7 @@ const OPEN_WATER: Stage[] = [
     title: "The Storm",
     icon: { dexId: 73 },
     bed: { ambience: "sea", music: "tense" },
-    text: "The sky turns dark, the wind starts to howl, and straight ahead the sea is full of Tentacruel, hundreds of them, with long stinging arms. Mabel stops, and looks back at you nervously. 'We could go round them,' says Brine. 'It's further, mind. Or we could go straight through.'",
+    text: "The sky turns dark, the wind starts to howl, and straight ahead the sea is full of Tentacruel, hundreds of them, with long stinging arms. Mabel stops, and looks back at you nervously. '{nervously} We could go round them,' says Brine. 'It's further, mind. Or we could go straight through.'",
     good: {
       label: "go round them",
       text: "You go the long way round, and it turns out not to be that long at all. The Tentacruel drift past in the rain, waving their arms, and nobody gets stung. 'Never argue with a Tentacruel,' says Brine.",
@@ -135,7 +135,7 @@ const OPEN_WATER: Stage[] = [
     text: "Ahead, the sea is spinning. A grumpy Gyarados has stirred up an enormous whirlpool, round and round and down, and is lying in the middle of it, sulking. 'We could ride it,' says Brine, 'round the edge and out the other side, quick as you like. Or we could go the long way round.' Mabel looks at the whirlpool. Mabel looks at you.",
     good: {
       label: "go the long way round",
-      text: "You steer well clear. The Gyarados watches you go with one cross eye, then goes back to sulking. 'Never get between a Gyarados and its sulk,' says Brine.",
+      text: "You steer well clear. The Gyarados watches you go with one cross eye, then goes back to sulking. '{laughs} Never get between a Gyarados and its sulk,' says Brine.",
     },
     slip: {
       label: "ride the whirlpool",
@@ -152,7 +152,7 @@ const FOG: Stage[] = [
     title: "The Fog",
     icon: { dexId: 171 },
     bed: { ambience: "sea", music: "mysterious" },
-    text: "A thick white fog rolls in, so thick you can't see Gulliver on the end of Brine's hat. Down in the water, a little light begins to glow. It's a Lanturn, a friendly Pokémon with a lamp on its head, blinking hello. And far, far away, so quiet you can hardly hear it, there's a song. 'Is that Mabel's family?' whispers Brine. 'Or a trick of the fog? Your call.'",
+    text: "A thick white fog rolls in, so thick you can't see Gulliver on the end of Brine's hat. Down in the water, a little light begins to glow. It's a Lanturn, a friendly Pokémon with a lamp on its head, blinking hello. And far, far away, so quiet you can hardly hear it, there's a song. '{whispers} Is that Mabel's family?' whispers Brine. 'Or a trick of the fog? Your call.'",
     good: {
       label: "follow the far-off song",
       text: `You listen hard, and steer towards the song. Mabel sings back, ${MABEL} and the Lanturn swims alongside for a while, lighting up the fog like a little lantern, before it waves goodbye and dives back to the deep.`,
@@ -305,7 +305,7 @@ const BEFORE_DARK: Stage[] = [
     text: "The sea turns calm and clear. Below you is a coral reef, full of pink Corsola and silver fish, and Mabel peers down at it, fascinated. Somewhere through it is the way to Moonshell Island. On the sea bed, an old grey Pokémon with a stony face is resting. 'A Relicanth,' says Brine, in a whisper. 'They've been around for a hundred million years. If anyone knows the old way through, it's that one.' But the Corsola are waving at you, and they look like they know everything.",
     good: {
       label: "ask the Relicanth",
-      text: "The Relicanth looks at you with one old eye. Then it swims ahead, slowly, through a secret gap in the reef that you would never have found, and out the other side. 'Well I never,' says Brine. 'A shortcut a hundred million years old.'",
+      text: "The Relicanth looks at you with one old eye. Then it swims ahead, slowly, through a secret gap in the reef that you would never have found, and out the other side. '{gasps} Well I never,' says Brine. 'A shortcut a hundred million years old.'",
     },
     slip: {
       label: "ask the Corsola",
@@ -318,7 +318,7 @@ const BEFORE_DARK: Stage[] = [
     title: "Tired Flippers",
     icon: { dexId: 321 },
     bed: { ambience: "sea", music: "calm" },
-    text: "Mabel is slowing down. Her flippers are drooping, and her song has gone very quiet. She's only young, and it's been a long day. 'She's tuckered out,' says Brine, patting her side. 'We could let her float for a bit and sing her a lullaby. Or we could keep going and hope she gets her second wind.'",
+    text: "Mabel is slowing down. Her flippers are drooping, and her song has gone very quiet. She's only young, and it's been a long day. '{sighs} She's tuckered out,' says Brine, patting her side. 'We could let her float for a bit and sing her a lullaby. Or we could keep going and hope she gets her second wind.'",
     good: {
       label: "sing her a lullaby",
       text: `Mabel floats on the gentle swell, and you sing her the softest song you know. Brine hums along, and even Gulliver tucks his head under his wing. Mabel closes her eyes, just for a few minutes. When she opens them again, she's full of beans, and she swims faster than ever. ${MABEL}`,
@@ -353,7 +353,7 @@ const ISLAND: Stage = {
   title: "Moonshell Island",
   icon: { dexId: 357 },
   bed: { ambience: "grass", music: "bright" },
-  text: "Waiting on the jetty is a woman with a lantern. 'Hello there!' says Nell. 'I'm the lighthouse keeper. Mabel's family is in the lagoon, on the far side of the island. There are two ways round. There's the jungle path, which is quicker, and there are Tropius in the trees with the sweetest fruit you've ever tasted. Or there's the long way, along the beach, by the water.' Of course, Mabel can't walk through a jungle. Mabel can only swim.",
+  text: "Waiting on the jetty is a woman with a lantern. '{cheerfully} Hello there!' says Nell. 'I'm the lighthouse keeper. Mabel's family is in the lagoon, on the far side of the island. There are two ways round. There's the jungle path, which is quicker, and there are Tropius in the trees with the sweetest fruit you've ever tasted. Or there's the long way, along the beach, by the water.' Of course, Mabel can't walk through a jungle. Mabel can only swim.",
   good: {
     label: "go the long way, along the beach",
     text: "You walk along the beach, and Mabel swims right beside you, all the way round the island, splashing you every few steps on purpose. On the way, three Sharpedo come circling, with very pointy teeth, but you stay close to Mabel, and they decide she's far too big to bother with.",
@@ -391,24 +391,24 @@ function progressLine(stage: number, slipped: boolean, slips: number): string {
     if (slips === 0) {
       return (
         [
-          "'Not one wrong turn,' says Brine. 'At this rate, we'll be there before the moon comes up.'",
+          "'{excited} Not one wrong turn,' says Brine. 'At this rate, we'll be there before the moon comes up.'",
           "'Right on time,' says Brine, checking his pocket watch.",
           "'Smooth sailing,' says Brine. 'Mabel will be leaping with her family tonight, you mark my words.'",
           "'We're making cracking time,' says Brine.",
-          "'Still not a single wrong turn,' says Brine. 'Sixty years at sea, and I've never had a better first mate.'",
+          "'{proudly} Still not a single wrong turn,' says Brine. 'Sixty years at sea, and I've never had a better first mate.'",
           "'The sun's still up,' says Brine, 'and so are we.'",
           "'Nearly there,' says Brine. 'And the moon's not up yet.'",
         ][stage] ?? ""
       );
     }
-    return "'That's more like it,' says Brine. 'We're catching up.'";
+    return "'{cheerfully} That's more like it,' says Brine. 'We're catching up.'";
   }
   return (
     [
       "",
       "'We've lost a bit of time,' says Brine. 'No matter. Plenty of day left.'",
-      "'The sun's getting low,' says Brine. 'We'd best hurry, or we'll miss the moonrise.'",
-      "'It'll be dark before we get there,' says Brine. 'But we'll get there. Mabel's not giving up, and neither are we.'",
+      "'{nervously} The sun's getting low,' says Brine. 'We'd best hurry, or we'll miss the moonrise.'",
+      "'{sighs} It'll be dark before we get there,' says Brine. 'But we'll get there. Mabel's not giving up, and neither are we.'",
     ][Math.min(slips, MOST_SLIPS)] ?? ""
   );
 }

@@ -5,6 +5,7 @@ import { checkStory, endingCount, storyLines } from "@/lib/story/story-check";
 import type { StoryGraph, StoryIcon, StoryNode, StoryNodeId } from "@/lib/story/story-graph";
 import { STORY_PIXELS, type StoryPixel } from "@/lib/story/pokeball";
 import { withoutCues, type StoryBed } from "@/lib/story/story-sound";
+import { withoutVoiceTags } from "@/lib/voice-tags";
 import {
   castVoices,
   fallbackVoices,
@@ -169,6 +170,7 @@ function storyTrack(
   voicing: Voicing,
   bed?: StoryBed,
 ): KidTrack {
+  // The page shows the words: no sound cues and no expression tags. The recording keeps the tags.
   const shown = withoutCues(text);
   const spoken = pronounce(shown);
   // Every adventure line goes through the joined recording, even a plain one, so each line is cached
@@ -182,7 +184,7 @@ function storyTrack(
   return {
     key,
     title,
-    text: shown,
+    text: withoutVoiceTags(shown),
     spoken,
     icon,
     overlay,
