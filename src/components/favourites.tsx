@@ -113,30 +113,42 @@ export function FavouritesDialog({
             up in Who&apos;s That and on a poster of their own.
           </DialogDescription>
         </DialogHeader>
-        <DialogBody className="grid gap-4">
+        {/* The body scrolls, which also clips sideways: a little inner room keeps the field's shadow,
+            its focus ring and the buttons' shadows from being cut off. */}
+        <DialogBody className="-mx-2 grid gap-4 px-2 pt-1 pb-2">
           {ids.length > 0 ? (
             <ol className="grid gap-2" aria-label="Favourites">
               {ids.map((id, index) => (
-                <li key={id} className="flex items-center gap-3 rounded-xl border-2 border-ink/20 bg-white px-2 py-1.5">
+                <li
+                  key={id}
+                  className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border-2 border-ink/20 bg-white px-2 py-1.5"
+                >
                   <Picture id={id} />
                   <span className="min-w-0 grow font-bold">
                     {names[id] ?? `Number ${id}`}
                     {index === 0 ? <span className="ml-2 text-xs font-bold text-poke-red">Partner</span> : null}
                   </span>
-                  {index > 0 ? (
-                    <Button type="button" variant="outline" className="h-9 px-3 text-xs" onClick={() => onIds(asPartner(ids, id))}>
-                      Make partner
+                  <span className="ml-auto flex shrink-0 gap-2">
+                    {index > 0 ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-9 px-3 text-xs"
+                        onClick={() => onIds(asPartner(ids, id))}
+                      >
+                        Make partner
+                      </Button>
+                    ) : null}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-9 px-3 text-xs"
+                      aria-label={`Remove ${names[id] ?? id}`}
+                      onClick={() => onIds(ids.filter((item) => item !== id))}
+                    >
+                      Remove
                     </Button>
-                  ) : null}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-9 px-3 text-xs"
-                    aria-label={`Remove ${names[id] ?? id}`}
-                    onClick={() => onIds(ids.filter((item) => item !== id))}
-                  >
-                    Remove
-                  </Button>
+                  </span>
                 </li>
               ))}
             </ol>
