@@ -2254,6 +2254,10 @@ export function Studio({
                     />
                   ) : null
                 }
+                onSwipe={(step) => {
+                  const to = step > 0 ? after : before;
+                  if (to) chooseChapter(to.key);
+                }}
                 kicker={guessing ? (revealed ? "Answer" : "Clues") : `Number ${chapterNumber(chapter)}`}
                 title={guessing && !revealed ? `Riddle ${chapter.overlay}` : chapter.title}
                 picture={

@@ -1138,6 +1138,25 @@ fieldset:disabled .pk-voice-chip {
   padding: 1.75rem 1rem 1.25rem;
 }
 
+/* Up and down still scrolls the page; sideways is a swipe to the next Pokémon. */
+.pk-swipeable {
+  touch-action: pan-y pinch-zoom;
+}
+
+.pk-swipe-hint {
+  display: none;
+  margin: 0.25rem 0 0.9rem;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+@media (pointer: coarse) {
+  .pk-swipe-hint {
+    display: block;
+  }
+}
+
 @media (min-width: 640px) {
   .pk-entry-card {
     padding: 2rem 1.75rem 1.75rem;

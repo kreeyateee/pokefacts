@@ -2,11 +2,13 @@
 
 import type { ReactNode } from "react";
 
+import { useSwipe } from "@/components/use-swipe";
 import { YotoScreen } from "@/components/yoto-screen";
 
 /**
  * One Pokémon or riddle. A picture column (artwork, then the 16×16 Yoto screen) beside the title and words.
  * The card switches to the stacked phone layout by its own width, so a narrow column also stacks.
+ * With `onSwipe`, a swipe left on a touch screen goes on to the next one and a swipe right goes back.
  */
 export function EntryCard({
   swapKey,
@@ -17,6 +19,7 @@ export function EntryCard({
   yotoSrc,
   top,
   tabs,
+  onSwipe,
   children,
 }: {
   swapKey: string | number;
@@ -28,11 +31,15 @@ export function EntryCard({
   top?: ReactNode;
   /** Section tabs. They sit beside the pictures, and the words below run the full width of the card. */
   tabs?: ReactNode;
+  /** 1 for the next one, -1 for the one before. */
+  onSwipe?: (step: 1 | -1) => void;
   children: ReactNode;
 }) {
+  const swipe = useSwipe<HTMLElement>(onSwipe);
   return (
-    <article className="pk-card pk-dex pk-entry-card min-w-0">
+    <article className={`pk-card pk-dex pk-entry-card min-w-0${onSwipe ? " pk-swipeable" : ""}`} {...swipe}>
       {top}
+      {onSwipe ? <p className="pk-swipe-hint">Swipe left or right for the next one</p> : null}
       <div className={tabs ? "pk-entry pk-entry-tabbed" : "pk-entry"}>
         <div key={`head-${swapKey}`} className="pk-entry-head pk-swap">
           <p className="pk-kicker">{kicker}</p>

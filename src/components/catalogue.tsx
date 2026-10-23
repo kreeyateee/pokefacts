@@ -908,6 +908,10 @@ export function Catalogue({
                 onNext={() => openEntry(entry.id + 1)}
               />
             }
+            onSwipe={(step) => {
+              const id = entry.id + step;
+              if (id >= 1 && (step < 0 || (list && id <= list.species))) openEntry(id);
+            }}
             kicker={`${numberLabel(entry.id)} · ${entry.region}`}
             title={entry.name}
             meta={
