@@ -11,6 +11,7 @@ import type {
   CataloguePage,
 } from "@/lib/catalogue-types";
 import { isFormPick } from "@/lib/catalogue-picks";
+import type { MonLook } from "@/lib/playlist-cover";
 import type { MonSheet } from "@/lib/dex-facts";
 import { habitatSpeech } from "@/lib/format";
 import { ALL_STARTER_IDS } from "@/lib/starters";
@@ -244,16 +245,27 @@ export function evolutionLine(speciesId: number): CatalogueLine {
   };
 }
 
+export type PickedItem = { id: number; speciesId: number; name: string; heightDm: number; color: string } & MonLook;
+
 /**
- * Name, Pokédex height, and colour for each picked id, in the order given. Unknown ids are skipped.
- * A form id (past 1025) gives the form's name and height, the species number, and the species colour.
+ * Name, Pokédex height, colour, habitat, types, and rarity for each picked id, in the order given. Unknown
+ * ids are skipped. A form id (past 1025) gives the form's name, height, and types, the species number, and
+ * the species colour and habitat.
  */
-export function cataloguePick(
-  ids: readonly number[],
-): Array<{ id: number; speciesId: number; name: string; heightDm: number; color: string }> {
+export function cataloguePick(ids: readonly number[]): PickedItem[] {
   const wanted = ids.filter((id) => Number.isInteger(id) && id > 0).slice(0, 2000);
   if (wanted.length === 0) return [];
-  type Row = { id: number; species_id: number; name: string; height_dm: number; color: string };
+  type Row = {
+    id: number;
+    species_id: number;
+    name: string;
+    height_dm: number;
+    color: string;
+    habitat: string | null;
+    types: string | null;
+    is_legendary: number;
+    is_mythical: number;
+  };
   const found = new Map<number, Row>();
   const unique = [...new Set(wanted)];
   const speciesIds = unique.filter((id) => !isFormPick(id));
@@ -268,11 +280,14 @@ export function cataloguePick(
   };
   read(
     speciesIds,
-    (marks) => `SELECT id, id AS species_id, name, height_dm, color FROM species WHERE id IN (${marks})`,
+    (marks) => `SELECT s.id, s.id AS species_id, s.name, s.height_dm, s.color, s.habitat, s.is_legendary, s.is_mythical,
+        (SELECT group_concat(type_name, ',') FROM (SELECT type_name FROM species_types WHERE species_id = s.id ORDER BY slot)) AS types
+      FROM species s WHERE s.id IN (${marks})`,
   );
   read(
     formIds,
-    (marks) => `SELECT f.id, f.species_id, f.name, f.height_dm, s.color
+    (marks) => `SELECT f.id, f.species_id, f.name, f.height_dm, s.color, s.habitat, s.is_legendary, s.is_mythical,
+        (SELECT group_concat(type_name, ',') FROM (SELECT type_name FROM form_types WHERE form_id = f.id ORDER BY slot)) AS types
       FROM forms f JOIN species s ON s.id = f.species_id
       WHERE f.is_default = 0 AND f.id IN (${marks})`,
   );
@@ -280,7 +295,19 @@ export function cataloguePick(
     const row = found.get(id);
     if (!row) return [];
     const name = isFormPick(id) ? formDisplayName(id, row.name) : row.name;
-    return [{ id, speciesId: row.species_id, name, heightDm: row.height_dm, color: row.color }];
+    return [
+      {
+        id,
+        speciesId: row.species_id,
+        name,
+        heightDm: row.height_dm,
+        color: row.color,
+        habitat: row.habitat,
+        types: row.types ? row.types.split(",") : [],
+        legendary: row.is_legendary === 1,
+        mythical: row.is_mythical === 1,
+      },
+    ];
   });
 }
 

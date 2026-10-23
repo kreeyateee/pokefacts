@@ -1,5 +1,6 @@
 import { getAlternateForm } from "@/lib/catalogue-db";
 import { ensureArtwork, isPng } from "@/lib/artwork";
+import { MAX_COVER_BYTES } from "@/lib/playlist-cover";
 import { safeHttpStatus, yotoUpstreamFailure } from "@/lib/yoto-error";
 import { bearerToken, jsonError } from "@/lib/yoto-proxy";
 import { yotoCoverImageL } from "@/lib/yoto-playlist";
@@ -11,8 +12,8 @@ function coverId(raw: string): number | null {
   return id;
 }
 
-/** A cover drawn in the page (picture, logo and the playlist's name) is a card-sized PNG, well under this. */
-const MAX_DRAWN_COVER_BYTES = 3_000_000;
+/** A cover drawn in the page (the card's sticker front) is a card-sized PNG, well under this. */
+const MAX_DRAWN_COVER_BYTES = MAX_COVER_BYTES;
 
 /** A cover the page drew, sent as the request body, or null when the request is not one. */
 async function drawnCover(request: Request): Promise<Buffer | null | "bad"> {

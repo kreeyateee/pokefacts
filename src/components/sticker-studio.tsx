@@ -18,20 +18,7 @@ import { Button } from "@/components/ui/button";
 import { BRAND_IMAGE_KEY } from "@/lib/brand-logo";
 import type { KidCard } from "@/lib/kid-cards";
 import { APP_NAME } from "@/lib/site";
-import {
-  autoCover,
-  cardCountLabel,
-  cardRangeText,
-  crowdFor,
-  heroInfo,
-  heroMon,
-  hidesNames,
-  linesFor,
-  monsFor,
-  pictureFor,
-  suggestedCover,
-  type StickerMon,
-} from "@/lib/sticker-cover";
+import { autoCover, heroMon, hidesNames, linesFor, monsFor, suggestedCover } from "@/lib/sticker-cover";
 import {
   COVER_STYLES,
   PREVIEW_DPI,
@@ -44,7 +31,6 @@ import {
   pagePixelSize,
   paperId,
   sheetSlots,
-  showsNameList,
   stickerFilename,
   type CoverDraft,
   type CoverStyle,
@@ -52,7 +38,7 @@ import {
 } from "@/lib/sticker-layout";
 import { paintCard, paintSheet, type CardPaint } from "@/lib/sticker-paint";
 import { jpegPagesPdf } from "@/lib/sticker-pdf";
-import { pileSeed } from "@/lib/sticker-pile";
+import { cardPaintFor, dexIds, picturesFor } from "@/lib/sticker-spec";
 
 type Step = "style" | "decorate" | "print";
 
@@ -88,33 +74,6 @@ function trackPointer(pointerId: number, onMove: (event: PointerEvent) => void, 
   window.addEventListener("pointerup", end);
   window.addEventListener("pointercancel", end);
   return stop;
-}
-
-function pictureKey(mon: StickerMon, sprites: boolean): string {
-  return `picture:${pictureFor(mon, sprites)}`;
-}
-
-function usesCrowd(style: CoverStyle): boolean {
-  return style === "photo" || style === "pile";
-}
-
-/** Who appears on a card's front: its crowd, or its star. */
-function frontMons(item: KidCard, cover: CoverDraft): StickerMon[] {
-  const mons = monsFor(item);
-  if (usesCrowd(cover.style)) return crowdFor(mons, cover);
-  const star = heroMon(mons, cover);
-  return star ? [star] : [];
-}
-
-/** Every picture a card's faces need: everyone on the front, and the drawing. */
-function picturesFor(item: KidCard, cover: CoverDraft): ImageEntry[] {
-  const entries: ImageEntry[] = frontMons(item, cover).map((mon) => [pictureKey(mon, cover.sprites), pictureFor(mon, cover.sprites)]);
-  if (cover.painting) entries.push([cover.painting, cover.painting]);
-  return entries;
-}
-
-function dexIds(mons: readonly StickerMon[]): number[] {
-  return mons.flatMap((mon) => (mon.dexId ? [mon.dexId] : []));
 }
 
 export function StickerStudio({
@@ -201,42 +160,7 @@ export function StickerStudio({
   }, []);
 
   function specFor(item: KidCard, itemCover: CoverDraft, live: CanvasImageSource | null): CardPaint {
-    const pictures = images.current;
-    const itemMons = monsFor(item);
-    const itemHidden = hidesNames(item);
-    const itemLines = linesFor(item);
-    const star = heroMon(itemMons, itemCover);
-    return {
-      style: itemCover.style,
-      kind: item.kind,
-      title: itemCover.title,
-      countLabel: cardCountLabel(item),
-      rangeText: cardRangeText(item),
-      backText: itemCover.backText,
-      backMode: itemCover.backMode,
-      showNames: showsNameList(itemLines, itemCover.backMode, itemHidden),
-      lines: itemLines,
-      owner: itemCover.owner,
-      hidden: itemHidden,
-      crowd: crowdFor(itemMons, itemCover).map((mon) => ({
-        image: pictureKey(mon, itemCover.sprites),
-        heightDm: mon.dexId ? (sizes[mon.dexId]?.heightDm ?? 0) : 0,
-        color: mon.dexId ? sizes[mon.dexId]?.color : undefined,
-      })),
-      pixelated: itemCover.sprites,
-      scene: itemCover.scene ?? undefined,
-      pileSeed: pileSeed(item.id) + itemCover.pileSeed,
-      images: pictures,
-      fonts: fonts(),
-      painting: live ?? (itemCover.painting ? (pictures.get(itemCover.painting) ?? null) : null),
-      drawLayer: itemCover.drawLayer,
-      hero: star
-        ? {
-            image: pictures.get(pictureKey(star, itemCover.sprites)) ?? null,
-            info: heroInfo(star, itemHidden, star.dexId ? heroEntries[star.dexId] : null),
-          }
-        : null,
-    };
+    return cardPaintFor({ card: item, cover: itemCover, images: images.current, sizes, heroes: heroEntries, fonts: fonts(), live });
   }
 
   function renderFaces(items: readonly KidCard[], dpi: number): HTMLCanvasElement[] {

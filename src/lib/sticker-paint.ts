@@ -978,14 +978,18 @@ function paintFront(ctx: CanvasRenderingContext2D, spec: CardPaint, width: numbe
   else paintPhotoFront(ctx, spec, width, height);
 }
 
+function startFace(ctx: CanvasRenderingContext2D) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  ctx.imageSmoothingEnabled = true;
+  ctx.shadowColor = "transparent";
+}
+
 /** One face of one card, clipped to the Yoto card's rounded corners. */
 export function paintCard(ctx: CanvasRenderingContext2D, face: "front" | "back", spec: CardPaint) {
   const { width, height } = ctx.canvas;
   const mm = width / CARD_MM.width;
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, width, height);
-  ctx.imageSmoothingEnabled = true;
-  ctx.shadowColor = "transparent";
+  startFace(ctx);
   ctx.save();
   roundRect(ctx, 0, 0, width, height, CARD_MM.radius * mm);
   ctx.clip();
@@ -995,46 +999,22 @@ export function paintCard(ctx: CanvasRenderingContext2D, face: "front" | "back",
 }
 
 /**
+ * A playlist's cover in the Yoto app: the card's sticker front, edge to edge, since the app rounds the
+ * corners itself. The canvas must have the card's shape.
+ */
+export function paintCover(ctx: CanvasRenderingContext2D, spec: CardPaint) {
+  const { width, height } = ctx.canvas;
+  startFace(ctx);
+  paintFront(ctx, spec, width, height);
+}
+
+/**
  * An A4 poster of the group photo or the pile. The canvas must have the A4 shape;
  * the card painters draw it in card units, so everything grows to fill the page.
  */
-/**
- * A playlist's cover in the Yoto app, card-shaped: its Pokémon (or nobody, for an adventure whose
- * Pokémon are a surprise) in front of the scene, the logo, and the playlist's name on the ribbon.
- */
-export function paintCover(ctx: CanvasRenderingContext2D, spec: CrowdPaint) {
-  const { width, height } = ctx.canvas;
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, width, height);
-  ctx.imageSmoothingEnabled = true;
-  ctx.shadowColor = "transparent";
-  const mm = scaleFor(ctx);
-  paintScene(ctx, spec.scene ?? "sky", width, height);
-  // One Pokémon, as big as the picture area allows, standing on a soft shadow.
-  const star = crowdPictures(spec)[0];
-  if (star) {
-    const area = box(PHOTO_FRONT.crowd, mm);
-    const room = { w: area.w * 0.86, h: area.h * 0.8 };
-    const w = Math.min(room.w, room.h * star.aspect);
-    const h = w / star.aspect;
-    const x = area.x + (area.w - w) / 2;
-    const y = area.y + area.h * 0.95 - h;
-    ctx.fillStyle = "rgba(22, 50, 79, 0.16)";
-    ctx.beginPath();
-    ctx.ellipse(area.x + area.w / 2, area.y + area.h * 0.95, w * 0.38, 1.4 * mm, 0, 0, Math.PI * 2);
-    ctx.fill();
-    drawMember(ctx, spec, star.trimmed.picture, x, y, w, h);
-  }
-  paintLogoPill(ctx, spec, PHOTO_FRONT.logo, mm);
-  paintTitleRibbon(ctx, spec, PHOTO_FRONT.ribbon, mm, 5.2);
-}
-
 export function paintPoster(ctx: CanvasRenderingContext2D, style: PosterStyle, spec: CrowdPaint) {
   const { width, height } = ctx.canvas;
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, width, height);
-  ctx.imageSmoothingEnabled = true;
-  ctx.shadowColor = "transparent";
+  startFace(ctx);
   if (style === "pile") paintPileFront(ctx, spec, width, height, POSTER_PILE);
   else paintPhotoFront(ctx, spec, width, height, POSTER_PHOTO);
 }
