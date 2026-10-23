@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { markCoffeeAsked } from "@/components/coffee-nudge";
@@ -13,6 +14,7 @@ import {
   sendReadyCopy,
   sendStartedCopy,
 } from "@/lib/send-cheer";
+import { isHidden, pillState } from "@/lib/send-pill";
 import { yotoPlaylistUrl } from "@/lib/yoto-playlist";
 
 export type SendJobView = {
@@ -73,7 +75,15 @@ export function SendBanner({
   /** Pick a failed send up from its last finished track. */
   onRetry?: () => void;
 }) {
-  if (!job) return null;
+  // The status the panel was hidden at. A new status (finished, failed) shows it again.
+  const [hiddenAt, setHiddenAt] = useState<string | null>(null);
+  if (!job) {
+    if (hiddenAt !== null) setHiddenAt(null);
+    return null;
+  }
+  if (isHidden(hiddenAt, job.status)) {
+    return <SendPill job={job} onShow={() => setHiddenAt(null)} />;
+  }
   const failed = job.status === "failed";
   const done = job.status === "completed";
   const playlistHref = done ? yotoPlaylistUrl(job.cardId) : undefined;
@@ -85,7 +95,18 @@ export function SendBanner({
   return (
     <div className="pk-send-dock">
       <div className="pk-send-dock-card">
-        <p className="pk-send-kicker">{kicker}</p>
+        <div className="pk-send-head">
+          <p className="pk-send-kicker">{kicker}</p>
+          <button
+            type="button"
+            className="pk-send-hide"
+            aria-expanded="true"
+            onClick={() => setHiddenAt(job.status)}
+          >
+            Hide
+            <span aria-hidden="true">⌄</span>
+          </button>
+        </div>
         <StatusBar label={job.detail} done={job.done} total={job.total} failed={failed} />
         {done ? (
           <p className="mt-2 text-xs leading-5">
@@ -139,5 +160,61 @@ export function SendBanner({
         ) : null}
       </div>
     </div>
+  );
+}
+
+const RING_R = 22;
+const RING_LENGTH = 2 * Math.PI * RING_R;
+
+/** The hidden panel: a small round button with the progress as a ring. Tap it to open the panel again. */
+function SendPill({ job, onShow }: { job: SendJobView; onShow: () => void }) {
+  const state = pillState(job);
+  const arc =
+    state.kind === "percent"
+      ? (state.percent / 100) * RING_LENGTH
+      : state.kind === "working"
+        ? RING_LENGTH * 0.28
+        : RING_LENGTH;
+  const label =
+    state.kind === "done"
+      ? "Show the finished playlist"
+      : state.kind === "failed"
+        ? "Show what went wrong"
+        : "Show send progress";
+  const text =
+    state.kind === "percent"
+      ? `${state.percent}%`
+      : state.kind === "done"
+        ? "✓"
+        : state.kind === "failed"
+          ? "!"
+          : "…";
+  return (
+    <>
+      <button
+        type="button"
+        className={`pk-send-pill pk-send-pill-${state.kind}`}
+        aria-expanded="false"
+        aria-label={`${label}. ${job.detail}`}
+        onClick={onShow}
+      >
+        <svg className="pk-send-ring" viewBox="0 0 56 56" aria-hidden="true">
+          <circle className="pk-send-ring-track" cx="28" cy="28" r={RING_R} />
+          <circle
+            className="pk-send-ring-arc"
+            cx="28"
+            cy="28"
+            r={RING_R}
+            strokeDasharray={`${arc} ${RING_LENGTH}`}
+          />
+        </svg>
+        <span className="pk-send-pill-text" aria-hidden="true">
+          {text}
+        </span>
+      </button>
+      <span className="sr-only" role="status">
+        {job.detail}
+      </span>
+    </>
   );
 }

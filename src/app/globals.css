@@ -218,6 +218,139 @@
   margin-top: 0.35rem;
 }
 
+.pk-send-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.pk-send-hide {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.75rem;
+  padding: 0.25rem 0.8rem;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  background: white;
+  color: var(--ink);
+  font-family: var(--font-fredoka), sans-serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  box-shadow: 3px 3px 0 var(--ink);
+  cursor: pointer;
+}
+
+.pk-send-hide:hover {
+  background: #fff4c2;
+}
+
+.pk-send-hide:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+.pk-send-hide:focus-visible,
+.pk-send-pill:focus-visible {
+  outline: 3px solid var(--poke-red);
+  outline-offset: 3px;
+}
+
+/* The hidden panel: a round button in the corner. The ring is the progress. */
+.pk-send-pill {
+  position: fixed;
+  right: max(1rem, env(safe-area-inset-right, 0px));
+  bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+  z-index: 40;
+  display: grid;
+  width: 3.75rem;
+  height: 3.75rem;
+  place-items: center;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  background: var(--poke-yellow);
+  color: var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  cursor: pointer;
+}
+
+.pk-send-pill:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+.pk-send-pill-done {
+  background: white;
+  color: #2c7a1d;
+}
+
+.pk-send-pill-failed {
+  background: var(--poke-red);
+  color: white;
+}
+
+.pk-send-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.pk-send-ring-track,
+.pk-send-ring-arc {
+  fill: none;
+  stroke-width: 5;
+}
+
+.pk-send-ring-track {
+  stroke: rgb(22 50 79 / 18%);
+}
+
+.pk-send-ring-arc {
+  stroke: var(--poke-red);
+  stroke-linecap: round;
+  transform-origin: 28px 28px;
+}
+
+.pk-send-pill-done .pk-send-ring-arc {
+  stroke: #3d9a2a;
+}
+
+.pk-send-pill-failed .pk-send-ring-arc {
+  stroke: white;
+}
+
+.pk-send-pill-working .pk-send-ring-arc {
+  animation: pk-send-spin 1.2s linear infinite;
+}
+
+@keyframes pk-send-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.pk-send-pill-text {
+  position: relative;
+  font-family: var(--font-fredoka), sans-serif;
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.pk-send-pill-done .pk-send-pill-text,
+.pk-send-pill-failed .pk-send-pill-text {
+  font-size: 1.5rem;
+}
+
+/* With the panel hidden the page only needs room for the round button. */
+.pk-page-docked:has(.pk-send-pill) {
+  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+}
+
 .pk-send-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1671,6 +1804,7 @@ fieldset:disabled .pk-voice-chip {
   .pk-field,
   .pk-bar-fill,
   .pk-send-dismiss,
+  .pk-send-hide,
   .pk-voice {
     transition: none;
   }
@@ -1682,8 +1816,14 @@ fieldset:disabled .pk-voice-chip {
   .pk-choice:active,
   .pk-banner-btn:active,
   .pk-send-dismiss:active,
+  .pk-send-hide:active,
+  .pk-send-pill:active,
   .pk-voice:hover {
     transform: none;
+  }
+
+  .pk-send-pill-working .pk-send-ring-arc {
+    animation: none;
   }
 }
 
