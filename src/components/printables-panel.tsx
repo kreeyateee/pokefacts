@@ -1,29 +1,123 @@
 "use client";
 
+import { useState } from "react";
+
+import { StickerStudio } from "@/components/sticker-studio";
 import { Button } from "@/components/ui/button";
+import { useStoredState } from "@/components/use-stored-state";
+import { CATALOGUE_PICKS_KEY, readCataloguePicks, serializeCataloguePicks } from "@/lib/catalogue-picks";
+import type { MeasureUnits } from "@/lib/format";
 import type { KidCard } from "@/lib/kid-cards";
+import { selectionStickerCards } from "@/lib/selection-playlist";
 
 export type PrintStart = "stickers" | "poster";
+
+/** The Pokémon picked in Make your own, as a poster or stickers. Picks live in this browser. */
+function OwnPicks({ units, onOwnPick }: { units: MeasureUnits; onOwnPick: () => void }) {
+  const [picks] = useStoredState(CATALOGUE_PICKS_KEY, readCataloguePicks, serializeCataloguePicks);
+  const [studio, setStudio] = useState<{ cards: KidCard[]; start: PrintStart } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState("");
+  const count = picks.ids.length;
+  const title = picks.title.trim();
+
+  async function open(start: PrintStart) {
+    if (count === 0 || busy) return;
+    setBusy(true);
+    setProblem("");
+    try {
+      const response = await fetch(`/api/catalogue?pick=${picks.ids.join(",")}`);
+      const payload = (await response.json()) as {
+        items?: Array<{ id: number; name: string; speciesId?: number }>;
+        error?: string;
+      };
+      if (!response.ok || !payload.items) throw new Error(payload.error || "Those Pokémon could not be opened.");
+      const cards = selectionStickerCards(payload.items, picks.kind, picks.title, units);
+      if (cards.length === 0) throw new Error("Pick at least one Pokémon in Make your own.");
+      setStudio({ cards, start });
+    } catch (error: unknown) {
+      setProblem(error instanceof Error ? error.message : "Your picks could not be opened.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="pk-panel grid content-start gap-3" aria-labelledby="own-picks-heading">
+      <h2 id="own-picks-heading" className="font-display text-2xl leading-tight">
+        Your own picks
+      </h2>
+      {count > 0 ? (
+        <>
+          <p className="text-sm leading-6">
+            {count === 1 ? "1 Pokémon is" : `${count} Pokémon are`} on your Make your own playlist
+            {title ? ` (${title})` : ""}. Put all of them on a poster, or on card stickers.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" className="h-12 px-6 text-base" disabled={busy} onClick={() => void open("poster")}>
+              {busy ? "Getting them ready…" : "Poster of my picks"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-12 px-5 text-base"
+              disabled={busy}
+              onClick={() => void open("stickers")}
+            >
+              Stickers for my picks
+            </Button>
+          </div>
+        </>
+      ) : (
+        <p className="text-sm leading-6">
+          Pick Pokémon in{" "}
+          <button type="button" className="font-bold underline" onClick={onOwnPick}>
+            Make your own
+          </button>
+          , then come back here to make a poster of them.
+        </p>
+      )}
+      {problem ? (
+        <p className="text-sm leading-6 pk-danger" role="alert">
+          {problem}
+        </p>
+      ) : null}
+      {studio?.cards[0] ? (
+        <StickerStudio
+          key={studio.cards.map((item) => item.id).join("|")}
+          card={studio.cards[0]}
+          cards={studio.cards}
+          start={studio.start}
+          onClose={() => setStudio(null)}
+        />
+      ) : null}
+    </section>
+  );
+}
 
 /** Printables: pick a set above, a playlist here, then stickers for its card or an A4 poster. */
 export function PrintablesPanel({
   card,
   rangeCards,
+  units,
   onChooseCard,
   onPrint,
   onOwnPick,
 }: {
   card: KidCard;
   rangeCards: readonly KidCard[];
+  units: MeasureUnits;
   onChooseCard: (card: KidCard) => void;
   onPrint: (start: PrintStart) => void;
   onOwnPick: () => void;
 }) {
   return (
     <div className="grid min-w-0 gap-5">
+      <OwnPicks units={units} onOwnPick={onOwnPick} />
+
       <section className="pk-panel min-w-0" aria-labelledby="print-playlist-heading">
         <h2 id="print-playlist-heading" className="pk-section-title">
-          {rangeCards.length > 1 ? "Pick a playlist" : "This playlist"}
+          {rangeCards.length > 1 ? "Or pick a ready-made playlist" : "Or use this ready-made playlist"}
         </h2>
         {rangeCards.length > 1 ? (
           <ul className="pk-scroll mt-2 flex gap-2 overflow-x-auto pb-1" aria-label={`${card.title} playlists`}>
@@ -68,14 +162,6 @@ export function PrintablesPanel({
           </Button>
         </div>
       </section>
-
-      <p className="text-sm leading-6">
-        Picked your own Pokémon?{" "}
-        <button type="button" className="font-bold underline" onClick={onOwnPick}>
-          Open Make your own
-        </button>{" "}
-        and press Make stickers there.
-      </p>
     </div>
   );
 }

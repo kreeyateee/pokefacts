@@ -2036,6 +2036,7 @@ export function Studio({
           <PrintablesPanel
             card={card}
             rangeCards={rangeCards}
+            units={playback.units}
             onChooseCard={chooseCard}
             onPrint={setStickersOpen}
             onOwnPick={() => {
