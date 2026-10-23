@@ -33,8 +33,12 @@ export function nodeTargets(node: StoryNode): StoryNodeId[] {
   return [];
 }
 
+/** Said at the end of every ending, just before the card goes back to the start. */
+export const ENDING_RESTART = "Now the adventure starts again from the beginning.";
+
 /**
- * What a node says. An ending adds its number out of the total, and says when it is golden.
+ * What a node says. An ending adds its number out of the total, says when it is golden, and says the
+ * adventure is starting again.
  * A choice adds the question that repeats until a button is pressed.
  */
 export function storyLines(node: StoryNode, endings: number): { narration: string; question?: string } {
@@ -48,7 +52,7 @@ export function storyLines(node: StoryNode, endings: number): { narration: strin
   if (node.kind === "ending") {
     const { number, name, golden } = node.ending;
     const called = golden ? `This is a golden ending: ${name.trim()}.` : `This ending is called ${name.trim()}.`;
-    return { narration: `${text} ${called} You found ending ${number} of ${endings}.` };
+    return { narration: `${text} ${called} You found ending ${number} of ${endings}. ${ENDING_RESTART}` };
   }
   return { narration: text };
 }

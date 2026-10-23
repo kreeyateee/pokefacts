@@ -118,14 +118,18 @@ describe("storyCard", () => {
     });
   });
 
-  it("stops at an ending and says which ending it was", () => {
+  it("says which ending it was, then starts the card again from the beginning", () => {
     const { upload } = compiled();
-    assert.deepEqual(trackEvents(upload, "lakea"), { onEnd: { cmd: "stop" } });
+    const restart = { cmd: "goto", params: { chapterKey: "gate", trackKey: "gatea" } };
+    assert.deepEqual(trackEvents(upload, "lakea"), { onLhb: restart, onRhb: restart, onEnd: restart });
     const tracks = nested(upload.content).chapters.flatMap((chapter) => chapter.tracks);
-    assert.match(tracks.find((track) => track.key === "lakea")?.trackUrl ?? "", /You found ending 1 of 2\.$/);
+    assert.match(
+      tracks.find((track) => track.key === "lakea")?.trackUrl ?? "",
+      /You found ending 1 of 2\. Now the adventure starts again from the beginning\.$/,
+    );
     const golden = tracks.find((track) => track.key === "catcha")?.trackUrl ?? "";
     assert.match(golden, /golden ending/);
-    assert.match(golden, /You found ending 2 of 2\.$/);
+    assert.match(golden, /You found ending 2 of 2\. Now the adventure starts again/);
   });
 
   it("speaks with the chosen voice and respelled names", () => {
@@ -217,7 +221,8 @@ describe("sending a story card", () => {
         }
       }
     }
-    assert.equal(gotos, 8);
+    // 8 between the scenes and choices, and 3 on each of the 2 endings back to the start.
+    assert.equal(gotos, 14);
   });
 
   it("fails instead of renaming a key a jump depends on", () => {

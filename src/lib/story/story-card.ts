@@ -67,10 +67,11 @@ function goto(chapterKey: StoryNodeId, trackKey = narrationKey(chapterKey)): Yot
 /**
  * Button and end-of-track events for each of a node's tracks, in track order.
  * Both tracks of a choice take a button press, and both end on the question, which then repeats.
+ * An ending goes back to the start of the story, at once if a button is pressed.
  */
-function nodeEvents(node: StoryNode): YotoTrackEvents[] {
+function nodeEvents(node: StoryNode, start: StoryNodeId): YotoTrackEvents[] {
   if (node.kind === "scene") return [{ onEnd: goto(node.next) }];
-  if (node.kind === "ending") return [{ onEnd: { cmd: "stop" } }];
+  if (node.kind === "ending") return [{ onLhb: goto(start), onRhb: goto(start), onEnd: goto(start) }];
   const waiting = (): YotoTrackEvents => ({
     onLhb: goto(node.left.to),
     onRhb: goto(node.right.to),
@@ -264,7 +265,7 @@ export function storyCard(
       config: { ...STORY_CONFIG },
       editSettings: { ...STORY_EDIT_SETTINGS },
       chapters: chapters.map((chapter, index) => {
-        const events = nodeEvents(nodes[index] as StoryNode);
+        const events = nodeEvents(nodes[index] as StoryNode, graph.start);
         return {
           key: chapter.key,
           title: chapter.title,

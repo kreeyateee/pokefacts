@@ -130,11 +130,11 @@ describe("storyLines", () => {
     if (!lake || !golden) throw new Error("fixture changed");
     assert.equal(
       storyLines(lake, 2).narration,
-      "A Psyduck splashes you. This ending is called Wet socks. You found ending 1 of 2.",
+      "A Psyduck splashes you. This ending is called Wet socks. You found ending 1 of 2. Now the adventure starts again from the beginning.",
     );
     assert.equal(
       storyLines(golden, 2).narration,
-      "You catch Chansey. This is a golden ending: Lucky catch. You found ending 2 of 2.",
+      "You catch Chansey. This is a golden ending: Lucky catch. You found ending 2 of 2. Now the adventure starts again from the beginning.",
     );
   });
 });
