@@ -19,11 +19,25 @@ export const POKEBALL_STILLS = {
   brokeFree: "/story/pokeball-broke-free.png",
 } as const;
 
-/** The 16×16 Poké Ball. Yoto takes still PNG icons, so it does not move on the player. */
-export const POKEBALL_PIXEL = "/story/pokeball-16.png";
+/**
+ * The story's own 16×16 pictures for the Yoto screen, by the name the icon route knows each by:
+ * the Poké Ball while you choose a throw, then a caught ball or a burst-open one for the result.
+ * Yoto takes still PNG icons, so they do not move on the player.
+ */
+export const STORY_PIXELS = {
+  pokeball: "/story/pokeball-16.png",
+  "pokeball-caught": "/story/pokeball-caught-16.png",
+  "pokeball-broken": "/story/pokeball-broken-16.png",
+} as const;
 
-/** The name the icon route knows it by. */
-export const POKEBALL_ICON = "pokeball";
+export type StoryPixel = keyof typeof STORY_PIXELS;
+
+export function isStoryPixel(value: unknown): value is StoryPixel {
+  return typeof value === "string" && Object.hasOwn(STORY_PIXELS, value);
+}
+
+/** The 16×16 Poké Ball. */
+export const POKEBALL_PIXEL = STORY_PIXELS.pokeball;
 
 /** When the page swaps from the wobble to the click, matching the catch sound. */
 export const WOBBLE_TO_CAUGHT_MS = Math.round((CATCH_CLICK - 0.05) * 1000);

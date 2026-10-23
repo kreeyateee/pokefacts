@@ -105,8 +105,10 @@ function nodeProblems(node: StoryNode, endings: number): string[] {
     if (!node.right.label?.trim()) problems.push(`${name} has no label for the right button.`);
   }
   if (!validDexId(node.dexId)) problems.push(`${name} plays cry ${node.dexId}, which is not in the national Pokédex.`);
-  if (!validDexId(iconDexId(node.icon))) {
-    problems.push(`${name} shows Pokémon ${iconDexId(node.icon)}, which is not in the national Pokédex.`);
+  for (const icon of [node.icon, node.kind === "choice" ? node.questionIcon : undefined]) {
+    if (!validDexId(iconDexId(icon))) {
+      problems.push(`${name} shows Pokémon ${iconDexId(icon)}, which is not in the national Pokédex.`);
+    }
   }
   return problems;
 }

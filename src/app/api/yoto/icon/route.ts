@@ -2,7 +2,7 @@ import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { getAlternateForm } from "@/lib/catalogue-db";
-import { POKEBALL_ICON, POKEBALL_PIXEL } from "@/lib/story/pokeball";
+import { isStoryPixel, STORY_PIXELS } from "@/lib/story/pokeball";
 import { ensureFormPixel } from "@/lib/form-pixel";
 import { paintColourPixel, paintShadowPixel } from "@/lib/pixel-scale";
 import { safeHttpStatus, yotoUpstreamFailure } from "@/lib/yoto-error";
@@ -38,15 +38,17 @@ export async function POST(request: Request) {
   if (!token) return jsonError("Connect Yoto before uploading a picture.", 401);
 
   const params = new URL(request.url).searchParams;
-  // The story pictures drawn for Pokefacts, such as the Poké Ball on a catch track.
-  if (params.get("name") === POKEBALL_ICON) {
-    let ball: Buffer;
+  // The story pictures drawn for Pokefacts, such as the Poké Ball while a child chooses a throw.
+  const name = params.get("name");
+  if (name !== null) {
+    if (!isStoryPixel(name)) return jsonError("That picture is not one of the story's.");
+    let picture: Buffer;
     try {
-      ball = await readFile(path.join(/* turbopackIgnore: true */ process.cwd(), "public", POKEBALL_PIXEL));
+      picture = await readFile(path.join(/* turbopackIgnore: true */ process.cwd(), "public", STORY_PIXELS[name]));
     } catch {
-      return jsonError("The Poké Ball picture is missing.");
+      return jsonError("That story picture is missing.");
     }
-    return uploadDisplayIcon(token, ball, `pokefacts-${POKEBALL_ICON}`);
+    return uploadDisplayIcon(token, picture, `pokefacts-${name}`);
   }
   const id = params.get("id") ?? "";
   const shadow = params.get("shadow") === "1";

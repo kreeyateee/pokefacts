@@ -245,7 +245,7 @@ export function introText(owner: string): string {
     "Behind her, a boy in a spotless jacket is polishing a gold Safari Ball.",
     "'That's Barnaby,' Marigold mutters. 'He says he'll catch more than you today.'",
     "Barnaby gives you a very smug smile. 'I don't say it,' he says. 'I know it.'",
-    "'Six stops,' says Marigold. 'A Pokémon at every one. No battling. This is their home, not ours, so if two get away frightened, I blow my whistle and the day is done.'",
+    "'Five stops,' says Marigold. 'A Pokémon at every one. No battling. This is their home, not ours, so if two get away frightened, I blow my whistle and the day is done.'",
     "She taps the whistle round her neck.",
     "'Now then. Do you want my quick lesson on throwing first?'",
   ].join(" ");
@@ -503,8 +503,7 @@ export const TALLY_LINES: Readonly<Record<number, readonly string[]>> = {
   2: ["That's two in the bag.", "Two in the bag. Marigold looks impressed.", "Two! Barnaby had better watch out."],
   3: ["Three in the bag.", "That's three. Somewhere, Barnaby is getting nervous.", "Three in the bag, and your bag is getting heavy."],
   4: ["Four in the bag!", "That's four. Barnaby is going to hate this.", "Four! Marigold does a tiny, secret fist pump."],
-  5: ["Five in the bag!", "That's five! Your arms are aching from carrying them all.", "Five! Marigold actually whoops."],
-  6: ["Six in the bag, and not one slip!"],
+  5: ["Five in the bag, and not one slip!"],
 };
 
 // ---------------------------------------------------------------------------
@@ -512,7 +511,7 @@ export const TALLY_LINES: Readonly<Record<number, readonly string[]>> = {
 
 export const GOLDEN_FIND = [
   "Did you hear that? You're nearly at the gate, and Marigold has gone very still. She grabs your sleeve.",
-  "'Six from six,' she whispers. 'Not one slip. Nobody has done that in years.'",
+  "'Five from five,' she whispers. 'Not one slip. Nobody has done that in years.'",
   "'That cry,' she says, 'is the rarest Pokémon in my whole Safari Zone. It only comes out for a perfect trainer.'",
   "Through her binoculars, you can just see it, {glimpse}.",
 ].join(" ");
@@ -527,7 +526,7 @@ export const GOLDEN_GONE =
   "When you get back, Marigold is looking at one perfect footprint. 'That was {a},' she says softly. 'They live {homeAt}. Next time.'";
 
 export const GOLDEN_FLED_AFTER =
-  "Marigold puts a hand on your shoulder. 'Six from six is still the best day anyone has had here in years.'";
+  "Marigold puts a hand on your shoulder. 'Five from five is still the best day anyone has had here in years.'";
 
 // ---------------------------------------------------------------------------
 // Endings, numbered by how many you caught. Ending 8 is the golden one.
@@ -535,7 +534,6 @@ export const GOLDEN_FLED_AFTER =
 export const ENDING_NAMES = [
   "The Empty Bag",
   "One in the Bag",
-  "Two's Company",
   "Hot on His Heels",
   "Neck and Neck",
   "Barnaby's Bad Day",
@@ -553,20 +551,19 @@ export const WHISTLE_TIPS = [
   "'Think about where it would like to live,' she says. 'A Fire type won't be paddling in the sea.'",
 ];
 
-/** Endings 1 to 5: the whistle has blown. */
+/** Endings 1 to 4: the whistle has blown. Barnaby always finishes with three. */
 export const WHISTLE_ENDINGS = [
-  "[whistle] Marigold blows her whistle, and all across the Safari Zone, Pokémon dive for cover. Your bag is completely empty. On the bright side, the Pokémon had a lovely day. Barnaby strolls past with four Safari Balls, and for once he doesn't say a word, which is somehow worse. Marigold pats your shoulder. 'My first day,' she says, 'I fell in the lake. Twice.'",
-  "[whistle] That's the whistle. You've got one Pokémon in your bag, which is one more than none. Barnaby has four, and he tells everyone about each one of them, in great detail. Marigold rolls her eyes so hard her hat wobbles.",
-  "[whistle] The whistle blows. Two Pokémon in your bag. Not bad at all. Barnaby has four, and he's already asking where they'll hang his photo. 'Don't let him get to you,' says Marigold. 'He fell in a stream earlier.'",
-  "[whistle] Three Pokémon in your bag when the whistle goes. Barnaby has four. One more and you'd have tied with him, and he knows it. He's laughing a bit too loudly.",
-  "Just as Marigold blows the whistle, [whistle] you count your bag. Four. Barnaby counts his. Four. It's a draw! Barnaby says one of his should count as two, because it was quite big. Marigold says that is not how counting works.",
+  "[whistle] Marigold blows her whistle, and all across the Safari Zone, Pokémon dive for cover. Your bag is completely empty. On the bright side, the Pokémon had a lovely day. Barnaby strolls past with three Safari Balls, and for once he doesn't say a word, which is somehow worse. Marigold pats your shoulder. 'My first day,' she says, 'I fell in the lake. Twice.'",
+  "[whistle] That's the whistle. You've got one Pokémon in your bag, which is one more than none. Barnaby has three, and he tells everyone about each one of them, in great detail. Marigold rolls her eyes so hard her hat wobbles.",
+  "[whistle] Two Pokémon in your bag when the whistle goes. Barnaby has three. One more and you'd have tied with him, and he knows it. He's laughing a bit too loudly.",
+  "Just as Marigold blows the whistle, [whistle] you count your bag. Three. Barnaby counts his. Three. It's a draw! Barnaby says one of his should count as two, because it was quite big. Marigold says that is not how counting works.",
 ];
 
 export function dayEndText(owner: string): string {
   return [
     "The sun sets over the Safari Zone, and Marigold walks you back to the gate.",
-    "Five Pokémon in your bag, and only one got away all day.",
-    "Barnaby counts his. Four. He counts them again. Still four. He goes very quiet.",
+    "Four Pokémon in your bag, and only one got away all day.",
+    "Barnaby counts his. Three. He counts them again. Still three. He goes very quiet.",
     `'Not bad at all, ${owner},' says Marigold. Then she leans in close.`,
     "'Here's a secret. Anyone who gets all the way round with no slips at all gets a visit from someone very special.'",
   ].join(" ");
@@ -574,7 +571,7 @@ export function dayEndText(owner: string): string {
 
 export function masterText(owner: string): string {
   return [
-    "The sun sets, gold and pink, and you walk back to the gate with six Pokémon in your bag. Six! Not one slip all day.",
+    "The sun sets, gold and pink, and you walk back to the gate with five Pokémon in your bag. Five! Not one slip all day.",
     "Barnaby has to sit down.",
     `Marigold shakes your hand like an old friend. 'You're a proper Safari Master, ${owner},' she says.`,
     "'And you saw it. Most trainers never even see it. Next time, you catch it.'",
@@ -585,6 +582,6 @@ export function goldenText(owner: string): string {
   return [
     "Marigold takes off her enormous hat, which she has never done for anyone, and bows.",
     "Barnaby comes running round the corner, sees what you've caught, and drops his gold Safari Ball. It rolls all the way down the hill and into the lake. Plop.",
-    `'Seven Pokémon,' says Marigold. 'Not one slip. ${owner}, I'm putting your name on the gate.'`,
+    `'Six Pokémon,' says Marigold. 'Not one slip. ${owner}, I'm putting your name on the gate.'`,
   ].join(" ");
 }

@@ -12,7 +12,7 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 
 import { ffmpegCommand } from "../src/lib/ffmpeg-bin";
-import { POKEBALL_GIFS, POKEBALL_PIXEL, POKEBALL_STILLS } from "../src/lib/story/pokeball";
+import { POKEBALL_GIFS, POKEBALL_STILLS, STORY_PIXELS, type StoryPixel } from "../src/lib/story/pokeball";
 import { CATCH_CLICK, CATCH_WOBBLES } from "../src/lib/story/story-sound";
 
 const SIZE = 220;
@@ -326,46 +326,87 @@ function writeStill(file: string, frame: Scene) {
   console.log(`Wrote ${file}`);
 }
 
-/** The 16×16 Poké Ball for the Yoto screen, drawn pixel by pixel. */
-const PIXEL_ART = [
-  "................",
-  ".....KKKKKK.....",
-  "...KKRRRRRRKK...",
-  "..KRRWRRRRRRRK..",
-  "..KRWRRRRRRRRK..",
-  ".KRRRRRRRRRRRRK.",
-  ".KRRRRRKKRRRRRK.",
-  ".KKKKKKWWKKKKKK.",
-  ".KKKKKKWWKKKKKK.",
-  ".KWWWWWKKWWWWWK.",
-  ".KWWWWWWWWWWWGK.",
-  "..KWWWWWWWWWGK..",
-  "..KWWWWWWWWGGK..",
-  "...KKWWWWWGKK...",
-  ".....KKKKKK.....",
-  "................",
-];
+/** The 16×16 pictures for the Yoto screen, drawn pixel by pixel. */
+const PIXEL_ART: Record<StoryPixel, string[]> = {
+  pokeball: [
+    "................",
+    ".....KKKKKK.....",
+    "...KKRRRRRRKK...",
+    "..KRRWRRRRRRRK..",
+    "..KRWRRRRRRRRK..",
+    ".KRRRRRRRRRRRRK.",
+    ".KRRRRRKKRRRRRK.",
+    ".KKKKKKWWKKKKKK.",
+    ".KKKKKKWWKKKKKK.",
+    ".KWWWWWKKWWWWWK.",
+    ".KWWWWWWWWWWWGK.",
+    "..KWWWWWWWWWGK..",
+    "..KWWWWWWWWGGK..",
+    "...KKWWWWWGKK...",
+    ".....KKKKKK.....",
+    "................",
+  ],
+  // Caught: the button lit up and little sparkles round it.
+  "pokeball-caught": [
+    "Y..............Y",
+    ".Y...KKKKKK...Y.",
+    "....KRRRRRRK....",
+    "...KRWRRRRRRK...",
+    "..KRRRRRRRRRRK..",
+    "..KRRRRKKRRRRK..",
+    "..KKKKKYYKKKKK..",
+    "..KKKKKYYKKKKK..",
+    "..KWWWWKKWWWWK..",
+    "..KWWWWWWWWWGK..",
+    "...KWWWWWWWGK...",
+    "....KWWWWWGK....",
+    ".....KKKKKK.....",
+    "................",
+    ".Y............Y.",
+    "Y..............Y",
+  ],
+  // Broke free: the two halves sprung apart, with a little burst between them.
+  "pokeball-broken": [
+    "................",
+    "...KKKKK........",
+    "..KRRRRRK....Y..",
+    ".KRWRRRRRK..Y.Y.",
+    ".KRRRRRRRK...Y..",
+    ".KRRRRRRRK......",
+    ".KKKKKKKKK......",
+    "................",
+    ".Y..............",
+    "Y.Y...KKKKKKKKK.",
+    ".Y....KWWWWWWWK.",
+    "......KWWWWWWWK.",
+    "......KWWWWWWGK.",
+    ".......KWWWWGK..",
+    "........KKKKK...",
+    "................",
+  ],
+};
 const PIXEL_COLOURS: Record<string, [number, number, number, number]> = {
   ".": [0, 0, 0, 0],
   K: [24, 24, 30, 255],
   R: [232, 56, 40, 255],
   W: [250, 250, 250, 255],
   G: [180, 182, 190, 255],
+  Y: [255, 206, 40, 255],
 };
 
-function writePixel() {
-  const output = path.join(process.cwd(), "public", POKEBALL_PIXEL);
+function writePixel(name: StoryPixel) {
+  const art = PIXEL_ART[name];
+  if (art.length !== 16 || art.some((row) => row.length !== 16)) throw new Error(`${name} is not 16 by 16.`);
+  const output = path.join(process.cwd(), "public", STORY_PIXELS[name]);
   mkdirSync(path.dirname(output), { recursive: true });
   const raw = Buffer.alloc(16 * 16 * 4);
-  PIXEL_ART.forEach((row, y) =>
-    [...row].forEach((cell, x) => raw.set(PIXEL_COLOURS[cell] ?? [0, 0, 0, 0], (y * 16 + x) * 4)),
-  );
+  art.forEach((row, y) => [...row].forEach((cell, x) => raw.set(PIXEL_COLOURS[cell] ?? [0, 0, 0, 0], (y * 16 + x) * 4)));
   execFileSync(
     ffmpegCommand(),
     ["-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgba", "-s", "16x16", "-i", "pipe:0", "-frames:v", "1", output],
     { input: raw },
   );
-  console.log(`Wrote ${POKEBALL_PIXEL}`);
+  console.log(`Wrote ${STORY_PIXELS[name]}`);
 }
 
 const sheetFlag = process.argv.indexOf("--sheets");
@@ -384,4 +425,4 @@ for (const [name, make] of [
   const still = name === "caught" ? POKEBALL_STILLS.caught : name === "broke-free" ? POKEBALL_STILLS.brokeFree : undefined;
   if (still) writeStill(still, frames.at(-1) as Scene);
 }
-writePixel();
+for (const name of Object.keys(PIXEL_ART) as StoryPixel[]) writePixel(name);

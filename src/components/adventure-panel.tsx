@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useStoredState } from "@/components/use-stored-state";
 import type { MixSettings } from "@/lib/playback-settings";
 import { pickerVoice } from "@/lib/piper-voice";
-import { storyIconPath } from "@/lib/story/story-card";
+import { storyIconPath, storyQuestionIconPath } from "@/lib/story/story-card";
 import { endingCount, storyLines, storyTrackCount } from "@/lib/story/story-check";
 import type { StoryGraph, StoryNode } from "@/lib/story/story-graph";
 import { withoutCues } from "@/lib/story/story-sound";
@@ -256,7 +256,21 @@ export function AdventurePanel({
                 <PokeballShow outcome={pokeballOutcome(node.text) ?? "caught"} play={ballPlay} />
               </div>
             ) : null}
-            {lines.question ? <p className="mt-3 font-medium">{lines.question}</p> : null}
+            {lines.question ? (
+              <p className="mt-3 flex items-center gap-2 font-medium">
+                {storyQuestionIconPath(node) !== storyIconPath(node) && !storyQuestionIconPath(node).startsWith("yoto:") ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={storyQuestionIconPath(node)}
+                    alt=""
+                    width={32}
+                    height={32}
+                    className="h-8 w-8 shrink-0 rounded bg-black p-0.5 [image-rendering:pixelated]"
+                  />
+                ) : null}
+                {lines.question}
+              </p>
+            ) : null}
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <Button
                 type="button"

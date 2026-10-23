@@ -39,8 +39,11 @@ export type SafariMon = MonSheet & { area: SafariArea; captureRate: number; spee
 
 export type SafariThrow = "ball" | "bait" | "rock";
 
-/** Six stops. Two slips blow the whistle. */
-export const SAFARI_STOPS = 6;
+/**
+ * Five stops. Two slips blow the whistle. Each throw ends on two tracks, so the Yoto screen can show the
+ * result and then the Pokémon, and five stops is what fits in a card's hundred tracks.
+ */
+export const SAFARI_STOPS = 5;
 
 /** At or above this catch rate a Pokémon counts as common. */
 export const COMMON_CATCH_RATE = 120;
@@ -99,8 +102,11 @@ function underScene(bed: StoryBed, text: string): StoryBed {
   return /\bBarnaby\b/.test(text) ? { ...bed, music: "tense" } : bed;
 }
 
-/** The Poké Ball on the Yoto screen while a catch plays. */
+/** The Poké Ball on the Yoto screen while the throw question plays. */
 const POKEBALL: StoryIcon = { pixel: "pokeball" };
+/** The result of a throw: a caught ball with sparkles, or a ball that has burst open. */
+const CAUGHT: StoryIcon = { pixel: "pokeball-caught" };
+const BROKE_FREE: StoryIcon = { pixel: "pokeball-broken" };
 
 /** How many stops Barnaby turns up at, on the way in. */
 const BARNABY_VISITS = 3;
@@ -397,7 +403,8 @@ export function planSafari(pool: readonly SafariMon[], seed: number, owner = "")
     stops.push({ ...stop, wrongThrow: wrongThrowFor(stop.mon, random), throwLeft: random() < 0.5 });
   }
 
-  const barnaby = drawSample([1, 2, 3, 4, 5, 6], BARNABY_VISITS, random).sort((a, b) => a - b);
+  const everyStop = Array.from({ length: SAFARI_STOPS }, (_, index) => index + 1);
+  const barnaby = drawSample(everyStop, BARNABY_VISITS, random).sort((a, b) => a - b);
   return { seed, owner: cleanOwner(owner), stops, golden, barnaby };
 }
 
@@ -440,11 +447,13 @@ const ID = {
   missed: (stop: number, slips: number) => `s${stop}w${slips}`,
   meet: (stop: number, slips: number) => `s${stop}b${slips}`,
   fled: (stop: number, slips: number) => `s${stop}f${slips}`,
+  fledReveal: (stop: number, slips: number) => `s${stop}e${slips}`,
   caught: (stop: number, slips: number) => `s${stop}c${slips}`,
+  caughtReveal: (stop: number, slips: number) => `s${stop}d${slips}`,
   ending: (number: number) => `end${number}`,
 };
 
-const GOLD = { find: "gold", missed: "goldw", meet: "goldb", fled: "goldf" };
+const GOLD = { find: "gold", missed: "goldw", meet: "goldb", fled: "goldf", fledReveal: "golde", caught: "goldc" };
 
 const shadow = (dexId: number): StoryIcon => ({ dexId, shadow: true });
 const picture = (dexId: number): StoryIcon => ({ dexId });
@@ -555,8 +564,14 @@ type StopWords = {
   labels: [string, string];
   missed: string;
   meet: string;
+  /** The throw that fails, on the broken-ball picture. */
   fled: string;
+  /** Who it was, on its own picture. */
+  fledReveal: string;
+  /** The catch, on the caught-ball picture. */
   caught: string;
+  /** Who it is, on its own picture, after its cry. */
+  caughtReveal: string;
 };
 
 function opener(number: number, words: Decks): string {
@@ -571,12 +586,10 @@ function stopWords(stop: SafariStop, number: number, plan: SafariPlan, words: De
   const right = throwFor(mon);
   const barnaby = plan.barnaby.includes(number) ? words.barnaby() : "";
   const opening = join(opener(number, words), barnaby);
-  const fled = join(
-    words.fled[`${stop.wrongThrow}-${right}` as W.WrongThrow](),
-    revealed(mon, false),
-    words.rightThrow[right](),
-  );
-  const caught = join(words.caught[right](), "[fanfare]", revealed(mon, true));
+  const fled = join(words.fled[`${stop.wrongThrow}-${right}` as W.WrongThrow]());
+  const fledReveal = join(revealed(mon, false), words.rightThrow[right]());
+  const caught = join(words.caught[right](), "[fanfare]");
+  const caughtReveal = join(revealed(mon, true));
 
   if (stop.kind === "area") {
     const { type, decoy } = stop.clue;
@@ -588,7 +601,9 @@ function stopWords(stop: SafariStop, number: number, plan: SafariPlan, words: De
       missed: join(words.empty[decoy](), fill(words.gone(), gaps), fill(words.home(), gaps)),
       meet: join(words.found(), words.arrive[mon.area](), notes.look, paceLine(mon, words), words.ask()),
       fled,
+      fledReveal,
       caught,
+      caughtReveal,
     };
   }
 
@@ -615,7 +630,9 @@ function stopWords(stop: SafariStop, number: number, plan: SafariPlan, words: De
     ),
     meet: join(fill(words.spotted(), { colour: notes.colour }), notes.look, paceLine(mon, words), words.ask()),
     fled,
+    fledReveal,
     caught,
+    caughtReveal,
   };
 }
 
@@ -687,7 +704,6 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
       const warning = slips === 1 ? words.oneSlip() : "";
       const findText = join("[footsteps]", warning, stopText.find);
       const missedText = join(stopText.missed, slipLine(number, slips, words));
-      const fledText = join(stopText.fled, slipLine(number, slips, words));
       nodes.push({
         id: ID.find(number, slips),
         kind: "choice",
@@ -713,6 +729,7 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
         title: `${title}: Close Up`,
         dexId: stop.mon.id,
         icon: shadow(stop.mon.id),
+        questionIcon: POKEBALL,
         bed: home,
         text: stopText.meet,
         ...throwSides(stop, ID.caught(number, slips), ID.fled(number, slips)),
@@ -720,26 +737,45 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
       nodes.push({
         id: ID.fled(number, slips),
         kind: "scene",
+        title: `${title}: The Throw`,
+        icon: BROKE_FREE,
+        bed: home,
+        text: stopText.fled,
+        next: ID.fledReveal(number, slips),
+      });
+      const fledReveal = join(stopText.fledReveal, slipLine(number, slips, words));
+      nodes.push({
+        id: ID.fledReveal(number, slips),
+        kind: "scene",
         title: `${title}: What Happened`,
         icon: picture(stop.mon.id),
-        bed: underScene(home, fledText),
-        text: fledText,
+        bed: underScene(home, fledReveal),
+        text: fledReveal,
         next: onSlip,
       });
       nodes.push({
         id: ID.caught(number, slips),
         kind: "scene",
-        title: `${title}: What Happened`,
-        dexId: stop.mon.id,
-        icon: POKEBALL,
+        title: `${title}: The Throw`,
+        icon: CAUGHT,
         bed: home,
-        text: join(stopText.caught, tallyLine(number - slips, words)),
+        text: stopText.caught,
+        next: ID.caughtReveal(number, slips),
+      });
+      nodes.push({
+        id: ID.caughtReveal(number, slips),
+        kind: "scene",
+        title: `${title}: Gotcha`,
+        dexId: stop.mon.id,
+        icon: picture(stop.mon.id),
+        bed: home,
+        text: join(stopText.caughtReveal, tallyLine(number - slips, words)),
         next: onWin,
       });
     }
   });
 
-  // The secret stop, after six from six.
+  // The secret stop, after five from five.
   const golden = plan.golden;
   const gold = golden.mon;
   const goldNotes = notesOf(gold);
@@ -774,21 +810,36 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
     icon: shadow(gold.id),
     bed: { ambience: PLACE_SOUND[gold.area].ambience, music: "magical" },
     text: join(words.arrive[gold.area](), W.GOLDEN_MEET, goldNotes.look, paceLine(gold, words), W.GOLDEN_ASK),
-    ...throwSides(golden, goldenEnding, GOLD.fled),
+    questionIcon: POKEBALL,
+    ...throwSides(golden, GOLD.caught, GOLD.fled),
   });
+  const goldBed: StoryBed = { ambience: PLACE_SOUND[gold.area].ambience, music: "magical" };
   nodes.push({
     id: GOLD.fled,
     kind: "scene",
+    title: "The Secret Stop: The Throw",
+    icon: BROKE_FREE,
+    bed: goldBed,
+    text: join(words.fled[`${golden.wrongThrow}-${goldRight}` as W.WrongThrow]()),
+    next: GOLD.fledReveal,
+  });
+  nodes.push({
+    id: GOLD.fledReveal,
+    kind: "scene",
     title: "The Secret Stop: What Happened",
     icon: picture(gold.id),
-    bed: { ambience: PLACE_SOUND[gold.area].ambience, music: "magical" },
-    text: join(
-      words.fled[`${golden.wrongThrow}-${goldRight}` as W.WrongThrow](),
-      revealed(gold, false),
-      words.rightThrow[goldRight](),
-      W.GOLDEN_FLED_AFTER,
-    ),
+    bed: goldBed,
+    text: join(revealed(gold, false), words.rightThrow[goldRight](), W.GOLDEN_FLED_AFTER),
     next: masterEnding,
+  });
+  nodes.push({
+    id: GOLD.caught,
+    kind: "scene",
+    title: "The Secret Stop: The Throw",
+    icon: CAUGHT,
+    bed: goldBed,
+    text: join(words.caught[goldRight](), "[fanfare]"),
+    next: goldenEnding,
   });
 
   for (let number = 1; number <= total; number += 1) {
@@ -798,8 +849,8 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
       nodes.push({
         ...base,
         dexId: gold.id,
-        icon: POKEBALL,
-        text: join(words.caught[goldRight](), revealed(gold, true), W.goldenText(capital(owner)), "[golden]"),
+        icon: picture(gold.id),
+        text: join(revealed(gold, true), W.goldenText(capital(owner)), "[golden]"),
         ending: { number, name, golden: true },
       });
     } else {
@@ -810,7 +861,7 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
       );
       nodes.push({
         ...base,
-        icon: { yoto: number >= total - 1 ? YOTO_ICONS.celebrate : number >= 5 ? YOTO_ICONS.star : YOTO_ICONS.music },
+        icon: { yoto: number >= total - 2 ? YOTO_ICONS.celebrate : number >= 4 ? YOTO_ICONS.star : YOTO_ICONS.music },
         text,
         ending: { number, name },
       });

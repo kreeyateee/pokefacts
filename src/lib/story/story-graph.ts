@@ -4,6 +4,7 @@
  * The compiler (story-card.ts) turns this map into a Yoto interactive playlist.
  */
 
+import type { StoryPixel } from "@/lib/story/pokeball";
 import type { StoryBed } from "@/lib/story/story-sound";
 import type { StoryCharacter } from "@/lib/story/story-voices";
 
@@ -20,7 +21,7 @@ export type StoryChoice = {
  * A 16×16 picture on the player screen: a Pokémon's pixel icon or shadow, one of the story's own
  * pictures (the Poké Ball), or a stock Yoto icon id.
  */
-export type StoryIcon = { dexId: number; shadow?: boolean } | { pixel: "pokeball" } | { yoto: string };
+export type StoryIcon = { dexId: number; shadow?: boolean } | { pixel: StoryPixel } | { yoto: string };
 
 type NodeBase = {
   id: StoryNodeId;
@@ -42,7 +43,13 @@ type NodeBase = {
 export type SceneNode = NodeBase & { kind: "scene"; next: StoryNodeId };
 
 /** Narration, then a short question that repeats until a button is pressed. */
-export type ChoiceNode = NodeBase & { kind: "choice"; left: StoryChoice; right: StoryChoice };
+export type ChoiceNode = NodeBase & {
+  kind: "choice";
+  left: StoryChoice;
+  right: StoryChoice;
+  /** A different picture while the question repeats, such as the Poké Ball when it is time to throw. */
+  questionIcon?: StoryIcon;
+};
 
 /** The story stops here. Endings are numbered so a child can collect them. */
 export type EndingNode = NodeBase & {

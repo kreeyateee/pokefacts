@@ -3,7 +3,7 @@ import { chosenVoice } from "@/lib/piper-voice";
 import { pronounce } from "@/lib/pronounce";
 import { checkStory, endingCount, storyLines } from "@/lib/story/story-check";
 import type { StoryGraph, StoryIcon, StoryNode, StoryNodeId } from "@/lib/story/story-graph";
-import { POKEBALL_ICON, POKEBALL_PIXEL } from "@/lib/story/pokeball";
+import { STORY_PIXELS, type StoryPixel } from "@/lib/story/pokeball";
 import { withoutCues, type StoryBed } from "@/lib/story/story-sound";
 import {
   castVoices,
@@ -81,11 +81,19 @@ function nodeEvents(node: StoryNode): YotoTrackEvents[] {
 
 /** Picture path for a node: a pixel path the studio uploads, or a stock `yoto:#` icon. */
 export function storyIconPath(node: Pick<StoryNode, "kind" | "icon">): string {
-  const icon: StoryIcon | undefined = node.icon;
-  if (!icon) return DEFAULT_ICONS[node.kind];
+  return iconPath(node.icon, node.kind);
+}
+
+function iconPath(icon: StoryIcon | undefined, kind: StoryNode["kind"]): string {
+  if (!icon) return DEFAULT_ICONS[kind];
   if ("yoto" in icon) return icon.yoto.startsWith("yoto:#") ? icon.yoto : `yoto:#${icon.yoto}`;
-  if ("pixel" in icon) return POKEBALL_PIXEL;
+  if ("pixel" in icon) return STORY_PIXELS[icon.pixel];
   return icon.shadow ? shadowPixelPath(icon.dexId) : `/pixels/${icon.dexId}.png`;
+}
+
+/** The picture while a choice's question repeats: its own, or the node's. */
+export function storyQuestionIconPath(node: StoryNode): string {
+  return node.kind === "choice" && node.questionIcon ? iconPath(node.questionIcon, node.kind) : storyIconPath(node);
 }
 
 /**
@@ -97,8 +105,10 @@ export function storyPixels(graph: StoryGraph): { real: number[]; shadow: number
   const shadow = new Set<number>();
   const named = new Set<string>();
   for (const node of graph.nodes) {
-    if (node.icon && "dexId" in node.icon) (node.icon.shadow ? shadow : real).add(node.icon.dexId);
-    if (node.icon && "pixel" in node.icon) named.add(POKEBALL_ICON);
+    for (const icon of [node.icon, node.kind === "choice" ? node.questionIcon : undefined]) {
+      if (icon && "dexId" in icon) (icon.shadow ? shadow : real).add(icon.dexId);
+      if (icon && "pixel" in icon) named.add(icon.pixel);
+    }
   }
   return { real: [...real], shadow: [...shadow], named: [...named] };
 }
@@ -111,8 +121,9 @@ type UploadedPixels = {
 
 /** Swap a pixel path for its uploaded `yoto:#` media. A path with no upload is left for the send to reject. */
 function uploadedIcon(path: string, uploaded: UploadedPixels): string {
-  if (path === POKEBALL_PIXEL) {
-    const media = uploaded.namedById[POKEBALL_ICON];
+  const named = (Object.entries(STORY_PIXELS) as Array<[StoryPixel, string]>).find(([, file]) => file === path);
+  if (named) {
+    const media = uploaded.namedById[named[0]];
     return media ? `yoto:#${media}` : path;
   }
   const match = /^\/pixels\/(\d+)(-shadow)?\.png$/.exec(path);
@@ -172,14 +183,21 @@ function storyTrack(
   };
 }
 
-function storyChapter(node: StoryNode, index: number, endings: number, icon: string, voicing: Voicing): KidChapter {
+function storyChapter(
+  node: StoryNode,
+  index: number,
+  endings: number,
+  icon: string,
+  questionIcon: string,
+  voicing: Voicing,
+): KidChapter {
   const overlay = String(index + 1);
   const lines = storyLines(node, endings);
   const narration = storyTrack(narrationKey(node.id), node.title.trim(), lines.narration, icon, overlay, voicing, node.bed);
   if (node.dexId) narration.lead = "cry";
   const tracks = [narration];
   if (lines.question) {
-    tracks.push(storyTrack(questionKey(node.id), QUESTION_TITLE, lines.question, icon, overlay, voicing));
+    tracks.push(storyTrack(questionKey(node.id), QUESTION_TITLE, lines.question, questionIcon, overlay, voicing));
   }
   return {
     key: node.id,
@@ -221,12 +239,13 @@ export function storyCard(
   const endings = endingCount(graph);
   const nodes = chapterOrder(graph);
   const chapters = nodes.map((node, index) => {
-    const icon = uploadedIcon(storyIconPath(node), {
+    const uploaded = {
       realById: options.realById ?? {},
       shadowById: options.shadowById ?? {},
       namedById: options.namedById ?? {},
-    });
-    return storyChapter(node, index, endings, icon, voicing);
+    };
+    const icon = uploadedIcon(storyIconPath(node), uploaded);
+    return storyChapter(node, index, endings, icon, uploadedIcon(storyQuestionIconPath(node), uploaded), voicing);
   });
   const card: KidCard = {
     id: graph.id,
