@@ -1,6 +1,12 @@
 import { YOTO_TRACK_LIMIT } from "@/lib/kid-cards";
 import { isPiperVoice } from "@/lib/piper-voice";
-import { safeHttpStatus, validYotoCardId, yotoUpstreamFailure } from "@/lib/yoto-error";
+import {
+  missingMediaHashes,
+  missingMediaText,
+  safeHttpStatus,
+  validYotoCardId,
+  yotoUpstreamFailure,
+} from "@/lib/yoto-error";
 import { bearerToken, forwardYoto, jsonError } from "@/lib/yoto-proxy";
 import { contentForElevenLabs } from "@/lib/voice-tags";
 import { appendToPlaylist, contentCreateBody, trackEventProblem } from "@/lib/yoto-send";
@@ -21,6 +27,22 @@ type JobBody = {
     metadata?: { title?: string; description?: string; cover?: { imageL?: string } };
   };
 };
+
+/**
+ * Yoto turned the playlist down. When it says recordings are missing ("Media file not found … (<hash>)"),
+ * answer 409 with every hash it named, so the page can upload those tracks again and retry.
+ */
+function playlistRejected(status: number, text: string): Response {
+  const missingMedia = missingMediaHashes(text);
+  if (missingMedia.length > 0) {
+    const message = missingMediaText(missingMedia.length);
+    return Response.json(
+      { error: message, message, missingMedia, yotoBody: text.trim().slice(0, 2000) },
+      { status: 409 },
+    );
+  }
+  return Response.json(yotoUpstreamFailure(text), { status: safeHttpStatus(status) });
+}
 
 export async function POST(request: Request) {
   const token = bearerToken(request);
@@ -131,9 +153,7 @@ export async function POST(request: Request) {
       120_000,
     );
     const text = await upstream.text();
-    if (!upstream.ok) {
-      return Response.json(yotoUpstreamFailure(text), { status: safeHttpStatus(upstream.status) });
-    }
+    if (!upstream.ok) return playlistRejected(upstream.status, text);
     let parsed: unknown = null;
     try {
       parsed = text ? (JSON.parse(text) as unknown) : null;
@@ -143,11 +163,8 @@ export async function POST(request: Request) {
     const row = parsed && typeof parsed === "object" ? (parsed as { cardId?: string; card?: { cardId?: string } }) : {};
     const cardId = validYotoCardId(row.card?.cardId) ?? validYotoCardId(row.cardId) ?? replaceId;
     if (!cardId) {
-      const yotoBody = text.trim().slice(0, 500);
-      const message = yotoBody
-        ? `Yoto did not return the playlist. ${yotoBody}`
-        : "Yoto did not return the playlist.";
-      return jsonError(message, 422);
+      const message = "Yoto did not return the playlist.";
+      return Response.json({ error: message, message, yotoBody: text.trim().slice(0, 500) }, { status: 422 });
     }
     return Response.json({
       status: "completed",
@@ -199,9 +216,7 @@ async function updateExistingPlaylist(
     120_000,
   );
   const text = await upstream.text();
-  if (!upstream.ok) {
-    return Response.json(yotoUpstreamFailure(text), { status: safeHttpStatus(upstream.status) });
-  }
+  if (!upstream.ok) return playlistRejected(upstream.status, text);
   let returned: unknown = null;
   try {
     returned = text ? (JSON.parse(text) as unknown) : null;

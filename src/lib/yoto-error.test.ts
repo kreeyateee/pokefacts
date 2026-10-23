@@ -204,3 +204,21 @@ describe("Yoto errors", () => {
     assert.equal(failure.yotoBody.includes("<!DOCTYPE"), false);
   });
 });
+
+describe("gateway retries", () => {
+  it("waits a little longer each time for about a minute, then gives up", async () => {
+    const { gatewayRetryDelay } = await import("./yoto-error");
+    const waits: number[] = [];
+    for (let miss = 0; gatewayRetryDelay(miss) !== null; miss += 1) waits.push(gatewayRetryDelay(miss) ?? 0);
+    assert.ok(waits.length >= 5);
+    for (let index = 1; index < waits.length; index += 1) assert.ok((waits[index] ?? 0) >= (waits[index - 1] ?? 0));
+    const total = waits.reduce((sum, wait) => sum + wait, 0);
+    assert.ok(total >= 45_000 && total <= 90_000, `total ${total}`);
+  });
+
+  it("treats our own 'public link timed out' answer as a gateway failure", async () => {
+    const { looksLikeGateway, PUBLIC_LINK_TIMEOUT } = await import("./yoto-error");
+    assert.equal(looksLikeGateway(422, { error: PUBLIC_LINK_TIMEOUT }), true);
+    assert.equal(looksLikeGateway(422, { error: "This track did not record." }), false);
+  });
+});

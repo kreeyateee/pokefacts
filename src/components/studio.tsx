@@ -104,13 +104,16 @@ import {
   withPlaylistSent,
   withScratch,
   withTrackDone,
+  withoutTracks,
   type PendingBulk,
   type PendingPlaylist,
   type PendingSend,
 } from "@/lib/pending-send";
+import { forgetMissingMedia, healingText, missingMediaError, postWithMediaHeal } from "@/lib/media-heal";
 import { demoHearBody, factTrackBody, readVoiceId, writeVoiceId } from "@/lib/voice-choice";
 import {
   asSendFailure,
+  gatewayRetryDelay,
   isRateLimited,
   looksLikeGateway,
   SendFailure,
@@ -196,9 +199,15 @@ function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Yoto's full reply goes to the console. The page shows one plain sentence. */
+function logYotoReply(what: string, status: number, payload: unknown) {
+  console.warn(`${what} (HTTP ${status})`, payload);
+}
+
 async function readApi(response: Response, fallback: string): Promise<unknown> {
   const payload = await readBody(response);
   if (!response.ok || looksLikeGateway(response.status, payload)) {
+    logYotoReply(fallback, response.status, payload);
     throw new SendFailure(
       statusErrorText(response.status, payload, fallback),
       looksLikeGateway(response.status, payload),
@@ -265,12 +274,33 @@ function uploadIcon(id: number, shadow = false): Promise<string> {
 
 async function uploadIconFrom(path: string): Promise<string> {
   const fallback = "Yoto did not take the 16×16 picture.";
+  let gatewayMisses = 0;
   for (let attempt = 0; attempt < 4; attempt += 1) {
-    const response = await yotoFetch(path, { method: "POST" });
-    const payload = await readBody(response);
+    let response: Response;
+    let payload: unknown;
+    try {
+      response = await yotoFetch(path, { method: "POST" });
+      payload = await readBody(response);
+    } catch (error) {
+      // The site restarting or the network dropping: wait it out rather than failing the send.
+      const failure = asSendFailure(error, fallback);
+      const wait = failure.gateway ? gatewayRetryDelay(gatewayMisses++) : null;
+      if (wait === null) throw failure;
+      await delay(wait);
+      attempt -= 1;
+      continue;
+    }
     if (isRateLimited(response.status, payload) && attempt < 3) {
       await delay(Math.min(8_000, 800 * (attempt + 1)));
       continue;
+    }
+    if (looksLikeGateway(response.status, payload)) {
+      const wait = gatewayRetryDelay(gatewayMisses++);
+      if (wait !== null) {
+        await delay(wait);
+        attempt -= 1;
+        continue;
+      }
     }
     if (!response.ok || looksLikeGateway(response.status, payload)) {
       throw new SendFailure(
@@ -1304,14 +1334,33 @@ export function Studio({
   }
 
   async function pollJob(id: string, headline?: string, mark?: { done: number; total: number }) {
+    let gatewayMisses = 0;
     for (let attempt = 0; attempt < 150; attempt += 1) {
       await delay(attempt < 8 ? 400 : 1000);
       throwIfCancelled();
-      const response = await yotoFetch(`/api/yoto/job/${id}`);
-      const payload = await readBody(response);
+      let response: Response;
+      let payload: unknown;
+      try {
+        response = await yotoFetch(`/api/yoto/job/${id}`);
+        payload = await readBody(response);
+      } catch (error) {
+        // The site restarting or the network dropping: checking again is safe, so wait and ask again.
+        const failure = asSendFailure(error, "Could not check the recording.");
+        const wait = failure.gateway ? gatewayRetryDelay(gatewayMisses++) : null;
+        if (wait === null) throw failure;
+        await delay(wait);
+        continue;
+      }
       if (isRateLimited(response.status, payload)) {
         await delay(Math.min(8_000, 1_000 * (attempt + 1)));
         continue;
+      }
+      if (looksLikeGateway(response.status, payload)) {
+        const wait = gatewayRetryDelay(gatewayMisses++);
+        if (wait !== null) {
+          await delay(wait);
+          continue;
+        }
       }
       if (!response.ok || looksLikeGateway(response.status, payload)) {
         throw new SendFailure(
@@ -1351,6 +1400,10 @@ export function Studio({
       });
       const payload = await readBody(response);
       if (!response.ok || looksLikeGateway(response.status, payload)) {
+        logYotoReply("Yoto did not accept the playlist", response.status, payload);
+        // Yoto lost recordings this playlist uses. sendPrepared uploads them again and posts once more.
+        const lost = missingMediaError(response.status, payload);
+        if (lost) throw lost;
         const gateway = looksLikeGateway(response.status, payload);
         // A rejected add or replace is reported, never quietly retried as a new playlist.
         if (!gateway && !attempt.append && !attempt.replace) {
@@ -1434,6 +1487,7 @@ export function Studio({
     let speechPart: string | undefined;
     let uploadId: string | undefined;
     let last = new SendFailure("This track did not finish.", false);
+    let gatewayMisses = 0;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         // An adventure track records each of its lines in turn, two steps each, so it may need more steps.
@@ -1469,6 +1523,7 @@ export function Studio({
             continue;
           }
           if (!response.ok || looksLikeGateway(response.status, body)) {
+            logYotoReply("A track did not record", response.status, body);
             throw new SendFailure(
               statusErrorText(response.status, body, "This track did not record."),
               looksLikeGateway(response.status, body),
@@ -1532,6 +1587,15 @@ export function Studio({
       } catch (error) {
         if (error instanceof SendCancelled) throw error;
         last = asSendFailure(error, "This track did not finish.");
+        // The site restarting or a Yoto gateway blip: wait it out (about a minute) without using up a try.
+        // Each step picks up where the track got to, so asking again is safe.
+        const gatewayWait = last.gateway ? gatewayRetryDelay(gatewayMisses++) : null;
+        if (gatewayWait !== null) {
+          setJob({ status: "sending", detail: "Pokefacts is busy for a moment. Trying again…", done: mark.done, total: mark.total });
+          await delay(gatewayWait);
+          attempt -= 1;
+          continue;
+        }
         if (!isRateLimited(0, last.message) && /could not record|did not start|does not look right/i.test(last.message)) {
           speechJobId = undefined;
           speechPart = undefined;
@@ -1543,13 +1607,17 @@ export function Studio({
     throw last;
   }
 
-  /** Record the tracks still missing. Each finished track is saved, so a resumed send skips it. */
-  async function renderPlaylist(current: PendingPlaylist, send: PendingSend) {
+  /**
+   * Record the tracks still missing. Each finished track is saved, so a resumed send skips it.
+   * `label` replaces each track's progress line, as when tracks Yoto lost are uploaded again.
+   */
+  async function renderPlaylist(current: PendingPlaylist, send: PendingSend, label?: string) {
     const audio = { ...send.audio };
     const scratch = new Set(send.scratch);
     const mark = { done: finishedTrackCount(send), total: current.jobs.length };
+    const jobs = unfinishedJobs(send).map((job) => (label ? { ...job, progress: label } : job));
     try {
-      await mapPool(unfinishedJobs(send), async (job) => {
+      await mapPool(jobs, async (job) => {
         const finished = await renderOneTrack(job, send, scratch, mark);
         audio[job.key] = finished;
         changePending((next) => withTrackDone(next, job.key, finished));
@@ -1578,9 +1646,23 @@ export function Studio({
             return cover;
           });
     const [audio, cover] = await Promise.all([renderPlaylist(current, send), coverReady]);
-    const prepared = applyPlaylistCover(applyFinishedAudio(current.upload, audio), cover);
-    if (prepared.create) delete prepared.content.cardId;
-    return postPlaylist(current.playlistId, prepared, current.headline);
+    // A cached recording Yoto no longer has is forgotten, uploaded again and the playlist posted again.
+    return postWithMediaHeal({
+      audio,
+      post: (ready) => {
+        const prepared = applyPlaylistCover(applyFinishedAudio(current.upload, ready), cover);
+        if (prepared.create) delete prepared.content.cardId;
+        return postPlaylist(current.playlistId, prepared, current.headline);
+      },
+      forget: (hashes) => forgetMissingMedia(hashes, yotoFetch),
+      onHeal: (keys) => {
+        throwIfCancelled();
+        changePending((next) => withoutTracks(next, keys));
+        setJob({ status: "sending", detail: healingText(keys.length) });
+      },
+      redo: (keys, kept) =>
+        renderPlaylist(current, { ...(pendingRef.current ?? send), audio: kept }, healingText(keys.length)),
+    });
   }
 
   function pendingPlaylist(playlist: KidCard, upload: PlaylistUpload, headline?: string): PendingPlaylist {
