@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import { BrandHomeButton } from "@/components/brand-logo";
 import { DONATE_LABEL } from "@/lib/send-cheer";
-import { DONATE_URL } from "@/lib/site";
+import { DONATE_URL, FEEDBACK_URL } from "@/lib/site";
 import type { YotoSession } from "@/lib/yoto-session";
 
 export function AppHeader({
@@ -98,6 +98,9 @@ export function AppHeader({
             )}
             <a className="pk-banner-btn pk-banner-btn-quiet" href={DONATE_URL} target="_blank" rel="noreferrer">
               {DONATE_LABEL}
+            </a>
+            <a className="pk-banner-btn pk-banner-btn-quiet" href={FEEDBACK_URL} target="_blank" rel="noreferrer">
+              Feedback
             </a>
           </div>
         </div>
