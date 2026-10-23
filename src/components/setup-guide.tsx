@@ -1,17 +1,30 @@
 "use client";
 
 import { LOCAL_APP_ORIGIN, YOTO_REDIRECT_URI } from "@/lib/local-origin";
-import { YOTO_DASHBOARD_SCOPES } from "@/lib/yoto-icons";
+import { YOTO_AUTO_SCOPES, YOTO_TICK_SCOPES } from "@/lib/yoto-icons";
 
-/** The boxes to tick on the Yoto dashboard, each in a small code chip. */
-export function ScopeList() {
+function Chips({ scopes }: { scopes: readonly string[] }) {
   return (
     <span className="mt-1 flex flex-wrap gap-1">
-      {YOTO_DASHBOARD_SCOPES.map((scope) => (
+      {scopes.map((scope) => (
         <code key={scope} className="break-all rounded bg-white px-1">
           {scope}
         </code>
       ))}
+    </span>
+  );
+}
+
+/** Which Scopes boxes to tick on the Yoto dashboard, and which ones it then ticks by itself. */
+export function ScopeList() {
+  return (
+    <span className="mt-1 block">
+      <span className="block font-bold">Tick these two:</span>
+      <Chips scopes={YOTO_TICK_SCOPES} />
+      <span className="mt-1 block">
+        Yoto then ticks these by itself (&ldquo;Included automatically&rdquo;). If one isn&apos;t ticked, tick it:
+      </span>
+      <Chips scopes={YOTO_AUTO_SCOPES} />
     </span>
   );
 }
@@ -63,9 +76,10 @@ export function SetupGuide({
             </li>
             <li>Choose to create a public app. There is no secret code to invent.</li>
             <li>
-              Under Scopes, tick these. Pokefacts needs them to make playlists and their icons, and{" "}
+              In the app&apos;s Scopes list, give Pokefacts the access it needs to make playlists and their icons.{" "}
               <code className="rounded bg-white px-1">offline_access</code> keeps it signed in while a long playlist
-              records. Without them, Yoto turns the login away. The other boxes are not needed.
+              records. Without these, Yoto turns the login away. The other boxes are not needed. Then tap Update
+              Application.
               <ScopeList />
             </li>
             <li>
@@ -183,7 +197,7 @@ export function SetupGuide({
             <code className="break-all rounded bg-white px-1">{YOTO_REDIRECT_URI}</code>.
           </li>
           <li>
-            <span className="font-bold">6. Tick these scopes.</span> All of them must be on, or Yoto turns the
+            <span className="font-bold">6. Tick the scopes.</span> All of these must be on, or Yoto turns the
             login away. If you already connected, reconnect so the new permissions are included.
             <ScopeList />
           </li>

@@ -99,7 +99,7 @@ export function ConnectDialog({
               >
                 dashboard.yoto.dev
               </a>
-              , sign in, and create a public app. Under Scopes, tick these, or Yoto turns the login away:
+              , sign in, and create a public app. Under Scopes, or Yoto turns the login away:
               <ScopeList />
               Copy the long Client ID.
             </li>

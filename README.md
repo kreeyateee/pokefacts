@@ -154,11 +154,11 @@ You do this once. It lets Pokefacts put playlists into your library.
 1. In Pokefacts, click **Connect Yoto**.
 2. Open [dashboard.yoto.dev](https://dashboard.yoto.dev/) in another tab and sign in with the same account you use for the Yoto app.
 3. Create a new app and choose **public**. Public means there is no secret password to copy. If the page offers public or confidential, choose public.
-   Under **Scopes**, tick all of these. Without them, Yoto turns the login away. The other boxes are not needed.
-   - **user:content:manage** and **user:content:view**: make and read your playlists
-   - **user:icons:manage**: upload the little Pokémon icons
-   - **family:library:view**: check each recording landed in your library
+   Under **Scopes**, tick these two. Without them, Yoto turns the login away. The other boxes are not needed.
+   - **user:content:manage**: make your playlists
    - **offline_access**: stay signed in while a long playlist records
+
+   Yoto then ticks **user:content:view**, **user:icons:manage** and **family:library:view** by itself and marks them "Included automatically". If one of them isn't ticked, tick it. Then tap **Update Application**.
 4. Copy the **client ID**. It is a long code for that app. Paste it into the Client ID box in Pokefacts.
 5. On the Yoto dashboard page for that app, add the callback address Pokefacts shows. It has to match exactly. On your own computer it is:
 
