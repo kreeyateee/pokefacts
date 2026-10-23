@@ -2658,6 +2658,10 @@ export function Studio({
           Help page
         </a>
         {" · "}
+        <a className="underline decoration-poke-red decoration-2" href="/radio">
+          Pokefacts Radio podcast
+        </a>
+        {" · "}
         <a className="underline decoration-poke-red decoration-2" href={SOURCE_URL} target="_blank" rel="noreferrer">
           Source on GitHub
         </a>

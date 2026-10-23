@@ -1240,3 +1240,69 @@ export async function finishFactUpload(
   }
   throw new Error(`Yoto is still transcoding track ${name}.`);
 }
+
+/** One step of recording a fixed line in a Yoto voice, kept with the other speech. Nothing is uploaded. */
+export type SavedLineStep = { phase: "speech"; speechJobId: string } | { phase: "saved" };
+
+/**
+ * Records `text` with a Yoto Labs voice into the speech cache, under the same key a card track would use,
+ * one short step per call like prepareFactTrack: start the job, then check it, then download the recording
+ * and delete the scratch card. A line already saved is left alone. Pokefacts Radio's host lines use this.
+ */
+export async function recordSavedLine(
+  token: string,
+  request: { text: string; voiceId?: string; speechJobId?: string },
+  fetchImpl: typeof fetch = fetch,
+  speechRoot: string = SPEECH_ROOT,
+): Promise<SavedLineStep> {
+  const text = request.text.replace(/\s+/g, " ").trim();
+  if (!text || text.length > 3000) throw new Error("That line is empty or longer than Yoto allows.");
+  const voiceId = chosenVoice(request.voiceId);
+  if (isPiperVoice(voiceId)) throw new Error("Piper lines are made on the server, not recorded.");
+  if (request.speechJobId && !/^[\w-]{8,80}$/.test(request.speechJobId)) {
+    throw new Error("That recording job id does not look right.");
+  }
+  const file = path.join(/* turbopackIgnore: true */ speechRoot, `${speechKey(text, voiceId)}.mp3`);
+  if (await fileExists(file)) return { phase: "saved" };
+
+  if (request.speechJobId) {
+    const status = await yoto(
+      token,
+      `https://labs.api.yotoplay.com/content/job/${encodeURIComponent(request.speechJobId)}`,
+      undefined,
+      fetchImpl,
+      15_000,
+    );
+    const fields = jobFields(await readJson(status));
+    if (!status.ok) throw new Error(fields.error || "Could not check the recording.");
+    if (fields.status === "failed") throw new Error(fields.error || "Yoto could not record this line.");
+    if (fields.status !== "completed" || !fields.cardId) return { phase: "speech", speechJobId: request.speechJobId };
+    const playable = await loadCard(token, fields.cardId, true, fetchImpl);
+    const source = httpsAudio(playable);
+    if (!source) throw new Error("The recording is not ready to download.");
+    const response = await fetchImpl(source, { signal: AbortSignal.timeout(20_000) });
+    if (!response.ok) throw new Error("The recording could not be downloaded.");
+    const speech = Buffer.from(await response.arrayBuffer());
+    if (speech.length < 128 || !inputContainer(speech)) throw new Error("The recording was empty.");
+    await writeBytesAtomic(file, speech);
+    const ids = new Set<string>([fields.cardId]);
+    if (playable.cardId) ids.add(playable.cardId);
+    for (const id of ids) await discardCard(token, id, fetchImpl);
+    return { phase: "saved" };
+  }
+
+  const created = await yoto(
+    token,
+    `https://labs.api.yotoplay.com/content/job?voiceId=${encodeURIComponent(voiceId)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(scratchContent(text, "Pokefacts Radio", voiceId)),
+    },
+    fetchImpl,
+    20_000,
+  );
+  const started = jobFields(await readJson(created));
+  if (!created.ok || !started.jobId) throw new Error(started.error || "Yoto did not start this line.");
+  return { phase: "speech", speechJobId: started.jobId };
+}

@@ -73,6 +73,7 @@ __pycache__/
 /data/cries
 /data/speech
 /data/rendered
+/data/radio
 /data/demo
 
 # Piper binary and British voice model. Tens of megabytes. Downloaded once.
