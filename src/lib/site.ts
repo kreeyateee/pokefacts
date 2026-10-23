@@ -11,6 +11,9 @@ export const DONATE_URL = "https://buymeacoffee.com/kreeyate";
 export const SUPPORT_GOAL = "$200";
 
 /** Public source. People clone this and run it on their own computer. */
+/** The build this page came from (the commit), or "dev". Set in next.config.ts. */
+export const APP_BUILD = process.env.NEXT_PUBLIC_POKEFACTS_BUILD || "dev";
+
 export const SOURCE_URL = "https://github.com/kreeyateee/pokefacts";
 
 /** Feedback opens a new GitHub issue. GitHub asks the visitor to sign in first. */
