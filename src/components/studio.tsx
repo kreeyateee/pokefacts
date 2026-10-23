@@ -17,7 +17,7 @@ import { MyoCardButton, MyoCardDialog, openAfterDialog, type MyoCardView } from 
 import { MusicPanel } from "@/components/music-panel";
 import { MysterySilhouette } from "@/components/mystery-silhouette";
 import { YotoScreen } from "@/components/yoto-screen";
-import { PrintablesPanel, type PrintStart } from "@/components/printables-panel";
+import { PrintablesPanel } from "@/components/printables-panel";
 import { StickerStudio } from "@/components/sticker-studio";
 import { Button } from "@/components/ui/button";
 import {
@@ -642,7 +642,7 @@ export function Studio({
   const [sending, setSending] = useState(false);
   const [bulkActive, setBulkActive] = useState(false);
   const [job, setJob] = useState<JobView | null>(null);
-  const [stickersOpen, setStickersOpen] = useState<PrintStart | null>(null);
+  const [stickersOpen, setStickersOpen] = useState(false);
   const [cardPrompt, setCardPrompt] = useState<{ confirmLabel: string; newTitle: string } | null>(null);
   const [myoCard, setMyoCard] = useState<MyoCardView | null>(null);
   const pendingCardAction = useRef<(() => void | Promise<void>) | null>(null);
@@ -2038,7 +2038,7 @@ export function Studio({
             rangeCards={rangeCards}
             units={playback.units}
             onChooseCard={chooseCard}
-            onPrint={setStickersOpen}
+            onStickers={() => setStickersOpen(true)}
             onOwnPick={() => {
               stopDemo();
               setView("catalogue");
@@ -2129,7 +2129,7 @@ export function Studio({
                     })
                   }
                 />
-                <Button type="button" variant="outline" className="h-11 px-4" onClick={() => setStickersOpen("stickers")}>
+                <Button type="button" variant="outline" className="h-11 px-4" onClick={() => setStickersOpen(true)}>
                   Stickers
                 </Button>
                 {kind === "meet" ? (
@@ -2468,7 +2468,7 @@ export function Studio({
         onDismiss={dismissJob}
         onCancel={sending ? cancelSend : undefined}
         onRetry={pendingSend?.failed && !sending ? () => void retrySend() : undefined}
-        onPrintStickers={view === "cards" && card ? () => setStickersOpen("stickers") : undefined}
+        onPrintStickers={view === "cards" && card ? () => setStickersOpen(true) : undefined}
         onShowMyoCard={() =>
           showMyoCard({
             title: card?.libraryTitle ?? myoCard?.title ?? "this playlist",
@@ -2482,8 +2482,7 @@ export function Studio({
           key={card.id}
           card={card}
           cards={rangeCards}
-          start={stickersOpen}
-          onClose={() => setStickersOpen(null)}
+          onClose={() => setStickersOpen(false)}
         />
       ) : null}
       <ConnectDialog open={connectOpen} onOpenChange={setConnectOpen} />

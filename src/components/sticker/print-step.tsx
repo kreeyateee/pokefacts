@@ -2,68 +2,11 @@
 
 import { Button } from "@/components/ui/button";
 import { PAPERS, PRINT_STEPS, type BackMode, type PaperId } from "@/lib/sticker-layout";
-import type { PosterStyle } from "@/lib/sticker-styles";
 
 export type PrintScope = "card" | "all";
 
-/** Stickers for the Yoto card, or one big A4 poster of the group photo or the pile. */
-export type PrintKind = "stickers" | "poster";
-
-const POSTER_CHOICES: ReadonlyArray<{ id: PosterStyle; label: string }> = [
-  { id: "photo", label: "Group photo" },
-  { id: "pile", label: "Pile" },
-];
-
-function PosterSection({
-  posterStyle,
-  busy,
-  sheetRef,
-  onPosterStyle,
-  onSave,
-}: {
-  posterStyle: PosterStyle;
-  busy: string | null;
-  sheetRef: React.Ref<HTMLCanvasElement>;
-  onPosterStyle: (style: PosterStyle) => void;
-  onSave: () => void;
-}) {
-  return (
-    <section className="grid gap-3" aria-labelledby="sticker-poster-heading">
-      <h3 id="sticker-poster-heading" className="font-display text-2xl leading-tight">
-        A4 poster
-      </h3>
-      <p className="text-sm leading-6">The same Pokémon, title and drawing as the card, big enough for a wall.</p>
-      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Poster picture">
-        {POSTER_CHOICES.map((choice) => (
-          <button
-            key={choice.id}
-            type="button"
-            role="radio"
-            aria-checked={posterStyle === choice.id}
-            className="pk-chip pk-chip-big"
-            onClick={() => onPosterStyle(choice.id)}
-          >
-            {choice.label}
-          </button>
-        ))}
-      </div>
-      <Button type="button" className="h-12 justify-self-start px-6 text-base" disabled={Boolean(busy)} onClick={onSave}>
-        {busy ?? "Save poster PDF"}
-      </Button>
-      <p className="text-sm leading-6 text-muted-foreground">Print it on A4 paper. Fit to page is fine for a poster.</p>
-      <canvas
-        ref={sheetRef}
-        aria-label="A4 poster"
-        className="h-auto w-full max-w-[420px] bg-white shadow-[4px_4px_0_#16324f]"
-      />
-    </section>
-  );
-}
-
-/** Step 3: stickers (what the back says, the paper, which cards, then the PDF), or a poster. */
+/** Step 3: what the back says, the paper, which cards, then the PDF. */
 export function PrintStep({
-  making,
-  posterStyle,
   backMode,
   backText,
   hidden,
@@ -82,12 +25,7 @@ export function PrintStep({
   onScope,
   onSheet,
   onSave,
-  onMaking,
-  onPosterStyle,
-  onSavePoster,
 }: {
-  making: PrintKind;
-  posterStyle: PosterStyle;
   backMode: BackMode;
   backText: string;
   hidden: boolean;
@@ -106,9 +44,6 @@ export function PrintStep({
   onScope: (scope: PrintScope) => void;
   onSheet: (page: number) => void;
   onSave: () => void;
-  onMaking: (making: PrintKind) => void;
-  onPosterStyle: (style: PosterStyle) => void;
-  onSavePoster: () => void;
 }) {
   const backChoices: { id: BackMode; label: string; disabled?: boolean; title?: string }[] = [
     { id: "steps", label: "How to play" },
@@ -120,27 +55,8 @@ export function PrintStep({
     },
     { id: "note", label: "My own note" },
   ];
-  const makingChoices = (
-    <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="What to print">
-      <button type="button" role="radio" aria-checked={making === "stickers"} className="pk-chip pk-chip-big" onClick={() => onMaking("stickers")}>
-        Card stickers
-      </button>
-      <button type="button" role="radio" aria-checked={making === "poster"} className="pk-chip pk-chip-big" onClick={() => onMaking("poster")}>
-        A4 poster
-      </button>
-    </div>
-  );
-  if (making === "poster") {
-    return (
-      <div className="grid gap-5">
-        {makingChoices}
-        <PosterSection posterStyle={posterStyle} busy={busy} sheetRef={sheetRef} onPosterStyle={onPosterStyle} onSave={onSavePoster} />
-      </div>
-    );
-  }
   return (
     <div className="grid gap-5">
-      {makingChoices}
       <section className="grid gap-2" aria-labelledby="sticker-back-heading">
         <h3 id="sticker-back-heading" className="font-display text-2xl leading-tight">
           The back

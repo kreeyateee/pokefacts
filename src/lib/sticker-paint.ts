@@ -69,6 +69,15 @@ export type CardPaint = {
   hero: { image: CanvasImageSource | null; info: HeroInfo } | null;
 };
 
+/**
+ * What a group photo or a pile needs, on a card front or across an A4 poster: the crowd, the title on
+ * its ribbon, and a drawing if there is one.
+ */
+export type CrowdPaint = Pick<
+  CardPaint,
+  "title" | "hidden" | "crowd" | "pixelated" | "pileSeed" | "images" | "fonts" | "painting" | "drawLayer"
+>;
+
 type Fonts = CardPaint["fonts"];
 
 /** Draw in card millimetres: every helper takes mm and scales by the canvas width. */
@@ -245,7 +254,7 @@ function paintPicture(
   ctx.restore();
 }
 
-function paintLogoPill(ctx: CanvasRenderingContext2D, spec: CardPaint, rect: Rect, mm: number) {
+function paintLogoPill(ctx: CanvasRenderingContext2D, spec: CrowdPaint, rect: Rect, mm: number) {
   const area = box(rect, mm);
   ctx.fillStyle = CREAM;
   roundRect(ctx, area.x, area.y, area.w, area.h, area.h / 2);
@@ -258,7 +267,7 @@ function paintLogoPill(ctx: CanvasRenderingContext2D, spec: CardPaint, rect: Rec
   });
 }
 
-function paintDrawing(ctx: CanvasRenderingContext2D, spec: CardPaint, width: number, height: number, layer: DrawLayer) {
+function paintDrawing(ctx: CanvasRenderingContext2D, spec: CrowdPaint, width: number, height: number, layer: DrawLayer) {
   if (!spec.painting || spec.drawLayer !== layer) return;
   ctx.save();
   ctx.imageSmoothingEnabled = true;
@@ -327,7 +336,7 @@ type PileLayout = { crowd: Rect; ribbon: Rect };
 
 function paintPhotoFront(
   ctx: CanvasRenderingContext2D,
-  spec: CardPaint,
+  spec: CrowdPaint,
   width: number,
   height: number,
   layout: PhotoLayout = PHOTO_FRONT,
@@ -373,7 +382,7 @@ function paintPhotoFront(
 
 function drawMember(
   ctx: CanvasRenderingContext2D,
-  spec: CardPaint,
+  spec: CrowdPaint,
   picture: CanvasImageSource,
   x: number,
   y: number,
@@ -386,7 +395,7 @@ function drawMember(
   ctx.restore();
 }
 
-function crowdPictures(spec: CardPaint) {
+function crowdPictures(spec: CrowdPaint) {
   return spec.crowd.flatMap((member) => {
     const image = spec.images.get(member.image);
     if (!image) return [];
@@ -399,7 +408,7 @@ function crowdPictures(spec: CardPaint) {
 
 function paintPileFront(
   ctx: CanvasRenderingContext2D,
-  spec: CardPaint,
+  spec: CrowdPaint,
   width: number,
   height: number,
   layout: PileLayout = PILE_FRONT,
@@ -424,7 +433,7 @@ function paintPileFront(
   paintDrawing(ctx, spec, width, height, "front");
 }
 
-function paintTitleRibbon(ctx: CanvasRenderingContext2D, spec: CardPaint, rect: Rect, mm: number, startMm: number) {
+function paintTitleRibbon(ctx: CanvasRenderingContext2D, spec: CrowdPaint, rect: Rect, mm: number, startMm: number) {
   const ribbon = box(rect, mm);
   ctx.fillStyle = YELLOW;
   roundRect(ctx, ribbon.x, ribbon.y, ribbon.w, ribbon.h, 2 * mm);
@@ -991,7 +1000,7 @@ export function paintCard(ctx: CanvasRenderingContext2D, face: "front" | "back",
  * An A4 poster of the group photo or the pile. The canvas must have the A4 shape;
  * the card painters draw it in card units, so everything grows to fill the page.
  */
-export function paintPoster(ctx: CanvasRenderingContext2D, style: PosterStyle, spec: CardPaint) {
+export function paintPoster(ctx: CanvasRenderingContext2D, style: PosterStyle, spec: CrowdPaint) {
   const { width, height } = ctx.canvas;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, width, height);

@@ -134,6 +134,9 @@ export const PRINT_STEPS = [
 
 export function stickerFilename(title: string, paper: PaperId): string {
   const slug = title
+    // "Pokémon" becomes "pokemon", not "pok-mon".
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
