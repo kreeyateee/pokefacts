@@ -1,14 +1,26 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { Button } from "@/components/ui/button";
 import { isPiperVoice, PICKER_VOICES, pickerVoice } from "@/lib/piper-voice";
-import { voiceSampleBody } from "@/lib/voice-choice";
+import { demoHearBody, voiceSampleBody } from "@/lib/voice-choice";
 import { YOTO_VOICES } from "@/lib/yoto-icons";
 import { yotoFetch } from "@/lib/yoto-session";
 
 const sampleUrls = new Map<string, string>();
+
+/**
+ * Hidden check, shown only at #tag-test: does Yoto's ElevenLabs model act on audio tags?
+ * Tags only work on ElevenLabs v3. An older model reads the word "excited" out loud.
+ */
+const TAG_TEST_TEXT =
+  "[excited] Wow! Pikachu just evolved into Raichu! [whispers] Shh. A wild Gengar is right behind you. [laughs] Only joking!";
+
+function subscribeHash(onChange: () => void) {
+  window.addEventListener("hashchange", onChange);
+  return () => window.removeEventListener("hashchange", onChange);
+}
 
 /** Short rows of names instead of one long list. The note shows for the chosen voice. */
 const VOICE_GROUPS = [
@@ -34,6 +46,11 @@ export function VoiceField({
   const [hearingId, setHearingId] = useState<string | null>(null);
   const [hearError, setHearError] = useState("");
   const [hasClip, setHasClip] = useState(false);
+  const tagTest = useSyncExternalStore(
+    subscribeHash,
+    () => window.location.hash === "#tag-test",
+    () => false,
+  );
 
   useEffect(() => {
     return () => {
@@ -65,29 +82,33 @@ export function VoiceField({
     }
   }
 
-  async function hearSample(voiceId: string) {
-    if (hearingId === voiceId || loadingId === voiceId) {
+  async function hearSample(voiceId: string, tags = false) {
+    // The tag test plays under its own key, so it never replaces the normal sample.
+    const key = tags ? `${voiceId}|tags` : voiceId;
+    if (hearingId === key || loadingId === key) {
       stopSample();
       return;
     }
     stopSample();
     onChange(voiceId);
     setHearError("");
-    const cached = sampleUrls.get(voiceId);
+    const cached = sampleUrls.get(key);
     if (cached) {
-      await playUrl(voiceId, cached);
+      await playUrl(key, cached);
       return;
     }
     const controller = new AbortController();
     hearAbort.current = controller;
-    setLoadingId(voiceId);
+    setLoadingId(key);
     try {
       const piper = isPiperVoice(voiceId);
       const response = await (piper ? fetch : yotoFetch)("/api/yoto/hear", {
         method: "POST",
         signal: controller.signal,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(voiceSampleBody(voiceId)),
+        body: JSON.stringify(
+          tags ? demoHearBody({ text: TAG_TEST_TEXT, voiceId, title: "Expression test" }) : voiceSampleBody(voiceId),
+        ),
       });
       if (controller.signal.aborted) return;
       const type = response.headers.get("content-type") ?? "";
@@ -98,8 +119,8 @@ export function VoiceField({
       const blob = await response.blob();
       if (controller.signal.aborted) return;
       const url = URL.createObjectURL(blob);
-      sampleUrls.set(voiceId, url);
-      await playUrl(voiceId, url);
+      sampleUrls.set(key, url);
+      await playUrl(key, url);
     } catch (error) {
       if (controller.signal.aborted) return;
       setLoadingId(null);
@@ -158,6 +179,23 @@ export function VoiceField({
           {chosenBusy ? "Hearing…" : chosenPlaying ? "Stop" : "Hear"}
         </Button>
       </div>
+      {tagTest && !isPiperVoice(chosen.id) ? (
+        <div className="grid gap-1 rounded-xl border-2 border-dashed border-ink/40 p-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 justify-self-start px-4"
+            disabled={disabled}
+            onClick={() => void hearSample(chosen.id, true)}
+          >
+            {loadingId === `${chosen.id}|tags` ? "Hearing…" : hearingId === `${chosen.id}|tags` ? "Stop" : "Test expression tags"}
+          </Button>
+          <p className="text-xs leading-5 pk-quiet">
+            Test only. Excited, then a whisper, then a laugh means tags work. Hearing the words &quot;excited&quot;,
+            &quot;whispers&quot; or &quot;laughs&quot; read out means they don&apos;t.
+          </p>
+        </div>
+      ) : null}
       <audio
         ref={audioRef}
         controls={hasClip}
