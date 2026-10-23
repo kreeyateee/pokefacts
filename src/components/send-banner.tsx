@@ -2,6 +2,7 @@
 
 import { toast } from "sonner";
 
+import { markCoffeeAsked } from "@/components/coffee-nudge";
 import { StatusBar } from "@/components/status-bar";
 import {
   DONATE_LABEL,
@@ -32,6 +33,7 @@ export function toastSendStarted(title: string) {
 }
 
 export function toastSendReady(title: string, updated = false) {
+  markCoffeeAsked();
   toast.success(sendReadyCopy(title, updated), {
     id: SEND_TOAST_ID,
     duration: SEND_TOAST_MS,
@@ -43,6 +45,7 @@ export function toastSendReady(title: string, updated = false) {
 }
 
 export function toastSendAllReady(count: number) {
+  markCoffeeAsked();
   toast.success(sendAllReadyCopy(count), {
     id: SEND_TOAST_ID,
     duration: SEND_TOAST_MS,

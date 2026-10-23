@@ -9,6 +9,7 @@ import { AppNav, type ShelfPicture } from "@/components/app-nav";
 import { EntryCard, EntryPager } from "@/components/entry-card";
 import { Catalogue } from "@/components/catalogue";
 import { PlaybackPanel } from "@/components/playback-panel";
+import { CoffeeNudge } from "@/components/coffee-nudge";
 import { SendBanner, toastSendAllReady, toastSendReady, toastSendStarted } from "@/components/send-banner";
 import { SetupGuide } from "@/components/setup-guide";
 import { CardOptionsDialog } from "@/components/card-options-dialog";
@@ -2467,6 +2468,7 @@ export function Studio({
         .
       </footer>
 
+      <CoffeeNudge />
       <SendBanner
         job={job}
         onDismiss={dismissJob}
