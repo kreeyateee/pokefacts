@@ -1,13 +1,14 @@
 /**
- * Writes every sound the Safari adventure plays, synthesised here from plain waves and noise.
- * Nothing is copied from the games or downloaded, so each sound can be tuned freely.
+ * Writes every sound the adventures play, synthesised here from plain waves and noise with the building
+ * blocks in sound-kit.ts. Nothing is copied from the games or downloaded, so each sound can be tuned freely.
  *
  *   npx tsx scripts/make-safari-sounds.ts          every sound
  *   npx tsx scripts/make-safari-sounds.ts catch    just the ones named
  *
  * Effects are 128 kb/s MP3, like the card's tracks. Ambience and music loops are 64 kb/s and are
- * crossfaded end to start so they loop without a click. To use your own recording instead, replace
- * the file at that sound's path in src/lib/story/story-sound.ts.
+ * crossfaded end to start so they loop without a click. Effects and ambience are brought to the loudness
+ * in LOUDNESS, so a new version of a sound sits in the mix with the voices exactly where the old one did.
+ * To use your own recording instead, replace the file at that sound's path in src/lib/story/story-sound.ts.
  */
 import { execFileSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
@@ -25,144 +26,81 @@ import {
   type StoryMusic,
   type StorySound,
 } from "../src/lib/story/story-sound";
+import {
+  RATE,
+  TAU,
+  VOWELS,
+  add,
+  bandNoise,
+  bell,
+  between,
+  blendVowel,
+  brighter,
+  brass,
+  buffer,
+  celesta,
+  choir,
+  clap,
+  cymbal,
+  decay,
+  edges,
+  filterAll,
+  glock,
+  held,
+  loopable,
+  lowNoise,
+  master,
+  modes,
+  mouth,
+  normalise,
+  note,
+  pinkNoise,
+  resonator,
+  reverb,
+  rng,
+  room,
+  saw,
+  shout,
+  sine,
+  strike,
+  strings,
+  svf,
+  swell,
+  timpani,
+  warm,
+  type Vowel,
+} from "./sound-kit";
 
-const RATE = 44100;
-const TAU = Math.PI * 2;
-
-// ---------------------------------------------------------------------------
-// A very small synthesiser
-
-/** Repeatable noise, so the files only change when this script does. */
-function rng(seed: number): () => number {
-  let state = seed >>> 0;
-  return () => {
-    state = (state + 0x6d2b79f5) >>> 0;
-    let value = state;
-    value = Math.imul(value ^ (value >>> 15), value | 1);
-    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
-    return (((value ^ (value >>> 14)) >>> 0) / 4294967296) * 2 - 1;
-  };
-}
-
-function buffer(seconds: number): Float32Array {
-  return new Float32Array(Math.round(seconds * RATE));
-}
-
-/** Adds `fn(t)` from `start` for `length` seconds, where t counts from the start of the note. */
-function add(out: Float32Array, start: number, length: number, fn: (t: number) => number) {
-  const first = Math.max(0, Math.round(start * RATE));
-  const last = Math.min(out.length, Math.round((start + length) * RATE));
-  for (let index = first; index < last; index += 1) out[index] = (out[index] ?? 0) + fn((index - first) / RATE);
-}
-
-/** Quick attack, exponential fall. */
-const decay = (t: number, rate: number, attack = 0.004) => (t < attack ? t / attack : Math.exp(-(t - attack) * rate));
-
-/** A soft swell in and out over `length`. */
-const swell = (t: number, length: number) => Math.sin(Math.PI * Math.min(1, Math.max(0, t / length))) ** 2;
-
-const note = (name: string): number => {
-  const match = /^([A-G])(#|b)?(\d)$/.exec(name);
-  if (!match) throw new Error(`Not a note: ${name}`);
-  const steps: Record<string, number> = { C: -9, D: -7, E: -5, F: -4, G: -2, A: 0, B: 2 };
-  const semis = (steps[match[1] as string] ?? 0) + (match[2] === "#" ? 1 : match[2] === "b" ? -1 : 0) + (Number(match[3]) - 4) * 12;
-  return 440 * 2 ** (semis / 12);
+/**
+ * How loud each sound is, in LUFS. These are the loudnesses of the first set, measured with ffmpeg, so the
+ * effects and beds keep the same place under and between the voices whatever their recipe becomes.
+ */
+const LOUDNESS: Record<StorySound, number> & Record<`bed-${StoryAmbience}`, number> = {
+  catch: -18.5,
+  escape: -17.9,
+  throw: -13.6,
+  run: -19.4,
+  gate: -15.6,
+  whistle: -13.4,
+  footsteps: -24.6,
+  fanfare: -18.2,
+  ending: -17.9,
+  golden: -19.2,
+  hit: -14.6,
+  fizzle: -14.0,
+  cheer: -17.2,
+  badge: -18.4,
+  "bed-gate": -19.0,
+  "bed-grass": -12.7,
+  "bed-woods": -20.8,
+  "bed-cave": -21.6,
+  "bed-mountain": -19.6,
+  "bed-canyon": -14.9,
+  "bed-sea": -17.8,
+  "bed-lake": -19.0,
+  "bed-house": -17.5,
+  "bed-stadium": -17.1,
 };
-
-/** A soft triangle-ish tone: sine with a little second and third harmonic. */
-const warm = (freq: number, t: number) =>
-  Math.sin(TAU * freq * t) + 0.25 * Math.sin(TAU * 2 * freq * t) + 0.08 * Math.sin(TAU * 3 * freq * t);
-
-/** A bell: inharmonic partials that die at different speeds. */
-const bell = (freq: number, t: number) =>
-  Math.sin(TAU * freq * t) * Math.exp(-t * 3) +
-  0.4 * Math.sin(TAU * freq * 2.76 * t) * Math.exp(-t * 6) +
-  0.2 * Math.sin(TAU * freq * 5.4 * t) * Math.exp(-t * 10);
-
-/** Noise through a one-pole low-pass. `cut` is roughly the cutoff in Hz. */
-function lowNoise(random: () => number, cut: number): () => number {
-  const k = 1 - Math.exp((-TAU * cut) / RATE);
-  let low = 0;
-  return () => {
-    low += k * (random() - low);
-    return low;
-  };
-}
-
-/** Noise in a band: high-passed then low-passed. */
-function bandNoise(random: () => number, low: number, high: number): () => number {
-  const lp = lowNoise(random, high);
-  const k = 1 - Math.exp((-TAU * low) / RATE);
-  let floor = 0;
-  return () => {
-    const value = lp();
-    floor += k * (value - floor);
-    return value - floor;
-  };
-}
-
-/** A two-pole resonant band-pass whose centre can move every sample. */
-function resonator(q = 6) {
-  let a = 0;
-  let b = 0;
-  return (input: number, freq: number) => {
-    const f = 2 * Math.sin((Math.PI * Math.min(freq, RATE / 6)) / RATE);
-    a += f * b;
-    b += f * (input - a - b / q);
-    return b;
-  };
-}
-
-/** A short room so dry tones sit together. */
-function reverb(out: Float32Array, mix = 0.25): Float32Array {
-  const delays = [1557, 1617, 1491, 1422].map((d) => Math.round((d * RATE) / 44100));
-  const lines = delays.map((d) => new Float32Array(d));
-  const marks = delays.map(() => 0);
-  const wet = new Float32Array(out.length);
-  for (let index = 0; index < out.length; index += 1) {
-    let sum = 0;
-    lines.forEach((line, n) => {
-      const mark = marks[n] as number;
-      const echo = line[mark] ?? 0;
-      line[mark] = (out[index] ?? 0) + echo * 0.78;
-      marks[n] = (mark + 1) % line.length;
-      sum += echo;
-    });
-    wet[index] = (out[index] ?? 0) * (1 - mix) + (sum / lines.length) * mix;
-  }
-  return wet;
-}
-
-/** Scales to a peak, so every file sits at a known level. */
-function normalise(out: Float32Array, peak: number): Float32Array {
-  let max = 0;
-  for (const value of out) max = Math.max(max, Math.abs(value));
-  if (max === 0) return out;
-  return out.map((value) => (value / max) * peak);
-}
-
-/** Fades the start and the end so a one-shot never clicks. */
-function edges(out: Float32Array, fadeIn = 0.005, fadeOut = 0.05): Float32Array {
-  const a = Math.round(fadeIn * RATE);
-  const b = Math.round(fadeOut * RATE);
-  for (let index = 0; index < a && index < out.length; index += 1) out[index] = (out[index] ?? 0) * (index / a);
-  for (let index = 0; index < b && index < out.length; index += 1) {
-    const at = out.length - 1 - index;
-    out[at] = (out[at] ?? 0) * (index / b);
-  }
-  return out;
-}
-
-/** Makes a loop seamless: the last `overlap` seconds fade into the first. */
-function loopable(out: Float32Array, overlap = 1.5): Float32Array {
-  const n = Math.round(overlap * RATE);
-  const body = out.slice(0, out.length - n);
-  for (let index = 0; index < n; index += 1) {
-    const mix = index / n;
-    body[index] = (body[index] ?? 0) * mix + (out[out.length - n + index] ?? 0) * (1 - mix);
-  }
-  return body;
-}
 
 function wav(samples: Float32Array): Buffer {
   const data = Buffer.alloc(samples.length * 2);
@@ -195,79 +133,233 @@ function writeMp3(file: string, samples: Float32Array, loop: boolean) {
   console.log(`Wrote ${file} (${(samples.length / RATE).toFixed(1)}s)`);
 }
 
+/**
+ * Adds a layer into `out` at a set RMS level. Layers made in very different ways (a buzz, a noise, a ring)
+ * come out at wildly different sizes, so each is balanced by how loud it is rather than by its numbers.
+ */
+function blend(out: Float32Array, part: Float32Array, level: number) {
+  let sum = 0;
+  for (const value of part) sum += value * value;
+  const rms = Math.sqrt(sum / Math.max(1, part.length));
+  if (rms === 0) return;
+  for (let index = 0; index < out.length; index += 1) out[index] = (out[index] ?? 0) + ((part[index] ?? 0) * level) / rms;
+}
+
 // ---------------------------------------------------------------------------
 // Effects
 
-/** One wobble: a low "dun" that drops in pitch, an octave above for small speakers, and a rattle. */
-function wobble(out: Float32Array, at: number, level = 1) {
-  add(out, at, 0.5, (t) => {
-    const phase = TAU * (330 * t - 170 * t * t);
-    const body = 0.55 * Math.sin(phase) + 0.3 * Math.sin(2 * phase);
-    return level * (Math.exp(-t * 11) * body + 0.18 * Math.sin(TAU * 1150 * t) * Math.exp(-t * 90));
-  });
+/** The hollow plastic shell of a Poké Ball: [frequency, level, decay per second]. */
+const SHELL = [
+  [420, 1, 38],
+  [890, 0.6, 45],
+  [1530, 0.35, 60],
+  [2380, 0.18, 80],
+] as const;
+
+/** The metal catch in the button. */
+const LATCH = [
+  [2350, 1, 70],
+  [3910, 0.6, 95],
+  [5620, 0.35, 130],
+  [7300, 0.2, 170],
+] as const;
+
+/**
+ * One wobble of a Poké Ball rocking on the ground: the thump of it tipping, the hollow knock of its shell,
+ * the low "dun" children know, and two smaller knocks as it settles back.
+ */
+function wobble(out: Float32Array, at: number, random: () => number, level = 1) {
+  const part = buffer(0.8);
+  const knock = modes(SHELL, 0.0015);
+  add(part, 0, 0.4, (t) => 0.8 * Math.sin(TAU * (210 * t - 110 * t * t)) * strike(t, 0.004, 14));
+  add(part, 0, 0.3, (t) => 0.3 * knock(t));
+  const contact = svf("low");
+  add(part, 0, 0.05, (t) => 2 * contact(random(), 1600) * strike(t, 0.002, 80));
+  add(part, 0, 0.45, (t) => 0.45 * Math.sin(TAU * (330 * t - 170 * t * t)) * strike(t, 0.006, 9));
+  for (const [delay, size] of [
+    [0.12, 0.2],
+    [0.2, 0.1],
+  ] as const) {
+    add(part, delay, 0.2, (t) => size * knock(t));
+  }
+  add(out, at, part.length / RATE, (t) => level * (part[Math.round(t * RATE)] ?? 0));
 }
 
-function sparkle(out: Float32Array, at: number, notes: string[], gap = 0.09, level = 0.3) {
-  notes.forEach((name, index) => add(out, at + index * gap, 1.2, (t) => level * bell(note(name), t)));
+/** The button clicking shut: a crisp snap, the ring of the metal catch, then the catch settling a moment later. */
+function latch(out: Float32Array, at: number, random: () => number) {
+  const snap = svf("high");
+  add(out, at, 0.03, (t) => 0.6 * snap(random(), 2500) * strike(t, 0.0006, 200));
+  const ping = modes(LATCH, 0.0006);
+  add(out, at, 0.15, (t) => 0.3 * ping(t));
+  add(out, at, 0.15, (t) => 0.35 * Math.sin(TAU * 180 * t) * strike(t, 0.002, 35));
+  const settle = modes([
+    [1650, 1, 90],
+    [2900, 0.5, 120],
+  ] as const, 0.0006);
+  const tick = svf("high");
+  add(out, at + 0.024, 0.1, (t) => 0.2 * settle(t) + 0.25 * tick(random(), 2000) * strike(t, 0.0006, 250));
+}
+
+/** A crowd cheering from `at` for `length` seconds: people shouting, hands clapping, and the roar under them. */
+function crowd(out: Float32Array, at: number, length: number, random: () => number, voices: number, clappers: number) {
+  const cries: ReadonlyArray<readonly [Vowel, Vowel]> = [
+    ["eh", "ee"],
+    ["oo", "oo"],
+    ["oo", "eh"],
+    ["ah", "eh"],
+    ["ah", "ah"],
+  ];
+  const shouts = new Float32Array(out.length);
+  for (let n = 0; n < voices; n += 1) {
+    const child = random() > -0.2;
+    const freq = child ? between(random, 280, 460) : between(random, 140, 260);
+    const start = at + Math.abs(random()) ** 2 * 0.6;
+    const left = at + length - start;
+    const span = between(random, Math.min(0.6, left), Math.min(1.6, left));
+    const cry = cries[Math.floor(Math.abs(random()) * cries.length)] ?? ["eh", "ee"];
+    const size = between(random, 0.4, 1);
+    const voice = shout(freq, span, cry, random, { child, rise: between(random, 0.15, 0.45) });
+    add(shouts, start, span, (t) => size * voice(t));
+  }
+  const hands = new Float32Array(out.length);
+  for (let n = 0; n < clappers; n += 1) {
+    const centre = between(random, 900, 2400);
+    const rate = between(random, 3.4, 5);
+    for (let when = at + 0.1 + Math.abs(random()) * 0.3; when < at + length - 0.1; when += (1 / rate) * (1 + 0.08 * random())) {
+      const hand = clap(random, centre);
+      const size = swell(when - at, length);
+      add(hands, when, 0.05, (t) => size * hand(t));
+    }
+  }
+  const roar = new Float32Array(out.length);
+  const pink = pinkNoise(random);
+  const [chest, throat] = [svf("band"), svf("band")];
+  add(roar, at, length, (t) => {
+    const value = pink();
+    return (chest(value, 1000, 0.9) + 0.7 * throat(value, 2200, 1.2)) * swell(t, length);
+  });
+  // A crowd heard from the stands has little below the voices themselves, so the rumble is taken out.
+  blend(out, filterAll(shouts, "high", 250), 1);
+  blend(out, hands, 0.45);
+  blend(out, filterAll(roar, "high", 250), 0.5);
 }
 
 const EFFECTS: Record<StorySound, () => Float32Array> = {
   catch() {
-    const out = buffer(2.6);
-    for (const at of CATCH_WOBBLES) wobble(out, at);
-    add(out, CATCH_CLICK, 0.05, (t) => 0.6 * Math.sign(Math.sin(TAU * 2600 * t)) * Math.exp(-t * 140));
-    add(out, CATCH_CLICK + 0.06, 0.74, (t) => 0.22 * Math.sin(TAU * 1568 * t) * Math.exp(-t * 7));
-    add(out, CATCH_CLICK + 0.17, 0.63, (t) => 0.22 * Math.sin(TAU * 2093 * t) * Math.exp(-t * 7));
-    return edges(normalise(out, 0.89), 0.002, 0.25);
+    const out = buffer(2.9);
+    const random = rng(5);
+    for (const at of CATCH_WOBBLES) wobble(out, at, random);
+    latch(out, CATCH_CLICK, random);
+    // A warm little chime: it's caught.
+    const low = celesta(note("G5"));
+    const high = celesta(note("C6"));
+    const top = glock(note("C7"));
+    add(out, CATCH_CLICK + 0.08, 1, (t) => 0.2 * low(t));
+    add(out, CATCH_CLICK + 0.2, 0.9, (t) => 0.2 * high(t) + 0.04 * top(t));
+    return edges(room(out, { size: 0.45, mix: 0.18, damp: 0.5 }), 0.002, 0.25);
   },
   escape() {
-    const out = buffer(1.9);
+    const out = buffer(2.3);
     const random = rng(7);
-    wobble(out, CATCH_WOBBLES[0]);
-    wobble(out, CATCH_WOBBLES[1], 1.1);
+    wobble(out, CATCH_WOBBLES[0], random);
+    wobble(out, CATCH_WOBBLES[1], random, 1.1);
     const pop = 1.0;
-    const crack = bandNoise(random, 900, 6000);
-    add(out, pop, 0.25, (t) => 0.9 * crack() * decay(t, 30, 0.002));
-    add(out, pop, 0.3, (t) => 0.5 * Math.sin(TAU * (300 * t + 2200 * t * t)) * decay(t, 12));
-    sparkle(out, pop + 0.08, ["E6", "C6", "G5"], 0.07, 0.25);
-    return edges(normalise(out, 0.89), 0.002, 0.2);
+    // The ball bursts open: a puff of air that falls from bright to dull, a soft whump, and the shell.
+    const puff = svf("low");
+    add(out, pop, 0.4, (t) => 1.2 * puff(random(), 500 + 7000 * Math.exp(-t * 14)) * strike(t, 0.002, 12));
+    add(out, pop, 0.45, (t) => 0.7 * Math.sin(TAU * (160 * t - 80 * t * t)) * strike(t, 0.004, 9));
+    const shell = modes(SHELL, 0.001);
+    add(out, pop, 0.25, (t) => 0.3 * shell(t));
+    // A swirl of light as the Pokémon breaks free: an airy sweep rising, with a soft glow under it.
+    const sweep = svf("band");
+    add(out, pop + 0.03, 0.7, (t) => 1.6 * sweep(random(), 700 * 2 ** (t * 3.2), 6) * swell(t, 0.7));
+    const glows = [sine(), sine(0.3), sine(0.6)];
+    add(out, pop + 0.03, 0.7, (t) =>
+      0.05 * swell(t, 0.7) * glows.reduce((sum, glow, n) => sum + glow(note("G4") * 2 ** n * 2 ** (t * 1.2)), 0),
+    );
+    // Sparkles falling back down.
+    ["E6", "C6", "G5"].forEach((name, index) => {
+      const bar = glock(note(name));
+      add(out, pop + 0.12 + index * 0.08, 1, (t) => 0.12 * bar(t));
+    });
+    return edges(room(out, { size: 0.5, mix: 0.2 }), 0.002, 0.2);
   },
   throw() {
-    const out = buffer(0.7);
+    // A ball spinning through the air: a rush that rises and falls as it passes, with the whirr of the spin.
+    const out = buffer(0.8);
     const air = rng(11);
-    const band = resonator(2.5);
-    add(out, 0, 0.7, (t) => band(air(), 600 + 2600 * Math.sin(Math.PI * Math.min(1, t / 0.6))) * swell(t, 0.62));
-    return edges(normalise(out, 0.7));
+    const band = svf("band");
+    const body = svf("low");
+    add(out, 0, 0.7, (t) => {
+      const p = Math.min(1, t / 0.62);
+      const centre = 500 + 2400 * Math.sin(Math.PI * p) ** 1.5 * (1 - 0.25 * p);
+      const spin = 1 - 0.35 * (0.5 + 0.5 * Math.sin(TAU * (14 * t + 6 * t * t)));
+      const value = air();
+      return swell(t, 0.62) * spin * (band(value, centre, 1.8) + 0.6 * body(value, 320));
+    });
+    return edges(room(out, { size: 0.3, mix: 0.1 }));
   },
   run() {
-    const out = buffer(1.2);
+    // A Pokémon scampering off: quick four-footed steps fading into the distance, then a dive into the bushes.
+    const out = buffer(1.5);
     const random = rng(23);
+    const gait = [0, 0.045, 0.12, 0.165];
     let at = 0.02;
-    let gap = 0.13;
-    for (let step = 0; step < 9; step += 1) {
-      const tap = bandNoise(random, 300, 2500);
-      const level = 0.9 * (1 - step / 10);
-      add(out, at, 0.06, (t) => level * tap() * decay(t, 70, 0.002));
-      at += gap;
-      gap *= 0.9;
+    for (let stride = 0; stride < 4; stride += 1) {
+      for (const offset of gait) {
+        const step = at + offset;
+        const far = Math.min(1, step / 1.1);
+        const level = 1 - 0.7 * far;
+        const thud = svf("low");
+        const brush = svf("band");
+        add(out, step, 0.14, (t) =>
+          level * (1.6 * thud(random(), 420) * strike(t, 0.003, 32) + 0.35 * brush(random(), 2600 - 1500 * far, 0.9) * strike(t, 0.006, 45)),
+        );
+      }
+      at += 0.27 - stride * 0.02;
     }
-    const air = bandNoise(rng(29), 800, 4000);
-    add(out, 0.55, 0.6, (t) => 0.35 * air() * swell(t, 0.6));
-    return edges(normalise(out, 0.75));
+    for (let n = 0; n < 40; n += 1) {
+      const when = between(random, 0.95, 1.3);
+      const length = between(random, 0.012, 0.03);
+      const centre = between(random, 1800, 4500);
+      const leaf = svf("band");
+      add(out, when, length, (t) => 0.35 * leaf(random(), centre, 1.5) * swell(t, length));
+    }
+    return edges(room(out, { size: 0.5, mix: 0.22, damp: 0.5 }), 0.005, 0.15);
   },
   gate() {
-    const out = buffer(1.9);
+    const out = buffer(2.3);
     const random = rng(31);
-    const body = resonator(12);
-    const friction = lowNoise(random, 40);
-    add(out, 0, 1.45, (t) => {
-      const pitch = 140 + 90 * Math.sin(t * 2.2) + 35 * friction();
-      const grain = Math.sign(Math.sin(TAU * pitch * t)) * (0.5 + 0.5 * Math.abs(friction()) * 6);
-      return 0.6 * body(grain, 900 + 300 * Math.sin(t * 3)) * swell(t, 1.45);
+    // The hinge: wood sticking and slipping, a stream of tiny catches (their rate is the creak's pitch)
+    // that ring the boards of the gate.
+    const creak = buffer(2.3);
+    const [boards, rail, nails] = [svf("band"), svf("band"), svf("band")];
+    const drift = lowNoise(random, 5);
+    let phase = 0;
+    add(creak, 0, 1.45, (t) => {
+      const pitch = 70 + 80 * Math.sin(Math.PI * Math.min(1, t / 1.45)) ** 0.7 + 1500 * drift();
+      phase += pitch / RATE;
+      let slip = 0;
+      if (phase >= 1) {
+        phase -= 1;
+        slip = 1 + 0.4 * random();
+      }
+      const ring = boards(slip, 380, 9) + 0.7 * rail(slip, 960, 11) + 0.4 * nails(slip, 1800, 14);
+      return ring * swell(t, 1.45) * (0.65 + 0.35 * Math.abs(Math.sin(TAU * 1.6 * t)));
     });
-    const thud = lowNoise(rng(37), 180);
-    add(out, 1.5, 0.35, (t) => 1.2 * thud() * decay(t, 14) + 0.4 * Math.sin(TAU * 70 * t) * decay(t, 12));
-    return edges(normalise(reverb(out, 0.2), 0.8));
+    // It swings shut against the post.
+    const shut = buffer(2.3);
+    const post = modes([
+      [140, 1, 9],
+      [300, 0.6, 14],
+      [610, 0.35, 22],
+      [1150, 0.15, 35],
+    ] as const, 0.002);
+    const thud = svf("low");
+    add(shut, 1.5, 0.7, (t) => post(t) + 1.5 * thud(random(), 400) * strike(t, 0.002, 25));
+    blend(out, creak, 1);
+    blend(out, shut, 0.8);
+    return edges(room(out, { size: 0.55, mix: 0.2, damp: 0.5 }));
   },
   whistle() {
     const out = buffer(1.1);
@@ -280,99 +372,161 @@ const EFFECTS: Record<StorySound, () => Float32Array> = {
     return edges(normalise(out, 0.38));
   },
   footsteps() {
-    // Soft steps through long grass: each one a slow swish and a muffled pad, never a click.
-    const out = buffer(2.4);
+    // Soft steps through long grass: heel then toe, each a muffled pad into the earth with the grass
+    // crunching softly under it. Every grain is rounded, so nothing clicks.
+    const out = buffer(2.5);
     const random = rng(43);
-    const starts = [0.08, 0.6, 1.08, 1.62];
-    starts.forEach((at, step) => {
-      const swish = bandNoise(random, 350, 2200 - step * 120);
-      const pad = lowNoise(random, 90);
-      const length = 0.42;
-      // A rounded rise over 60 ms and a gentle fall, so nothing snaps.
-      const shape = (t: number) => Math.sin(Math.PI * Math.min(1, t / 0.06) / 2) ** 2 * Math.exp(-t * 7);
-      add(out, at, length, (t) => (0.45 * swish() + 1.1 * pad()) * shape(t) * (step % 2 === 0 ? 1 : 0.85));
+    [0.08, 0.6, 1.08, 1.62].forEach((at, step) => {
+      const level = step % 2 === 0 ? 1 : 0.85;
+      for (const [offset, size] of [
+        [0, 1],
+        [0.08, 0.6],
+      ] as const) {
+        const pad = svf("low");
+        add(out, at + offset, 0.35, (t) => level * size * 2.4 * pad(random(), 380) * strike(t, 0.025, 13));
+      }
+      for (let n = 0; n < 28; n += 1) {
+        const when = at + 0.01 + Math.abs(random()) ** 1.6 * 0.24;
+        const length = between(random, 0.012, 0.03);
+        const centre = between(random, 800, 2200);
+        const size = 0.55 * (1 - (when - at) / 0.3);
+        const blade = svf("band");
+        add(out, when, length, (t) => level * size * blade(random(), centre, 1.3) * swell(t, length));
+      }
     });
-    // A little rustle of grass under the whole walk.
-    const rustle = bandNoise(random, 1200, 5000);
-    add(out, 0, 2.3, (t) => 0.05 * rustle() * swell(t, 2.3));
-    return edges(normalise(reverb(out, 0.12), 0.42), 0.05, 0.3);
+    const rustle = svf("band");
+    add(out, 0, 2.4, (t) => 0.03 * rustle(random(), 2500, 0.6) * swell(t, 2.4));
+    return edges(room(filterAll(out, "low", 4500), { size: 0.35, mix: 0.1, damp: 0.6 }), 0.05, 0.3);
   },
   fanfare() {
-    const out = buffer(2.2);
-    const run = ["C5", "E5", "G5"];
-    run.forEach((name, index) =>
-      add(out, index * 0.12, 0.3, (t) => 0.5 * warm(note(name), t) * decay(t, 9)),
+    // Three quick brass notes, then the chord held over strings, a timpani and a cymbal swell.
+    const out = buffer(2.6);
+    const random = rng(47);
+    ["C5", "E5", "G5"].forEach((name, index) =>
+      add(out, index * 0.12, 0.3, brass(note(name), 0.12, { level: 0.55, bright: 5, seed: 10 + index })),
     );
-    for (const name of ["C5", "E5", "G5", "C6"]) {
-      add(out, 0.4, 1.6, (t) => 0.3 * warm(note(name), t) * decay(t, 2.2, 0.02) * (1 + 0.05 * Math.sin(TAU * 5 * t)));
-    }
-    sparkle(out, 0.42, ["G6", "C7"], 0.1, 0.12);
-    return edges(normalise(reverb(out, 0.25), 0.7), 0.002, 0.3);
+    ["C4", "G4", "C5", "E5"].forEach((name, index) =>
+      add(out, 0.4, 1.9, brass(note(name), 1.7, { level: 0.3, bright: 4, fall: 0.5, seed: 20 + index })),
+    );
+    ["C3", "G3", "E4"].forEach((name, index) =>
+      add(out, 0.4, 2, strings(note(name), 1.8, { level: 0.25, attack: 0.15, seed: 30 + index })),
+    );
+    const drum = timpani(note("C3"), random);
+    add(out, 0.38, 1.8, (t) => 0.9 * drum(t));
+    const swish = cymbal(random, 0.3, 1.8);
+    add(out, 0.3, 2, (t) => 0.12 * swish(t));
+    ["G6", "C7"].forEach((name, index) => {
+      const bar = glock(note(name));
+      add(out, 0.42 + index * 0.1, 1.2, (t) => 0.1 * bar(t));
+    });
+    return edges(room(out, { size: 0.75, mix: 0.25, predelay: 0.015 }), 0.002, 0.3);
   },
   ending() {
-    const out = buffer(2.6);
-    ["G4", "E5", "D5", "C5"].forEach((name, index) =>
-      add(out, index * 0.28, 1.6, (t) => 0.5 * bell(note(name), t)),
+    // A little celesta tune, then strings settling on the home chord.
+    const out = buffer(3.1);
+    ["G4", "E5", "D5", "C5"].forEach((name, index) => {
+      const bar = celesta(note(name));
+      const top = glock(note(name) * 2);
+      add(out, index * 0.28, 1.8, (t) => 0.45 * bar(t) + 0.05 * top(t));
+    });
+    ["C3", "G3", "C4", "E4"].forEach((name, index) =>
+      add(out, 1.0, 2.0, strings(note(name), 1.9, { level: 0.18, attack: 0.5, seed: 40 + index })),
     );
-    for (const name of ["C4", "G4", "E5"]) add(out, 1.1, 1.5, (t) => 0.18 * warm(note(name), t) * swell(t, 1.5));
-    return edges(normalise(reverb(out, 0.3), 0.65), 0.002, 0.4);
+    return edges(room(out, { size: 0.85, mix: 0.3, predelay: 0.02 }), 0.002, 0.4);
   },
   golden() {
-    const out = buffer(3.6);
-    ["C5", "E5", "G5", "C6", "E6", "G6"].forEach((name, index) =>
-      add(out, index * 0.1, 0.4, (t) => 0.4 * warm(note(name), t) * decay(t, 7)),
-    );
-    for (const name of ["C4", "G4", "C5", "E5", "G5", "C6"]) {
-      add(out, 0.7, 2.6, (t) => 0.2 * warm(note(name), t) * decay(t, 1.2, 0.03) * (1 + 0.06 * Math.sin(TAU * 5.5 * t)));
-    }
+    // The big one: a brass run, a timpani roll into a crash, then brass, strings and a choir together,
+    // with chimes glittering over the top.
+    const out = buffer(4.1);
     const random = rng(53);
-    for (let n = 0; n < 14; n += 1) {
-      const pitch = 2000 + 3000 * Math.abs(random());
-      add(out, 0.8 + n * 0.15, 0.5, (t) => 0.07 * Math.sin(TAU * pitch * t) * decay(t, 12));
+    ["C4", "E4", "G4", "C5", "E5", "G5"].forEach((name, index) =>
+      add(out, index * 0.1, 0.35, brass(note(name), 0.16, { level: 0.45, bright: 5, seed: 60 + index })),
+    );
+    for (let hit = 0; hit < 8; hit += 1) {
+      const drum = timpani(note("C3"), random);
+      add(out, 0.3 + hit * 0.05, 0.5, (t) => (0.15 + 0.06 * hit) * drum(t));
     }
-    return edges(normalise(reverb(out, 0.3), 0.75), 0.002, 0.5);
+    const boom = timpani(note("C3"), random);
+    add(out, 0.7, 2.5, (t) => boom(t));
+    const crash = cymbal(random, 0.002, 1.3);
+    add(out, 0.7, 3, (t) => 0.25 * crash(t));
+    ["C4", "G4", "C5", "E5", "G5"].forEach((name, index) =>
+      add(out, 0.7, 2.9, brass(note(name), 2.7, { level: 0.26, bright: 4, fall: 0.3, seed: 70 + index })),
+    );
+    ["C3", "G3", "E4", "C5"].forEach((name, index) =>
+      add(out, 0.7, 3, strings(note(name), 2.9, { level: 0.2, attack: 0.3, seed: 80 + index })),
+    );
+    ["C4", "E4", "G4"].forEach((name, index) => add(out, 0.75, 3, choir(note(name), 2.8, { level: 0.35, seed: 90 + index })));
+    const scale = ["C6", "D6", "E6", "G6", "A6", "C7"];
+    for (let n = 0; n < 14; n += 1) {
+      const bar = glock(note(scale[Math.floor(Math.abs(random()) * scale.length)] ?? "C6"));
+      add(out, 0.8 + n * 0.15, 0.8, (t) => 0.07 * bar(t));
+    }
+    return edges(room(out, { size: 0.9, mix: 0.3, predelay: 0.02 }), 0.002, 0.5);
   },
   hit() {
-    const out = buffer(0.9);
-    const air = bandNoise(rng(61), 800, 6000);
-    add(out, 0, 0.25, (t) => 0.5 * air() * swell(t, 0.25));
-    const thump = lowNoise(rng(67), 200);
-    add(out, 0.22, 0.6, (t) => 1.4 * thump() * decay(t, 9) + 0.8 * Math.sin(TAU * (90 - 40 * t) * t) * decay(t, 7));
-    add(out, 0.22, 0.4, (t) => 0.25 * bandNoise(rng(71), 2000, 8000)() * decay(t, 25));
-    return edges(normalise(reverb(out, 0.15), 0.85), 0.002, 0.15);
+    // A move that lands hard: a rush of air building into a deep thump, a crack, and bits settling after.
+    const out = buffer(1.0);
+    const random = rng(61);
+    const rush = svf("band");
+    add(out, 0, 0.24, (t) => 0.8 * rush(random(), 400 + 3600 * (t / 0.24) ** 2, 1.2) * (t / 0.24) ** 2 * Math.min(1, (0.24 - t) / 0.015));
+    const impact = 0.22;
+    add(out, impact, 0.6, (t) => 0.9 * Math.sin(TAU * (120 * t - 75 * t * t)) * strike(t, 0.002, 8));
+    const body = svf("low");
+    add(out, impact, 0.35, (t) => 1.4 * body(random(), 200 + 1400 * Math.exp(-t * 10)) * strike(t, 0.001, 20));
+    const snap = svf("high");
+    add(out, impact, 0.05, (t) => 0.5 * snap(random(), 3500) * strike(t, 0.0005, 110));
+    for (let n = 0; n < 12; n += 1) {
+      const when = impact + between(random, 0.05, 0.4);
+      const length = between(random, 0.015, 0.04);
+      const centre = between(random, 700, 2500);
+      const size = 0.15 * (1 - (when - impact) / 0.5);
+      const bit = svf("band");
+      add(out, when, length, (t) => size * bit(random(), centre, 2) * swell(t, length));
+    }
+    return edges(room(out, { size: 0.45, mix: 0.15 }), 0.002, 0.15);
   },
   fizzle() {
-    const out = buffer(1.3);
-    // A slide whistle going down, then a little wobble: a move that did nothing much.
-    add(out, 0, 1.1, (t) => 0.5 * Math.sin(TAU * (900 * t - 260 * t * t)) * swell(t, 1.1) * (1 + 0.15 * Math.sin(TAU * 7 * t)));
-    add(out, 1.0, 0.25, (t) => 0.3 * Math.sin(TAU * 180 * t) * decay(t, 12));
-    return edges(normalise(out, 0.55), 0.005, 0.15);
+    // A muted trombone going "wah, wah, wahhh": a move that did nothing much.
+    const out = buffer(1.6);
+    const parts = [
+      ["G3", 0, 0.26, 0],
+      ["F#3", 0.3, 0.26, 0],
+      ["F3", 0.6, 0.85, 1],
+    ] as const;
+    for (const [name, at, length, sag] of parts) {
+      const [one, two] = [saw(0.1), saw(0.6)];
+      const mute = svf("band");
+      const freq = note(name);
+      add(out, at, length, (t) => {
+        const p = Math.min(1, t / length);
+        const pitch = freq * (1 - sag * 0.06 * p * p) * (1 + sag * 0.02 * p * Math.sin(TAU * 5.5 * t));
+        const wah = sag ? Math.abs(Math.sin(Math.PI * p * 1.5)) : Math.sin(Math.PI * p);
+        const buzz = (one(pitch) + two(pitch * 1.004)) / 2;
+        return 0.6 * Math.tanh(1.5 * mute(buzz, 350 + 1100 * wah, 2.5)) * held(t, length, 0.03, 0.08);
+      });
+    }
+    return edges(room(out, { size: 0.4, mix: 0.15 }), 0.005, 0.15);
   },
   cheer() {
-    const out = buffer(2.6);
-    const random = rng(73);
-    // Many voices of noise with their own swells, then whoops on top.
-    for (let n = 0; n < 6; n += 1) {
-      const voice = bandNoise(random, 300 + n * 120, 2600 + n * 200);
-      const start = Math.abs(random()) * 0.2;
-      add(out, start, 2.3, (t) => 0.4 * voice() * swell(t, 2.3) * (0.7 + 0.3 * Math.sin(TAU * (3 + n) * t)));
-    }
-    for (let n = 0; n < 8; n += 1) {
-      const at = 0.2 + Math.abs(random()) * 1.6;
-      const pitch = 500 + Math.abs(random()) * 500;
-      add(out, at, 0.35, (t) => 0.12 * Math.sin(TAU * (pitch * t + 600 * t * t)) * swell(t, 0.35));
-    }
-    return edges(normalise(out, 0.7), 0.05, 0.4);
+    // The crowd in the stands: children and grown-ups shouting "yay" and "woo", clapping, in a big hall.
+    const out = buffer(2.9);
+    crowd(out, 0, 2.5, rng(73), 36, 22);
+    return edges(room(out, { size: 0.95, mix: 0.3, predelay: 0.025, damp: 0.45 }), 0.05, 0.4);
   },
   badge() {
-    const out = buffer(1.8);
-    ["E6", "G6", "C7"].forEach((name, index) => add(out, index * 0.08, 1.4, (t) => 0.4 * bell(note(name), t)));
-    const random = rng(79);
-    for (let n = 0; n < 10; n += 1) {
-      const pitch = 3000 + Math.abs(random()) * 3000;
-      add(out, 0.25 + n * 0.08, 0.3, (t) => 0.06 * Math.sin(TAU * pitch * t) * decay(t, 14));
-    }
-    return edges(normalise(reverb(out, 0.3), 0.6), 0.002, 0.3);
+    // A badge pinned on: a bright celesta chord with a glockenspiel twinkling up above it.
+    const out = buffer(2.1);
+    ["E5", "G5", "C6"].forEach((name, index) => {
+      const bar = celesta(note(name));
+      const top = glock(note(name) * 2);
+      add(out, index * 0.08, 1.6, (t) => 0.35 * bar(t) + 0.08 * top(t));
+    });
+    ["C6", "D6", "E6", "G6", "A6", "C7", "D7", "E7"].forEach((name, index) => {
+      const bar = glock(note(name));
+      add(out, 0.3 + index * 0.05, 0.8, (t) => 0.04 * bar(t));
+    });
+    return edges(room(out, { size: 0.7, mix: 0.3, predelay: 0.01 }), 0.002, 0.3);
   },
 };
 
@@ -380,24 +534,65 @@ const EFFECTS: Record<StorySound, () => Float32Array> = {
 // Ambience: 16 seconds each, made to loop
 
 const BED_SECONDS = 17.5;
+/** How long a bed is once its ends are crossfaded into a loop. */
+const LOOP_SECONDS = BED_SECONDS - 1.5;
 
-function chirps(out: Float32Array, random: () => number, count: number, level: number, low = 2500, high = 5200) {
+/**
+ * Folds anything that runs past the loop back onto its start, so long events (a wave, a cheer) carry on
+ * across the join instead of being cut off there.
+ */
+function circular(long: Float32Array): Float32Array {
+  const loop = Math.round(LOOP_SECONDS * RATE);
+  const out = buffer(BED_SECONDS);
+  for (let index = 0; index < long.length; index += 1) {
+    const at = index % loop;
+    out[at] = (out[at] ?? 0) + (long[index] ?? 0);
+  }
+  for (let index = loop; index < out.length; index += 1) out[index] = out[index - loop] ?? 0;
+  return out;
+}
+
+/** One bird note whose pitch follows `pitch(p)` as p goes from 0 to 1, with a touch of the overtones a real one has. */
+function chirp(out: Float32Array, at: number, length: number, level: number, pitch: (p: number) => number) {
+  let phase = 0;
+  add(out, at, length, (t) => {
+    phase += pitch(t / length) / RATE;
+    return level * swell(t, length) * (Math.sin(TAU * phase) + 0.15 * Math.sin(2 * TAU * phase) + 0.05 * Math.sin(3 * TAU * phase));
+  });
+}
+
+/** Birds singing, some near and some far: little falling tweets, quick trills and two-note whistles. */
+function birds(out: Float32Array, random: () => number, count: number, level: number, low = 2600, high = 5000) {
   for (let n = 0; n < count; n += 1) {
-    const at = Math.abs(random()) * (BED_SECONDS - 1);
-    const base = low + Math.abs(random()) * (high - low);
-    const notes = 2 + Math.floor(Math.abs(random()) * 4);
-    for (let k = 0; k < notes; k += 1) {
-      const up = random() > 0 ? 1 : -1;
-      add(out, at + k * 0.11, 0.09, (t) => level * Math.sin(TAU * (base * t + up * 3000 * t * t)) * swell(t, 0.09));
+    const at = Math.abs(random()) * (BED_SECONDS - 2);
+    const base = between(random, low, high);
+    const near = level * between(random, 0.35, 1);
+    const kind = Math.floor(Math.abs(random()) * 3);
+    if (kind === 0) {
+      const notes = 2 + Math.floor(Math.abs(random()) * 3);
+      for (let k = 0; k < notes; k += 1) {
+        chirp(out, at + k * between(random, 0.1, 0.14), between(random, 0.05, 0.08), near, (p) => base * (1.3 - 0.45 * p));
+      }
+    } else if (kind === 1) {
+      const notes = 6 + Math.floor(Math.abs(random()) * 5);
+      for (let k = 0; k < notes; k += 1) {
+        chirp(out, at + k * 0.055, 0.03, near * 0.8, (p) => base * (0.95 + 0.02 * k + 0.1 * p));
+      }
+    } else {
+      chirp(out, at, 0.22, near * 0.8, (p) => base * 0.7 * (1 + 0.15 * p));
+      chirp(out, at + 0.3, 0.3, near * 0.8, (p) => base * 0.8 * (1.15 - 0.3 * p));
     }
   }
 }
 
-function crickets(out: Float32Array, random: () => number, level: number, pitch = 4600) {
-  const rate = 0.55 + Math.abs(random()) * 0.2;
-  for (let at = Math.abs(random()) * 0.4; at < BED_SECONDS; at += rate) {
-    for (let k = 0; k < 3; k += 1) {
-      add(out, at + k * 0.045, 0.03, (t) => level * Math.sin(TAU * pitch * t) * swell(t, 0.03));
+/** A cricket: bursts of three or four quick pulses on one high note, over and over. */
+function cricket(out: Float32Array, random: () => number, level: number, pitch = 4600) {
+  const rate = between(random, 0.5, 0.75);
+  const pulses = random() > 0 ? 4 : 3;
+  for (let at = Math.abs(random()) * 0.5; at < BED_SECONDS - 0.2; at += rate * (1 + 0.04 * random())) {
+    for (let k = 0; k < pulses; k += 1) {
+      const freq = pitch * (1 + 0.004 * random());
+      add(out, at + k * 0.032, 0.02, (t) => level * Math.sin(TAU * freq * t) * swell(t, 0.02));
     }
   }
 }
@@ -408,41 +603,139 @@ function breeze(out: Float32Array, random: () => number, level: number, low = 20
   add(out, 0, BED_SECONDS, (t) => level * air() * (0.55 + 0.45 * Math.sin(TAU * speed * (t + offset)) ** 2));
 }
 
+/** An owl far off in the trees: "hoo, hoo-hoo", round and breathy. */
+function owl(out: Float32Array, at: number, random: () => number) {
+  for (const [offset, pitch, length] of [
+    [0, 410, 0.4],
+    [0.55, 360, 0.3],
+    [0.9, 360, 0.6],
+  ] as const) {
+    const voice = sine();
+    const breath = svf("band");
+    add(out, at + offset, length, (t) => {
+      const freq = pitch * (1 + 0.03 * Math.sin((Math.PI * t) / length) - 0.04 * (t / length));
+      return (voice(freq) + 2.5 * breath(random(), freq, 8)) * held(t, length, 0.06, 0.15);
+    });
+  }
+}
+
+/** A gull wheeling overhead: three rising-and-falling cries, a little hoarse. */
+function gull(out: Float32Array, at: number, random: () => number) {
+  let when = at;
+  for (let k = 0; k < 3; k += 1) {
+    const length = between(random, 0.25, 0.4);
+    const top = between(random, 1100, 1400);
+    const wave = saw();
+    const throat = svf("band");
+    add(out, when, length, (t) => {
+      const p = t / length;
+      const freq = top * (0.75 + 0.35 * Math.sin(Math.PI * Math.min(1, p * 1.4))) - 200 * p;
+      return Math.tanh(2 * throat(wave(freq), 2200, 1.5)) * swell(t, length);
+    });
+    when += between(random, 0.35, 0.5);
+  }
+}
+
+/** A frog in the reeds: "rib-bit", a throaty buzz in quick pulses. */
+function frog(out: Float32Array, at: number) {
+  for (const [offset, length] of [
+    [0, 0.11],
+    [0.16, 0.14],
+  ] as const) {
+    const wave = saw();
+    const throat = mouth();
+    add(out, at + offset, length, (t) =>
+      throat(wave(150 * (1 + (0.1 * t) / length)), [500, 1300, 2200]) * Math.sin(Math.PI * ((t * 28) % 1)) ** 2 * swell(t, length),
+    );
+  }
+}
+
+/** One person in the crowd chatting: syllables at their own pitch on passing vowels, never real words. */
+function talker(out: Float32Array, random: () => number) {
+  const wave = saw((random() + 1) / 2);
+  const shape = mouth();
+  const voice = brighter(0.6);
+  const child = random() > 0.2;
+  const pitch = child ? between(random, 230, 340) : between(random, 110, 220);
+  const scale = child ? 1.15 : 1;
+  const names = Object.keys(VOWELS) as Vowel[];
+  const level = between(random, 0.3, 1);
+  let at = Math.abs(random()) * 2;
+  while (at < BED_SECONDS - 0.4) {
+    const words = 3 + Math.floor(Math.abs(random()) * 6);
+    for (let word = 0; word < words && at < BED_SECONDS - 0.4; word += 1) {
+      const length = between(random, 0.12, 0.28);
+      const name = names[Math.floor(Math.abs(random()) * names.length)] ?? "ah";
+      const vowel = blendVowel(name, name, 0, scale);
+      const lift = between(random, 0.9, 1.15);
+      add(out, at, length, (t) => level * shape(voice(0.8 * wave(pitch * lift * (1 - (0.1 * t) / length)) + 0.2 * random()), vowel) * swell(t, length));
+      at += length + between(random, 0.01, 0.06);
+    }
+    at += between(random, 0.3, 1.2);
+  }
+}
+
 const AMBIENCE: Record<StoryAmbience, () => Float32Array> = {
   gate() {
     const out = buffer(BED_SECONDS);
     const random = rng(101);
-    breeze(out, random, 0.35, 150, 900, 0.1);
-    chirps(out, random, 9, 0.12);
-    return out;
+    const air = buffer(BED_SECONDS);
+    breeze(air, random, 1, 150, 900, 0.1);
+    const life = buffer(BED_SECONDS);
+    birds(life, random, 9, 1);
+    blend(out, air, 1);
+    blend(out, life, 0.3);
+    return room(out, { size: 0.5, mix: 0.12 });
   },
   grass() {
+    // Wind combing through long grass: a soft hiss that rises and falls with the gusts, the blades
+    // brushing each other as it does, crickets, and birds now and then.
     const out = buffer(BED_SECONDS);
     const random = rng(103);
-    const rustle = bandNoise(random, 1500, 7000);
-    const sway = lowNoise(random, 0.6);
-    add(out, 0, BED_SECONDS, (t) => 0.5 * rustle() * Math.max(0.15, 0.5 + 6 * sway()) * (0.6 + 0.4 * Math.sin(TAU * 0.13 * t) ** 2));
-    breeze(out, random, 0.12, 120, 700, 0.07);
-    crickets(out, random, 0.05);
-    chirps(out, random, 6, 0.06);
-    return out;
+    const [g1, g2, g3] = [0, 1, 2].map(() => Math.abs(random()) * TAU) as [number, number, number];
+    const gust = (t: number) => 0.55 + 0.25 * Math.sin(TAU * 0.07 * t + g1) + 0.15 * Math.sin(TAU * 0.13 * t + g2) + 0.1 * Math.sin(TAU * 0.23 * t + g3);
+    const hiss = buffer(BED_SECONDS);
+    const shh = svf("band");
+    add(hiss, 0, BED_SECONDS, (t) => gust(t) ** 1.5 * shh(random(), 3200, 0.7));
+    const wind = buffer(BED_SECONDS);
+    const low = svf("band");
+    add(wind, 0, BED_SECONDS, (t) => gust(t) * low(random(), 350, 0.6));
+    const blades = buffer(BED_SECONDS);
+    for (let at = 0; at < BED_SECONDS - 0.05; at += 0.004) {
+      const strength = gust(at);
+      if (Math.abs(random()) < 0.5 * strength * strength) {
+        const length = between(random, 0.008, 0.025);
+        const centre = between(random, 2000, 6000);
+        const size = Math.abs(random());
+        const leaf = svf("band");
+        add(blades, at, length, (t) => size * leaf(random(), centre, 1.5) * swell(t, length));
+      }
+    }
+    const life = buffer(BED_SECONDS);
+    cricket(life, random, 0.5, 4700);
+    cricket(life, random, 0.3, 4300);
+    birds(life, random, 5, 0.6);
+    blend(out, hiss, 1);
+    blend(out, blades, 0.5);
+    blend(out, wind, 0.5);
+    blend(out, life, 0.18);
+    return room(out, { size: 0.5, mix: 0.12, damp: 0.5 });
   },
   woods() {
     const out = buffer(BED_SECONDS);
     const random = rng(107);
-    breeze(out, random, 0.18, 100, 600, 0.07);
-    crickets(out, random, 0.06, 5200);
-    crickets(out, random, 0.04, 3900);
-    for (const at of [2.5, 10.5]) {
-      for (const [offset, pitch, length] of [
-        [0, 410, 0.35],
-        [0.5, 360, 0.3],
-        [0.85, 360, 0.55],
-      ] as const) {
-        add(out, at + offset, length, (t) => 0.22 * Math.sin(TAU * pitch * t) * swell(t, length));
-      }
-    }
-    return out;
+    const air = buffer(BED_SECONDS);
+    breeze(air, random, 1, 100, 600, 0.07);
+    const night = buffer(BED_SECONDS);
+    cricket(night, random, 1, 5200);
+    cricket(night, random, 0.7, 3900);
+    cricket(night, random, 0.4, 4500);
+    const owls = buffer(BED_SECONDS);
+    for (const at of [2.5, 10.5]) owl(owls, at, random);
+    blend(out, air, 1);
+    blend(out, night, 0.35);
+    blend(out, owls, 0.3);
+    return room(out, { size: 0.6, mix: 0.2, damp: 0.5 });
   },
   cave() {
     const out = buffer(BED_SECONDS);
@@ -487,68 +780,119 @@ const AMBIENCE: Record<StoryAmbience, () => Float32Array> = {
     return reverb(out, 0.35);
   },
   sea() {
-    const out = buffer(BED_SECONDS);
+    // Waves on a beach: each one rolls in low, breaks in a broad crash, and runs back fizzing over the
+    // sand. Under them, the deep sound of the open sea, and gulls overhead.
     const random = rng(137);
-    const surf = lowNoise(random, 900);
-    const hiss = bandNoise(random, 2000, 8000);
-    add(out, 0, BED_SECONDS, (t) => {
-      const wave = Math.sin(Math.PI * ((t % 5.8) / 5.8)) ** 3;
-      return 1.4 * surf() * (0.25 + wave) + 0.12 * hiss() * wave;
-    });
-    // Gulls, high and far off.
-    for (const at of [2.2, 7.9, 13.5]) {
-      for (const [offset, length] of [[0, 0.35], [0.45, 0.3], [0.85, 0.45]] as const) {
-        add(out, at + offset, length, (t) => {
-          const pitch = 1500 + 500 * Math.sin(Math.PI * (t / length)) - 300 * (t / length);
-          return 0.05 * Math.sin(TAU * pitch * t) * swell(t, length);
-        });
+    const long = buffer(BED_SECONDS + 6);
+    const surf = buffer(BED_SECONDS + 6);
+    const foam = buffer(BED_SECONDS + 6);
+    const fizz = buffer(BED_SECONDS + 6);
+    for (let at = 0.1; at < LOOP_SECONDS; at += between(random, 4.6, 7)) {
+      const size = between(random, 0.6, 1);
+      const build = between(random, 1.3, 1.9);
+      const roll = svf("low");
+      add(surf, at, build + 0.3, (t) => {
+        const p = Math.min(1, t / build);
+        return size * p * p * roll(random(), 200 + 900 * p * p) * (t > build ? Math.max(0, 1 - (t - build) / 0.3) : 1);
+      });
+      const crash = svf("band");
+      add(foam, at + build - 0.05, 2.5, (t) => size * crash(random(), 1600 - 400 * Math.min(1, t), 0.45) * strike(t, 0.12, 1.6));
+      const wash = svf("high");
+      add(foam, at + build + 0.25, 3.2, (t) => size * 0.5 * wash(random(), 3000) * Math.min(1, t / 0.4) * Math.exp(-t * 0.8));
+      for (let n = 0; n < 160; n += 1) {
+        const when = at + build + 0.2 + Math.abs(random()) ** 2 * 3;
+        const length = between(random, 0.005, 0.012);
+        const centre = between(random, 3000, 8000);
+        const bubble = svf("band");
+        const grain = size * Math.abs(random()) * Math.exp(-(when - at - build) * 0.9);
+        add(fizz, when, length, (t) => grain * bubble(random(), centre, 2) * swell(t, length));
       }
     }
-    return reverb(out, 0.15);
+    const deep = buffer(BED_SECONDS + 6);
+    const far = pinkNoise(random);
+    const under = svf("low");
+    add(deep, 0, deep.length / RATE, () => under(far(), 300));
+    const calls = buffer(BED_SECONDS + 6);
+    for (const at of [2.2, 7.9, 13.5]) gull(calls, at, random);
+    filterAll(calls, "low", 3000);
+    blend(long, surf, 0.6);
+    blend(long, foam, 1);
+    blend(long, fizz, 0.15);
+    blend(long, deep, 0.35);
+    blend(long, calls, 0.05);
+    return room(circular(long), { size: 0.6, mix: 0.12, damp: 0.5 });
   },
   lake() {
+    // Still water: small waves lapping at the shore, a drip or a bubble now and then, a frog, a bird.
     const out = buffer(BED_SECONDS);
     const random = rng(139);
-    const water = lowNoise(random, 500);
-    add(out, 0, BED_SECONDS, (t) => 1.1 * water() * (0.35 + 0.65 * Math.sin(Math.PI * ((t % 2.3) / 2.3)) ** 2));
-    for (let n = 0; n < 7; n += 1) {
+    const laps = buffer(BED_SECONDS);
+    for (let at = 0.2; at < BED_SECONDS - 1; at += between(random, 0.7, 1.9)) {
+      const size = between(random, 0.4, 1);
+      const pitch = between(random, 380, 650);
+      const [lap, under] = [svf("band"), svf("low")];
+      add(laps, at, 1.2, (t) => size * (lap(random(), pitch - 150 * t, 1.1) + 0.8 * under(random(), 250)) * strike(t, 0.09, 4));
+    }
+    const still = buffer(BED_SECONDS);
+    const quiet = svf("low");
+    add(still, 0, BED_SECONDS, () => quiet(random(), 400));
+    const drops = buffer(BED_SECONDS);
+    for (let n = 0; n < 9; n += 1) {
       const at = Math.abs(random()) * (BED_SECONDS - 1);
-      add(out, at, 0.2, (t) => 0.2 * Math.sin(TAU * (700 * t - 900 * t * t)) * decay(t, 18));
+      const base = between(random, 700, 1500);
+      const bubble = sine();
+      // A bubble rises in pitch as it shrinks and pops: the sound of a drip landing in water.
+      add(drops, at, 0.09, (t) => bubble(base * (1 + 14 * t)) * strike(t, 0.0015, 45));
     }
-    // A frog, croaking softly from the reeds.
-    for (const at of [3.1, 3.5, 11.2]) {
-      add(out, at, 0.3, (t) => 0.16 * (Math.sin(TAU * 140 * t) + 0.3 * Math.sin(TAU * 280 * t)) * Math.sin(TAU * 18 * t) ** 2 * swell(t, 0.3));
-    }
-    chirps(out, random, 3, 0.05);
-    return out;
+    const frogs = buffer(BED_SECONDS);
+    for (const at of [3.1, 3.6, 11.2]) frog(frogs, at);
+    const life = buffer(BED_SECONDS);
+    birds(life, random, 3, 1);
+    blend(out, laps, 1);
+    blend(out, still, 0.4);
+    blend(out, drops, 0.12);
+    blend(out, frogs, 0.12);
+    blend(out, life, 0.08);
+    return room(out, { size: 0.55, mix: 0.15, damp: 0.5 });
   },
   house() {
     // A warm, quiet room with the window open: birds outside, and a wind chime now and then.
     const out = buffer(BED_SECONDS);
     const random = rng(149);
-    const room = lowNoise(random, 300);
-    add(out, 0, BED_SECONDS, () => 0.5 * room());
-    breeze(out, random, 0.06, 300, 1500, 0.08);
-    chirps(out, random, 7, 0.05);
+    const still = buffer(BED_SECONDS);
+    const hum = lowNoise(random, 300);
+    add(still, 0, BED_SECONDS, () => hum());
+    const air = buffer(BED_SECONDS);
+    breeze(air, random, 1, 300, 1500, 0.08);
+    const life = buffer(BED_SECONDS);
+    birds(life, random, 7, 1);
+    const chimes = buffer(BED_SECONDS);
     for (const [at, name] of [[2.4, "E6"], [2.9, "B5"], [9.6, "G6"], [10.2, "D6"], [10.7, "B5"]] as const) {
-      add(out, at, 2.2, (t) => 0.035 * bell(note(name), t) * Math.min(1, t / 0.02));
+      const tube = glock(note(name));
+      add(chimes, at, 2.2, (t) => tube(t));
     }
-    return reverb(out, 0.2);
+    blend(out, still, 1);
+    blend(out, air, 0.15);
+    blend(out, life, 0.15);
+    blend(out, chimes, 0.1);
+    return room(out, { size: 0.4, mix: 0.2, damp: 0.6 });
   },
   stadium() {
+    // A big crowd waiting: hundreds of people chatting at once, the hum of the hall, and twice a ripple of cheering.
     const out = buffer(BED_SECONDS);
     const random = rng(151);
-    // A big crowd talking, with a ripple of cheering now and then.
-    for (let n = 0; n < 5; n += 1) {
-      const murmur = bandNoise(random, 250 + n * 80, 1500 + n * 150);
-      const offset = Math.abs(random()) * 10;
-      add(out, 0, BED_SECONDS, (t) => 0.35 * murmur() * (0.7 + 0.3 * Math.sin(TAU * 0.2 * (t + offset))));
-    }
-    for (const at of [3.5, 10.2]) {
-      const roar = bandNoise(random, 400, 3000);
-      add(out, at, 1.6, (t) => 0.5 * roar() * swell(t, 1.6));
-    }
-    return out;
+    const babble = buffer(BED_SECONDS);
+    for (let n = 0; n < 22; n += 1) talker(babble, random);
+    const cheers = buffer(BED_SECONDS);
+    for (const at of [3.5, 10.2]) crowd(cheers, at, 1.8, random, 12, 10);
+    const hall = buffer(BED_SECONDS);
+    const pink = pinkNoise(random);
+    const band = svf("band");
+    add(hall, 0, BED_SECONDS, (t) => band(pink(), 600, 0.7) * (0.8 + 0.2 * Math.sin(TAU * 0.11 * t)));
+    blend(out, babble, 1);
+    blend(out, hall, 0.6);
+    blend(out, cheers, 0.5);
+    return room(filterAll(filterAll(out, "low", 5000), "high", 180), { size: 0.95, mix: 0.35, predelay: 0.03, damp: 0.4 });
   },
 };
 
@@ -650,14 +994,25 @@ const MUSIC: Record<StoryMusic, () => Float32Array> = {
 
 // ---------------------------------------------------------------------------
 
+/** MP3 encoding takes about 0.3 dB of loudness (mostly the very top), so each sound is mastered that much over. */
+const ENCODER_LOSS = 0.3;
+
 const wanted = new Set(process.argv.slice(2));
 const pick = (name: string) => wanted.size === 0 || wanted.has(name);
 
+/**
+ * A Yoto Mini's little speaker plays almost nothing under about 100 Hz, and energy there still counts
+ * towards a sound's loudness, so an effect heavy in it would come out thin and quiet just where it
+ * matters. Everything under 90 Hz is taken out of the effects before they are levelled.
+ */
+const forSmallSpeakers = (out: Float32Array) => filterAll(filterAll(out, "high", 90), "high", 90);
+
 for (const [name, make] of Object.entries(EFFECTS) as Array<[StorySound, () => Float32Array]>) {
-  if (pick(name)) writeMp3(STORY_SOUNDS[name], make(), false);
+  if (pick(name)) writeMp3(STORY_SOUNDS[name], master(forSmallSpeakers(make()), LOUDNESS[name] + ENCODER_LOSS), false);
 }
 for (const [name, make] of Object.entries(AMBIENCE) as Array<[StoryAmbience, () => Float32Array]>) {
-  if (pick(name)) writeMp3(STORY_AMBIENCE[name], normalise(loopable(make()), 0.7), true);
+  // Beds are dense noise, which the encoder lifts by a few dB at its peaks, so they are held lower.
+  if (pick(name)) writeMp3(STORY_AMBIENCE[name], master(loopable(make()), LOUDNESS[`bed-${name}`] + ENCODER_LOSS, 0.5), true);
 }
 for (const [name, make] of Object.entries(MUSIC) as Array<[StoryMusic, () => Float32Array]>) {
   if (pick(name)) writeMp3(STORY_MUSIC[name], normalise(make(), 0.7), true);
