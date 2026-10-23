@@ -54,6 +54,7 @@ import {
   freeSlotMessage,
   libraryPlaylists,
   renderJobs,
+  retitledUpload,
   uploadForPlaylist,
   type PlaylistUpload,
   type SavedCardMap,
@@ -1625,6 +1626,40 @@ describe("voice and playlist build-up", () => {
     assert.equal(kept.append, true);
     assert.equal(kept.content.cardId, "ab12C");
     assert.equal(kept.create, undefined);
+
+    const replaced = uploadForPlaylist(addition, "ab12C", "replace");
+    assert.equal(replaced.replace, true);
+    assert.equal(replaced.append, false);
+    assert.equal(replaced.create, undefined);
+    assert.equal(replaced.content.cardId, "ab12C");
+    assert.equal(uploadForPlaylist(addition, "", "replace").replace, undefined, "no card to replace makes a new one");
+    const renamed = retitledUpload(addition, "Bedtime 2");
+    assert.equal(renamed.content.title, "Bedtime 2");
+    assert.equal(addition.content.title === "Bedtime 2", false, "the original is left alone");
+
+    // The job route sends the new tracks with the old card id, so Yoto replaces that playlist in place.
+    const realFetch = globalThis.fetch;
+    let replacedBody: { cardId?: string; content?: { chapters?: unknown[] } } | null = null;
+    globalThis.fetch = async (_input, init) => {
+      replacedBody = JSON.parse(String(init?.body ?? "null")) as typeof replacedBody;
+      return new Response(JSON.stringify({ card: { cardId: "ab12C" } }), { status: 200 });
+    };
+    try {
+      const response = await postJob(
+        new Request("http://localhost/api/yoto/job", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${"x".repeat(24)}`, "Content-Type": "application/json" },
+          body: JSON.stringify(replaced),
+        }),
+      );
+      assert.equal(response.status, 200);
+      const sentBody = replacedBody as { cardId?: string; content?: { chapters?: unknown[] } } | null;
+      assert.equal(sentBody?.cardId, "ab12C");
+      assert.equal(sentBody?.content?.chapters?.length, 1, "only the new tracks");
+      assert.match(JSON.stringify(await response.json()), /ab12C/);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
 
     const merged = appendToPlaylist(
       {

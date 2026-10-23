@@ -10,6 +10,8 @@ type JobBody = {
   create?: boolean;
   /** Add these tracks onto an existing playlist. This is the one case cardId is sent. */
   append?: boolean;
+  /** Put these tracks in place of everything on an existing playlist, keeping its card id. */
+  replace?: boolean;
   content?: {
     title?: string;
     cardId?: string;
@@ -99,6 +101,8 @@ export async function POST(request: Request) {
   const content = body.content ? { ...body.content } : undefined;
   const appendId =
     body.append === true && body.create !== true ? validYotoCardId(content?.cardId) : undefined;
+  const replaceId =
+    body.replace === true && body.append !== true && body.create !== true ? validYotoCardId(content?.cardId) : undefined;
   if (body.create === true && content) delete content.cardId;
 
   if (audioCount > 0 && appendId && content) {
@@ -109,6 +113,8 @@ export async function POST(request: Request) {
     let playlist: ReturnType<typeof contentCreateBody> | undefined;
     try {
       playlist = content ? contentCreateBody(content) : undefined;
+      // Yoto updates the playlist with this id in place, so a card linked to it keeps working.
+      if (playlist && replaceId) playlist.cardId = replaceId;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Yoto did not accept this card.";
       return jsonError(message);
@@ -134,7 +140,7 @@ export async function POST(request: Request) {
       parsed = null;
     }
     const row = parsed && typeof parsed === "object" ? (parsed as { cardId?: string; card?: { cardId?: string } }) : {};
-    const cardId = validYotoCardId(row.card?.cardId) ?? validYotoCardId(row.cardId);
+    const cardId = validYotoCardId(row.card?.cardId) ?? validYotoCardId(row.cardId) ?? replaceId;
     if (!cardId) {
       const yotoBody = text.trim().slice(0, 500);
       const message = yotoBody

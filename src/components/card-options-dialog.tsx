@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { PlaybackSettings } from "@/lib/playback-settings";
+import { nextFreeTitle, playlistNamed, type NameClash } from "@/lib/playlist-names";
 
 export function CardOptionsDialog({
   open,
@@ -26,6 +27,8 @@ export function CardOptionsDialog({
   onPlayback,
   targetPlaylist,
   onTargetPlaylist,
+  nameClash,
+  onNameClash,
   library,
   newTitle,
 }: {
@@ -41,10 +44,16 @@ export function CardOptionsDialog({
   onPlayback: (settings: PlaybackSettings) => void;
   targetPlaylist: string;
   onTargetPlaylist: (cardId: string) => void;
+  /** When the new list's name is already in the library: a numbered name, or in place of the old one. */
+  nameClash: NameClash;
+  onNameClash: (choice: NameClash) => void;
   library: Array<{ cardId: string; title: string }>;
   newTitle: string;
 }) {
   const destination = library.find((item) => item.cardId === targetPlaylist);
+  const clash = destination ? undefined : playlistNamed(library, newTitle);
+  const numbered = clash ? nextFreeTitle(newTitle, library.map((item) => item.title)) : newTitle;
+  const replacing = Boolean(clash) && nameClash === "replace";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -96,9 +105,46 @@ export function CardOptionsDialog({
                 <span className="text-xs leading-5 text-muted-foreground">
                   {destination
                     ? `Adds these entries at the end of ${destination.title}. What is already there stays.`
-                    : `Makes a new list named ${newTitle}. Lists you already have stay as they are.`}
+                    : replacing
+                      ? `Replaces every track on ${clash?.title}.`
+                      : `Makes a new list named ${numbered}. Lists you already have stay as they are.`}
                 </span>
               </label>
+              {clash ? (
+                <fieldset className="mt-3 grid gap-2 rounded-xl border-2 border-ink/30 p-3 text-sm">
+                  <legend className="px-1 font-bold">You already have a list called {clash.title}</legend>
+                  <label className="flex items-start gap-2">
+                    <input
+                      type="radio"
+                      name="card-options-clash"
+                      className="mt-1"
+                      checked={nameClash === "number"}
+                      onChange={() => onNameClash("number")}
+                    />
+                    <span>
+                      Make a new list called <span className="font-bold">{numbered}</span>
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-2">
+                    <input
+                      type="radio"
+                      name="card-options-clash"
+                      className="mt-1"
+                      checked={nameClash === "replace"}
+                      onChange={() => onNameClash("replace")}
+                    />
+                    <span>
+                      Replace the tracks on <span className="font-bold">{clash.title}</span> with these
+                    </span>
+                  </label>
+                  {replacing ? (
+                    <p className="text-xs leading-5 pk-danger">
+                      The old tracks are removed. A card linked to {clash.title} keeps working and plays the new ones.
+                      You will be asked to confirm.
+                    </p>
+                  ) : null}
+                </fieldset>
+              ) : null}
             </li>
             <li className="pk-step">
               <span className="pk-step-num" aria-hidden="true">
@@ -129,7 +175,7 @@ export function CardOptionsDialog({
           </Button>
           {connected ? (
             <Button type="button" className="h-11 px-4" onClick={onConfirm}>
-              {confirmLabel}
+              {replacing ? `Replace ${clash?.title}` : confirmLabel}
             </Button>
           ) : (
             <Button type="button" className="h-11 px-4" onClick={onConnect}>

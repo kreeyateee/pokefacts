@@ -28,6 +28,8 @@ export type PlaylistUpload = {
   create?: boolean;
   /** When set, Send adds tracks onto this card instead of creating one. */
   append?: boolean;
+  /** When set, Send replaces every track on this card with these, keeping the card (and any linked card). */
+  replace?: boolean;
   content: {
     title?: string;
     cardId?: string;
@@ -557,20 +559,38 @@ export function playlistSummary(payload: unknown): { cardId: string; title: stri
 
 /**
  * "New playlist" is a create and never keeps a card id.
- * An existing playlist is the one case the update body includes that card id.
+ * An existing playlist is the one case the update body includes that card id: its tracks are added to
+ * the end, or, with "replace", they take the place of everything that was there.
  */
-export function uploadForPlaylist(upload: PlaylistUpload, selection: string | undefined): PlaylistUpload {
+export function uploadForPlaylist(
+  upload: PlaylistUpload,
+  selection: string | undefined,
+  mode: "append" | "replace" = "append",
+): PlaylistUpload {
   const cardId = validYotoCardId(selection);
   if (!cardId) {
     const content = { ...upload.content };
     delete content.cardId;
-    return { ...upload, create: true, append: false, content };
+    return { ...upload, create: true, append: false, replace: undefined, content };
   }
   return {
     ...upload,
     create: undefined,
-    append: true,
+    append: mode === "append",
+    replace: mode === "replace" ? true : undefined,
     content: { ...upload.content, cardId },
+  };
+}
+
+/** The same upload under another name in the Yoto library. */
+export function retitledUpload(upload: PlaylistUpload, title: string): PlaylistUpload {
+  return {
+    ...upload,
+    content: {
+      ...upload.content,
+      title,
+      ...(upload.content.metadata ? { metadata: { ...upload.content.metadata, title } } : {}),
+    },
   };
 }
 

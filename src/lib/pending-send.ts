@@ -1,3 +1,4 @@
+import { isScene, type Scene } from "@/lib/sticker-scenes";
 import { clampMix, type MixSettings } from "@/lib/playback-settings";
 import type { FinishedAudio, PlaylistUpload, RenderJob } from "@/lib/yoto-send";
 
@@ -24,6 +25,10 @@ export type PendingPlaylist = {
   headline: string;
   rangeLabel: string;
   coverId?: number;
+  /** The cover's background, for a cover with nobody on it. */
+  coverScene?: Scene;
+  /** The cover's Pokémon is a silhouette, so a Who's That card does not give its first answer away. */
+  coverHidden?: boolean;
   upload: PlaylistUpload;
   jobs: RenderJob[];
 };
@@ -110,6 +115,8 @@ function isPendingPlaylist(value: unknown): value is PendingPlaylist {
     typeof value.headline === "string" &&
     typeof value.rangeLabel === "string" &&
     (value.coverId === undefined || typeof value.coverId === "number") &&
+    (value.coverScene === undefined || isScene(value.coverScene)) &&
+    (value.coverHidden === undefined || typeof value.coverHidden === "boolean") &&
     isRecord(value.upload) &&
     isRecord(value.upload.content) &&
     Array.isArray(value.jobs) &&

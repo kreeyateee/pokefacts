@@ -10,6 +10,7 @@ import { EntryCard, EntryPager } from "@/components/entry-card";
 import { Catalogue } from "@/components/catalogue";
 import { PlaybackPanel } from "@/components/playback-panel";
 import { CoffeeNudge } from "@/components/coffee-nudge";
+import { coverPng } from "@/components/cover-art";
 import { SendBanner, toastSendAllReady, toastSendReady, toastSendStarted } from "@/components/send-banner";
 import { SetupGuide } from "@/components/setup-guide";
 import { CardOptionsDialog } from "@/components/card-options-dialog";
@@ -19,6 +20,7 @@ import { MusicPanel } from "@/components/music-panel";
 import { MysterySilhouette } from "@/components/mystery-silhouette";
 import { YotoScreen } from "@/components/yoto-screen";
 import { PrintablesPanel } from "@/components/printables-panel";
+import { nextFreeTitle, playlistNamed, type NameClash } from "@/lib/playlist-names";
 import { StickerStudio } from "@/components/sticker-studio";
 import { Button } from "@/components/ui/button";
 import {
@@ -120,6 +122,7 @@ import {
   libraryPlaylists,
   mapPool,
   renderJobs,
+  retitledUpload,
   uploadForPlaylist,
   type FinishedAudio,
   type PlaylistUpload,
@@ -275,10 +278,20 @@ async function uploadIconFrom(path: string): Promise<string> {
   throw new SendFailure(fallback, false);
 }
 
-async function uploadCover(id: number | undefined): Promise<string | undefined> {
-  if (!id) return undefined;
+/** The playlist's cover with its name on it, drawn in this page; the bare artwork if drawing fails. */
+async function uploadCover(current: PendingPlaylist): Promise<string | undefined> {
+  const id = current.coverId;
   try {
-    const response = await yotoFetch(`/api/yoto/cover?id=${id}`, { method: "POST" });
+    const drawn = await coverPng({
+      title: current.libraryTitle,
+      pictureId: id,
+      hidden: current.coverHidden,
+      scene: current.coverScene,
+    }).catch(() => null);
+    if (!drawn && !id) return undefined;
+    const response = drawn
+      ? await yotoFetch("/api/yoto/cover", { method: "POST", headers: { "Content-Type": "image/png" }, body: drawn })
+      : await yotoFetch(`/api/yoto/cover?id=${id}`, { method: "POST" });
     const payload = await readBody(response);
     if (!response.ok) return undefined;
     const imageL = (payload as { imageL?: unknown } | null)?.imageL;
@@ -642,6 +655,8 @@ export function Studio({
   const [library, setLibrary] = useState<Array<{ cardId: string; title: string }>>([]);
   const [libraryNote, setLibraryNote] = useState("");
   const [targetPlaylist, setTargetPlaylist] = useState("");
+  /** When a new playlist's name is already in the library: a numbered name, or in place of the old one. */
+  const [nameClash, setNameClash] = useState<NameClash>("number");
   const [speaking, setSpeaking] = useState(false);
   const [hearError, setHearError] = useState("");
   const [sending, setSending] = useState(false);
@@ -670,6 +685,8 @@ export function Studio({
   const playbackRef = useRef(playback);
   voiceIdRef.current = voiceId;
   targetPlaylistRef.current = targetPlaylist;
+  const nameClashRef = useRef(nameClash);
+  nameClashRef.current = nameClash;
   playbackRef.current = playback;
 
   const cardId = kind === "meet" ? factsId : guessId;
@@ -1290,7 +1307,8 @@ export function Studio({
       const payload = await readBody(response);
       if (!response.ok || looksLikeGateway(response.status, payload)) {
         const gateway = looksLikeGateway(response.status, payload);
-        if (!gateway && !attempt.append) {
+        // A rejected add or replace is reported, never quietly retried as a new playlist.
+        if (!gateway && !attempt.append && !attempt.replace) {
           const decision = afterRejectedPlaylist({
             playlistId,
             upload: attempt,
@@ -1510,7 +1528,7 @@ export function Studio({
     const coverReady =
       send.cover !== undefined
         ? Promise.resolve(send.cover ?? undefined)
-        : uploadCover(current.coverId).then((cover) => {
+        : uploadCover(current).then((cover) => {
             changePending((next) => withCover(next, cover));
             return cover;
           });
@@ -1528,6 +1546,7 @@ export function Studio({
       headline: headline ?? libraryTitle,
       rangeLabel: playlist.rangeLabel,
       coverId: coverArtworkId(playlist),
+      coverHidden: playlist.kind === "guess" || undefined,
       upload,
       jobs: renderJobs(libraryTitle, playlist, upload),
     };
@@ -1737,12 +1756,47 @@ export function Studio({
     if (sendingRef.current) return;
     setMyoCard(null);
     pendingCardAction.current = run;
+    setNameClash("number");
     setCardPrompt({ confirmLabel, newTitle });
+  }
+
+  /**
+   * Where a send goes: onto the playlist picked in the dialog, or a new one. A new one whose name is
+   * already in the library gets the next number, or replaces the old one's tracks if the parent chose that.
+   */
+  function plannedTarget(title: string): { cardId?: string; mode: "append" | "replace"; title: string } {
+    const chosenId = validYotoCardId(targetPlaylistRef.current);
+    if (chosenId) return { cardId: chosenId, mode: "append", title };
+    const clash = playlistNamed(library, title);
+    if (!clash) return { mode: "append", title };
+    if (nameClashRef.current === "replace") return { cardId: clash.cardId, mode: "replace", title: clash.title };
+    return { mode: "append", title: nextFreeTitle(title, library.map((item) => item.title)) };
+  }
+
+  /** What the bar and the toast say once a send is in the library. */
+  function finishCopy(target: ReturnType<typeof plannedTarget>, newLine: string) {
+    if (target.mode === "replace") return { line: `${target.title} now has the new tracks.`, toast: target.title, updated: true };
+    if (target.cardId) {
+      const title = library.find((item) => item.cardId === target.cardId)?.title ?? "The playlist";
+      return { line: `${title} was updated.`, toast: title, updated: true };
+    }
+    return { line: newLine, toast: target.title, updated: false };
   }
 
   function confirmCardOptions() {
     if (!session) {
       setConnectOpen(true);
+      return;
+    }
+    const clash =
+      cardPrompt && !validYotoCardId(targetPlaylistRef.current) ? playlistNamed(library, cardPrompt.newTitle) : undefined;
+    if (
+      clash &&
+      nameClashRef.current === "replace" &&
+      !window.confirm(
+        `Replace everything on "${clash.title}" with these tracks? The old tracks are removed. A card linked to it keeps working and plays the new ones.`,
+      )
+    ) {
       return;
     }
     const run = pendingCardAction.current;
@@ -1768,29 +1822,24 @@ export function Studio({
         status: "sending",
         detail: statusWithDexNote(`Sending ${playlist.libraryTitle} to Yoto…`, dexNote),
       });
-      const chosenId = validYotoCardId(targetPlaylistRef.current);
-      if (chosenId) await assertRoom(chosenId, playlist.chapters);
+      const target = plannedTarget(playlist.libraryTitle);
+      if (target.cardId && target.mode === "append") await assertRoom(target.cardId, playlist.chapters);
       const icons = playlist.kind === "guess" ? await uploadGuessIcons(playlist) : null;
       const pixels = icons ? icons.real : await uploadPixels(playlist);
       const prepared = selectionUpload(playlist, pixels, {
-        title: playlist.libraryTitle,
+        title: target.title,
         shadowById: icons?.shadow,
         voiceId: voiceIdRef.current,
       });
-      const upload = uploadForPlaylist(prepared, chosenId);
-      const updatedTitle = library.find((item) => item.cardId === chosenId)?.title;
+      const upload = uploadForPlaylist(prepared, target.cardId, target.mode);
+      const done = finishCopy(target, `${target.title} is in your Yoto library.`);
       return newSend({
-        title: playlist.libraryTitle,
-        current: pendingPlaylist(playlist, upload, playlist.libraryTitle),
+        title: target.title,
+        current: pendingPlaylist(playlist, upload, target.title),
         finish: {
-          detail: statusWithDexNote(
-            chosenId
-              ? `${updatedTitle ?? "The playlist"} was updated.`
-              : `${playlist.libraryTitle} is in your Yoto library.`,
-            dexNote,
-          ),
-          toastTitle: chosenId ? (updatedTitle ?? "The playlist") : playlist.libraryTitle,
-          updated: Boolean(chosenId),
+          detail: statusWithDexNote(done.line, dexNote),
+          toastTitle: done.toast,
+          updated: done.updated,
           tracks: countSpokenTracks(playlist.chapters),
         },
       });
@@ -1803,8 +1852,8 @@ export function Studio({
     try {
       await driveSend(card.libraryTitle, false, async () => {
         setJob({ status: "sending", detail: `Sending ${card.rangeLabel} to Yoto…` });
-        const chosenId = validYotoCardId(targetPlaylistRef.current);
-        if (chosenId) await assertRoom(chosenId, card.chapters);
+        const target = plannedTarget(card.libraryTitle);
+        if (target.cardId && target.mode === "append") await assertRoom(target.cardId, card.chapters);
         const formKind = isFormPlaylistKind(card.kind);
         let dexNote = "";
         let spokenCard = card;
@@ -1842,18 +1891,19 @@ export function Studio({
         } else {
           base = factsPlaylistUpload(spokenCard, await uploadPixels(spokenCard), undefined, voiceIdRef.current);
         }
-        const upload = uploadForPlaylist({ ...base, voiceId: voiceIdRef.current }, chosenId);
-        const updatedTitle = library.find((item) => item.cardId === chosenId)?.title;
+        const named = target.title === card.libraryTitle ? base : retitledUpload(base, target.title);
+        const upload = uploadForPlaylist({ ...named, voiceId: voiceIdRef.current }, target.cardId, target.mode);
+        const done = finishCopy(
+          target,
+          target.title === card.libraryTitle ? `${card.rangeLabel} is in your Yoto library.` : `${target.title} is in your Yoto library.`,
+        );
         return newSend({
-          title: card.libraryTitle,
-          current: pendingPlaylist(card, upload, card.libraryTitle),
+          title: target.title,
+          current: pendingPlaylist(card, upload, target.title),
           finish: {
-            detail: statusWithDexNote(
-              chosenId ? `${updatedTitle ?? "The playlist"} was updated.` : `${card.rangeLabel} is in your Yoto library.`,
-              dexNote,
-            ),
-            toastTitle: chosenId ? (updatedTitle ?? "The playlist") : card.libraryTitle,
-            updated: Boolean(chosenId),
+            detail: statusWithDexNote(done.line, dexNote),
+            toastTitle: done.toast,
+            updated: done.updated,
             tracks: countSpokenTracks(card.chapters),
           },
         });
@@ -1864,9 +1914,11 @@ export function Studio({
   }
 
   /** An adventure card: its pictures, then the interactive playlist. Always a new playlist, never added to one. */
-  async function sendAdventure(story: StoryGraph) {
+  async function sendAdventure(sent: StoryGraph) {
     if (sendingRef.current) return;
     if (!(await connectedSession())) return;
+    // Each send is a new adventure, so a second Safari Zone in the library becomes "Safari Zone 2".
+    const story = { ...sent, title: nextFreeTitle(sent.title, library.map((item) => item.title)) };
     try {
       await driveSend(story.title, false, async () => {
         setJob({ status: "sending", detail: `Sending ${story.title} to Yoto…` });
@@ -1894,8 +1946,13 @@ export function Studio({
         const built = storyCard(story, { voiceId: voiceIdRef.current, realById, shadowById, namedById });
         return newSend({
           title: story.title,
-          // No cover picture: the first Pokémon with a cry may be a secret the child has to work out.
-          current: { ...pendingPlaylist(built.card, built.upload, story.title), coverId: undefined },
+          // No Pokémon on the cover: the first one with a cry may be a secret the child has to work out.
+          current: {
+            ...pendingPlaylist(built.card, built.upload, story.title),
+            coverId: undefined,
+            coverHidden: undefined,
+            coverScene: story.id.startsWith("gym") ? "city" : "grassland",
+          },
           finish: {
             detail: `${story.title} is in your Yoto library.`,
             toastTitle: story.title,
@@ -2527,6 +2584,8 @@ export function Studio({
         onPlayback={setPlayback}
         targetPlaylist={targetPlaylist}
         onTargetPlaylist={setTargetPlaylist}
+        nameClash={nameClash}
+        onNameClash={setNameClash}
         library={library}
         newTitle={cardPrompt?.newTitle ?? card?.libraryTitle ?? "Pokefacts"}
       />
