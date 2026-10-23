@@ -56,7 +56,10 @@ type DemoOptions = {
   sounds?: string;
 };
 
+/** Hear's own recordings from before it shared the send's speech folder. Still read, no longer written. */
 const DEMO_ROOT = path.join(/* turbopackIgnore: true */ process.cwd(), "data", "demo");
+/** The recordings card sends keep, named by voice and words. Hear reads them and adds to them. */
+const SPEECH_ROOT = path.join(/* turbopackIgnore: true */ process.cwd(), "data", "speech");
 
 function sha256(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
@@ -306,13 +309,18 @@ async function recordVoice(
   fetchImpl: typeof fetch,
   options: DemoOptions,
 ): Promise<Buffer> {
-  const root = options.speech ?? DEMO_ROOT;
-  const file = path.join(/* turbopackIgnore: true */ root, `${sha256(Buffer.from(`${voiceId}\n${text}`))}.mp3`);
-  try {
-    const cached = await readFile(file);
-    if (audioContainer(cached) && cached.length >= 128) return cached;
-  } catch {
-    // Record below.
+  // The same name a card send gives this line (speechKey), so a line heard once is not recorded again
+  // when it is sent, and a line already sent plays straight away on Hear.
+  const name = `${sha256(Buffer.from(`${voiceId}\n${text}`))}.mp3`;
+  const root = options.speech ?? SPEECH_ROOT;
+  const file = path.join(/* turbopackIgnore: true */ root, name);
+  for (const dir of options.speech ? [root] : [SPEECH_ROOT, DEMO_ROOT]) {
+    try {
+      const cached = await readFile(path.join(/* turbopackIgnore: true */ dir, name));
+      if (audioContainer(cached) && cached.length >= 128) return cached;
+    } catch {
+      // Try the next folder, then record below.
+    }
   }
 
   const wait = options.wait ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
