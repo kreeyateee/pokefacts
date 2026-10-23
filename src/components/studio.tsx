@@ -25,6 +25,7 @@ import { YotoScreen } from "@/components/yoto-screen";
 import { PrintablesPanel } from "@/components/printables-panel";
 import { nextFreeTitle, playlistNamed, type NameClash } from "@/lib/playlist-names";
 import { StickerStudio } from "@/components/sticker-studio";
+import { SupportBox } from "@/components/support-box";
 import { Button } from "@/components/ui/button";
 import {
   isReadyKind,
@@ -2556,6 +2557,8 @@ export function Studio({
           />
         ) : null}
       </main>
+
+      <SupportBox />
 
       <footer className="mx-auto w-full max-w-5xl px-4 pb-8 text-xs leading-5 font-bold text-ink sm:px-6">
         Works with Yoto. An independent fan project, not made by or affiliated with Yoto, Nintendo, Game Freak, Creatures, or The Pokémon Company.
