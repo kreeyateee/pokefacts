@@ -14,7 +14,7 @@ import {
 import { clampMix, isDefaultMix, mixCacheToken, type MixSettings } from "@/lib/playback-settings";
 import { synthesizePiper, type PiperSynthOptions } from "@/lib/piper";
 import { chosenVoice, isPiperVoice, piperCacheToken } from "@/lib/piper-voice";
-import { isSpokenPart, joinTrackParts, type SpokenPart } from "@/lib/story-audio";
+import { isSpokenPart, joinTrackParts, levelledCryMix, type SpokenPart } from "@/lib/story-audio";
 import { readStoryBed } from "@/lib/story/story-sound";
 import { partKey, piperParts, readTrackParts } from "@/lib/story/story-voices";
 import { RECONNECT_YOTO, reconnectMessage, yotoErrorText } from "@/lib/yoto-error";
@@ -885,7 +885,7 @@ export async function prepareFactTrack(
   const bed = parts ? readStoryBed(request.bed) : null;
   if (parts && request.bed !== undefined && !bed) throw new Error("That background sound is not one of the story's.");
   // Every voice, sound and bed in the track is part of its identity, so a recast story is recorded again.
-  const keyText = parts ? `${text}\n${JSON.stringify(parts)}${bed ? `\n${JSON.stringify(bed)}` : ""}` : text;
+  const keyText = parts ? `${text}\nlevel-cry\n${JSON.stringify(parts)}${bed ? `\n${JSON.stringify(bed)}` : ""}` : text;
 
   // Dex number, not the slot on the card. A Pokefacts playlist never has 142 tracks.
   const label = dexId ? String(dexId) : "intro";
@@ -993,14 +993,16 @@ export async function prepareFactTrack(
   };
 
   /** The cry in front when there is one, then the upload. `speech` is a finished reading. */
-  const finishSpeech = async (speech: Buffer): Promise<TrackPrepareResult> => {
+  const finishSpeech = async (speech: Buffer, levelCry = false): Promise<TrackPrepareResult> => {
     const kind = inputContainer(speech);
     let audio = speech;
     if (dexId) {
       try {
         const cry = await ensureCry(dexId, fetchImpl, roots.cries ?? CRY_CACHE);
-        const merged = roots.merge ? await roots.merge(cry, speech) : await mergeCryFirst(cry, speech, mix);
-        await assertCryFirst(cry, speech, merged, mix.cryVolume);
+        // An adventure's cry sits level with its voices; the fact cards keep their boost.
+        const cryMix = levelCry ? await levelledCryMix(cry, speech, mix) : mix;
+        const merged = roots.merge ? await roots.merge(cry, speech) : await mergeCryFirst(cry, speech, cryMix);
+        await assertCryFirst(cry, speech, merged, cryMix.cryVolume);
         if (merged === speech) throw new Error("The cry was not mixed in front of the reading.");
         await writeBytesAtomic(mergedFile, merged);
         audio = merged;
@@ -1123,7 +1125,7 @@ export async function prepareFactTrack(
     stats.tracks += 1;
     logSend(sendId, stats);
     const joined = await joinTrackParts(lines, (part) => readFile(fileFor(part)), roots.sounds, bed);
-    return finishSpeech(joined);
+    return finishSpeech(joined.wav, true);
   };
 
   if (parts) return fromParts(parts);

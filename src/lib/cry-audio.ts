@@ -438,64 +438,106 @@ const TRIM_SILENCE =
   "silenceremove=start_periods=1:start_threshold=-50dB:start_silence=0.02,areverse";
 
 /**
- * The ffmpeg filter that joins clips end to end at 44.1 kHz mono. A pitch shift resamples the clip
- * and then corrects its speed, so a character can sound higher or lower without talking faster.
+ * The ffmpeg filter for one clip before it is joined: 44.1 kHz mono, the silence trimmed off a voice,
+ * and a pitch shift that resamples the clip and then corrects its speed, so a character can sound
+ * higher or lower without talking faster.
  */
-export function joinFilter(
-  clips: ReadonlyArray<{ pitch?: number; tempo?: number; speech?: boolean; tight?: boolean }>,
-  gap = JOIN_GAP_SECONDS,
-): string {
-  const steps = clips.map((clip, index) => {
-    const filters = ["aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=mono"];
-    if (clip.speech) filters.push(TRIM_SILENCE);
-    const pitch = clip.pitch ?? 0;
-    const tempo = clip.tempo ?? 1;
-    if (pitch !== 0) {
-      const factor = 2 ** (pitch / 12);
-      filters.push(`asetrate=${Math.round(44100 * factor)}`, "aresample=44100", `atempo=${(tempo / factor).toFixed(4)}`);
-    } else if (tempo !== 1) {
-      filters.push(`atempo=${tempo.toFixed(4)}`);
-    }
-    const pause = clips[index + 1]?.tight ? TIGHT_GAP_SECONDS : gap;
-    filters.push(`apad=pad_dur=${pause}`);
-    return `[${index}:a]${filters.join(",")}[p${index}]`;
-  });
-  const inputs = clips.map((_, index) => `[p${index}]`).join("");
-  return `${steps.join(";")};${inputs}concat=n=${clips.length}:v=0:a=1[out]`;
+export function clipFilter(clip: { pitch?: number; tempo?: number; speech?: boolean }): string {
+  const filters = ["aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=mono"];
+  if (clip.speech) filters.push(TRIM_SILENCE);
+  const pitch = clip.pitch ?? 0;
+  const tempo = clip.tempo ?? 1;
+  if (pitch !== 0) {
+    const factor = 2 ** (pitch / 12);
+    filters.push(`asetrate=${Math.round(44100 * factor)}`, "aresample=44100", `atempo=${(tempo / factor).toFixed(4)}`);
+  } else if (tempo !== 1) {
+    filters.push(`atempo=${tempo.toFixed(4)}`);
+  }
+  return filters.join(",");
 }
 
-/** Joins voice lines and sounds into one WAV, in order. */
-export async function joinClips(clips: readonly JoinClip[]): Promise<Buffer> {
+/** A joined recording, and where each clip starts in it, in seconds. */
+export type JoinedClips = { wav: Buffer; starts: number[] };
+
+/** A 16-bit mono 44.1 kHz WAV around raw samples. */
+function wavFile(samples: Int16Array): Buffer {
+  const data = Buffer.alloc(samples.length * 2);
+  samples.forEach((value, index) => data.writeInt16LE(value, index * 2));
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + data.length, 4);
+  header.write("WAVEfmt ", 8);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(44100, 24);
+  header.writeUInt32LE(88200, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write("data", 36);
+  header.writeUInt32LE(data.length, 40);
+  return Buffer.concat([header, data]);
+}
+
+/**
+ * Joins voice lines and sounds into one WAV, in order. Each clip is prepared on its own and the samples
+ * are laid end to end here, so the start of every clip is known exactly: the page uses that to show the
+ * Poké Ball at the moment its sound plays.
+ */
+export async function joinClips(clips: readonly JoinClip[], gap = JOIN_GAP_SECONDS): Promise<JoinedClips> {
   if (clips.length === 0) throw new Error("There is nothing to join.");
-  const dir = await mkdtemp(path.join(tmpdir(), "champdex-join-"));
+  const prepared: Int16Array[] = [];
+  for (const [index, clip] of clips.entries()) {
+    const kind = inputContainer(clip.audio);
+    if (!kind) throw new Error(`Line ${index + 1} was not playable audio.`);
+    prepared.push(await pcm(clip.audio, `part-${index}.${kind}`, clipFilter(clip)));
+  }
+  const pauses = clips.map((_, index) => Math.round((clips[index + 1]?.tight ? TIGHT_GAP_SECONDS : gap) * 44100));
+  const total = prepared.reduce((sum, samples, index) => sum + samples.length + (pauses[index] ?? 0), 0);
+  const joined = new Int16Array(total);
+  const starts: number[] = [];
+  let at = 0;
+  prepared.forEach((samples, index) => {
+    starts.push(at / 44100);
+    joined.set(samples, at);
+    at += samples.length + (pauses[index] ?? 0);
+  });
+  return { wav: wavFile(joined), starts };
+}
+
+/** Integrated loudness in LUFS (EBU R128), or null for a clip too short or too quiet to measure. */
+export async function integratedLoudness(bytes: Buffer): Promise<number | null> {
+  const kind = inputContainer(bytes);
+  if (!kind) return null;
+  const dir = await mkdtemp(path.join(tmpdir(), "champdex-lufs-"));
+  const file = path.join(dir, `clip.${kind}`);
   try {
-    const args = ["-y", "-loglevel", "error"];
-    for (const [index, clip] of clips.entries()) {
-      const kind = inputContainer(clip.audio);
-      if (!kind) throw new Error(`Line ${index + 1} was not playable audio.`);
-      const file = path.join(dir, `part-${index}.${kind}`);
-      await writeFile(file, clip.audio);
-      args.push(...inputArgs(clip.audio, file));
-    }
-    const outPath = path.join(dir, "joined.wav");
-    await run(ffmpegCommand(), [
-      ...args,
-      "-filter_complex",
-      joinFilter(clips),
-      "-map",
-      "[out]",
-      "-c:a",
-      "pcm_s16le",
-      "-ar",
-      "44100",
-      "-ac",
-      "1",
-      outPath,
-    ]);
-    return await readFile(outPath);
+    await writeFile(file, bytes);
+    const stderr = await new Promise<string>((resolve) => {
+      execFile(
+        ffmpegCommand(),
+        ["-hide_banner", "-nostats", ...inputArgs(bytes, file), "-af", "ebur128=framelog=quiet", "-f", "null", "-"],
+        { timeout: 60_000, windowsHide: true },
+        (_error, _stdout, text) => resolve(String(text ?? "")),
+      );
+    });
+    const match = /I:\s+(-?[\d.]+)\s+LUFS/.exec(stderr.slice(stderr.lastIndexOf("Summary")));
+    const value = match ? Number(match[1]) : Number.NaN;
+    return Number.isFinite(value) && value > -60 ? value : null;
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+}
+
+/**
+ * The cry gain that puts a cry level with the voices after it, then scaled by the Settings cry slider
+ * (its default leaves the cry level; double the slider is 6 dB louder). Kept between quarter and four times.
+ */
+export function levelCryGain(cryLufs: number | null, speechLufs: number | null, slider: number, defaultSlider: number): number {
+  const relative = slider / defaultSlider;
+  if (cryLufs === null || speechLufs === null) return Math.max(0.25, Math.min(4, relative));
+  const gain = 10 ** ((speechLufs - cryLufs) / 20) * relative;
+  return Math.round(Math.max(0.05, Math.min(4, gain)) * 1000) / 1000;
 }
 
 /** A loop to play under a recording, and how loud: 1 is as recorded. */

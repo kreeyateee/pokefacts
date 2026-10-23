@@ -1,7 +1,16 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { joinClips, mixUnderBed, type BedClip } from "@/lib/cry-audio";
+import {
+  audioDurationSeconds,
+  inputContainer,
+  integratedLoudness,
+  joinClips,
+  levelCryGain,
+  mixUnderBed,
+  type BedClip,
+} from "@/lib/cry-audio";
+import { DEFAULT_CRY_VOLUME, type MixSettings } from "@/lib/playback-settings";
 import { STORY_AMBIENCE, STORY_MUSIC, STORY_SOUNDS, type StoryBed, type StorySound } from "@/lib/story/story-sound";
 import type { TrackPart } from "@/lib/story/story-voices";
 
@@ -38,16 +47,19 @@ export async function bedClips(bed: StoryBed | null | undefined, root = PUBLIC_R
   return clips;
 }
 
+/** Where a sound plays in a recording, in seconds from its start. */
+export type SoundCue = { sound: StorySound; at: number };
+
 /**
  * One WAV of every line in its own voice, with the sounds where the story puts them,
- * and the scene's ambience and music underneath.
+ * and the scene's ambience and music underneath. Also says when each sound plays.
  */
 export async function joinTrackParts(
   parts: readonly TrackPart[],
   speechFor: (part: SpokenPart) => Promise<Buffer>,
   soundRoot = PUBLIC_ROOT,
   bed?: StoryBed | null,
-): Promise<Buffer> {
+): Promise<{ wav: Buffer; cues: SoundCue[] }> {
   const clips = [];
   for (const part of parts) {
     clips.push(
@@ -57,6 +69,26 @@ export async function joinTrackParts(
     );
   }
   const joined = await joinClips(clips);
+  const cues = parts.flatMap((part, index) =>
+    "sound" in part ? [{ sound: part.sound, at: Math.round((joined.starts[index] ?? 0) * 1000) / 1000 }] : [],
+  );
   const beds = await bedClips(bed, soundRoot);
-  return beds.length > 0 ? mixUnderBed(joined, beds) : joined;
+  // The bed goes under the words and does not move them, so the cues stay where they are.
+  return { wav: beds.length > 0 ? await mixUnderBed(joined.wav, beds) : joined.wav, cues };
+}
+
+/**
+ * The cry level with the voices that follow it, scaled by the Settings cry slider. The fact cards boost
+ * the cry four times, which on a Safari scene left it about 24 dB louder than the words.
+ */
+export async function levelledCryMix(cry: Buffer, speech: Buffer, mix: MixSettings): Promise<MixSettings> {
+  const [cryLufs, speechLufs] = await Promise.all([integratedLoudness(cry), integratedLoudness(speech)]);
+  return { ...mix, cryVolume: levelCryGain(cryLufs, speechLufs, mix.cryVolume, DEFAULT_CRY_VOLUME) };
+}
+
+/** Moves the cues along by the cry and the pause that now come first. */
+export async function cuesAfterCry(cues: readonly SoundCue[], cry: Buffer, mix: MixSettings): Promise<SoundCue[]> {
+  const kind = inputContainer(cry) ?? "ogg";
+  const seconds = await audioDurationSeconds(cry, `cry.${kind}`);
+  return cues.map((cue) => ({ ...cue, at: Math.round((cue.at + seconds + mix.pauseSeconds) * 1000) / 1000 }));
 }

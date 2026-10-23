@@ -13,7 +13,7 @@ import {
   readCachedMergedMp3,
   recordingCardId,
 } from "@/lib/yoto-fact-audio";
-import { joinTrackParts } from "@/lib/story-audio";
+import { cuesAfterCry, joinTrackParts, levelledCryMix, type SoundCue } from "@/lib/story-audio";
 import { readStoryBed, type StoryBed } from "@/lib/story/story-sound";
 import { piperParts, readTrackParts, type TrackPart } from "@/lib/story/story-voices";
 import { reconnectMessage, yotoErrorText } from "@/lib/yoto-error";
@@ -23,6 +23,8 @@ type DemoAudio = {
   audio: Buffer;
   /** True when the cry was mixed in front of the voice. */
   cryFirst: boolean;
+  /** On an adventure line, when each sound plays, so the page can time the Poké Ball to it. */
+  cues?: SoundCue[];
 };
 
 type DemoRequest = {
@@ -270,7 +272,7 @@ async function partsDemo(
       options.sounds,
       bed,
     );
-  let joined: Buffer;
+  let joined: { wav: Buffer; cues: SoundCue[] };
   try {
     joined = await join(parts);
   } catch (error) {
@@ -280,15 +282,17 @@ async function partsDemo(
     if (reconnectMessage(message) || piper.some((part) => "voiceId" in part && !isPiperVoice(part.voiceId))) throw error;
     joined = await join(piper);
   }
-  if (!dexId) return { audio: joined, cryFirst: false };
+  if (!dexId) return { audio: joined.wav, cryFirst: false, cues: joined.cues };
   try {
     const loadCry = options.loadCry ?? ((id: number) => ensureCry(id, fetchImpl));
-    const merge = options.merge ?? ((cry: Buffer, speech: Buffer) => mergeCryFirst(cry, speech, mix));
-    const merged = await merge(await loadCry(dexId), joined);
+    const cry = await loadCry(dexId);
+    // On an adventure the cry sits level with the voices instead of the fact cards' boost.
+    const levelled = await levelledCryMix(cry, joined.wav, mix);
+    const merged = options.merge ? await options.merge(cry, joined.wav) : await mergeCryFirst(cry, joined.wav, levelled);
     if (!inputContainer(merged) || merged.length < 128) throw new Error("The cry mix was not playable audio.");
-    return { audio: merged, cryFirst: true };
+    return { audio: merged, cryFirst: true, cues: await cuesAfterCry(joined.cues, cry, levelled) };
   } catch {
-    return { audio: joined, cryFirst: false };
+    return { audio: joined.wav, cryFirst: false, cues: joined.cues };
   }
 }
 

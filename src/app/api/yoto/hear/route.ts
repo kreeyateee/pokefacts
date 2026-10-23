@@ -52,6 +52,8 @@ export async function POST(request: Request) {
         "Content-Type": contentType,
         "Cache-Control": "no-store",
         "X-Pokefacts-Cry": result.cryFirst ? "1" : "0",
+        // When each adventure sound plays, in seconds, so the page can show the Poké Ball right then.
+        ...(result.cues?.length ? { "X-Pokefacts-Cues": JSON.stringify(result.cues) } : {}),
       },
     });
   } catch (error) {

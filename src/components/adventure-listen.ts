@@ -7,6 +7,7 @@ import { isPiperVoice, pickerVoice } from "@/lib/piper-voice";
 import { pronounce } from "@/lib/pronounce";
 import type { StoryGraph, StoryNode } from "@/lib/story/story-graph";
 import {
+  isStorySound,
   STORY_AMBIENCE,
   STORY_MUSIC,
   STORY_SOUNDS,
@@ -51,6 +52,44 @@ export function nodeParts(
   const partsOf = (text: string): TrackPart[] =>
     trackParts(text, voices, cast, pronounce, options) ?? [{ text: pronounce(withoutCues(text)), ...narrator }];
   return [...partsOf(lines.narration), ...(lines.question ? partsOf(lines.question) : [])];
+}
+
+/** When each sound plays in a recording from the server, read from its header. Bad values are dropped. */
+export function readCues(header: string | null): Array<{ sound: StorySound; at: number }> {
+  if (!header) return [];
+  try {
+    const rows = JSON.parse(header) as unknown;
+    if (!Array.isArray(rows)) return [];
+    return rows.flatMap((row) => {
+      const cue = row as { sound?: unknown; at?: unknown };
+      return isStorySound(cue.sound) && typeof cue.at === "number" && Number.isFinite(cue.at) && cue.at >= 0
+        ? [{ sound: cue.sound, at: cue.at }]
+        : [];
+    });
+  } catch {
+    return [];
+  }
+}
+
+/** How often the page checks the recording's position: often enough that the ball lands on the sound. */
+const CUE_CHECK_MS = 40;
+
+/** Calls `onSound` as the recording reaches each cue. */
+function followCues(
+  audio: HTMLAudioElement,
+  cues: ReadonlyArray<{ sound: StorySound; at: number }>,
+  onSound: ((sound: StorySound) => void) | undefined,
+  signal: AbortSignal,
+) {
+  if (!onSound || cues.length === 0) return;
+  const pending = [...cues].sort((a, b) => a.at - b.at);
+  const timer = window.setInterval(() => {
+    if (signal.aborted || audio.ended || pending.length === 0) {
+      window.clearInterval(timer);
+      return;
+    }
+    while (pending.length > 0 && (pending[0]?.at ?? Infinity) <= audio.currentTime) onSound(pending.shift()?.sound as StorySound);
+  }, CUE_CHECK_MS);
 }
 
 function playUrl(audio: HTMLAudioElement, url: string, signal: AbortSignal): Promise<void> {
@@ -198,12 +237,15 @@ export function useAdventureListen(options: { voiceId: string; connected: boolea
             const payload = (await response.json().catch(() => null)) as { error?: string } | null;
             throw new Error(payload?.error ?? "Could not record this scene.");
           }
+          const cues = readCues(response.headers.get("X-Pokefacts-Cues"));
           const blob = await response.blob();
           if (signal.aborted) return;
           if (urlRef.current) URL.revokeObjectURL(urlRef.current);
           urlRef.current = URL.createObjectURL(blob);
           setNote("Playing the voices the card will use.");
-          await playUrl(audio, urlRef.current, signal);
+          const playing = playUrl(audio, urlRef.current, signal);
+          followCues(audio, cues, onSound, signal);
+          await playing;
         } else {
           setNote("Your browser's voices, standing in for the card's. Connect Yoto to hear the real ones.");
           startBed(node.bed);

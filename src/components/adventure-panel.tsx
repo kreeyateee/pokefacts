@@ -11,7 +11,7 @@ import { pickerVoice } from "@/lib/piper-voice";
 import { storyIconPath } from "@/lib/story/story-card";
 import { endingCount, storyLines, storyTrackCount } from "@/lib/story/story-check";
 import type { StoryGraph, StoryNode } from "@/lib/story/story-graph";
-import { withoutCues, type StorySound } from "@/lib/story/story-sound";
+import { withoutCues } from "@/lib/story/story-sound";
 import { castVoices, NARRATOR, speakerLines, type VoiceStyle } from "@/lib/story/story-voices";
 
 const OWNER_KEY = "pokefacts.adventure-owner";
@@ -57,20 +57,6 @@ function NodePicture({ node }: { node: StoryNode }) {
   );
 }
 
-/** What each sound looks like in the text on the page. */
-const SOUND_LABELS: Record<StorySound, string> = {
-  catch: "● ● ● click!",
-  escape: "● ● pop!",
-  throw: "whoosh",
-  run: "scurry",
-  gate: "creak",
-  whistle: "pheep!",
-  footsteps: "footsteps",
-  fanfare: "♪ fanfare",
-  ending: "♪",
-  golden: "♪ ♪ ♪",
-};
-
 /** Each character's lines are coloured on the page, so you can see who will speak them. */
 const SPEAKER_COLOURS = ["text-[#b3400c]", "text-[#22609f]", "text-[#5b3f9e]"];
 
@@ -86,17 +72,8 @@ function SpokenText({ text, story }: { text: string; story: StoryGraph }) {
   return (
     <>
       {lines.map((line, index) => {
-        if ("sound" in line) {
-          return (
-            <span
-              key={index}
-              className="mx-1 inline-block rounded-full bg-poke-red px-2 align-middle text-xs font-bold text-white"
-              title="A sound plays here"
-            >
-              {SOUND_LABELS[line.sound]}
-            </span>
-          );
-        }
+        // Sounds are heard, not read: the text stays clean sentences, and the Poké Ball shows the catch.
+        if ("sound" in line) return null;
         const character = cast.findIndex((item) => item.id === line.speaker);
         if (line.speaker === NARRATOR || character < 0) return <span key={index}>{line.text} </span>;
         return (

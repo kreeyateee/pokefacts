@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 
-import { audioDurationSeconds, bedFilter, cryUrl, joinFilter, mixUnderBed } from "../cry-audio";
+import { audioDurationSeconds, bedFilter, clipFilter, cryUrl, joinClips, levelCryGain, mixUnderBed } from "../cry-audio";
 import { POST as postIcon } from "../../app/api/yoto/icon/route";
 import { ffmpegCommand } from "../ffmpeg-bin";
 import { YOTO_VOICES } from "../yoto-icons";
@@ -126,10 +126,25 @@ async function drive(fetchImpl: typeof fetch, roots: Parameters<typeof prepareFa
 
 describe("adventure track audio", () => {
   it("shifts a character's pitch without changing how fast they talk", () => {
-    const filter = joinFilter([{ pitch: 0, tempo: 1 }, { pitch: 12, tempo: 1 }, {}]);
-    assert.match(filter, /\[1:a\][^;]*asetrate=88200,aresample=44100,atempo=0\.5000/);
-    assert.doesNotMatch(filter.split(";")[0] ?? "", /asetrate|atempo/);
-    assert.match(filter, /\[p0\]\[p1\]\[p2\]concat=n=3:v=0:a=1\[out\]/);
+    assert.match(clipFilter({ pitch: 12, tempo: 1 }), /asetrate=88200,aresample=44100,atempo=0\.5000$/);
+    assert.doesNotMatch(clipFilter({ pitch: 0, tempo: 1 }), /asetrate|atempo/);
+    assert.match(clipFilter({ speech: true }), /silenceremove/);
+    assert.doesNotMatch(clipFilter({}), /silenceremove/, "a sound effect keeps its own timing");
+  });
+
+  it("knows exactly where each clip starts once joined", async () => {
+    const one = await tone(440, true);
+    const joined = await joinClips([{ audio: one }, { audio: one, tight: true }, { audio: one }]);
+    assert.deepEqual(joined.starts, [0, 1.05, 2.27], "a tight clip follows after a breath, the next after a pause");
+    assert.ok(Math.abs((await audioDurationSeconds(joined.wav, "joined.wav")) - 3.49) < 0.01);
+  });
+
+  it("sets the cry level with the voices, and follows the Settings slider from there", () => {
+    assert.equal(levelCryGain(-7, -19, 4, 4), 0.251, "a cry 12 dB too loud comes down by 12 dB");
+    assert.equal(levelCryGain(-19, -19, 4, 4), 1);
+    assert.equal(levelCryGain(-19, -19, 8, 4), 2, "twice the slider is 6 dB louder");
+    assert.equal(levelCryGain(null, -19, 4, 4), 1, "an unmeasurable cry is left as it is");
+    assert.equal(levelCryGain(-40, -10, 4, 4), 4, "never more than four times");
   });
 
   it("records each line in its own voice, plays the catch sound, puts the cry first, and uploads one track", async () => {
