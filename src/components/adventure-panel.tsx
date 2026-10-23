@@ -43,6 +43,14 @@ const ADVENTURES = {
     opening: "Hoisting the sails…",
     failed: "The Island Adventure could not be opened.",
   },
+  paldea: {
+    title: "Paldea Picnic",
+    blurb:
+      "Your child chooses Sprigatito, Fuecoco or Quaxly, and sets off with classmates Juno and Arlo to gather ingredients for the Great Picnic Sandwich. Every battle counts towards the picnic, where their partner might evolve.",
+    ownerNote: "Juno, Arlo and Ms Olwen call them by name.",
+    opening: "Packing the picnic basket…",
+    failed: "The Paldea Picnic could not be set up.",
+  },
 } as const;
 
 type AdventureKind = keyof typeof ADVENTURES;
