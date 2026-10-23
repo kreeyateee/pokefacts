@@ -4,6 +4,7 @@
  * The compiler (story-card.ts) turns this map into a Yoto interactive playlist.
  */
 
+import type { StoryBed } from "@/lib/story/story-sound";
 import type { StoryCharacter } from "@/lib/story/story-voices";
 
 /** Short and unique: lowercase letters and digits, at most 8 characters. Used for Yoto chapter keys. */
@@ -15,8 +16,11 @@ export type StoryChoice = {
   label: string;
 };
 
-/** A 16×16 picture on the player screen: a Pokémon's pixel icon or shadow, or a stock Yoto icon id. */
-export type StoryIcon = { dexId: number; shadow?: boolean } | { yoto: string };
+/**
+ * A 16×16 picture on the player screen: a Pokémon's pixel icon or shadow, one of the story's own
+ * pictures (the Poké Ball), or a stock Yoto icon id.
+ */
+export type StoryIcon = { dexId: number; shadow?: boolean } | { pixel: "pokeball" } | { yoto: string };
 
 type NodeBase = {
   id: StoryNodeId;
@@ -30,6 +34,8 @@ type NodeBase = {
   /** Plays this Pokémon's cry before the narration. */
   dexId?: number;
   icon?: StoryIcon;
+  /** Ambience and music under the narration. The repeating question plays without them. */
+  bed?: StoryBed;
 };
 
 /** Narration that carries straight on to `next`. */

@@ -21,6 +21,7 @@ export async function POST(request: Request) {
     /** Adventure lines in several voices, with sounds. Checked by prepareFactTrack. */
     parts?: unknown;
     speechPart?: string;
+    bed?: unknown;
     cryVolume?: number;
     voiceVolume?: number;
     pauseSeconds?: number;

@@ -1,5 +1,6 @@
 import { chosenVoice } from "@/lib/piper-voice";
 import type { MixSettings } from "@/lib/playback-settings";
+import type { StoryBed } from "@/lib/story/story-sound";
 import type { TrackPart } from "@/lib/story/story-voices";
 
 const VOICE_STORAGE_KEY = "champdex.voiceId";
@@ -83,6 +84,7 @@ export function factTrackBody(input: {
   speechCardId?: string;
   speechPart?: string;
   parts?: TrackPart[];
+  bed?: StoryBed;
   uploadId?: string;
   mix?: Partial<MixSettings>;
 }): {
@@ -95,6 +97,7 @@ export function factTrackBody(input: {
   speechCardId?: string;
   speechPart?: string;
   parts?: TrackPart[];
+  bed?: StoryBed;
   uploadId?: string;
   cryVolume?: number;
   voiceVolume?: number;
@@ -110,6 +113,7 @@ export function factTrackBody(input: {
     ...(input.speechCardId ? { speechCardId: input.speechCardId } : {}),
     ...(input.speechPart ? { speechPart: input.speechPart } : {}),
     ...(input.parts?.length ? { parts: input.parts } : {}),
+    ...(input.parts?.length && input.bed ? { bed: input.bed } : {}),
     ...(input.uploadId ? { uploadId: input.uploadId } : {}),
     ...(input.mix
       ? {

@@ -160,7 +160,7 @@ describe("storyCard", () => {
   });
 
   it("uses uploaded pixels, shadows and stock icons", () => {
-    assert.deepEqual(storyPixels(smallStory()), { real: [113], shadow: [113] });
+    assert.deepEqual(storyPixels(smallStory()), { real: [113], shadow: [113], named: [] });
     const { card, upload } = compiled();
     const icons = Object.fromEntries(card.chapters.map((chapter) => [chapter.key, chapter.icon]));
     assert.deepEqual(icons, {

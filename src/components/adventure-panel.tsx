@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { useAdventureListen } from "@/components/adventure-listen";
+import { pokeballOutcome, PokeballShow } from "@/components/pokeball-show";
 import { Button } from "@/components/ui/button";
 import { useStoredState } from "@/components/use-stored-state";
 import type { MixSettings } from "@/lib/playback-settings";
@@ -10,7 +11,7 @@ import { pickerVoice } from "@/lib/piper-voice";
 import { storyIconPath } from "@/lib/story/story-card";
 import { endingCount, storyLines, storyTrackCount } from "@/lib/story/story-check";
 import type { StoryGraph, StoryNode } from "@/lib/story/story-graph";
-import { withoutCues } from "@/lib/story/story-sound";
+import { withoutCues, type StorySound } from "@/lib/story/story-sound";
 import { castVoices, NARRATOR, speakerLines, type VoiceStyle } from "@/lib/story/story-voices";
 
 const OWNER_KEY = "pokefacts.adventure-owner";
@@ -56,6 +57,20 @@ function NodePicture({ node }: { node: StoryNode }) {
   );
 }
 
+/** What each sound looks like in the text on the page. */
+const SOUND_LABELS: Record<StorySound, string> = {
+  catch: "● ● ● click!",
+  escape: "● ● pop!",
+  throw: "whoosh",
+  run: "scurry",
+  gate: "creak",
+  whistle: "pheep!",
+  footsteps: "footsteps",
+  fanfare: "♪ fanfare",
+  ending: "♪",
+  golden: "♪ ♪ ♪",
+};
+
 /** Each character's lines are coloured on the page, so you can see who will speak them. */
 const SPEAKER_COLOURS = ["text-[#b3400c]", "text-[#22609f]", "text-[#5b3f9e]"];
 
@@ -76,9 +91,9 @@ function SpokenText({ text, story }: { text: string; story: StoryGraph }) {
             <span
               key={index}
               className="mx-1 inline-block rounded-full bg-poke-red px-2 align-middle text-xs font-bold text-white"
-              title="The Poké Ball catch sound plays here"
+              title="A sound plays here"
             >
-              ● ● ● click!
+              {SOUND_LABELS[line.sound]}
             </span>
           );
         }
@@ -134,6 +149,8 @@ export function AdventurePanel({
   const [error, setError] = useState("");
   const [nodeId, setNodeId] = useState("");
   const [found, setFound] = useState<ReadonlySet<number>>(() => new Set());
+  // Bumped to play the Poké Ball again: on arriving at a scene, and when its sound plays.
+  const [ballPlay, setBallPlay] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -172,6 +189,7 @@ export function AdventurePanel({
     if (!next) return;
     listener.stop();
     setNodeId(to);
+    setBallPlay((count) => count + 1);
     if (next.kind === "ending") setFound((current) => new Set(current).add(next.ending.number));
   }
 
@@ -256,13 +274,24 @@ export function AdventurePanel({
             <p className="mt-3 whitespace-pre-line leading-7">
               <SpokenText text={lines.narration} story={story} />
             </p>
+            {pokeballOutcome(node.text) ? (
+              <div className="mt-3 flex justify-center">
+                <PokeballShow outcome={pokeballOutcome(node.text) ?? "caught"} play={ballPlay} />
+              </div>
+            ) : null}
             {lines.question ? <p className="mt-3 font-medium">{lines.question}</p> : null}
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <Button
                 type="button"
                 variant="outline"
                 className="h-9 px-3"
-                onClick={() => (listener.listening ? listener.stop() : void listener.listen(story, node, lines))}
+                onClick={() =>
+                  listener.listening
+                    ? listener.stop()
+                    : void listener.listen(story, node, lines, (sound) => {
+                        if (sound === "catch" || sound === "escape") setBallPlay((count) => count + 1);
+                      })
+                }
               >
                 {listener.listening ? "■ Stop" : "▶ Listen"}
               </Button>

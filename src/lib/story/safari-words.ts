@@ -239,7 +239,7 @@ export const SLOW_LINES = [
 export function introText(owner: string): string {
   return [
     "Welcome to the Safari Zone!",
-    "The big wooden gate creaks open, and there it all is: long grass, dark woods, a glittering lake, and a mountain with its head in the clouds.",
+    "[gate] The big wooden gate creaks open, and there it all is: long grass, dark woods, a glittering lake, and a mountain with its head in the clouds.",
     "A woman in an enormous hat comes stomping over, with mud up to her knees.",
     `'Marigold,' she says, shaking your hand very hard. 'Head warden. Forty years. Morning, ${owner}.'`,
     "Behind her, a boy in a spotless jacket is polishing a gold Safari Ball.",
@@ -253,7 +253,7 @@ export function introText(owner: string): string {
 
 export const LESSON_TEXT = [
   "Marigold takes you to a little pond by the gate. 'Watch,' she whispers.",
-  "A small Pokémon is nibbling a crust on the path. Marigold doesn't even crouch down. She lobs a Safari Ball, bonk. [catch]",
+  "A small Pokémon is nibbling a crust on the path. Marigold doesn't even crouch down. She lobs a Safari Ball. [throw] [catch]",
   "'Common as crumbs, that one,' she says. 'Common ones, you just throw the ball.'",
   "Then something streaks across the grass, so fast it's a blur. 'Rare, and fast,' says Marigold. 'Chase it, and it's gone.'",
   "She tosses a handful of bait. The Pokémon skids to a stop and starts munching. 'Nobody runs off while they're chewing.'",
@@ -369,22 +369,22 @@ export const THROW_LABEL: Record<SafariThrow, string> = {
 /** The right throw. Then the name. */
 export const CAUGHT_LINES: Record<SafariThrow, readonly string[]> = {
   ball: [
-    "You don't wait. The Safari Ball flies, bonks it on the head, and swallows it in a flash of red. [catch] Gotcha!",
-    "Straight in with the ball. It shakes once, it shakes twice, it shakes three times. [catch] Gotcha!",
-    "You throw the ball before you can talk yourself out of it. [catch] Got it!",
-    "No fuss. One Safari Ball, one perfect throw. [catch] Gotcha!",
+    "You don't wait. The Safari Ball flies, bonks it on the head, and swallows it in a flash of red. [throw] [catch] Gotcha!",
+    "Straight in with the ball. It shakes once, it shakes twice, it shakes three times. [throw] [catch] Gotcha!",
+    "You throw the ball before you can talk yourself out of it. [throw] [catch] Got it!",
+    "No fuss. One Safari Ball, one perfect throw. [throw] [catch] Gotcha!",
   ],
   bait: [
-    "You toss a handful of bait. It sniffs. It nibbles. Then it's munching so happily that it doesn't even see the ball coming. [catch] Gotcha!",
-    "The bait lands right under its nose. It freezes, starts chewing, and while its cheeks are full, your ball drops neatly on top. [catch] Got it!",
-    "One handful of bait, and it forgets all about running. Chomp, chomp, chomp. Then the ball. [catch] Gotcha!",
-    "It's about to bolt, but the bait smells too good. It stops for one bite, and one bite is all you need. [catch] Gotcha!",
+    "You toss a handful of bait. It sniffs. It nibbles. Then it's munching so happily that it doesn't even see the ball coming. [throw] [catch] Gotcha!",
+    "The bait lands right under its nose. It freezes, starts chewing, and while its cheeks are full, your ball drops neatly on top. [throw] [catch] Got it!",
+    "One handful of bait, and it forgets all about running. Chomp, chomp, chomp. Then the ball. [throw] [catch] Gotcha!",
+    "It's about to bolt, but the bait smells too good. It stops for one bite, and one bite is all you need. [throw] [catch] Gotcha!",
   ],
   rock: [
-    "You plop a rock down right beside it. Not at it. Beside it. It jumps, spins round, gets in a terrible fluster, and while it's still flustering, your ball lands. [catch] Gotcha!",
-    "Your rock lands with a thud next to it. It huffs and puffs and turns in a slow circle, far too flustered to wriggle out of the ball. [catch] Got it!",
-    "Thunk. The rock lands beside it, and it gets such a surprise that it sits down. The ball is already flying. [catch] Gotcha!",
-    "You drop a rock beside it, and it's so busy being cross about the rock that it never notices the ball. [catch] Gotcha!",
+    "You plop a rock down right beside it. Not at it. Beside it. It jumps, spins round, gets in a terrible fluster, and while it's still flustering, your ball lands. [throw] [catch] Gotcha!",
+    "Your rock lands with a thud next to it. It huffs and puffs and turns in a slow circle, far too flustered to wriggle out of the ball. [throw] [catch] Got it!",
+    "Thunk. The rock lands beside it, and it gets such a surprise that it sits down. The ball is already flying. [throw] [catch] Gotcha!",
+    "You drop a rock beside it, and it's so busy being cross about the rock that it never notices the ball. [throw] [catch] Gotcha!",
   ],
 };
 
@@ -393,14 +393,14 @@ export type WrongThrow = Exclude<`${SafariThrow}-${SafariThrow}`, "ball-ball" | 
 
 export const FLED_LINES: Record<WrongThrow, readonly string[]> = {
   "ball-bait": [
-    "You throw a Safari Ball. It wobbles once. It wobbles twice. Pop! Out it bursts, and whoosh, it's gone, quicker than a sneeze.",
-    "The ball opens. Out it pops, and it's off before you can blink. All that's left is a swirl of dust.",
-    "The ball shakes, cracks open, and the Pokémon shoots out like a cork from a bottle. Gone.",
+    "You throw a Safari Ball. [throw] [escape] Out it bursts, and whoosh, it's gone, quicker than a sneeze. [run]",
+    "The ball lands. [escape] Out it pops, and it's off before you can blink. [run] All that's left is a swirl of dust.",
+    "Your ball flies. [throw] [escape] The Pokémon shoots out like a cork from a bottle. [run] Gone.",
   ],
   "ball-rock": [
-    "You throw a Safari Ball. Wobble. Wobble. Pop! It breaks free, has an enormous yawn, and wanders off at its own slow pace.",
-    "The ball shakes, and out it climbs. It gives you a long, disappointed look, and plods away.",
-    "Pop! It wriggles out of the ball easily, and strolls off, very slowly, without looking back.",
+    "You throw a Safari Ball. [throw] [escape] It breaks free, has an enormous yawn, and wanders off at its own slow pace.",
+    "The ball lands. [escape] Out it climbs. It gives you a long, disappointed look, and plods away.",
+    "Your ball flies. [throw] [escape] It wriggles out easily, and strolls off, very slowly, without looking back.",
   ],
   "bait-ball": [
     "You throw some bait. It munches. And munches. And munches. It eats every crumb, does an enormous burp, and toddles off home.",
@@ -413,14 +413,14 @@ export const FLED_LINES: Record<WrongThrow, readonly string[]> = {
     "It munches the bait so slowly that you nearly fall asleep yourself. Then it plods off, still chewing.",
   ],
   "rock-ball": [
-    "You throw a rock. It lands with a thud right next to it. It gets a terrible fright and scampers off.",
-    "Thud! The rock lands beside it, and it leaps about a mile in the air and runs for it.",
-    "Your rock makes it jump out of its skin. It's gone before the rock stops rolling.",
+    "You throw a rock. It lands with a thud right next to it. It gets a terrible fright and scampers off. [run]",
+    "Thud! The rock lands beside it, and it leaps about a mile in the air and runs for it. [run]",
+    "Your rock makes it jump out of its skin. [run] It's gone before the rock stops rolling.",
   ],
   "rock-bait": [
-    "You throw a rock. But before it even lands, the Pokémon has zipped away in a cloud of dust.",
-    "Your rock is still in the air when it bolts. The rock lands on an empty patch of ground.",
-    "It hears the rock coming and is gone in a flash. You didn't even see which way it went.",
+    "You throw a rock. But before it even lands, the Pokémon has zipped away in a cloud of dust. [run]",
+    "Your rock is still in the air when it bolts. [run] The rock lands on an empty patch of ground.",
+    "It hears the rock coming and is gone in a flash. [run] You didn't even see which way it went.",
   ],
 };
 
@@ -555,11 +555,11 @@ export const WHISTLE_TIPS = [
 
 /** Endings 1 to 5: the whistle has blown. */
 export const WHISTLE_ENDINGS = [
-  "Pheeeep! Marigold blows her whistle, and all across the Safari Zone, Pokémon dive for cover. Your bag is completely empty. On the bright side, the Pokémon had a lovely day. Barnaby strolls past with four Safari Balls, and for once he doesn't say a word, which is somehow worse. Marigold pats your shoulder. 'My first day,' she says, 'I fell in the lake. Twice.'",
-  "Pheeeep! That's the whistle. You've got one Pokémon in your bag, which is one more than none. Barnaby has four, and he tells everyone about each one of them, in great detail. Marigold rolls her eyes so hard her hat wobbles.",
-  "Pheeeep! The whistle blows. Two Pokémon in your bag. Not bad at all. Barnaby has four, and he's already asking where they'll hang his photo. 'Don't let him get to you,' says Marigold. 'He fell in a stream earlier.'",
-  "Pheeeep! Three Pokémon in your bag when the whistle goes. Barnaby has four. One more and you'd have tied with him, and he knows it. He's laughing a bit too loudly.",
-  "Pheeeep! Just as Marigold blows the whistle, you count your bag. Four. Barnaby counts his. Four. It's a draw! Barnaby says one of his should count as two, because it was quite big. Marigold says that is not how counting works.",
+  "[whistle] Marigold blows her whistle, and all across the Safari Zone, Pokémon dive for cover. Your bag is completely empty. On the bright side, the Pokémon had a lovely day. Barnaby strolls past with four Safari Balls, and for once he doesn't say a word, which is somehow worse. Marigold pats your shoulder. 'My first day,' she says, 'I fell in the lake. Twice.'",
+  "[whistle] That's the whistle. You've got one Pokémon in your bag, which is one more than none. Barnaby has four, and he tells everyone about each one of them, in great detail. Marigold rolls her eyes so hard her hat wobbles.",
+  "[whistle] The whistle blows. Two Pokémon in your bag. Not bad at all. Barnaby has four, and he's already asking where they'll hang his photo. 'Don't let him get to you,' says Marigold. 'He fell in a stream earlier.'",
+  "[whistle] Three Pokémon in your bag when the whistle goes. Barnaby has four. One more and you'd have tied with him, and he knows it. He's laughing a bit too loudly.",
+  "Just as Marigold blows the whistle, [whistle] you count your bag. Four. Barnaby counts his. Four. It's a draw! Barnaby says one of his should count as two, because it was quite big. Marigold says that is not how counting works.",
 ];
 
 export function dayEndText(owner: string): string {

@@ -1,7 +1,7 @@
 import { YOTO_TRACK_LIMIT } from "@/lib/kid-cards";
 import { pronounce } from "@/lib/pronounce";
 import type { StoryGraph, StoryIcon, StoryNode, StoryNodeId } from "@/lib/story/story-graph";
-import { isStorySound, SOUND_CUE, withoutCues } from "@/lib/story/story-sound";
+import { isStoryAmbience, isStoryMusic, isStorySound, SOUND_CUE, withoutCues } from "@/lib/story/story-sound";
 import { storyChunks } from "@/lib/story/story-voices";
 
 /** Yoto reads at most this many characters of text to speech on one track. */
@@ -92,6 +92,8 @@ function nodeProblems(node: StoryNode, endings: number): string[] {
     for (const match of node.text.matchAll(SOUND_CUE)) {
       if (!isStorySound(match[1])) problems.push(`${name} plays [${match[1]}], which is not a story sound.`);
     }
+    if (node.bed?.ambience && !isStoryAmbience(node.bed.ambience)) problems.push(`${name} has an unknown ambience.`);
+    if (node.bed?.music && !isStoryMusic(node.bed.music)) problems.push(`${name} has unknown music.`);
     try {
       storyChunks(node.text);
     } catch {

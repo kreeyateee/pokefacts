@@ -15,6 +15,7 @@ import { clampMix, isDefaultMix, mixCacheToken, type MixSettings } from "@/lib/p
 import { synthesizePiper, type PiperSynthOptions } from "@/lib/piper";
 import { chosenVoice, isPiperVoice, piperCacheToken } from "@/lib/piper-voice";
 import { isSpokenPart, joinTrackParts, type SpokenPart } from "@/lib/story-audio";
+import { readStoryBed } from "@/lib/story/story-sound";
 import { partKey, readTrackParts } from "@/lib/story/story-voices";
 import { RECONNECT_YOTO, reconnectMessage, yotoErrorText } from "@/lib/yoto-error";
 
@@ -344,6 +345,8 @@ type TrackPrepareRequest = {
   parts?: unknown;
   /** Which of those lines the speech job or scratch card belongs to. */
   speechPart?: string;
+  /** Ambience and music to lay under an adventure track. Needs `parts`. */
+  bed?: unknown;
 };
 
 type TrackPrepareResult = {
@@ -808,8 +811,10 @@ export async function prepareFactTrack(
   if (request.speechPart && !/^[a-z0-9]{1,16}$/.test(request.speechPart)) {
     throw new Error("That line id does not look right.");
   }
-  // Every voice and sound in the track is part of its identity, so a recast story is recorded again.
-  const keyText = parts ? `${text}\n${JSON.stringify(parts)}` : text;
+  const bed = parts ? readStoryBed(request.bed) : null;
+  if (parts && request.bed !== undefined && !bed) throw new Error("That background sound is not one of the story's.");
+  // Every voice, sound and bed in the track is part of its identity, so a recast story is recorded again.
+  const keyText = parts ? `${text}\n${JSON.stringify(parts)}${bed ? `\n${JSON.stringify(bed)}` : ""}` : text;
 
   // Dex number, not the slot on the card. A Pokefacts playlist never has 142 tracks.
   const label = dexId ? String(dexId) : "intro";
@@ -1018,7 +1023,7 @@ export async function prepareFactTrack(
       return { phase: "speech", speechJobId: started.jobId, speechPart: key };
     }
     await releaseScratch();
-    const joined = await joinTrackParts(lines, (part) => readFile(fileFor(part)), roots.sounds);
+    const joined = await joinTrackParts(lines, (part) => readFile(fileFor(part)), roots.sounds, bed);
     return finishSpeech(joined);
   };
 

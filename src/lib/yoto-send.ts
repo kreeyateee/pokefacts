@@ -16,6 +16,7 @@ import {
   statusErrorText,
   validYotoCardId,
 } from "@/lib/yoto-error";
+import type { StoryBed } from "@/lib/story/story-sound";
 import type { TrackPart } from "@/lib/story/story-voices";
 import { isYotoCoverUrl } from "@/lib/yoto-playlist";
 
@@ -155,6 +156,8 @@ export type RenderJob = {
   name?: string;
   /** Adventure lines in several voices, with sounds, recorded as this one track. */
   parts?: TrackPart[];
+  /** Ambience and music under those lines. */
+  bed?: StoryBed;
   progress: string;
   /** Finished tracks so far, including this one when it has started. */
   done?: number;
@@ -247,6 +250,7 @@ export function renderJobs(libraryTitle: string, card: KidCard, upload: Playlist
         dexId,
         name: dexId ? source.title : undefined,
         ...(sourceTrack?.parts ? { parts: sourceTrack.parts } : {}),
+        ...(sourceTrack?.parts && sourceTrack.bed ? { bed: sourceTrack.bed } : {}),
       };
     });
   });

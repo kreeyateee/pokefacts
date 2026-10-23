@@ -14,6 +14,7 @@ import {
   recordingCardId,
 } from "@/lib/yoto-fact-audio";
 import { joinTrackParts } from "@/lib/story-audio";
+import { readStoryBed, type StoryBed } from "@/lib/story/story-sound";
 import { readTrackParts, type TrackPart } from "@/lib/story/story-voices";
 import { reconnectMessage, yotoErrorText } from "@/lib/yoto-error";
 import { spokenForDemo } from "@/lib/voice-choice";
@@ -34,6 +35,8 @@ type DemoRequest = {
   pauseSeconds?: number;
   /** Adventure lines in several voices, with sounds, played as one clip. */
   parts?: unknown;
+  /** Ambience and music under those lines. */
+  bed?: unknown;
 };
 
 type DemoOptions = {
@@ -161,7 +164,9 @@ export async function prepareDemoAudio(
   if (request.parts !== undefined) {
     const parts = readTrackParts(request.parts);
     if (!parts) throw new Error("The lines for this adventure track could not be read.");
-    return partsDemo(token, parts, title, dexId, fetchImpl, options, mix);
+    const bed = readStoryBed(request.bed);
+    if (request.bed !== undefined && !bed) throw new Error("That background sound is not one of the story's.");
+    return partsDemo(token, parts, title, dexId, fetchImpl, options, mix, bed);
   }
 
   if (dexId) {
@@ -253,6 +258,7 @@ async function partsDemo(
   fetchImpl: typeof fetch,
   options: DemoOptions,
   mix: MixSettings,
+  bed: StoryBed | null,
 ): Promise<DemoAudio> {
   const joined = await joinTrackParts(
     parts,
@@ -261,6 +267,7 @@ async function partsDemo(
         ? synthesizePiper(part.text, options.piper)
         : recordVoice(token, part.text, title, part.voiceId, fetchImpl, options),
     options.sounds,
+    bed,
   );
   if (!dexId) return { audio: joined, cryFirst: false };
   try {

@@ -241,11 +241,19 @@ function playableChapters(card: KidCard) {
   return card.chapters.filter((chapter) => chapter.key !== "start");
 }
 
-async function uploadIcon(id: number, shadow = false): Promise<string> {
-  const shadowQuery = shadow ? "&shadow=1" : "";
+/** One of Pokefacts' own 16×16 pictures, such as the Poké Ball. */
+function uploadNamedIcon(name: string): Promise<string> {
+  return uploadIconFrom(`/api/yoto/icon?name=${encodeURIComponent(name)}`);
+}
+
+function uploadIcon(id: number, shadow = false): Promise<string> {
+  return uploadIconFrom(`/api/yoto/icon?id=${id}${shadow ? "&shadow=1" : ""}`);
+}
+
+async function uploadIconFrom(path: string): Promise<string> {
   const fallback = "Yoto did not take the 16×16 picture.";
   for (let attempt = 0; attempt < 4; attempt += 1) {
-    const response = await yotoFetch(`/api/yoto/icon?id=${id}${shadowQuery}`, { method: "POST" });
+    const response = await yotoFetch(path, { method: "POST" });
     const payload = await readBody(response);
     if (isRateLimited(response.status, payload) && attempt < 3) {
       await delay(Math.min(8_000, 800 * (attempt + 1)));
@@ -1353,6 +1361,7 @@ export function Studio({
                 speechCardId,
                 speechPart,
                 parts: job.parts,
+                bed: job.bed,
                 uploadId,
                 mix: voice.mix,
               }),
@@ -1807,6 +1816,9 @@ export function Studio({
         ];
         const realById: Record<number, string> = {};
         const shadowById: Record<number, string> = {};
+        const namedById: Record<string, string> = {};
+        // The Poké Ball shown on catch tracks.
+        for (const name of pixels.named) namedById[name] = await uploadNamedIcon(name);
         let finished = 0;
         await mapPool(pictures, async ({ id, shadow }) => {
           (shadow ? shadowById : realById)[id] = await uploadIcon(id, shadow);
@@ -1818,7 +1830,7 @@ export function Studio({
             total: pictures.length,
           });
         });
-        const built = storyCard(story, { voiceId: voiceIdRef.current, realById, shadowById });
+        const built = storyCard(story, { voiceId: voiceIdRef.current, realById, shadowById, namedById });
         return newSend({
           title: story.title,
           // No cover picture: the first Pokémon with a cry may be a secret the child has to work out.

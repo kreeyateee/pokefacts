@@ -16,6 +16,7 @@ export async function POST(request: Request) {
     voiceVolume?: number;
     pauseSeconds?: number;
     parts?: unknown;
+    bed?: unknown;
   };
   try {
     body = (await request.json()) as typeof body;
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
       voiceVolume: body.voiceVolume,
       pauseSeconds: body.pauseSeconds,
       ...(body.parts !== undefined ? { parts: body.parts } : {}),
+      ...(body.bed !== undefined ? { bed: body.bed } : {}),
     });
     const kind = inputContainer(result.audio);
     const contentType = kind === "ogg" ? "audio/ogg" : kind === "wav" ? "audio/wav" : "audio/mpeg";

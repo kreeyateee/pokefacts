@@ -6,7 +6,14 @@ import type { MixSettings } from "@/lib/playback-settings";
 import { isPiperVoice, pickerVoice } from "@/lib/piper-voice";
 import { pronounce } from "@/lib/pronounce";
 import type { StoryGraph, StoryNode } from "@/lib/story/story-graph";
-import { STORY_SOUNDS, withoutCues } from "@/lib/story/story-sound";
+import {
+  STORY_AMBIENCE,
+  STORY_MUSIC,
+  STORY_SOUNDS,
+  withoutCues,
+  type StoryBed,
+  type StorySound,
+} from "@/lib/story/story-sound";
 import {
   castVoices,
   NARRATOR,
@@ -16,6 +23,19 @@ import {
   type VoiceStyle,
 } from "@/lib/story/story-voices";
 import { yotoFetch } from "@/lib/yoto-session";
+
+/** How loud the browser plays the beds, and how far they drop while someone speaks. */
+const BROWSER_AMBIENCE = 0.3;
+const BROWSER_MUSIC = 0.22;
+const DUCKED = 0.4;
+
+/** Drops the bed loops while someone speaks, and brings them back after. */
+function setLoopVolumes(loops: readonly HTMLAudioElement[], speaking: boolean) {
+  for (const loop of loops) {
+    const volume = Number(loop.dataset.volume ?? "0");
+    loop.volume = speaking ? volume * DUCKED : volume;
+  }
+}
 
 /** Every part of what this node says: its narration, then its question. */
 export function nodeParts(
@@ -98,19 +118,52 @@ export function useAdventureListen(options: { voiceId: string; connected: boolea
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const urlRef = useRef("");
+  const bedRef = useRef<HTMLAudioElement[]>([]);
+
+  const stopBed = useCallback(() => {
+    for (const loop of bedRef.current) loop.pause();
+    bedRef.current = [];
+  }, []);
 
   const stop = useCallback(() => {
     controllerRef.current?.abort();
     controllerRef.current = null;
     audioRef.current?.pause();
+    stopBed();
     if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
     setListening(false);
-  }, []);
+  }, [stopBed]);
 
   useEffect(() => stop, [stop]);
 
+  /** The browser plays the scene's ambience and music itself, quietly, and lower still while anyone speaks. */
+  const startBed = useCallback(
+    (bed: StoryBed | undefined) => {
+      stopBed();
+      const loops: Array<[string, number]> = [];
+      if (bed?.ambience) loops.push([STORY_AMBIENCE[bed.ambience], BROWSER_AMBIENCE]);
+      if (bed?.music) loops.push([STORY_MUSIC[bed.music], BROWSER_MUSIC]);
+      bedRef.current = loops.map(([src, volume]) => {
+        const loop = new Audio(src);
+        loop.loop = true;
+        loop.volume = volume;
+        loop.dataset.volume = String(volume);
+        void loop.play().catch(() => undefined);
+        return loop;
+      });
+    },
+    [stopBed],
+  );
+
+  const duckBed = useCallback((speaking: boolean) => setLoopVolumes(bedRef.current, speaking), []);
+
   const listen = useCallback(
-    async (story: StoryGraph, node: StoryNode, lines: { narration: string; question?: string }) => {
+    async (
+      story: StoryGraph,
+      node: StoryNode,
+      lines: { narration: string; question?: string },
+      onSound?: (sound: StorySound) => void,
+    ) => {
       stop();
       const controller = new AbortController();
       controllerRef.current = controller;
@@ -132,6 +185,7 @@ export function useAdventureListen(options: { voiceId: string; connected: boolea
               voiceId,
               dexId: node.dexId,
               parts,
+              ...(node.bed ? { bed: node.bed } : {}),
               cryVolume: mix.cryVolume,
               voiceVolume: mix.voiceVolume,
               pauseSeconds: mix.pauseSeconds,
@@ -150,17 +204,25 @@ export function useAdventureListen(options: { voiceId: string; connected: boolea
           await playUrl(audio, urlRef.current, signal);
         } else {
           setNote("Your browser's voices, standing in for the card's. Connect Yoto to hear the real ones.");
+          startBed(node.bed);
           if (node.dexId) await playUrl(audio, `/api/cry/${node.dexId}`, signal).catch(() => undefined);
           const voices = castVoices(voiceId, story.cast ?? []);
           const said = [lines.narration, lines.question ?? ""].flatMap((text) => speakerLines(text, story.cast ?? []));
           for (const line of said) {
             if (signal.aborted) return;
-            if ("sound" in line) await playUrl(audio, STORY_SOUNDS[line.sound], signal);
-            else if ("speechSynthesis" in window) {
+            if ("sound" in line) {
+              onSound?.(line.sound);
+              await playUrl(audio, STORY_SOUNDS[line.sound], signal);
+            } else if ("speechSynthesis" in window) {
               const style = voices[line.speaker] ?? (voices[NARRATOR] as VoiceStyle);
+              duckBed(true);
               await speak(line.text, style, speakerGender(story, line.speaker, voiceId), signal);
+              duckBed(false);
             }
           }
+          // Let the bed breathe for a moment after the last word, as the card does.
+          if (!signal.aborted) await new Promise((resolve) => window.setTimeout(resolve, 1200));
+          stopBed();
         }
       } catch (error) {
         if (!signal.aborted) setNote(error instanceof Error ? error.message : "Could not play this scene.");
@@ -171,7 +233,7 @@ export function useAdventureListen(options: { voiceId: string; connected: boolea
         }
       }
     },
-    [connected, mix, stop, voiceId],
+    [connected, duckBed, mix, startBed, stop, stopBed, voiceId],
   );
 
   return { listening, note, listen, stop };

@@ -17,7 +17,7 @@ import { pronounce } from "@/lib/pronounce";
 import { FIELD_NOTES, GOLDEN_STOPS, type FieldNotes } from "@/lib/story/safari-roster";
 import * as W from "@/lib/story/safari-words";
 import type { StoryGraph, StoryIcon, StoryNode } from "@/lib/story/story-graph";
-import { isStorySound } from "@/lib/story/story-sound";
+import { isStorySound, type StoryBed } from "@/lib/story/story-sound";
 import type { StoryCharacter } from "@/lib/story/story-voices";
 import { iconForType, YOTO_ICONS, YOTO_VOICES } from "@/lib/yoto-icons";
 
@@ -71,6 +71,29 @@ export const SAFARI_CAST: StoryCharacter[] = [
     tempo: 1.08,
   },
 ];
+
+/** The sound of each place, and the music that suits it. */
+const PLACE_SOUND: Record<SafariArea, StoryBed> = {
+  cave: { ambience: "cave", music: "mysterious" },
+  forest: { ambience: "woods", music: "mysterious" },
+  grassland: { ambience: "grass", music: "bright" },
+  mountain: { ambience: "mountain", music: "adventure" },
+  "rough-terrain": { ambience: "canyon", music: "adventure" },
+  sea: { ambience: "sea", music: "calm" },
+  urban: { ambience: "house", music: "homely" },
+  "waters-edge": { ambience: "lake", music: "calm" },
+};
+
+/** On the path between places. */
+const PATH_SOUND: StoryBed = { ambience: "gate", music: "adventure" };
+
+/** The music turns tense whenever Barnaby is about. */
+function underScene(bed: StoryBed, text: string): StoryBed {
+  return /\bBarnaby\b/.test(text) ? { ...bed, music: "tense" } : bed;
+}
+
+/** The Poké Ball on the Yoto screen while a catch plays. */
+const POKEBALL: StoryIcon = { pixel: "pokeball" };
 
 /** How many stops Barnaby turns up at, on the way in. */
 const BARNABY_VISITS = 3;
@@ -546,7 +569,7 @@ function stopWords(stop: SafariStop, number: number, plan: SafariPlan, words: De
     revealed(mon, false),
     words.rightThrow[right](),
   );
-  const caught = join(words.caught[right](), revealed(mon, true));
+  const caught = join(words.caught[right](), "[fanfare]", revealed(mon, true));
 
   if (stop.kind === "area") {
     const { type, decoy } = stop.clue;
@@ -625,6 +648,7 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
     kind: "choice",
     title: "The Safari Gate",
     icon: { yoto: iconForType("grass") },
+    bed: { ambience: "gate", music: "bright" },
     text: join(W.introText(owner)),
     left: { to: "lesson", label: W.LESSON_LABELS.hear },
     right: { to: ID.find(1, 0), label: W.LESSON_LABELS.skip },
@@ -634,6 +658,7 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
     kind: "scene",
     title: "Marigold's Lesson",
     icon: { yoto: YOTO_ICONS.book },
+    bed: { ambience: "lake", music: "bright" },
     text: join(W.LESSON_TEXT),
     next: ID.find(1, 0),
   });
@@ -642,6 +667,10 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
     const number = index + 1;
     const stopText = stopWords(stop, number, plan, words);
     const findLeft = stop.kind === "area" ? stop.homeLeft : stop.rareLeft;
+    const home = PLACE_SOUND[stop.mon.area];
+    // Before an area stop's choice you are still on the path; at a spot stop you are already there.
+    const findBed = stop.kind === "area" ? PATH_SOUND : home;
+    const missedBed = stop.kind === "area" ? PLACE_SOUND[stop.clue.decoy] : home;
     for (const slips of number === 1 ? [0] : [0, 1]) {
       const caughtSoFar = number - 1 - slips;
       const onWin = number < stops ? ID.find(number + 1, slips) : slips === 0 ? GOLD.find : endingFor(stops - 1);
@@ -649,11 +678,15 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
         slips === 0 ? (number < stops ? ID.find(number + 1, 1) : endingFor(stops - 1)) : endingFor(caughtSoFar);
       const title = `Stop ${number}`;
       const warning = slips === 1 ? words.oneSlip() : "";
+      const findText = join("[footsteps]", warning, stopText.find);
+      const missedText = join(stopText.missed, slipLine(number, slips, words));
+      const fledText = join(stopText.fled, slipLine(number, slips, words));
       nodes.push({
         id: ID.find(number, slips),
         kind: "choice",
         title,
-        text: join(warning, stopText.find),
+        bed: underScene(findBed, findText),
+        text: findText,
         ...(stopText.findCry ? { dexId: stopText.findCry } : {}),
         icon: stopText.findIcon,
         ...sides(findLeft, stopText.labels, ID.meet(number, slips), ID.missed(number, slips)),
@@ -663,7 +696,8 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
         kind: "scene",
         title: `${title}: What Happened`,
         icon: picture(stop.mon.id),
-        text: join(stopText.missed, slipLine(number, slips, words)),
+        bed: underScene(missedBed, missedText),
+        text: missedText,
         next: onSlip,
       });
       nodes.push({
@@ -672,6 +706,7 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
         title: `${title}: Close Up`,
         dexId: stop.mon.id,
         icon: shadow(stop.mon.id),
+        bed: home,
         text: stopText.meet,
         ...throwSides(stop, ID.caught(number, slips), ID.fled(number, slips)),
       });
@@ -680,7 +715,8 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
         kind: "scene",
         title: `${title}: What Happened`,
         icon: picture(stop.mon.id),
-        text: join(stopText.fled, slipLine(number, slips, words)),
+        bed: underScene(home, fledText),
+        text: fledText,
         next: onSlip,
       });
       nodes.push({
@@ -688,7 +724,8 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
         kind: "scene",
         title: `${title}: What Happened`,
         dexId: stop.mon.id,
-        icon: picture(stop.mon.id),
+        icon: POKEBALL,
+        bed: home,
         text: join(stopText.caught, tallyLine(number - slips, words)),
         next: onWin,
       });
@@ -709,6 +746,7 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
     title: "The Secret Stop",
     dexId: gold.id,
     icon: shadow(gold.id),
+    bed: { ambience: "gate", music: "magical" },
     text: join(fill(W.GOLDEN_FIND, goldGaps), golden.sign, W.GOLDEN_WHERE),
     ...sides(golden.homeLeft, [`head for ${goldGaps.home}`, `head for ${goldGaps.decoy}`], GOLD.meet, GOLD.missed),
   });
@@ -717,6 +755,7 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
     kind: "scene",
     title: "The Secret Stop: What Happened",
     icon: picture(gold.id),
+    bed: { ambience: PLACE_SOUND[golden.decoy].ambience, music: "magical" },
     text: join(words.empty[golden.decoy](), fill(W.GOLDEN_GONE, goldGaps)),
     next: masterEnding,
   });
@@ -726,6 +765,7 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
     title: "The Secret Stop: Close Up",
     dexId: gold.id,
     icon: shadow(gold.id),
+    bed: { ambience: PLACE_SOUND[gold.area].ambience, music: "magical" },
     text: join(words.arrive[gold.area](), W.GOLDEN_MEET, goldNotes.look, paceLine(gold, words), W.GOLDEN_ASK),
     ...throwSides(golden, goldenEnding, GOLD.fled),
   });
@@ -734,6 +774,7 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
     kind: "scene",
     title: "The Secret Stop: What Happened",
     icon: picture(gold.id),
+    bed: { ambience: PLACE_SOUND[gold.area].ambience, music: "magical" },
     text: join(
       words.fled[`${golden.wrongThrow}-${goldRight}` as W.WrongThrow](),
       revealed(gold, false),
@@ -750,17 +791,16 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
       nodes.push({
         ...base,
         dexId: gold.id,
-        icon: picture(gold.id),
-        text: join(words.caught[goldRight](), revealed(gold, true), W.goldenText(capital(owner))),
+        icon: POKEBALL,
+        text: join(words.caught[goldRight](), revealed(gold, true), W.goldenText(capital(owner)), "[golden]"),
         ending: { number, name, golden: true },
       });
     } else {
       const whistle = W.WHISTLE_ENDINGS[number - 1];
-      const text = whistle
-        ? join(whistle, words.tip())
-        : number === total - 1
-          ? join(W.masterText(owner))
-          : join(W.dayEndText(owner));
+      const text = join(
+        whistle ? join(whistle, words.tip()) : number === total - 1 ? W.masterText(owner) : W.dayEndText(owner),
+        "[ending]",
+      );
       nodes.push({
         ...base,
         icon: { yoto: number >= total - 1 ? YOTO_ICONS.celebrate : number >= 5 ? YOTO_ICONS.star : YOTO_ICONS.music },

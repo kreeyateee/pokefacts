@@ -3,8 +3,9 @@ import { chosenVoice } from "@/lib/piper-voice";
 import { pronounce } from "@/lib/pronounce";
 import { checkStory, endingCount, storyLines } from "@/lib/story/story-check";
 import type { StoryGraph, StoryIcon, StoryNode, StoryNodeId } from "@/lib/story/story-graph";
-import { withoutCues } from "@/lib/story/story-sound";
-import { castVoices, trackParts, type StoryCharacter, type VoiceStyle } from "@/lib/story/story-voices";
+import { POKEBALL_ICON, POKEBALL_PIXEL } from "@/lib/story/pokeball";
+import { withoutCues, type StoryBed } from "@/lib/story/story-sound";
+import { castVoices, NARRATOR, trackParts, type StoryCharacter, type VoiceStyle } from "@/lib/story/story-voices";
 import type {
   YotoContent,
   YotoEditSettings,
@@ -75,24 +76,40 @@ export function storyIconPath(node: Pick<StoryNode, "kind" | "icon">): string {
   const icon: StoryIcon | undefined = node.icon;
   if (!icon) return DEFAULT_ICONS[node.kind];
   if ("yoto" in icon) return icon.yoto.startsWith("yoto:#") ? icon.yoto : `yoto:#${icon.yoto}`;
+  if ("pixel" in icon) return POKEBALL_PIXEL;
   return icon.shadow ? shadowPixelPath(icon.dexId) : `/pixels/${icon.dexId}.png`;
 }
 
-/** Pokémon pixels the story shows. Upload each with /api/yoto/icon (shadow=1 for the shadows). */
-export function storyPixels(graph: StoryGraph): { real: number[]; shadow: number[] } {
+/**
+ * Pixels the story shows. Upload each Pokémon with /api/yoto/icon (shadow=1 for the shadows),
+ * and each named picture with /api/yoto/icon?name=.
+ */
+export function storyPixels(graph: StoryGraph): { real: number[]; shadow: number[]; named: string[] } {
   const real = new Set<number>();
   const shadow = new Set<number>();
+  const named = new Set<string>();
   for (const node of graph.nodes) {
     if (node.icon && "dexId" in node.icon) (node.icon.shadow ? shadow : real).add(node.icon.dexId);
+    if (node.icon && "pixel" in node.icon) named.add(POKEBALL_ICON);
   }
-  return { real: [...real], shadow: [...shadow] };
+  return { real: [...real], shadow: [...shadow], named: [...named] };
 }
 
+type UploadedPixels = {
+  realById: Record<number, string>;
+  shadowById: Record<number, string>;
+  namedById: Record<string, string>;
+};
+
 /** Swap a pixel path for its uploaded `yoto:#` media. A path with no upload is left for the send to reject. */
-function uploadedIcon(path: string, realById: Record<number, string>, shadowById: Record<number, string>): string {
+function uploadedIcon(path: string, uploaded: UploadedPixels): string {
+  if (path === POKEBALL_PIXEL) {
+    const media = uploaded.namedById[POKEBALL_ICON];
+    return media ? `yoto:#${media}` : path;
+  }
   const match = /^\/pixels\/(\d+)(-shadow)?\.png$/.exec(path);
   if (!match) return path;
-  const media = (match[2] ? shadowById : realById)[Number(match[1])];
+  const media = (match[2] ? uploaded.shadowById : uploaded.realById)[Number(match[1])];
   return media ? `yoto:#${media}` : path;
 }
 
@@ -109,25 +126,38 @@ type Voicing = { voiceId: string; voices: Record<string, VoiceStyle>; cast: read
  * One track. The page shows the words without sound cues. A track with dialogue or a sound also
  * carries its parts, so each line is recorded in its speaker's voice and joined into this one track.
  */
-function storyTrack(key: string, title: string, text: string, icon: string, overlay: string, voicing: Voicing): KidTrack {
+function storyTrack(
+  key: string,
+  title: string,
+  text: string,
+  icon: string,
+  overlay: string,
+  voicing: Voicing,
+  bed?: StoryBed,
+): KidTrack {
   const shown = withoutCues(text);
-  const parts = trackParts(text, voicing.voices, voicing.cast, pronounce);
+  const spoken = pronounce(shown);
+  // A bed needs the joined recording, so a plain narrator line with one becomes a single part.
+  const parts =
+    trackParts(text, voicing.voices, voicing.cast, pronounce) ??
+    (bed ? [{ text: spoken, ...(voicing.voices[NARRATOR] as VoiceStyle) }] : null);
   return {
     key,
     title,
     text: shown,
-    spoken: pronounce(shown),
+    spoken,
     icon,
     overlay,
     voiceId: voicing.voiceId,
     ...(parts ? { parts } : {}),
+    ...(parts && bed ? { bed } : {}),
   };
 }
 
 function storyChapter(node: StoryNode, index: number, endings: number, icon: string, voicing: Voicing): KidChapter {
   const overlay = String(index + 1);
   const lines = storyLines(node, endings);
-  const narration = storyTrack(narrationKey(node.id), node.title.trim(), lines.narration, icon, overlay, voicing);
+  const narration = storyTrack(narrationKey(node.id), node.title.trim(), lines.narration, icon, overlay, voicing, node.bed);
   if (node.dexId) narration.lead = "cry";
   const tracks = [narration];
   if (lines.question) {
@@ -152,7 +182,12 @@ function storyChapter(node: StoryNode, index: number, endings: number, icon: str
  */
 export function storyCard(
   graph: StoryGraph,
-  options: { voiceId?: string; realById?: Record<number, string>; shadowById?: Record<number, string> } = {},
+  options: {
+    voiceId?: string;
+    realById?: Record<number, string>;
+    shadowById?: Record<number, string>;
+    namedById?: Record<string, string>;
+  } = {},
 ): { card: KidCard; upload: PlaylistUpload } {
   const problems = checkStory(graph);
   if (problems.length > 0) throw new Error(`${graph.title || "This story"} is not ready. ${problems.join(" ")}`);
@@ -162,7 +197,11 @@ export function storyCard(
   const endings = endingCount(graph);
   const nodes = chapterOrder(graph);
   const chapters = nodes.map((node, index) => {
-    const icon = uploadedIcon(storyIconPath(node), options.realById ?? {}, options.shadowById ?? {});
+    const icon = uploadedIcon(storyIconPath(node), {
+      realById: options.realById ?? {},
+      shadowById: options.shadowById ?? {},
+      namedById: options.namedById ?? {},
+    });
     return storyChapter(node, index, endings, icon, voicing);
   });
   const card: KidCard = {

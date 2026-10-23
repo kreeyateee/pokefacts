@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 
-import { audioDurationSeconds, cryUrl, joinFilter } from "../cry-audio";
+import { audioDurationSeconds, bedFilter, cryUrl, joinFilter, mixUnderBed } from "../cry-audio";
+import { POST as postIcon } from "../../app/api/yoto/icon/route";
 import { ffmpegCommand } from "../ffmpeg-bin";
 import { YOTO_VOICES } from "../yoto-icons";
 import { prepareDemoAudio } from "../yoto-demo";
@@ -15,17 +16,22 @@ import { factTrackBody } from "../voice-choice";
 import { SAFARI_CAST } from "./safari";
 import { storyCard } from "./story-card";
 import type { StoryGraph } from "./story-graph";
-import { CATCH_SOUND_PATH } from "./story-sound";
+import { bedClips } from "../story-audio";
+import { POKEBALL_PIXEL } from "./pokeball";
+import { CATCH_SOUND_PATH, readStoryBed, STORY_AMBIENCE, STORY_MUSIC, STORY_SOUNDS } from "./story-sound";
 import { castVoices, trackParts, type TrackPart } from "./story-voices";
 
 const [LILY, GEORGE] = YOTO_VOICES.map((voice) => voice.id) as [string, string];
 
-/** A one-second tone as an MP3, standing in for a recorded line. */
-function tone(frequency: number): Promise<Buffer> {
+/** A one-second tone as an MP3 (or a WAV), standing in for a recorded line. */
+function tone(frequency: number, wav = false): Promise<Buffer> {
+  const format = wav
+    ? ["-c:a", "pcm_s16le", "-ar", "44100", "-ac", "1", "-f", "wav"]
+    : ["-c:a", "libmp3lame", "-b:a", "64k", "-f", "mp3"];
   return new Promise((resolve, reject) => {
     execFile(
       ffmpegCommand(),
-      ["-loglevel", "error", "-f", "lavfi", "-i", `sine=frequency=${frequency}:duration=1`, "-c:a", "libmp3lame", "-b:a", "64k", "-f", "mp3", "pipe:1"],
+      ["-loglevel", "error", "-f", "lavfi", "-i", `sine=frequency=${frequency}:duration=1`, ...format, "pipe:1"],
       { encoding: "buffer", maxBuffer: 4_000_000, timeout: 20_000 },
       (error, stdout) => (error ? reject(error) : resolve(stdout)),
     );
@@ -78,6 +84,24 @@ function fakeYoto(lines: Map<string, Buffer>, cry: Buffer) {
     throw new Error(`Unexpected ${init?.method ?? "GET"} ${url}`);
   };
   return { fetchImpl, jobs, uploads };
+}
+
+/** The samples of a 16-bit mono WAV, from -1 to 1. */
+function pcm(wav: Buffer): Float32Array {
+  const data = wav.indexOf("data", 12, "ascii");
+  const start = data + 8;
+  const count = Math.floor((wav.length - start) / 2);
+  const out = new Float32Array(count);
+  for (let index = 0; index < count; index += 1) out[index] = wav.readInt16LE(start + index * 2) / 32768;
+  return out;
+}
+
+function rms(samples: Float32Array, from: number, to: number): number {
+  let sum = 0;
+  const first = Math.round(from * 44100);
+  const last = Math.round(to * 44100);
+  for (let index = first; index < last; index += 1) sum += (samples[index] ?? 0) ** 2;
+  return Math.sqrt(sum / Math.max(1, last - first));
 }
 
 describe("adventure track audio", () => {
@@ -196,5 +220,90 @@ describe("adventure track audio", () => {
     assert.ok(first?.parts?.some((part) => "pitch" in part && part.pitch < 0), "Marigold is lower");
     assert.equal(jobs.find((job) => job.key === "ba")?.parts, undefined, "a plain line records as before");
     assert.deepEqual(factTrackBody({ text: "x", title: "y", parts: first?.parts }).parts, first?.parts);
+  });
+
+  it("lays the ambience and music under the words, quieter than the words, with a short tail", async () => {
+    // A WAV tone at a normal speaking level, so the bed under it can be measured exactly.
+    const speech = await tone(440, true);
+    const beds = await bedClips({ ambience: "grass", music: "bright" });
+    const mixed = await mixUnderBed(speech, beds);
+    const seconds = await audioDurationSeconds(mixed, "mixed.wav");
+    assert.ok(seconds > 2 && seconds < 2.6, `the mix is ${seconds.toFixed(2)}s`);
+    const voice = pcm(speech);
+    const samples = pcm(mixed);
+    const words = rms(voice, 0.3, 0.9);
+    const underWords = rms(samples.map((value, index) => value - (voice[index] ?? 0)), 0.3, 0.9);
+    const between = rms(samples, 1.3, 1.8);
+    assert.ok(between > 0.002, "the bed carries on after the words");
+    assert.ok(underWords < between * 0.7, `ducked under the words (${underWords.toFixed(4)} against ${between.toFixed(4)})`);
+    const db = (value: number) => 20 * Math.log10(value);
+    assert.ok(db(words) - db(underWords) > 18, `the bed is ${(db(words) - db(underWords)).toFixed(1)} dB under the words`);
+    assert.ok(db(words) - db(between) > 12, `and ${(db(words) - db(between)).toFixed(1)} dB under them between lines`);
+    assert.match(bedFilter([{ volume: 0.2 }], 3), /sidechaincompress/);
+  });
+
+  it("only accepts beds the story knows", () => {
+    assert.deepEqual(readStoryBed({ ambience: "lake", music: "calm" }), { ambience: "lake", music: "calm" });
+    assert.equal(readStoryBed({ ambience: "volcano" }), null);
+    assert.equal(readStoryBed({}), null);
+    assert.equal(readStoryBed("lake"), null);
+  });
+
+  it("keeps every sound in one folder, as small, short files", async () => {
+    for (const file of [...Object.values(STORY_SOUNDS), ...Object.values(STORY_AMBIENCE), ...Object.values(STORY_MUSIC)]) {
+      assert.match(file, /^\/sounds\/[a-z-]+\.mp3$/);
+      const bytes = await readFile(path.join(process.cwd(), "public", file));
+      assert.ok(bytes.length < 200_000, `${file} is ${bytes.length} bytes`);
+      assert.ok((await audioDurationSeconds(bytes)) < 20, `${file} is short`);
+    }
+  });
+
+  it("uploads the Poké Ball picture for catch tracks", async () => {
+    const original = globalThis.fetch;
+    let uploaded: Buffer | undefined;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      assert.match(String(input), /displayIcons\/user\/me\/upload\?autoConvert=false&filename=pokefacts-pokeball/);
+      uploaded = Buffer.from(init?.body as Uint8Array);
+      return Response.json({ displayIcon: { mediaId: `yoto:#${"b".repeat(43)}` } });
+    }) as typeof fetch;
+    try {
+      const response = await postIcon(
+        new Request("http://localhost/api/yoto/icon?name=pokeball", { method: "POST", headers: { Authorization: `Bearer ${"x".repeat(24)}` } }),
+      );
+      assert.deepEqual(await response.json(), { mediaId: "b".repeat(43) });
+      assert.deepEqual(uploaded, await readFile(path.join(process.cwd(), "public", POKEBALL_PIXEL)));
+      assert.equal(uploaded?.subarray(1, 4).toString("ascii"), "PNG");
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it("records a narrator-only scene with a bed as one part, and leaves the repeating question plain", () => {
+    const graph: StoryGraph = {
+      id: "bed",
+      title: "Bed",
+      description: "A bed.",
+      start: "a",
+      nodes: [
+        {
+          id: "a",
+          kind: "choice",
+          title: "A",
+          text: "The lake is calm.",
+          bed: { ambience: "lake", music: "calm" },
+          left: { to: "b", label: "go left" },
+          right: { to: "b", label: "go right" },
+        },
+        { id: "b", kind: "ending", title: "B", text: "The end.", ending: { number: 1, name: "Done" } },
+      ],
+    };
+    const { card, upload } = storyCard(graph, { voiceId: LILY });
+    const jobs = renderJobs("Bed", card, upload);
+    const narration = jobs.find((job) => job.key === "aa");
+    assert.deepEqual(narration?.bed, { ambience: "lake", music: "calm" });
+    assert.deepEqual(narration?.parts, [{ text: "The lake is calm.", voiceId: LILY, pitch: 0, tempo: 1 }]);
+    assert.equal(jobs.find((job) => job.key === "aq")?.bed, undefined);
+    assert.equal(jobs.find((job) => job.key === "aq")?.parts, undefined);
+    assert.deepEqual(factTrackBody({ text: "x", title: "y", parts: narration?.parts, bed: narration?.bed }).bed, narration?.bed);
   });
 });

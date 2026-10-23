@@ -365,6 +365,29 @@ describe("safari adventure from the catalogue", () => {
     }
   });
 
+  it("sets every scene in its place, with footsteps, fanfares, stings and the Poké Ball on catches", () => {
+    for (const seed of [1, 2, 3, 4]) {
+      const graph = safariAdventure({ seed });
+      for (const node of graph.nodes) {
+        const catching = /^s\dc\d$/.test(node.id) || node.id === "end8";
+        if (/^s\da\d$/.test(node.id)) assert.match(node.text, /^\[footsteps\]/, `${node.id} starts with footsteps`);
+        if (catching) {
+          assert.deepEqual(node.icon, { pixel: "pokeball" }, `${node.id} shows the Poké Ball`);
+          assert.match(node.text, /\[throw\] \[catch\]/);
+        }
+        if (/^s\dc\d$/.test(node.id)) assert.match(node.text, /\[fanfare\]/);
+        if (node.kind === "ending") {
+          assert.match(node.text, node.ending.golden ? /\[golden\]$/ : /\[ending\]$/);
+          if (node.ending.number <= 5) assert.match(node.text, /\[whistle\]/);
+        } else {
+          assert.ok(node.bed?.ambience && node.bed.music, `${node.id} has ambience and music`);
+          if (/Barnaby/.test(node.text)) assert.equal(node.bed.music, "tense", `${node.id} is tense with Barnaby about`);
+        }
+      }
+      assert.doesNotMatch(graph.nodes.map((node) => node.text).join(" "), /Pheeeep/);
+    }
+  });
+
   it("walks the golden path through every stop", () => {
     const graph = safariAdventure({ seed: 1, owner: "Mia" });
     const walk = goldenWalk(graph);

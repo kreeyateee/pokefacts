@@ -2,6 +2,7 @@ import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { getAlternateForm } from "@/lib/catalogue-db";
+import { POKEBALL_ICON, POKEBALL_PIXEL } from "@/lib/story/pokeball";
 import { ensureFormPixel } from "@/lib/form-pixel";
 import { paintColourPixel, paintShadowPixel } from "@/lib/pixel-scale";
 import { safeHttpStatus, yotoUpstreamFailure } from "@/lib/yoto-error";
@@ -37,6 +38,16 @@ export async function POST(request: Request) {
   if (!token) return jsonError("Connect Yoto before uploading a picture.", 401);
 
   const params = new URL(request.url).searchParams;
+  // The story pictures drawn for Pokefacts, such as the Poké Ball on a catch track.
+  if (params.get("name") === POKEBALL_ICON) {
+    let ball: Buffer;
+    try {
+      ball = await readFile(path.join(/* turbopackIgnore: true */ process.cwd(), "public", POKEBALL_PIXEL));
+    } catch {
+      return jsonError("The Poké Ball picture is missing.");
+    }
+    return uploadDisplayIcon(token, ball, `pokefacts-${POKEBALL_ICON}`);
+  }
   const id = params.get("id") ?? "";
   const shadow = params.get("shadow") === "1";
   const file = pixelFile(id, shadow);
@@ -60,13 +71,18 @@ export async function POST(request: Request) {
     return jsonError("That picture is not a national Pokédex icon.");
   }
 
-  const url = new URL("https://api.yotoplay.com/media/displayIcons/user/me/upload");
-  url.searchParams.set("autoConvert", "false");
   const filename = form
     ? `pokefacts-form-${form.formId}`
     : shadow
       ? `pokefacts-${id}-shadow`
       : `pokefacts-${id}`;
+  return uploadDisplayIcon(token, bytes, filename);
+}
+
+/** Uploads a 16×16 PNG to the Yoto account's display icons and returns its media id. */
+async function uploadDisplayIcon(token: string, bytes: Buffer, filename: string): Promise<Response> {
+  const url = new URL("https://api.yotoplay.com/media/displayIcons/user/me/upload");
+  url.searchParams.set("autoConvert", "false");
   url.searchParams.set("filename", filename);
 
   const response = await fetch(url, {

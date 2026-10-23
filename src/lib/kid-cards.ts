@@ -5,6 +5,7 @@ import { dexBlurb, guessSpoken, pickDexEntry, type MonSheet } from "@/lib/dex-fa
 import { pronounce } from "@/lib/pronounce";
 import { spokenWiki } from "@/lib/spoken-wiki";
 import { chosenVoice, isPiperVoice } from "@/lib/piper-voice";
+import type { StoryBed } from "@/lib/story/story-sound";
 import type { TrackPart } from "@/lib/story/story-voices";
 import { iconForType, YOTO_ICONS } from "@/lib/yoto-icons";
 
@@ -39,6 +40,8 @@ export type KidTrack = {
   lead?: "cry";
   /** An adventure track with characters or sounds: each line in its own voice, recorded as one track. */
   parts?: TrackPart[];
+  /** Ambience and music under an adventure track. */
+  bed?: StoryBed;
 };
 
 export type KidChapter = {
