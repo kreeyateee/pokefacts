@@ -372,17 +372,21 @@
 }
 
 /* Ready-made, Make your own, Music. Equal thirds on a phone, side by side on a computer. */
+/* Phones: three across, and the last row shares its width, so five sections never squeeze their names. */
 .pk-sections {
-  display: grid;
-  grid-auto-columns: minmax(0, 1fr);
-  grid-auto-flow: column;
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.6rem;
 }
 
+.pk-sections > li {
+  flex: 1 1 30%;
+  min-width: 0;
+}
+
 @media (min-width: 640px) {
-  .pk-sections {
-    display: flex;
-    flex-wrap: wrap;
+  .pk-sections > li {
+    flex: 0 0 auto;
   }
 }
 

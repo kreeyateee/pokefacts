@@ -15,7 +15,7 @@ function hideBrokenPicture(event: { currentTarget: HTMLImageElement }): void {
   image.style.visibility = "hidden";
 }
 
-/** Ready-made, Make your own, Adventures and Music on top. Ready-made opens a shelf of sets, each with a picture. */
+/** Ready-made, Make your own, Adventures, Printables and Music on top. Ready-made opens a shelf of sets, each with a picture. */
 export function AppNav({
   section,
   kind,
@@ -45,7 +45,7 @@ export function AppNav({
           </li>
         ))}
       </ul>
-      {section === "ready" ? (
+      {section === "ready" || section === "printables" ? (
         <div className="pk-shelf">
           <h2 id="shelf-heading" className="pk-section-title">
             Pick a set

@@ -17,6 +17,7 @@ import { MyoCardButton, MyoCardDialog, openAfterDialog, type MyoCardView } from 
 import { MusicPanel } from "@/components/music-panel";
 import { MysterySilhouette } from "@/components/mystery-silhouette";
 import { YotoScreen } from "@/components/yoto-screen";
+import { PrintablesPanel, type PrintStart } from "@/components/printables-panel";
 import { StickerStudio } from "@/components/sticker-studio";
 import { Button } from "@/components/ui/button";
 import {
@@ -641,7 +642,7 @@ export function Studio({
   const [sending, setSending] = useState(false);
   const [bulkActive, setBulkActive] = useState(false);
   const [job, setJob] = useState<JobView | null>(null);
-  const [stickersOpen, setStickersOpen] = useState(false);
+  const [stickersOpen, setStickersOpen] = useState<PrintStart | null>(null);
   const [cardPrompt, setCardPrompt] = useState<{ confirmLabel: string; newTitle: string } | null>(null);
   const [myoCard, setMyoCard] = useState<MyoCardView | null>(null);
   const pendingCardAction = useRef<(() => void | Promise<void>) | null>(null);
@@ -1978,7 +1979,11 @@ export function Studio({
         kind={isReadyKind(kind) ? kind : "meet"}
         pictures={shelfPictures}
         onSection={chooseSection}
-        onCategory={showKind}
+        onCategory={(nextKind) => {
+          showKind(nextKind);
+          // On Printables the shelf picks the set to print, and the page stays put.
+          if (view === "printables") setView("printables");
+        }}
       />
 
       <main className="mx-auto w-full min-w-0 max-w-5xl px-4 pt-5 pb-6 sm:px-6">
@@ -2005,6 +2010,17 @@ export function Studio({
           />
         ) : view === "music" ? (
           <MusicPanel />
+        ) : view === "printables" && card ? (
+          <PrintablesPanel
+            card={card}
+            rangeCards={rangeCards}
+            onChooseCard={chooseCard}
+            onPrint={setStickersOpen}
+            onOwnPick={() => {
+              stopDemo();
+              setView("catalogue");
+            }}
+          />
         ) : view === "adventures" ? (
           <AdventurePanel
             sending={sending}
@@ -2090,7 +2106,7 @@ export function Studio({
                     })
                   }
                 />
-                <Button type="button" variant="outline" className="h-11 px-4" onClick={() => setStickersOpen(true)}>
+                <Button type="button" variant="outline" className="h-11 px-4" onClick={() => setStickersOpen("stickers")}>
                   Stickers
                 </Button>
                 {kind === "meet" ? (
@@ -2429,7 +2445,7 @@ export function Studio({
         onDismiss={dismissJob}
         onCancel={sending ? cancelSend : undefined}
         onRetry={pendingSend?.failed && !sending ? () => void retrySend() : undefined}
-        onPrintStickers={view === "cards" && card ? () => setStickersOpen(true) : undefined}
+        onPrintStickers={view === "cards" && card ? () => setStickersOpen("stickers") : undefined}
         onShowMyoCard={() =>
           showMyoCard({
             title: card?.libraryTitle ?? myoCard?.title ?? "this playlist",
@@ -2439,7 +2455,13 @@ export function Studio({
         }
       />
       {stickersOpen && card ? (
-        <StickerStudio key={card.id} card={card} cards={rangeCards} onClose={() => setStickersOpen(false)} />
+        <StickerStudio
+          key={card.id}
+          card={card}
+          cards={rangeCards}
+          start={stickersOpen}
+          onClose={() => setStickersOpen(null)}
+        />
       ) : null}
       <ConnectDialog open={connectOpen} onOpenChange={setConnectOpen} />
       <MyoCardDialog

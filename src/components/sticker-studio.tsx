@@ -161,7 +161,18 @@ function releaseCanvas(canvas: HTMLCanvasElement) {
   canvas.height = 0;
 }
 
-export function StickerStudio({ card, cards = [], onClose }: { card: KidCard; cards?: KidCard[]; onClose: () => void }) {
+export function StickerStudio({
+  card,
+  cards = [],
+  start = "stickers",
+  onClose,
+}: {
+  card: KidCard;
+  cards?: KidCard[];
+  /** "poster" opens straight on the A4 poster in the Print step. */
+  start?: PrintKind;
+  onClose: () => void;
+}) {
   // The studio is opened for one card and its playlist, so the list of cards is read once.
   const [roster] = useState(() => (cards.some((item) => item.id === card.id) ? cards : [card, ...cards]));
   const [focusId, setFocusId] = useState(card.id);
@@ -172,7 +183,7 @@ export function StickerStudio({ card, cards = [], onClose }: { card: KidCard; ca
   const hidden = hidesNames(focus);
   const lines = useMemo(() => linesFor(focus), [focus]);
 
-  const [step, setStep] = useState<Step>("style");
+  const [step, setStep] = useState<Step>(start === "poster" ? "print" : "style");
   const [face, setFace] = useState<"front" | "back">("front");
   const [tool, setTool] = useState<Tool>("pictures");
   const [brush, setBrush] = useState("#e10600");
@@ -182,7 +193,7 @@ export function StickerStudio({ card, cards = [], onClose }: { card: KidCard; ca
   const [sheetPage, setSheetPage] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
   const [strokes, setStrokes] = useState(0);
-  const [making, setMaking] = useState<PrintKind>("stickers");
+  const [making, setMaking] = useState<PrintKind>(start);
   const [posterPick, setPosterPick] = useState<PosterStyle | null>(null);
   // A poster is a group photo or a pile. Cards with another front start on the group photo.
   const posterStyle: PosterStyle = posterPick ?? (cover.style === "pile" ? "pile" : "photo");
