@@ -20,10 +20,13 @@ export function writeVoiceId(storage: Required<Pick<VoiceStorage, "getItem" | "s
   return voiceId;
 }
 
-/** Short Pokédex line for the on-page voice buttons. No cry is mixed in. */
+/**
+ * Short Pokédex line for the on-page voice buttons. No cry is mixed in.
+ * The tags show off what a Yoto voice can do. Piper drops them and reads the plain words.
+ */
 const VOICE_SAMPLE_TITLE = "Voice sample";
-const VOICE_SAMPLE_TEXT =
-  "Pikachu. This Pokémon stores electricity in its cheeks. It lets that charge go when it is excited.";
+export const VOICE_SAMPLE_TEXT =
+  "{excited} Pikachu! {curious} This Pokémon stores electricity in its cheeks. {whispers} When it gets excited... {gasps} zap! It lets all that charge go at once. {laughs}";
 
 /** Hear request for one voice, with no cry in front. */
 export function voiceSampleBody(voiceId?: string) {

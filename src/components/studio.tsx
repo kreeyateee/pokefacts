@@ -59,6 +59,7 @@ import {
   guessUpload,
   mulberry32,
   countSpokenTracks,
+  entrySpeech,
   LILY_VOICE_ID,
   pokedexUpload,
   POKEDEX_HOWTO,
@@ -81,6 +82,7 @@ import { spokenDexLine, statusWithDexNote, WIKI_DEX_NOTE } from "@/lib/spoken-wi
 import { selectionUpload } from "@/lib/selection-playlist";
 import { adventureCoverCard, coverUploadRequest } from "@/lib/playlist-cover";
 import { stickerCard } from "@/lib/sticker-cover";
+import { withoutVoiceTags } from "@/lib/voice-tags";
 import { DONATE_URL, SOURCE_URL } from "@/lib/site";
 import { defaultPlayback, readPlayback, type MixSettings, type PlaybackSettings } from "@/lib/playback-settings";
 import {
@@ -459,7 +461,7 @@ async function formReading(formId: number): Promise<FormReading> {
 }
 
 function formSpokenText(chapter: { title: string; tracks: Array<{ text?: string }> }): string {
-  return chapter.tracks[0]?.text?.replace(/\s+/g, " ").trim() ?? "";
+  return withoutVoiceTags(chapter.tracks[0]?.text ?? "").replace(/\s+/g, " ").trim();
 }
 
 /** A name, or "it can Mega Evolve", is not the description Lily should read. */
@@ -524,7 +526,7 @@ async function uploadGuessIcons(card: KidCard): Promise<{
 }
 
 function RiddleReading({ text }: { text: string }) {
-  const parts = riddleParts(text);
+  const parts = riddleParts(withoutVoiceTags(text));
   return (
     <>
       <ol className="grid gap-2">
@@ -541,7 +543,7 @@ function RiddleReading({ text }: { text: string }) {
 }
 
 function entryLines(text: string, title: string): string[] {
-  return text
+  return withoutVoiceTags(text)
     .split(/(?<=[.!?])\s+(?=[A-Z])/)
     .map((line) => line.trim())
     .filter(
@@ -1186,7 +1188,7 @@ export function Studio({
     const answer = chapter.tracks[1];
     if (!answer) return;
     void hearScript(async () => ({
-      text: trackSpeech(answer),
+      text: trackSpeech(answer, chapter),
       title: answer.title,
       dexId: answer.lead === "cry" ? chapter.dexId : undefined,
     }));
@@ -2483,7 +2485,7 @@ export function Studio({
                             {factReading.notice}
                           </p>
                         ) : null}
-                        <p>{factReading.speech}</p>
+                        <p>{withoutVoiceTags(factReading.speech)}</p>
                       </>
                     ) : (
                       <p className="text-sm text-muted-foreground">Opening the description…</p>
@@ -2541,7 +2543,7 @@ export function Studio({
                           const track = revealed ? chapter.tracks[1] : chapter.tracks[0];
                           if (!track) return;
                           void hearScript(async () => ({
-                            text: trackSpeech(track),
+                            text: trackSpeech(track, chapter),
                             title: track.title,
                             dexId: track.lead === "cry" ? chapter.dexId : undefined,
                           }));
@@ -2574,7 +2576,7 @@ export function Studio({
                             const fresh = playlistsRef.current[card.kind]
                               .flatMap((item) => item.chapters)
                               .find((item) => item.key === chapter.key);
-                            line = fresh?.tracks[0] ? trackSpeech(fresh.tracks[0]) : "";
+                            line = fresh?.tracks[0] ? trackSpeech(fresh.tracks[0], fresh) : "";
                             dexId = fresh?.tracks[0]?.lead === "cry" ? fresh.dexId : undefined;
                           } else if (chapter.dexId && readsSpeciesBiology(kind)) {
                             const prefix = chapter.tracks[0]?.text.startsWith(POKEDEX_HOWTO) ? POKEDEX_HOWTO : "";
@@ -2583,10 +2585,10 @@ export function Studio({
                                 ? factReading.speech
                                 : (await speciesSpeech(chapter.dexId, chapter.title)).speech;
                             const speech = shown || chapterDexText(chapter) || `${chapter.title}.`;
-                            line = pronounce(`${prefix}${speech}`.replace(/\s+/g, " ").trim());
+                            line = entrySpeech(`${prefix}${speech}`, chapter);
                             dexId = chapter.tracks.some((track) => track.lead === "cry") ? chapter.dexId : undefined;
                           } else {
-                            line = chapter.tracks.map((track) => trackSpeech(track)).join(" ");
+                            line = chapter.tracks.map((track) => trackSpeech(track, chapter)).join(" ");
                             dexId = chapter.tracks.some((track) => track.lead === "cry") ? chapter.dexId : undefined;
                           }
                           if (!line) return null;

@@ -680,7 +680,7 @@ describe("fact audio", () => {
       assert.equal(guessJobs[0]?.name, "Bulbasaur");
       assert.equal(guessJobs[1]?.name, "Bulbasaur");
       assert.doesNotMatch(guessJobs[0]?.text ?? "", /Bulbasaur/i);
-      assert.match(guessJobs[1]?.text ?? "", /^It is Bulbasaur\./);
+      assert.match(guessJobs[1]?.text ?? "", /^\{[a-z]+\} It is Bulbasaur\./);
       const clueAudio = await finish(guessJobs[0]?.text ?? "", guessJobs[0]?.title ?? "", clueSpeech, "clue1", "job-clue-1", "cluemergedhash");
       const answerAudio = await finish(
         guessJobs[1]?.text ?? "",

@@ -8,6 +8,7 @@ import { spokenWiki } from "@/lib/spoken-wiki";
 import { chosenVoice, isPiperVoice } from "@/lib/piper-voice";
 import type { StoryBed } from "@/lib/story/story-sound";
 import type { TrackPart } from "@/lib/story/story-voices";
+import { expressHowTo, expressTrack, type VoiceSeat } from "@/lib/voice-expression";
 import { iconForType, YOTO_ICONS } from "@/lib/yoto-icons";
 
 /** Lily, the British woman. Yoto Labs records her MP3 from the spoken script. */
@@ -28,7 +29,7 @@ export type KidTrack = {
   title: string;
   /** Official wording, shown on the page. */
   text: string;
-  /** Same words with names respelled for the narrator. */
+  /** Same words with names respelled for the narrator. No expression tags: trackSpeech adds those. */
   spoken: string;
   /** Pixel shown on the player while this part plays. */
   icon: string;
@@ -59,6 +60,8 @@ export type KidChapter = {
   dexId?: number;
   /** PokéAPI form id. Form tracks use this picture, not the species icon. */
   formId?: number;
+  /** The Pokémon's types, when known. They help pick how the Yoto voice says the name. Not shown. */
+  types?: string[];
   /** Bulbapedia article for the on-page credit. Not spoken. */
   articleUrl?: string;
   /** Set once that form's article has been read. */
@@ -155,7 +158,7 @@ function picture(
   mark: string,
   icon: string,
   tracks: KidTrack[],
-  extras?: { sprite?: string; clip?: string; dexId?: number },
+  extras?: { sprite?: string; clip?: string; dexId?: number; types?: string[] },
 ): KidChapter {
   return {
     key,
@@ -168,11 +171,32 @@ function picture(
     sprite: extras?.sprite,
     clip: extras?.clip,
     dexId: extras?.dexId,
+    ...(extras?.types?.length ? { types: extras.types } : {}),
   };
 }
 
-export function trackSpeech(track: KidTrack): string {
-  return track.spoken;
+/** The spoken script with its ElevenLabs expression tags. The random card's how-to keeps its own tag. */
+function expressed(key: string, spoken: string, seat?: VoiceSeat): string {
+  if (key === "entry" && spoken.startsWith(POKEDEX_HOWTO)) {
+    const fact = spoken.slice(POKEDEX_HOWTO.length);
+    if (!fact.trim()) return expressHowTo(spoken);
+    return `${expressHowTo(POKEDEX_HOWTO)}${expressTrack(key, fact, seat)}`;
+  }
+  return expressTrack(key, spoken, seat);
+}
+
+/**
+ * What the Yoto voice reads for this track: the respelled script with expression tags such as
+ * {excited}. Pass the chapter so the delivery follows the Pokémon. The page shows track.text,
+ * and Piper drops the tags, so only ElevenLabs hears them.
+ */
+export function trackSpeech(track: KidTrack, chapter?: VoiceSeat): string {
+  return expressed(track.key, track.spoken, chapter);
+}
+
+/** A fact reading, such as the Biology speech, as the Yoto voice reads it on this chapter. */
+export function entrySpeech(text: string, chapter?: VoiceSeat): string {
+  return expressed("entry", pronounce(text.replace(/\s+/g, " ").trim()), chapter);
 }
 
 export function countSpokenTracks(chapters: Array<{ tracks?: unknown[] }>): number {
@@ -251,6 +275,7 @@ function factChapter(sheet: MonSheet): KidChapter {
       sprite: artworkSrc(sheet.id),
       clip: CRY_CLIPS.has(sheet.id) ? `/facts/${sheet.id}.mp3` : undefined,
       dexId: sheet.id,
+      types: sheet.types,
     },
   );
 }
@@ -270,7 +295,7 @@ function riddleChapter(sheet: MonSheet): KidChapter {
       talk("clues", "Clues", script.clue, I.detective, "?", undefined, "cry"),
       talk("answer", "The answer", script.answer, answerIcon, "Yes", undefined, "cry"),
     ],
-    { sprite: `/sprites/${sheet.id}.png`, dexId: sheet.id },
+    { sprite: `/sprites/${sheet.id}.png`, dexId: sheet.id, types: sheet.types },
   );
 }
 
@@ -408,7 +433,7 @@ export function buildKidCard(card: KidCard, cardId?: string): YotoContent {
         tracks: chapter.tracks.map((track) => ({
           key: `${chapter.key}-${track.key}`,
           title: track.title,
-          trackUrl: trackSpeech(track),
+          trackUrl: trackSpeech(track, chapter),
           type: "elevenlabs" as const,
           ...(track.voiceId ? { voiceId: track.voiceId } : {}),
           overlayLabel: track.overlay,

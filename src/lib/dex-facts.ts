@@ -581,7 +581,8 @@ export function riddleParts(script: string): { numberLabel: string; clues: strin
 export function guessSpoken(sheet: MonSheet): { clue: string; answer: string } {
   const clues = shortClues(sheet);
   const clue = [`Number ${sheet.id}.`, ...clues, GUESS_COUNTDOWN].join("\n");
-  const answer = `It is ${sheet.name}. ${answerExtra(sheet, clues)}`.replace(/\s+/g, " ").trim();
+  // "It's Pikachu!" is the reveal. A name that ends in a full stop, like Mime Jr., keeps just the "!".
+  const answer = `It's ${sheet.name.replace(/\.$/, "")}! ${answerExtra(sheet, clues)}`.replace(/\s+/g, " ").trim();
   return { clue, answer };
 }
 

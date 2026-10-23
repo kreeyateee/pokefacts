@@ -98,7 +98,7 @@ describe("catalogue selection playlists", () => {
     assert.doesNotMatch(`${clue} ${answer}`, LECTURE);
     assert.match(clue, /^Number 25\./);
     assert.match(clue, /Shout your guess\. One\. Two\. Three\./);
-    assert.match(answer, /^It is Pikachu\./);
+    assert.match(answer, /^It's Pikachu!/);
     assert.equal(whos.card.chapters[0]?.tracks.length, 2);
   });
 
@@ -149,7 +149,7 @@ describe("catalogue selection playlists", () => {
     assert.equal(jobs[0]?.name, "Pikachu");
     assert.equal(jobs[1]?.name, "Pikachu");
     assert.doesNotMatch(jobs[0]?.text ?? "", /Pikachu/i);
-    assert.match(jobs[1]?.text ?? "", /^It is Pikachu\./);
+    assert.match(jobs[1]?.text ?? "", /^\{[a-z]+\} It's Pikachu!/);
     assert.doesNotMatch(`${jobs[0]?.text} ${jobs[1]?.text}`, LECTURE);
     const body = JSON.stringify(upload.content);
     assert.equal(body.includes("yoto:#shadow-25"), true);
@@ -339,7 +339,7 @@ describe("picked forms in a catalogue playlist", () => {
     const answer = chapter.tracks[1]?.text ?? "";
     assert.match(clue, /^Number 19\./);
     assert.doesNotMatch(clue, /Rattata|Alolan/i);
-    assert.match(answer, /^It is Alolan Rattata\./);
+    assert.match(answer, /^It's Alolan Rattata!/);
     assert.equal(chapter.icon, "/pixels/19-shadow.png");
     assert.equal(chapter.tracks[1]?.icon, "/api/artwork/form/10091");
     const upload = selectionUpload(built.card, { 10091: "pixel-10091" }, {
