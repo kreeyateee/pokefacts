@@ -47,6 +47,10 @@ export function iconForType(type: string | undefined): string {
   return TYPE_ICONS[type] ?? YOTO_ICONS.star;
 }
 
+/**
+ * ElevenLabs Default voices, ids as api.elevenlabs.io/v1/voices lists them.
+ * ElevenLabs retires every Default voice on 31 December 2026; replacements must be chosen before then.
+ */
 export const YOTO_VOICES = [
   {
     id: "pFZP5JQG7iQjIQuC4Bku",
@@ -68,6 +72,23 @@ export const YOTO_VOICES = [
     name: "Adam",
     note: "American man, lower",
   },
+  { id: "Xb7hH8MSUJpSbSDYk0k2", name: "Alice", note: "British woman, clear teacher" },
+  { id: "XrExE9yKIg1WjnnlVkGX", name: "Matilda", note: "American woman, warm and lower" },
+  { id: "EXAVITQu4vr4xnSDxMaL", name: "Sarah", note: "American woman, calm and reassuring" },
+  { id: "hpp4J3VqNfWAUOO0d1Us", name: "Bella", note: "American woman, bright and warm" },
+  { id: "cgSgspJ2msm6clMCkdW9", name: "Jessica", note: "American woman, young and playful" },
+  { id: "FGY2WhTYpPnrIDTdsKH5", name: "Laura", note: "American woman, young and lively" },
+  { id: "onwK4e9ZLuTAKqWW03F9", name: "Daniel", note: "British man, newsreader" },
+  { id: "pqHfZKP75CvOlQylNhV4", name: "Bill", note: "American man, older storyteller" },
+  { id: "cjVigY5qzO86Huf0OWal", name: "Eric", note: "American man, smooth and friendly" },
+  { id: "iP95p4xoKVk53GoZ742B", name: "Chris", note: "American man, down to earth" },
+  { id: "CwhRBWXzGAHq8TQ4Fs17", name: "Roger", note: "American man, laid back" },
+  { id: "IKne3meq5aSn9XLyUdCD", name: "Charlie", note: "Australian man, young and lively" },
+  { id: "TX3LPaxmHKxFdv7VOQHJ", name: "Liam", note: "American man, young and energetic" },
+  { id: "bIHbv24MWmeRgasZH58o", name: "Will", note: "American man, young and relaxed" },
+  { id: "SAz9YHcvj6GT2YYXdXww", name: "River", note: "American, calm and neutral" },
+  { id: "N2lVS1w4EtoT3dr4eOWO", name: "Callum", note: "American man, husky trickster" },
+  { id: "SOYHLrjzK2X1ezoPC6cr", name: "Harry", note: "American man, fierce warrior" },
 ] as const;
 
 /** Lily when the saved id is missing or not one of the Pokefacts voices. */
