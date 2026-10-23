@@ -10,8 +10,9 @@ export const PIPER_MODEL_NAME = "en_GB-cori-high";
  * What Piper's takes sound like: its settings and the words it is given. Changing this must miss old
  * speech and mix files so Hear and Send do not reuse an old take.
  * v2: Piper-only name respellings (piper-pronounce.ts) and the livelier read (piper-lively.ts).
+ * v3: "Pokémon" said POH-kay-mon, with a full "mon".
  */
-export const PIPER_SYNTH_ID = "pokedex-v2";
+export const PIPER_SYNTH_ID = "pokedex-v3";
 
 const PIPER_VOICE = {
   id: PIPER_VOICE_ID,

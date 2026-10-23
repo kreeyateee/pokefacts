@@ -9,7 +9,9 @@
  */
 const PIPER_NAMES: ReadonlyArray<readonly [string, string]> = [
   // The words on every card.
-  ["Pokémon", "Pohkaymon"],
+  // "Pohkaymon" ended in a lazy "mun". The doubled n keeps a full "mon", stressed like Pokédex: POH-kay-mon.
+  ["Pokémon", "Pohkaymonn"],
+  ["Pokemon", "Pohkaymonn"],
   ["Pokédex", "Pohkaydex"],
   ["Pokedex", "Pohkaydex"],
   ["Poké", "Pohkay"],

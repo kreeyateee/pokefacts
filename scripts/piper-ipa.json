@@ -1,8 +1,13 @@
 {
   "Pokémon": {
-    "said": "Pohkaymon",
+    "said": "Pohkaymonn",
     "before": "pˈɒkeɪmən",
-    "after": "pˈəʊkeɪmən"
+    "after": "pˈəʊkeɪmˌɒn"
+  },
+  "Pokemon": {
+    "said": "Pohkaymonn",
+    "before": "pˈəʊkeɪmˌɒn",
+    "after": "pˈəʊkeɪmˌɒn"
   },
   "Pokédex": {
     "said": "Pohkaydex",

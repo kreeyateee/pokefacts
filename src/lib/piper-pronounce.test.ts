@@ -38,7 +38,7 @@ describe("Piper pronunciation", () => {
     assert.equal(piperSpeech("Porygon, Porygon2 and Porygon-Z"), "Porry gon, Porry gon two and Porry gon zee");
     assert.equal(piperSpeech("Jangmo-o, Hakamo-o and Kommo-o"), "Jangmo-o, Ha ka mo oh and Kommo-o");
     assert.equal(piperSpeech("Flabébé"), "Flah bay bay");
-    assert.equal(piperSpeech("Pokémon, Pokédex, Poké Ball"), "Pohkaymon, Pohkaydex, Pohkay Ball");
+    assert.equal(piperSpeech("Pokémon, Pokédex, Poké Ball"), "Pohkaymonn, Pohkaydex, Pohkay Ball");
     // espeak already reads these well.
     assert.equal(piperSpeech("Ho-Oh and Type: Null"), "Ho-Oh and Type: Null");
   });
@@ -83,7 +83,7 @@ describe("Piper pronunciation", () => {
     const file = path.join(import.meta.dirname, "..", "data", "species-names.json");
     const names = new Set((JSON.parse(readFileSync(file, "utf8")) as { name: string }[]).map((row) => row.name));
     const words = PIPER_SAID_WORDS.filter((word) => !/\s/.test(word) || names.has(word));
-    const extra = ["Nidoran", "Pokémon", "Pokédex", "Pokedex", "Poké", "Pokéfacts", "Pokefacts", "Hoenn", "Hisui", "Paldea", "Aurelia", "Mia"];
+    const extra = ["Nidoran", "Pokémon", "Pokemon", "Pokédex", "Pokedex", "Poké", "Pokéfacts", "Pokefacts", "Hoenn", "Hisui", "Paldea", "Aurelia", "Mia"];
     const unknown = words.filter((word) => !names.has(word) && !extra.includes(word) && !word.includes("'"));
     assert.deepEqual(unknown, []);
   });
