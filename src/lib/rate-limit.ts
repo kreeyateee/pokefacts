@@ -35,6 +35,11 @@ export class RateLimiter {
   }
 }
 
+/** Sending a card to Yoto: never limited here. */
+export function isYotoRoute(pathname: string): boolean {
+  return pathname.startsWith("/api/yoto/");
+}
+
 /** Which budget a request comes out of. Prefetches and app data count with the API, not as pages. */
 export function budgetFor(pathname: string, headers: Headers, search = ""): Budget {
   if (pathname.startsWith("/api/") || pathname.startsWith("/_next/")) return "other";

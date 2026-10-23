@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { NextRequest } from "next/server";
+
+import { config, proxy } from "../proxy";
 import { budgetFor, RateLimiter, visitorOf } from "./rate-limit";
 
 describe("rate limit", () => {
@@ -28,5 +31,22 @@ describe("rate limit", () => {
     assert.equal(visitorOf(new Headers({ "x-forwarded-for": "6.6.6.6, 1.2.3.4" })), "1.2.3.4");
     assert.equal(visitorOf(new Headers({ "x-real-ip": "5.6.7.8" })), "5.6.7.8");
     assert.equal(visitorOf(new Headers()), "local");
+  });
+
+  it("never limits a card send, however many Yoto requests it makes", () => {
+    const from = { headers: { "x-forwarded-for": "7.7.7.7" } };
+    for (let index = 0; index < 5_000; index += 1) {
+      const path = ["/api/yoto/job/abc", "/api/yoto/track", "/api/yoto/icon"][index % 3];
+      assert.notEqual(proxy(new NextRequest(`http://localhost${path}`, from)).status, 429);
+    }
+    assert.match(config.matcher[0] ?? "", /api\/yoto\//, "the Yoto routes skip the proxy entirely");
+  });
+
+  it("does limit someone hammering other routes", () => {
+    const from = { headers: { "x-forwarded-for": "6.6.6.6" } };
+    const statuses = Array.from({ length: 60 }, (_, index) =>
+      proxy(new NextRequest(`http://localhost/.env${index}`, from)).status,
+    );
+    assert.equal(statuses.indexOf(429), 40);
   });
 });
