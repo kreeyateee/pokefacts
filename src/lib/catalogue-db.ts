@@ -13,6 +13,7 @@ import type {
 import { isFormPick } from "@/lib/catalogue-picks";
 import type { MonSheet } from "@/lib/dex-facts";
 import { habitatSpeech } from "@/lib/format";
+import { ALL_STARTER_IDS } from "@/lib/starters";
 
 const PAGE_SIZE = 40;
 
@@ -660,6 +661,12 @@ function sheetsWhere(column: "is_legendary" | "is_mythical"): MonSheet[] {
 /** Species flagged legendary. Mythical species are a separate list. */
 export function listLegendarySheets(): MonSheet[] {
   return sheetsWhere("is_legendary");
+}
+
+/** The 81 starter Pokémon, every region's three starter lines. */
+export function listStarterSheets(): MonSheet[] {
+  const ids = new Set(ALL_STARTER_IDS);
+  return listMonSheets().filter((sheet) => ids.has(sheet.id));
 }
 
 /** Species flagged mythical. */

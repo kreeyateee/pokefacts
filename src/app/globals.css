@@ -462,10 +462,16 @@
   margin-top: 0.6rem;
 }
 
-/* Four across once every label fits on one line. */
+/* Four across once every label fits on one line, then five. */
 @media (min-width: 480px) {
   .pk-shelf-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 640px) {
+  .pk-shelf-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }
 
@@ -475,8 +481,9 @@
   }
 
   .pk-shelf-grid {
-    grid-template-columns: repeat(8, minmax(0, 1fr));
-    gap: 0.75rem;
+    /* Every set on one row. */
+    grid-template-columns: repeat(9, minmax(0, 1fr));
+    gap: 0.6rem;
   }
 }
 

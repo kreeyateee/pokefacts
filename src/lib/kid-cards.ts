@@ -80,18 +80,19 @@ export type KidCardKind =
   | "hisui"
   | "legendary"
   | "mythical"
+  | "starter"
   | "story";
 
 export type FormPlaylistKind = "mega" | "gmax" | "alola" | "hisui";
 
-type SpeciesPlaylistKind = "legendary" | "mythical";
+type SpeciesPlaylistKind = "legendary" | "mythical" | "starter";
 
 export function isFormPlaylistKind(kind: string): kind is FormPlaylistKind {
   return kind === "mega" || kind === "gmax" || kind === "alola" || kind === "hisui";
 }
 
 export function isSpeciesPlaylistKind(kind: string): kind is SpeciesPlaylistKind {
-  return kind === "legendary" || kind === "mythical";
+  return kind === "legendary" || kind === "mythical" || kind === "starter";
 }
 
 export type KidCard = {
@@ -205,6 +206,7 @@ export function rangeLabel(kind: KidCardKind, first: number, last: number, index
   if (kind === "hisui") return "Hisuian forms";
   if (kind === "legendary") return "Legendary Pokémon";
   if (kind === "mythical") return "Mythical Pokémon";
+  if (kind === "starter") return "Starter Pokémon";
   const span = first === last ? String(first) : `${first}-${last}`;
   if (kind === "meet") return `${pokefactsTitle(index)} (${span})`;
   return `Who's That Pokémon ${span}`;
@@ -697,7 +699,7 @@ export function chaptersForCries(card: KidCard): Array<{ key: string; dexId: num
  * Guess Who is left as it is. The random how-to stays on the first track.
  */
 export function applySpeciesSpeech(card: KidCard, speechByDexId: Record<number, string>): KidCard {
-  if (card.kind !== "meet" && card.kind !== "legendary" && card.kind !== "mythical") return card;
+  if (card.kind !== "meet" && !isSpeciesPlaylistKind(card.kind)) return card;
   return {
     ...card,
     chapters: card.chapters.map((chapter) => {
@@ -752,6 +754,7 @@ const ALOLA_PLAYLIST_ID = "alolan-forms";
 const HISUI_PLAYLIST_ID = "hisuian-forms";
 const LEGENDARY_PLAYLIST_ID = "legendary";
 const MYTHICAL_PLAYLIST_ID = "mythical";
+const STARTER_PLAYLIST_ID = "starters";
 
 const FORM_PLAYLIST_META: Record<FormPlaylistKind, { title: string; id: string }> = {
   mega: { title: "Mega Evolutions", id: MEGA_PLAYLIST_ID },
@@ -763,6 +766,7 @@ const FORM_PLAYLIST_META: Record<FormPlaylistKind, { title: string; id: string }
 const SPECIES_PLAYLIST_META: Record<SpeciesPlaylistKind, { title: string; id: string }> = {
   legendary: { title: "Legendary Pokémon", id: LEGENDARY_PLAYLIST_ID },
   mythical: { title: "Mythical Pokémon", id: MYTHICAL_PLAYLIST_ID },
+  starter: { title: "Starter Pokémon", id: STARTER_PLAYLIST_ID },
 };
 
 const FORM_CHILD_DOES =

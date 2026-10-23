@@ -10,6 +10,7 @@ import {
   listMegaForms,
   listMonSheets,
   listMythicalSheets,
+  listStarterSheets,
 } from "./catalogue-db";
 import { dexBlurb, pickDexEntry, riddleParts, threeClues, type FlavorSource, type MonSheet } from "./dex-facts";
 import {
@@ -1476,6 +1477,26 @@ describe("biology speech and form playlists", () => {
     assert.equal(overflow[0]?.chapters[0]?.sprite, "/artwork/1.webp");
     assert.equal(overflow[0]?.chapters[0]?.tracks[0]?.icon, "/pixels/1.png");
     for (const card of overflow) assert.ok(countSpokenTracks(card.chapters) <= YOTO_TRACK_LIMIT);
+  });
+
+  it("puts all 81 starter Pokémon on one card, cry first, from Bulbasaur to Quaquaval", () => {
+    const starters = speciesPlaylists("starter", listStarterSheets());
+    assert.equal(starters.length, 1);
+    const card = starters[0] as NonNullable<(typeof starters)[0]>;
+    assert.equal(card.id, "starters");
+    assert.equal(card.kind, "starter");
+    assert.equal(card.libraryTitle, "Starter Pokémon");
+    assert.equal(card.rangeLabel, "Starter Pokémon");
+    assert.equal(card.chapters.length, 81);
+    assert.equal(countSpokenTracks(card.chapters), 81);
+    assert.equal(chaptersForCries(card).length, 81);
+    assert.deepEqual(
+      [card.chapters[0]?.title, card.chapters[3]?.title, card.chapters[80]?.title],
+      ["Bulbasaur", "Charmander", "Quaquaval"],
+    );
+    assert.ok(card.chapters.some((chapter) => chapter.title === "Pikachu") === false, "Pikachu is not a starter line");
+    const spoken = applySpeciesSpeech(card, { 7: "Squirtle. It shelters in its shell." });
+    assert.match(spoken.chapters.find((chapter) => chapter.dexId === 7)?.tracks[0]?.text ?? "", /shelters in its shell/);
   });
 });
 

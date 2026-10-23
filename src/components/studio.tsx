@@ -552,7 +552,7 @@ function revealChoice(nav: HTMLElement) {
   nav.scrollLeft += itemRect.left - navRect.left - (nav.clientWidth - selected.clientWidth) / 2;
 }
 
-type PlaylistMap = Record<FormPlaylistKind | "legendary" | "mythical", KidCard[]>;
+type PlaylistMap = Record<FormPlaylistKind | "legendary" | "mythical" | "starter", KidCard[]>;
 
 /** One picture for each set on the ready-made shelf. Who's That shows a shadow. */
 function shelfPicturesFor(lists: PlaylistMap): Partial<Record<ReadyKind, ShelfPicture>> {
@@ -572,7 +572,7 @@ function shelfPicturesFor(lists: PlaylistMap): Partial<Record<ReadyKind, ShelfPi
 }
 
 function readsSpeciesBiology(kind: KidCardKind): boolean {
-  return kind === "meet" || kind === "legendary" || kind === "mythical";
+  return kind === "meet" || isSpeciesPlaylistKind(kind);
 }
 
 function activePlaylist(lists: PlaylistMap, kind: keyof PlaylistMap, id: string): KidCard | undefined {
@@ -587,6 +587,7 @@ export function Studio({
   hisui = formPlaylists("hisui", []),
   legendary = speciesPlaylists("legendary", []),
   mythical = speciesPlaylists("mythical", []),
+  starter = speciesPlaylists("starter", []),
 }: {
   cards: KidCard[];
   mega?: KidCard;
@@ -595,6 +596,7 @@ export function Studio({
   hisui?: KidCard[];
   legendary?: KidCard[];
   mythical?: KidCard[];
+  starter?: KidCard[];
 }) {
   const factsCards = cards.filter((card) => card.kind === "meet");
   const factPool = factPoolFromCards(cards);
@@ -609,6 +611,7 @@ export function Studio({
     hisui,
     legendary,
     mythical,
+    starter,
   };
   const [playlists, setPlaylists] = useState(initialPlaylists);
   const playlistsRef = useRef(initialPlaylists);
@@ -620,6 +623,7 @@ export function Studio({
     hisui: hisui[0]?.id ?? "hisuian-forms",
     legendary: legendary[0]?.id ?? "legendary",
     mythical: mythical[0]?.id ?? "mythical",
+    starter: starter[0]?.id ?? "starters",
   });
   const [factSpeech, setFactSpeech] = useState<{ id: number; speech: string; url: string; notice: string } | null>(
     null,

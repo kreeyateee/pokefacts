@@ -1,3 +1,5 @@
+import { ALL_STARTER_IDS, STARTER_REGIONS, starterLines } from "@/lib/starters";
+
 /**
  * Ready-made posters: every Pokémon from one region, and the starter Pokémon. Each is a list of national
  * Pokédex numbers and a title for the ribbon.
@@ -29,21 +31,6 @@ const REGIONS = [
   { id: "paldea", name: "Paldea", first: 906, last: 1025 },
 ] as const;
 
-/** The first Pokémon of each region's three starter lines: grass, fire, water. Each line has three. */
-const STARTERS: ReadonlyArray<{ region: string; firsts: readonly [number, number, number] }> = [
-  { region: "Kanto", firsts: [1, 4, 7] },
-  { region: "Johto", firsts: [152, 155, 158] },
-  { region: "Hoenn", firsts: [252, 255, 258] },
-  { region: "Sinnoh", firsts: [387, 390, 393] },
-  { region: "Unova", firsts: [495, 498, 501] },
-  { region: "Kalos", firsts: [650, 653, 656] },
-  { region: "Alola", firsts: [722, 725, 728] },
-  { region: "Galar", firsts: [810, 813, 816] },
-  { region: "Paldea", firsts: [906, 909, 912] },
-];
-
-const starterLines = (firsts: readonly number[]) => firsts.flatMap((first) => range(first, first + 2));
-
 export const REGION_POSTERS: readonly PosterCollection[] = REGIONS.map((region) => ({
   id: `region-${region.id}`,
   label: region.name,
@@ -56,9 +43,9 @@ export const STARTER_POSTERS: readonly PosterCollection[] = [
     id: "starters-all",
     label: "Every starter",
     title: "Starter Pokémon",
-    dexIds: STARTERS.flatMap((starter) => starterLines(starter.firsts)),
+    dexIds: ALL_STARTER_IDS,
   },
-  ...STARTERS.map((starter) => ({
+  ...STARTER_REGIONS.map((starter) => ({
     id: `starters-${starter.region.toLowerCase()}`,
     label: starter.region,
     title: `${starter.region} starters`,

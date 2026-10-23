@@ -7,7 +7,7 @@ export type SectionId = "ready" | "own" | "adventures" | "printables" | "music";
 
 export type CollectionKind = Extract<
   KidCardKind,
-  "mega" | "gmax" | "alola" | "hisui" | "legendary" | "mythical"
+  "starter" | "mega" | "gmax" | "alola" | "hisui" | "legendary" | "mythical"
 >;
 
 export type ReadyKind = "meet" | "guess" | CollectionKind;
@@ -28,6 +28,7 @@ export const COLLECTION_TABS: ReadonlyArray<{
   label: string;
   title: string;
 }> = [
+  { kind: "starter", label: "Starters", title: "Starter Pokémon" },
   { kind: "mega", label: "Mega", title: "Mega Evolutions" },
   { kind: "gmax", label: "Gigantamax", title: "Gigantamax" },
   { kind: "alola", label: "Alolan", title: "Alolan forms" },
@@ -136,7 +137,10 @@ export function pageHeading(input: {
     const tab = COLLECTION_TABS.find((item) => item.kind === input.kind);
     return {
       title: input.libraryTitle || tab?.title || "Collection Cards",
-      blurb: "Special forms and legendaries. Hear one, then send the set to Yoto.",
+      blurb:
+        input.kind === "starter"
+          ? "Every region's starter Pokémon, all three steps of each. Hear one, then send the set to Yoto."
+          : "Special forms and legendaries. Hear one, then send the set to Yoto.",
     };
   }
   return {

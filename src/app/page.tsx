@@ -6,6 +6,7 @@ import {
   listLegendarySheets,
   listMegaForms,
   listMythicalSheets,
+  listStarterSheets,
 } from "@/lib/catalogue-db";
 import { formPlaylist, formPlaylists, speciesPlaylists } from "@/lib/kid-cards";
 import { loadKidCards } from "@/lib/load-kid-cards";
@@ -18,6 +19,7 @@ export default async function Home() {
   const hisui = formPlaylists("hisui", listHisuianForms());
   const legendary = speciesPlaylists("legendary", listLegendarySheets());
   const mythical = speciesPlaylists("mythical", listMythicalSheets());
+  const starter = speciesPlaylists("starter", listStarterSheets());
   return (
     <Studio
       cards={cards}
@@ -27,6 +29,7 @@ export default async function Home() {
       hisui={hisui}
       legendary={legendary}
       mythical={mythical}
+      starter={starter}
     />
   );
 }
