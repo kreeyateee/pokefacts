@@ -2,6 +2,7 @@ import { YOTO_TRACK_LIMIT } from "@/lib/kid-cards";
 import { isPiperVoice } from "@/lib/piper-voice";
 import { safeHttpStatus, validYotoCardId, yotoUpstreamFailure } from "@/lib/yoto-error";
 import { bearerToken, forwardYoto, jsonError } from "@/lib/yoto-proxy";
+import { contentForElevenLabs } from "@/lib/voice-tags";
 import { appendToPlaylist, contentCreateBody, trackEventProblem } from "@/lib/yoto-send";
 
 type JobBody = {
@@ -125,7 +126,7 @@ export async function POST(request: Request) {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(playlist),
+        body: JSON.stringify(contentForElevenLabs(playlist)),
       },
       120_000,
     );
@@ -193,7 +194,7 @@ async function updateExistingPlaylist(
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(playlist),
+      body: JSON.stringify(contentForElevenLabs(playlist)),
     },
     120_000,
   );
@@ -221,7 +222,7 @@ async function updateExistingPlaylist(
   const upstream = await forwardYoto(url, token, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(content),
+    body: JSON.stringify(contentForElevenLabs(content)),
   });
   if (upstream.ok) return upstream;
   const text = await upstream.text();

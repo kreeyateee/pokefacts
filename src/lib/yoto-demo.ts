@@ -18,6 +18,7 @@ import { readStoryBed, type StoryBed } from "@/lib/story/story-sound";
 import { piperParts, readTrackParts, type TrackPart } from "@/lib/story/story-voices";
 import { reconnectMessage, yotoErrorText } from "@/lib/yoto-error";
 import { spokenForDemo } from "@/lib/voice-choice";
+import { forElevenLabs } from "@/lib/voice-tags";
 
 type DemoAudio = {
   audio: Buffer;
@@ -104,7 +105,7 @@ function scratchContent(text: string, title: string, voiceId: string) {
             {
               key: "line-1",
               title,
-              trackUrl: text,
+              trackUrl: forElevenLabs(text),
               type: "elevenlabs" as const,
               voiceId,
             },

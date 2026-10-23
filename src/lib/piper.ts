@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { PIPER_MODEL_NAME } from "@/lib/piper-voice";
+import { withoutVoiceTags } from "@/lib/voice-tags";
 
 /**
  * Official Piper lives here. The binary and the voice model are large, so this
@@ -311,7 +312,9 @@ function runPiper(spec: PiperCommand): Promise<Buffer> {
 }
 
 /** Speak one line with the local Piper binary. A missing binary does not call Yoto. */
-export async function synthesizePiper(text: string, options: PiperSynthOptions = {}): Promise<Buffer> {
+export async function synthesizePiper(script: string, options: PiperSynthOptions = {}): Promise<Buffer> {
+  // Piper has no expression. A {tag} meant for ElevenLabs would be read out as a word.
+  const text = withoutVoiceTags(script);
   const located = await locate(options);
   const dir = await mkdtemp(path.join(tmpdir(), "pokefacts-piper-"));
   const output = path.join(dir, "speech.wav");

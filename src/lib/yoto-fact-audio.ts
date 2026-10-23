@@ -17,6 +17,7 @@ import { chosenVoice, isPiperVoice, piperCacheToken } from "@/lib/piper-voice";
 import { isSpokenPart, joinTrackParts, levelledCryMix, type SpokenPart } from "@/lib/story-audio";
 import { readStoryBed } from "@/lib/story/story-sound";
 import { partKey, piperParts, readTrackParts } from "@/lib/story/story-voices";
+import { forElevenLabs } from "@/lib/voice-tags";
 import { RECONNECT_YOTO, reconnectMessage, yotoErrorText } from "@/lib/yoto-error";
 
 type FactCryRequest = {
@@ -543,7 +544,7 @@ function scratchContent(text: string, title: string, voiceId: string) {
             {
               key: "line-1",
               title,
-              trackUrl: text,
+              trackUrl: forElevenLabs(text),
               type: "elevenlabs",
               voiceId,
             },
