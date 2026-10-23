@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
@@ -10,7 +10,14 @@ import { POST as postJob } from "../app/api/yoto/job/route";
 import { cryUrl, inputContainer } from "./cry-audio";
 import { ffmpegCommand } from "./ffmpeg-bin";
 import { factsPlaylistUpload, LILY_VOICE_ID } from "./kid-cards";
-import { piperReleaseArchive, piperSpeechCommand, PIPER_POKEDEX_ARGS, type PiperCommand } from "./piper";
+import {
+  PIPER_EXCITED_ARGS,
+  piperReleaseArchive,
+  piperSpeechCommand,
+  PIPER_POKEDEX_ARGS,
+  synthesizePiper,
+  type PiperCommand,
+} from "./piper";
 import {
   PICKER_VOICES,
   PIPER_MODEL_NAME,
@@ -123,6 +130,69 @@ describe("Piper Pokédex voice", () => {
     assert.equal(JSON.stringify(spec).includes(LILY_VOICE_ID), false);
     assert.equal(piperCacheToken(PIPER_VOICE_ID), PIPER_SYNTH_ID);
     assert.equal(piperCacheToken(LILY_VOICE_ID), "");
+  });
+
+  it("gives Piper a tagged script without its tags, and with Piper's respellings", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pokefacts-piper-tags-"));
+    const wavPath = path.join(dir, "speech.wav");
+    await sine(wavPath, 440, "wav");
+    const wav = await readFile(wavPath);
+    const seen: PiperCommand[] = [];
+    try {
+      const said = await synthesizePiper("{excited} Pikachu meets {whispers} Gyarados.", {
+        download: false,
+        run: async (command) => {
+          seen.push(command);
+          return wav;
+        },
+      });
+      assert.equal(said, wav);
+      assert.equal(seen.length, 1);
+      assert.equal(seen[0]?.input, "Peekachoo meets Ghyara dos.");
+      assert.equal(/[{}[\]]|excited|whispers/.test(seen[0]?.input ?? ""), false);
+      assert.deepEqual(seen[0]?.args.slice(-PIPER_POKEDEX_ARGS.length), [...PIPER_POKEDEX_ARGS]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("reads excited sentences in their own run and joins every take in order", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pokefacts-piper-lively-"));
+    const wavPath = path.join(dir, "speech.wav");
+    await sine(wavPath, 440, "wav");
+    const wav = await readFile(wavPath);
+    const seen: Array<PiperCommand & { outputs?: string[] }> = [];
+    try {
+      const said = await synthesizePiper("Pikachu! It stores electricity. It lets it all out at once!", {
+        download: false,
+        run: async (command: PiperCommand & { outputs?: string[] }) => {
+          seen.push(command);
+          for (const file of command.outputs ?? []) await writeFile(file, wav);
+          return wav;
+        },
+      });
+      assert.equal(seen.length, 2);
+      const [plain, excited] = seen;
+      assert.ok(plain?.args.includes("--json-input"));
+      assert.deepEqual(plain?.args.slice(-PIPER_POKEDEX_ARGS.length), [...PIPER_POKEDEX_ARGS]);
+      assert.deepEqual(excited?.args.slice(-PIPER_EXCITED_ARGS.length), [...PIPER_EXCITED_ARGS]);
+      const texts = (command?: PiperCommand) =>
+        (command?.input ?? "").split("\n").map((line) => (JSON.parse(line) as { text: string }).text);
+      assert.deepEqual(texts(plain), ["It stores electricity."]);
+      assert.deepEqual(texts(excited), ["Peekachoo!", "It lets it all out at once!"]);
+      assert.equal(said.toString("ascii", 0, 4), "RIFF");
+      // One plain take and two lifted (shorter) takes.
+      assert.ok(said.length > wav.length * 2 && said.length < wav.length * 3);
+
+      // A line with no "!" is one run, as before.
+      seen.length = 0;
+      await synthesizePiper("It is calm. Is it asleep?", { download: false, run: async (command) => (seen.push(command), wav) });
+      assert.equal(seen.length, 1);
+      assert.equal(seen[0]?.input, "It is calm. Is it asleep?");
+      assert.equal(seen[0]?.args.includes("--json-input"), false);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("downloads the Linux x86_64 Piper binary on Oracle Pokefacts", () => {

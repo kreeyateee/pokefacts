@@ -7,10 +7,11 @@ export const PIPER_VOICE_ID = "piper:en_GB-cori-high";
 export const PIPER_MODEL_NAME = "en_GB-cori-high";
 
 /**
- * Piper cadence for a handheld Pokédex. Changing this must miss old speech
- * and mix files so Hear and Send do not reuse a conversational take.
+ * What Piper's takes sound like: its settings and the words it is given. Changing this must miss old
+ * speech and mix files so Hear and Send do not reuse an old take.
+ * v2: Piper-only name respellings (piper-pronounce.ts) and the livelier read (piper-lively.ts).
  */
-export const PIPER_SYNTH_ID = "pokedex-v1";
+export const PIPER_SYNTH_ID = "pokedex-v2";
 
 const PIPER_VOICE = {
   id: PIPER_VOICE_ID,

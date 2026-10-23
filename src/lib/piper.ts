@@ -4,6 +4,15 @@ import { chmod, mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile }
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import {
+  joinWavs,
+  liftPitch,
+  PIPER_EXCITED_ARGS,
+  PIPER_POKEDEX_ARGS,
+  piperSentences,
+  type PiperSentence,
+} from "@/lib/piper-lively";
+import { piperSpeech } from "@/lib/piper-pronounce";
 import { PIPER_MODEL_NAME } from "@/lib/piper-voice";
 import { withoutVoiceTags } from "@/lib/voice-tags";
 
@@ -47,21 +56,6 @@ export function piperReleaseArchive(
   }
   return null;
 }
-
-/**
- * Slightly slower, more even timing than Piper's conversational defaults.
- * That is the handheld Pokédex cadence on a 1-OCPU host.
- */
-export const PIPER_POKEDEX_ARGS = [
-  "--length_scale",
-  "1.12",
-  "--noise_scale",
-  "0.333",
-  "--noise_w",
-  "0.4",
-  "--sentence_silence",
-  "0.35",
-] as const;
 
 const VOICE_FILES = [
   {
@@ -118,21 +112,51 @@ function defaultPiperModel(): string {
   return path.join(PIPER_DIR, "voices", `${PIPER_MODEL_NAME}.onnx`);
 }
 
+export { PIPER_EXCITED_ARGS, PIPER_POKEDEX_ARGS };
+
 /** Local Piper invocation. The model path is the onnx file, not an ElevenLabs voice id. */
 export function piperSpeechCommand(input: {
   text: string;
   output: string;
   bin?: string;
   model?: string;
+  excited?: boolean;
 }): PiperCommand {
   const command = input.bin || defaultPiperBin();
   const model = input.model || defaultPiperModel();
+  const settings = input.excited ? PIPER_EXCITED_ARGS : PIPER_POKEDEX_ARGS;
   return {
     command,
-    args: ["--model", model, "--output_file", input.output, ...PIPER_POKEDEX_ARGS],
+    args: ["--model", model, "--output_file", input.output, ...settings],
     input: input.text,
     cwd: path.dirname(command),
     output: input.output,
+  };
+}
+
+/**
+ * Several sentences in one Piper run, each to its own file. Piper reads one JSON line per sentence.
+ * `output` is the last file, so the run is only done once every sentence is written.
+ */
+export function piperSentencesCommand(input: {
+  sentences: ReadonlyArray<{ text: string; output: string }>;
+  bin?: string;
+  model?: string;
+  excited?: boolean;
+}): PiperCommand & { outputs: string[] } {
+  const command = input.bin || defaultPiperBin();
+  const model = input.model || defaultPiperModel();
+  const settings = input.excited ? PIPER_EXCITED_ARGS : PIPER_POKEDEX_ARGS;
+  const outputs = input.sentences.map((sentence) => sentence.output);
+  return {
+    command,
+    args: ["--model", model, "--json-input", "--output_dir", path.dirname(outputs[0] ?? command), ...settings],
+    input: input.sentences
+      .map((sentence) => JSON.stringify({ text: sentence.text, output_file: sentence.output }))
+      .join("\n"),
+    cwd: path.dirname(command),
+    output: outputs.at(-1) ?? "",
+    outputs,
   };
 }
 
@@ -311,23 +335,63 @@ function runPiper(spec: PiperCommand): Promise<Buffer> {
   });
 }
 
+/**
+ * A line with both plain and "!" sentences: one Piper run for each kind, then the takes in order.
+ * Excited takes are lifted a semitone.
+ */
+async function mixedTakes(
+  sentences: readonly PiperSentence[],
+  dir: string,
+  located: { bin: string; model: string },
+  run: (command: PiperCommand) => Promise<Buffer>,
+): Promise<Buffer> {
+  const files = sentences.map((_, i) => path.join(dir, `sentence-${i}.wav`));
+  for (const excited of [false, true]) {
+    const picked = sentences.flatMap((sentence, i) =>
+      sentence.excited === excited ? [{ text: sentence.text, output: files[i] }] : [],
+    );
+    if (picked.length) await run(piperSentencesCommand({ sentences: picked, bin: located.bin, model: located.model, excited }));
+  }
+  const takes = await Promise.all(
+    files.map(async (file, i) => {
+      const wav = await readFile(file).catch(() => {
+        throw new Error("Piper did not write a recording.");
+      });
+      return sentences[i]?.excited ? liftPitch(wav) : wav;
+    }),
+  );
+  return joinWavs(takes);
+}
+
 /** Speak one line with the local Piper binary. A missing binary does not call Yoto. */
 export async function synthesizePiper(script: string, options: PiperSynthOptions = {}): Promise<Buffer> {
   // Piper has no expression. A {tag} meant for ElevenLabs would be read out as a word.
-  const text = withoutVoiceTags(script);
+  // Then the Piper-only respellings, so espeak says the names the way the games do.
+  const text = piperSpeech(withoutVoiceTags(script));
   const located = await locate(options);
   const dir = await mkdtemp(path.join(tmpdir(), "pokefacts-piper-"));
   const output = path.join(dir, "speech.wav");
-  const spec = piperSpeechCommand({
-    text,
-    output,
-    bin: located.bin,
-    model: located.model,
-  });
-  try {
-    if (options.run) return await options.run(spec);
+  const sentences = piperSentences(text);
+  const excited = sentences.filter((sentence) => sentence.excited).length;
+  const run = async (spec: PiperCommand) => {
+    if (options.run) return options.run(spec);
     if (!existsSync(located.bin) || !existsSync(located.model)) throw new Error(MISSING);
-    return await runPiper(spec);
+    return runPiper(spec);
+  };
+  try {
+    // Every sentence the same kind: one run, as before.
+    if (excited === 0 || excited === sentences.length) {
+      const spec = piperSpeechCommand({
+        text,
+        output,
+        bin: located.bin,
+        model: located.model,
+        excited: excited > 0,
+      });
+      const wav = await run(spec);
+      return excited ? liftPitch(wav) : wav;
+    }
+    return await mixedTakes(sentences, dir, located, run);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

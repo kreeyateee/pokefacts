@@ -1,0 +1,912 @@
+{
+  "Pokémon": {
+    "said": "Pohkaymon",
+    "before": "pˈɒkeɪmən",
+    "after": "pˈəʊkeɪmən"
+  },
+  "Pokédex": {
+    "said": "Pohkaydex",
+    "before": "pˈɒkeɪdˌɛks",
+    "after": "pˈəʊkeɪdˌɛks"
+  },
+  "Pokedex": {
+    "said": "Pohkaydex",
+    "before": "pˈəʊkdɛks",
+    "after": "pˈəʊkeɪdˌɛks"
+  },
+  "Poké": {
+    "said": "Pohkay",
+    "before": "pəkˈeɪ",
+    "after": "pˈəʊkeɪ"
+  },
+  "Poke Ball": {
+    "said": "Pohkay Ball",
+    "before": "pˈəʊk bˈɔːl",
+    "after": "pˈəʊkeɪ bˈɔːl"
+  },
+  "Pokéfacts": {
+    "said": "Pohkay facts",
+    "before": "pˈɒkeɪfˌakts",
+    "after": "pˈəʊkeɪ fˈakts"
+  },
+  "Pokefacts": {
+    "said": "Pohkay facts",
+    "before": "pˈəʊkfakts",
+    "after": "pˈəʊkeɪ fˈakts"
+  },
+  "Ivysaur": {
+    "said": "Ivy sore",
+    "before": "ˈɪvɪsˌɔː",
+    "after": "ˈaɪvi sˈɔː"
+  },
+  "Charizard": {
+    "said": "Chari zard",
+    "before": "tʃˈɑːɹɪzəd",
+    "after": "tʃˈɑːɹi zˈɑːd"
+  },
+  "Caterpie": {
+    "said": "Caterpee",
+    "before": "kˈatəpˌaɪ",
+    "after": "kˈatəpˌiː"
+  },
+  "Metapod": {
+    "said": "Metta pod",
+    "before": "mˌɛtəpˈɒd",
+    "after": "mˈɛtə pˈɒd"
+  },
+  "Pidgeotto": {
+    "said": "Pidgeoto",
+    "before": "pɪdʒˈɒtəʊ",
+    "after": "pɪdʒˈəʊtəʊ"
+  },
+  "Pidgeot": {
+    "said": "Pidgey ot",
+    "before": "pˈɪdʒɒt",
+    "after": "pˈɪdʒi ˈɒt"
+  },
+  "Pikachu": {
+    "said": "Peekachoo",
+    "before": "pɪkˈatʃuː",
+    "after": "pˈiːkɐtʃˌuː"
+  },
+  "Nidoran♀": {
+    "said": "Needo ran female",
+    "before": "nˈɪdɔːɹən fˈiːmeɪl sˈaɪn",
+    "after": "nˈiːdəʊ ɹˈan fˈiːmeɪl"
+  },
+  "Nidoran♂": {
+    "said": "Needo ran male",
+    "before": "nˈɪdɔːɹən mˈeɪl sˈaɪn",
+    "after": "nˈiːdəʊ ɹˈan mˈeɪl"
+  },
+  "Nidoran": {
+    "said": "Needo ran",
+    "before": "nˈɪdɔːɹən",
+    "after": "nˈiːdəʊ ɹˈan"
+  },
+  "Nidorina": {
+    "said": "Needoreena",
+    "before": "nˌɪdɔːɹˈiːnə",
+    "after": "nˈiːdɔːɹˌiːnə"
+  },
+  "Nidoqueen": {
+    "said": "Needoqueen",
+    "before": "nˈɪdəkwˌiːn",
+    "after": "nˈiːdəkwˌiːn"
+  },
+  "Nidorino": {
+    "said": "Needoreeno",
+    "before": "nˌɪdɔːɹˈiːnəʊ",
+    "after": "nˌiːdɔːɹˈiːnəʊ"
+  },
+  "Nidoking": {
+    "said": "Needoking",
+    "before": "nˈɪdəʊkɪŋ",
+    "after": "nˈiːdəʊkɪŋ"
+  },
+  "Clefairy": {
+    "said": "Kluh fairy",
+    "before": "klˈɛfeəɹi",
+    "after": "klˈʌ fˈeəɹi"
+  },
+  "Clefable": {
+    "said": "Kluh fable",
+    "before": "klˈiːfəbəl",
+    "after": "klˈʌ fˈeɪbəl"
+  },
+  "Zubat": {
+    "said": "Zoobat",
+    "before": "zjˈuːbat",
+    "after": "zˈuːbat"
+  },
+  "Growlithe": {
+    "said": "Growlith",
+    "before": "ɡɹˈaʊlaɪð",
+    "after": "ɡɹˈaʊlɪθ"
+  },
+  "Kadabra": {
+    "said": "Cadabra",
+    "before": "kˈadabɹə",
+    "after": "kɐdˈabɹə"
+  },
+  "Alakazam": {
+    "said": "Allakazam",
+    "before": "ɐlˈakɐzˌam",
+    "after": "ˈalɐkˌazam"
+  },
+  "Farfetch’d": {
+    "said": "Far fetched",
+    "before": "fˈɑːfɛtʃd",
+    "after": "fˈɑː fˈɛtʃt"
+  },
+  "Farfetch'd": {
+    "said": "Far fetched",
+    "before": "fˈɑːfɛtʃd",
+    "after": "fˈɑː fˈɛtʃt"
+  },
+  "Doduo": {
+    "said": "Doh doo oh",
+    "before": "dˈɒdjuːˌəʊ",
+    "after": "dˈəʊ dˈuː ˈəʊ"
+  },
+  "Dodrio": {
+    "said": "Doh dree oh",
+    "before": "dˈɒdɹɪˌəʊ",
+    "after": "dˈəʊ dɹˈiː ˈəʊ"
+  },
+  "Exeggcute": {
+    "said": "Eggsicute",
+    "before": "ɛɡzˈɛɡkjuːt",
+    "after": "ˈɛɡsɪkjˌuːt"
+  },
+  "Tangela": {
+    "said": "Tangulla",
+    "before": "tandʒˈɛlə",
+    "after": "tˈaŋɡʌlə"
+  },
+  "Kangaskhan": {
+    "said": "Kangaskan",
+    "before": "kˈaŋɡaskhən",
+    "after": "kˈaŋɡaskən"
+  },
+  "Horsea": {
+    "said": "Hor see",
+    "before": "hˈɔːsə",
+    "after": "hˈɔː sˈiː"
+  },
+  "Staryu": {
+    "said": "Star you",
+    "before": "stˈɑːɹɪˌuː",
+    "after": "stˈɑː juː"
+  },
+  "Mr. Mime": {
+    "said": "Mister Mime",
+    "before": "mˈɪstə. | mˈaɪm",
+    "after": "mˈɪstə mˈaɪm"
+  },
+  "Pinsir": {
+    "said": "Pin sir",
+    "before": "pˈɪnsiə",
+    "after": "pˈɪn sˌɜː"
+  },
+  "Gyarados": {
+    "said": "Ghyara dos",
+    "before": "dʒjaɹˈɑːdəʊz",
+    "after": "ɡjˈɑːɹə dˈɒs"
+  },
+  "Porygon-Z": {
+    "said": "Porry gon zee",
+    "before": "pˈɔːɹɪɡənzˈɛd",
+    "after": "pˈɒɹi ɡˈɒn zˈiː"
+  },
+  "Porygon2": {
+    "said": "Porry gon two",
+    "before": "pˈɔːɹɪɡən tˈuː",
+    "after": "pˈɒɹi ɡˈɒn tˈuː"
+  },
+  "Porygon": {
+    "said": "Porry gon",
+    "before": "pˈɔːɹɪɡən",
+    "after": "pˈɒɹi ɡˈɒn"
+  },
+  "Kabuto": {
+    "said": "Kabooto",
+    "before": "kabjˈuːtəʊ",
+    "after": "kabˈuːtəʊ"
+  },
+  "Kabutops": {
+    "said": "Kabboo tops",
+    "before": "kˈabjuːtˌɒps",
+    "after": "kˈabuː tˈɒps"
+  },
+  "Aerodactyl": {
+    "said": "Airo dactill",
+    "before": "ˈeəɹəʊdˌaktaɪl",
+    "after": "ˈeəɹəʊ dˈaktɪl"
+  },
+  "Moltres": {
+    "said": "Moltrays",
+    "before": "mˈəʊltəz",
+    "after": "mˈəʊltɹeɪz"
+  },
+  "Meganium": {
+    "said": "Meg gay nee um",
+    "before": "mˈɛɡənˌiəm",
+    "after": "mˈɛɡ ɡˈeɪ nˈiː ˈʌm"
+  },
+  "Typhlosion": {
+    "said": "Tie flow zhun",
+    "before": "tˈaɪfləʊʒən",
+    "after": "tˈaɪ flˈəʊ ʒˈʌn"
+  },
+  "Totodile": {
+    "said": "Toe toe dile",
+    "before": "tˈɒtədˌaɪl",
+    "after": "tˈəʊ tˈəʊ dˈaɪl"
+  },
+  "Feraligatr": {
+    "said": "Feralligator",
+    "before": "fˈɛɹɐlˌɪɡatə",
+    "after": "fəɹˈalɪɡˌeɪtə"
+  },
+  "Hoothoot": {
+    "said": "Hoot hoot",
+    "before": "hˈuːθuːt",
+    "after": "hˈuːt hˈuːt"
+  },
+  "Noctowl": {
+    "said": "Nock towel",
+    "before": "nˈɒktəʊl",
+    "after": "nˈɒk tˈaʊəl"
+  },
+  "Ledyba": {
+    "said": "Leddy buh",
+    "before": "lɛdˈɪbə",
+    "after": "lˈɛdi bˈʌ"
+  },
+  "Ariados": {
+    "said": "Airy a dose",
+    "before": "ˌaɹɪˈɑːdəʊz",
+    "after": "ˈeəɹi ɐ dˈəʊs"
+  },
+  "Chinchou": {
+    "said": "Chinchow",
+    "before": "tʃˈɪntʃuː",
+    "after": "tʃˈɪntʃaʊ"
+  },
+  "Pichu": {
+    "said": "Peechoo",
+    "before": "pˈɪtʃuː",
+    "after": "pˈiːtʃuː"
+  },
+  "Togepi": {
+    "said": "Toe gheppy",
+    "before": "tˈəʊdʒpi",
+    "after": "tˈəʊ ɡˈɛpi"
+  },
+  "Togetic": {
+    "said": "Toe ghettic",
+    "before": "tədʒˈɛtɪk",
+    "after": "tˈəʊ ɡˈɛtɪk"
+  },
+  "Ampharos": {
+    "said": "Amfa rose",
+    "before": "amfˈaɹəʊz",
+    "after": "ˈamfə ɹˈəʊz"
+  },
+  "Azumarill": {
+    "said": "Uh zooma rill",
+    "before": "ˈazjuːməɹˌɪl",
+    "after": "ˈʌ zˈuːmə ɹˈɪl"
+  },
+  "Sudowoodo": {
+    "said": "Soodo woo doe",
+    "before": "sˌuːdəʊˈʊdəʊ",
+    "after": "sˈuːdəʊ wˈuː dˈəʊ"
+  },
+  "Girafarig": {
+    "said": "Jih raffa rig",
+    "before": "dʒˈɜːɹɐfˌɑːɹɪɡ",
+    "after": "dʒˈɪ ɹˈafə ɹˈɪɡ"
+  },
+  "Pineco": {
+    "said": "Pine co",
+    "before": "pˈaɪŋkəʊ",
+    "after": "pˈaɪn kˈəʊ"
+  },
+  "Gligar": {
+    "said": "Gly gar",
+    "before": "ɡlˈɪɡə",
+    "after": "ɡlˈaɪ ɡˈɑː"
+  },
+  "Qwilfish": {
+    "said": "Quill fish",
+    "before": "kjˈuːwˈɪlfɪʃ",
+    "after": "kwˈɪl fˈɪʃ"
+  },
+  "Scizor": {
+    "said": "Sizor",
+    "before": "sˈɪzə",
+    "after": "sˈaɪzə"
+  },
+  "Ursaring": {
+    "said": "Ursa ring",
+    "before": "ˈɜːseəɹɪŋ",
+    "after": "ˈɜːsə ɹˈɪŋ"
+  },
+  "Swinub": {
+    "said": "Swy nub",
+    "before": "swˈɪnʌb",
+    "after": "swˈaɪ nˈʌb"
+  },
+  "Corsola": {
+    "said": "Corso la",
+    "before": "kɔːsˈəʊlə",
+    "after": "kˈɔːsəʊ lˌa"
+  },
+  "Remoraid": {
+    "said": "Remmo raid",
+    "before": "ɹɪmˈɔːɹeɪd",
+    "after": "ɹˈɛməʊ ɹˈeɪd"
+  },
+  "Octillery": {
+    "said": "Ock tillery",
+    "before": "ˈɒktɪləɹi",
+    "after": "ˈɒk tˈɪləɹi"
+  },
+  "Delibird": {
+    "said": "Delly bird",
+    "before": "dɪlˈɪbɜːd",
+    "after": "dˈɛli bˈɜːd"
+  },
+  "Houndour": {
+    "said": "Hound dour",
+    "before": "hˈaʊndə",
+    "after": "hˈaʊnd dˈaʊə"
+  },
+  "Elekid": {
+    "said": "Ellakid",
+    "before": "ɪlˈɛkɪd",
+    "after": "ˈɛlɐkˌɪd"
+  },
+  "Raikou": {
+    "said": "Rye koo",
+    "before": "ɹˈeɪkuː",
+    "after": "ɹˈaɪ kˈuː"
+  },
+  "Suicune": {
+    "said": "Swee coon",
+    "before": "sˈuːɪkjˌuːn",
+    "after": "swˈiː kˈuːn"
+  },
+  "Tyranitar": {
+    "said": "Tie ranny tar",
+    "before": "tˈaɪɹɐnˌɪtə",
+    "after": "tˈaɪ ɹˈani tˈɑː"
+  },
+  "Lugia": {
+    "said": "Loo ghee uh",
+    "before": "lˈuːdʒə",
+    "after": "lˈuː ɡˈiː ˈʌ"
+  },
+  "Celebi": {
+    "said": "Celleby",
+    "before": "sˈɛlɪbˌaɪ",
+    "after": "sˈɛlɛbi"
+  },
+  "Grovyle": {
+    "said": "Grow vile",
+    "before": "ɡɹˈɒvɪl",
+    "after": "ɡɹˈəʊ vˈaɪl"
+  },
+  "Sceptile": {
+    "said": "Sep tile",
+    "before": "skˈɛptaɪl",
+    "after": "sˈɛp tˈaɪl"
+  },
+  "Torchic": {
+    "said": "Tor chick",
+    "before": "tˈɔːkɪk",
+    "after": "tˈɔː tʃˈɪk"
+  },
+  "Blaziken": {
+    "said": "Blaze a ken",
+    "before": "blˈazaɪkən",
+    "after": "blˈeɪz ɐ kˈɛn"
+  },
+  "Ludicolo": {
+    "said": "Loody coe low",
+    "before": "luːdˈɪkəlˌəʊ",
+    "after": "lˈuːdi kˈəʊ lˈəʊ"
+  },
+  "Manectric": {
+    "said": "Muh neck trick",
+    "before": "mˈeɪŋktɹɪk",
+    "after": "mˈʌ nˈɛk tɹˈɪk"
+  },
+  "Relicanth": {
+    "said": "Relly canth",
+    "before": "ɹɪlˈɪkanθ",
+    "after": "ɹˈɛli kˈanθ"
+  },
+  "Salamence": {
+    "said": "Salla mence",
+    "before": "sˈaleɪməns",
+    "after": "sˈalə mˈɛns"
+  },
+  "Regirock": {
+    "said": "Redgie rock",
+    "before": "ɹɪdʒˈaɪɹɒk",
+    "after": "ɹˈɛdʒi ɹˈɒk"
+  },
+  "Regice": {
+    "said": "Redge ice",
+    "before": "ɹiːdʒˈaɪs",
+    "after": "ɹˈɛdʒ ˈaɪs"
+  },
+  "Latias": {
+    "said": "Lattee ahs",
+    "before": "lˈeɪʃəz",
+    "after": "lˈatiː ˈɑːz"
+  },
+  "Latios": {
+    "said": "Lattee ose",
+    "before": "lˈeɪʃɪˌəʊz",
+    "after": "lˈatiː ˈəʊs"
+  },
+  "Kyogre": {
+    "said": "Kai ogre",
+    "before": "kˈaɪəʊɡə",
+    "after": "kˈaɪ ˈəʊɡə"
+  },
+  "Rayquaza": {
+    "said": "Ray kway za",
+    "before": "ɹeɪkwˈɑːzə",
+    "after": "ɹˈeɪ kwˈeɪ zˈɑː"
+  },
+  "Jirachi": {
+    "said": "Juh rah chee",
+    "before": "dʒɜːɹˈatʃɪ",
+    "after": "dʒˈʌ ɹˈɑː tʃˈiː"
+  },
+  "Torterra": {
+    "said": "Tor terra",
+    "before": "tˈɔːtɛɹə",
+    "after": "tˈɔː tˈɛɹə"
+  },
+  "Monferno": {
+    "said": "Mon fur no",
+    "before": "mˈɒnfənˌəʊ",
+    "after": "mˈɒn fˈɜː nˈəʊ"
+  },
+  "Staraptor": {
+    "said": "Star rap tor",
+    "before": "stˈaɹaptə",
+    "after": "stˈɑː ɹˈap tˈɔː"
+  },
+  "Bidoof": {
+    "said": "Bee doof",
+    "before": "bˈɪduːf",
+    "after": "bˈiː dˈuːf"
+  },
+  "Bibarel": {
+    "said": "Bee bear el",
+    "before": "baɪbˈeəl",
+    "after": "bˈiː bˈeəɹ ˌɛl"
+  },
+  "Combee": {
+    "said": "Comb bee",
+    "before": "kəmˈiː",
+    "after": "kˈəʊm bˈiː"
+  },
+  "Pachirisu": {
+    "said": "Patchy ree soo",
+    "before": "pˌakaɪɹˈɪsuː",
+    "after": "pˈatʃi ɹˈiː sˈuː"
+  },
+  "Cherubi": {
+    "said": "Chuh roo bee",
+    "before": "tʃˈɛɹuːbˌaɪ",
+    "after": "tʃˈʌ ɹˈuː bˈiː"
+  },
+  "Buneary": {
+    "said": "Bun ear ee",
+    "before": "bˈʌniəɹi",
+    "after": "bˈʌn ˈiəɹ ˈiː"
+  },
+  "Gible": {
+    "said": "Gibble",
+    "before": "dʒˈɪbəl",
+    "after": "ɡˈɪbəl"
+  },
+  "Togekiss": {
+    "said": "Toe ghekiss",
+    "before": "tˈəʊdʒkɪs",
+    "after": "tˈəʊ ɡˈɛkɪs"
+  },
+  "Gallade": {
+    "said": "Guh laid",
+    "before": "ɡˈaleɪd",
+    "after": "ɡˈʌ lˈeɪd"
+  },
+  "Uxie": {
+    "said": "Yook see",
+    "before": "ˈʌksi",
+    "after": "jˈuːk sˈiː"
+  },
+  "Azelf": {
+    "said": "Azz elf",
+    "before": "ˈeɪzəlf",
+    "after": "ˈaz ˈɛlf"
+  },
+  "Dialga": {
+    "said": "Dee al guh",
+    "before": "dˈaɪəlɡə",
+    "after": "dˈiː ˈal ɡˈʌ"
+  },
+  "Regigigas": {
+    "said": "Redgie giggus",
+    "before": "ɹɪdʒˈɪdʒɪɡəz",
+    "after": "ɹˈɛdʒi ɡˈɪɡəs"
+  },
+  "Giratina": {
+    "said": "Gear a teena",
+    "before": "dʒˌɜːɹɐtˈiːnə",
+    "after": "ɡˈiəɹ ɐ tˈiːnə"
+  },
+  "Cresselia": {
+    "said": "Kress sellia",
+    "before": "kɹɛsˈiːliə",
+    "after": "kɹˈɛs sˈɛliə"
+  },
+  "Phione": {
+    "said": "Fee oh nay",
+    "before": "faɪˈəʊni",
+    "after": "fˈiː ˈəʊ nˈeɪ"
+  },
+  "Arceus": {
+    "said": "Arkey us",
+    "before": "ˈɑːsɪəs",
+    "after": "ˈɑːki ˌʌs"
+  },
+  "Sewaddle": {
+    "said": "See waddle",
+    "before": "sˈuːɒdəl",
+    "after": "sˈiː wˈɒdəl"
+  },
+  "Archen": {
+    "said": "Ar ken",
+    "before": "ˌɑːtʃˈɛn",
+    "after": "ˈɑː kˈɛn"
+  },
+  "Hydreigon": {
+    "said": "High dry gon",
+    "before": "hˈaɪdɹeɪɡən",
+    "after": "hˈaɪ dɹˈaɪ ɡˈɒn"
+  },
+  "Tornadus": {
+    "said": "Tor nay dus",
+    "before": "tˈɔːneɪdəs",
+    "after": "tˈɔː nˈeɪ dˈʌs"
+  },
+  "Reshiram": {
+    "said": "Resh ee ram",
+    "before": "ɹɪʃˈɜːɹam",
+    "after": "ɹˈɛʃ ˈiː ɹˈam"
+  },
+  "Meloetta": {
+    "said": "Mello etta",
+    "before": "mˈɛləʊtə",
+    "after": "mˈɛləʊ ˈɛtə"
+  },
+  "Frogadier": {
+    "said": "Frog a deer",
+    "before": "fɹˈɒɡɐdiə",
+    "after": "fɹˈɒɡ ɐ dˈiə"
+  },
+  "Greninja": {
+    "said": "Gren ninja",
+    "before": "ɡɹˈɛnɪnjə",
+    "after": "ɡɹˈɛn nˈɪndʒə"
+  },
+  "Flabébé": {
+    "said": "Flah bay bay",
+    "before": "flabˈeɪbˈeɪ",
+    "after": "flˈɑː bˈeɪ bˈeɪ"
+  },
+  "Floette": {
+    "said": "Flow ett",
+    "before": "flˈəʊt",
+    "after": "flˈəʊ ˈɛt"
+  },
+  "Hawlucha": {
+    "said": "Ha loo cha",
+    "before": "hˈɔːlʌtʃə",
+    "after": "hˈɑː lˈuː tʃˈɑː"
+  },
+  "Dedenne": {
+    "said": "Duh den nay",
+    "before": "dɛdˈɛn",
+    "after": "dˈʌ dˈɛn nˈeɪ"
+  },
+  "Goodra": {
+    "said": "Goo druh",
+    "before": "ɡˈʊdɹə",
+    "after": "ɡˈuː dɹˈʌ"
+  },
+  "Yveltal": {
+    "said": "Ee vell tall",
+    "before": "ˈɪvɛltəl",
+    "after": "ˈiː vˈɛl tˈɔːl"
+  },
+  "Primarina": {
+    "said": "Pree ma ree na",
+    "before": "pɹˌaɪməɹˈiːnə",
+    "after": "pɹˈiː mˈɑː ɹˈiː nˈɑː"
+  },
+  "Pikipek": {
+    "said": "Picky peck",
+    "before": "pˈɪkaɪpək",
+    "after": "pˈɪki pˈɛk"
+  },
+  "Toucannon": {
+    "said": "Too can on",
+    "before": "tˈuːkanən",
+    "after": "tˈuː kan ˈɒn"
+  },
+  "Yungoos": {
+    "said": "Young goose",
+    "before": "jˈuːŋɡuːz",
+    "after": "jˈʌŋ ɡˈuːs"
+  },
+  "Mareanie": {
+    "said": "Muh ree nee",
+    "before": "mˈeəɹiəni",
+    "after": "mˈʌ ɹˈiː nˈiː"
+  },
+  "Mimikyu": {
+    "said": "Mimmy cue",
+    "before": "mˈɪmɪkɪˌuː",
+    "after": "mˈɪmi kjˈuː"
+  },
+  "Silvally": {
+    "said": "Sil valley",
+    "before": "sˈɪlvəli",
+    "after": "sˈɪl vˈalɪ"
+  },
+  "Hakamo-o": {
+    "said": "Ha ka mo oh",
+    "before": "hˈakəmˌəʊˈəʊ",
+    "after": "hˈɑː kˈɑː mˈəʊ ˈəʊ"
+  },
+  "Tapu Lele": {
+    "said": "Tapu Lay lay",
+    "before": "tˈɑːpuː lˈiːl",
+    "after": "tˈɑːpuː lˈeɪ lˈeɪ"
+  },
+  "Tapu Fini": {
+    "said": "Tapu Fee nee",
+    "before": "tˈɑːpuː fˈɪni",
+    "after": "tˈɑːpuː fˈiː nˈiː"
+  },
+  "Cosmoem": {
+    "said": "Coz mo em",
+    "before": "kˈɒzməʊˌɪm",
+    "after": "kˈɒz mˈəʊ ˈɛm"
+  },
+  "Solgaleo": {
+    "said": "Solga lay oh",
+    "before": "sˈɒlɡeɪlɪˌəʊ",
+    "after": "sˈɒlɡə lˈeɪ ˈəʊ"
+  },
+  "Necrozma": {
+    "said": "Nuh croz ma",
+    "before": "nˈɛkɹɒzmə",
+    "after": "nˈʌ kɹˈɒz mˈɑː"
+  },
+  "Magearna": {
+    "said": "Muh gear na",
+    "before": "mˈeɪdʒɑːnə",
+    "after": "mˈʌ ɡˈiə nˈɑː"
+  },
+  "Grookey": {
+    "said": "Grew key",
+    "before": "ɡɹˈʊki",
+    "after": "ɡɹˈuː kˈiː"
+  },
+  "Skwovet": {
+    "said": "Squoh vet",
+    "before": "ˈɛskwˈɒvɪt",
+    "after": "skwˈəʊ vˈɛt"
+  },
+  "Corviknight": {
+    "said": "Corvy knight",
+    "before": "kˈɔːvɪknˌaɪt",
+    "after": "kˈɔːvi nˈaɪt"
+  },
+  "Applin": {
+    "said": "Apple in",
+    "before": "ɐplˈɪn",
+    "after": "ˈapəl ˈɪn"
+  },
+  "Silicobra": {
+    "said": "Silly co bra",
+    "before": "sˈɪlɪkˌɒbɹə",
+    "after": "sˈɪli kˈəʊ bɹˈɑː"
+  },
+  "Sirfetch’d": {
+    "said": "Sir fetched",
+    "before": "sˈɜːfɛtʃd",
+    "after": "sˌɜː fˈɛtʃt"
+  },
+  "Sirfetch'd": {
+    "said": "Sir fetched",
+    "before": "sˈɜːfɛtʃd",
+    "after": "sˌɜː fˈɛtʃt"
+  },
+  "Mr. Rime": {
+    "said": "Mister Rime",
+    "before": "mˈɪstə. | ɹˈaɪm",
+    "after": "mˈɪstə ɹˈaɪm"
+  },
+  "Morpeko": {
+    "said": "Mor peck oh",
+    "before": "mɔːpˈiːkəʊ",
+    "after": "mˈɔː pˈɛk ˈəʊ"
+  },
+  "Duraludon": {
+    "said": "Dural oo don",
+    "before": "djˈʊəɹɐlˌuːdən",
+    "after": "djˈʊəɹəl ˈuː dˈɒn"
+  },
+  "Zacian": {
+    "said": "Zah see an",
+    "before": "zˈaʃiən",
+    "after": "zˈɑː sˈiː an"
+  },
+  "Kubfu": {
+    "said": "Koob foo",
+    "before": "kˈʌbfuː",
+    "after": "kˈuːb fˈuː"
+  },
+  "Zarude": {
+    "said": "Zah roo day",
+    "before": "zˈɑːɹuːd",
+    "after": "zˈɑː ɹˈuː dˈeɪ"
+  },
+  "Regieleki": {
+    "said": "Redgie electy",
+    "before": "ɹɪdʒˈiːlɛki",
+    "after": "ɹˈɛdʒi ɪlˈɛkti"
+  },
+  "Regidrago": {
+    "said": "Redgie drah go",
+    "before": "ɹɪdʒɪdɹˈeɪɡəʊ",
+    "after": "ɹˈɛdʒi dɹˈɑː ɡˈəʊ"
+  },
+  "Overqwil": {
+    "said": "Over quill",
+    "before": "ˌəʊvəkwˈɪl",
+    "after": "ˌəʊvə kwˈɪl"
+  },
+  "Fuecoco": {
+    "said": "Fooay coco",
+    "before": "fjuːkˈəʊkəʊ",
+    "after": "fˈuːeɪ kˈəʊkəʊ"
+  },
+  "Quaquaval": {
+    "said": "Kwah kwah val",
+    "before": "kwˈakwavəl",
+    "after": "kwˈɑː kwˈɑː vˈal"
+  },
+  "Brambleghast": {
+    "said": "Bramble ghast",
+    "before": "bɹˈambəlɡhˌeɪst",
+    "after": "bɹˈambəl ɡˈast"
+  },
+  "Gimmighoul": {
+    "said": "Gimmy ghoul",
+    "before": "ɡˈɪmɪɡhˌuːl",
+    "after": "ɡˈɪmi ɡˈuːl"
+  },
+  "Tatsugiri": {
+    "said": "Tatsu gheery",
+    "before": "tˌatsuːdʒˈiəɹi",
+    "after": "tˈatsuː ɡˈiəɹi"
+  },
+  "Iron Jugulis": {
+    "said": "Iron Jug you liss",
+    "before": "ˈaɪən dʒˈuːɡjʊlˌaɪz",
+    "after": "ˈaɪən dʒˈʌɡ juː lˈɪs"
+  },
+  "Chi-Yu": {
+    "said": "Chee you",
+    "before": "kˈaɪjˈuː",
+    "after": "tʃˈiː juː"
+  },
+  "Koraidon": {
+    "said": "Kor eye don",
+    "before": "kˈɔːɹeɪdən",
+    "after": "kˈɔːɹ ˈaɪ dˈɒn"
+  },
+  "Miraidon": {
+    "said": "Meer eye don",
+    "before": "mˈɜːɹeɪdən",
+    "after": "mˈiəɹ ˈaɪ dˈɒn"
+  },
+  "Okidogi": {
+    "said": "Oh key doe ghee",
+    "before": "ˌɒkɪdˈəʊɡɪ",
+    "after": "ˈəʊ kˈiː dˈəʊ ɡˈiː"
+  },
+  "Ogerpon": {
+    "said": "Oh gur pon",
+    "before": "ˈəʊdʒəpˌɒn",
+    "after": "ˈəʊ ɡˈɜː pˈɒn"
+  },
+  "Hoenn": {
+    "said": "Ho-enn",
+    "before": "hˈəʊn",
+    "after": "hˈəʊɛn"
+  },
+  "Hisui": {
+    "said": "Hee soo ee",
+    "before": "hˈɪsuːi",
+    "after": "hˈiː sˈuː ˈiː"
+  },
+  "Paldea": {
+    "said": "Pal day uh",
+    "before": "pˈaldiə",
+    "after": "pˈal dˈeɪ ˈʌ"
+  },
+  "Aurelia": {
+    "said": "Awreelia",
+    "before": "ˈɔːɹɪlˌaɪə",
+    "after": "ɔːɹˈiːliə"
+  },
+  "Mia": {
+    "said": "Mee uh",
+    "before": "mˈiə",
+    "after": "mˈiː ˈʌ"
+  },
+  "It burns at 2,500° F.": {
+    "said": "It burns at 2,500 degrees Fahrenheit.",
+    "before": "ɪt bˈɜːnz at tˈuː θˈaʊzənd fˈaɪvhˈʌndɹɪd dɪɡɹˈiːz ˈɛf.",
+    "after": "ɪt bˈɜːnz at tˈuː θˈaʊzənd fˈaɪvhˈʌndɹɪd dɪɡɹˈiːz fˈaɹənhˌaɪt."
+  },
+  "It boosts the Sp. Atk and Sp. Def stats.": {
+    "said": "It boosts the Special Attack and Special Defence stats.",
+    "before": "ɪt bˈuːsts ðɪ ˌɛspˈiː. | ˌeɪtˌiːkˈeɪ and ˌɛspˈiː. | dˈɛf stˈats.",
+    "after": "ɪt bˈuːsts ðə spˈɛʃəl ɐtˈak and spˈɛʃəl dɪfˈɛns stˈats."
+  },
+  "It boosts the Sp. It lives in grassland.": {
+    "said": "It boosts the Special. It lives in grassland.",
+    "before": "ɪt bˈuːsts ðɪ ˌɛspˈiː. | ɪt lˈɪvz ɪn ɡɹˈaslənd.",
+    "after": "ɪt bˈuːsts ðə spˈɛʃəl. | ɪt lˈɪvz ɪn ɡɹˈaslənd."
+  },
+  "It is a strong believer in the one-hit KO.": {
+    "said": "It is a strong believer in the one-hit K O.",
+    "before": "ɪt ɪz ɐ stɹˈɒŋ bɪlˈiːvəɹ ɪnðə wˈɒnhˈɪt kˌeɪˈəʊ.",
+    "after": "ɪt ɪz ɐ stɹˈɒŋ bɪlˈiːvəɹ ɪnðə wˈɒnhˈɪt kˈeɪ ˈəʊ."
+  },
+  "An unknown life-form called a UB.": {
+    "said": "An unknown life-form called an Ultra Beast.",
+    "before": "ɐn ʌnnˈəʊn lˈaɪffˈɔːm kˈɔːld ɐ jˌuːbˈiː.",
+    "after": "ɐn ʌnnˈəʊn lˈaɪffˈɔːm kˈɔːld ɐn ˈʌltɹə bˈiːst."
+  },
+  "It stakes out the location... but it’s always snoozing.": {
+    "said": "It stakes out the location, but it’s always snoozing.",
+    "before": "ɪt stˈeɪks ˈaʊt ðə ləʊkˈeɪʃənbˌʌt ɪts ˈɔːlweɪz snˈuːzɪŋ.",
+    "after": "ɪt stˈeɪks ˈaʊt ðə ləʊkˈeɪʃən, bˌʌt ɪts ˈɔːlweɪz snˈuːzɪŋ."
+  },
+  "It is very strong—when it butts heads, mountains shake.": {
+    "said": "It is very strong, when it butts heads, mountains shake.",
+    "before": "ɪt ɪz vˈɛɹi stɹˈɒŋ wɛn ɪt bˈʌts hˈɛdz, mˈaʊntɪnz ʃˈeɪk.",
+    "after": "ɪt ɪz vˈɛɹi stɹˈɒŋ, wˌɛn ɪt bˈʌts hˈɛdz, mˈaʊntɪnz ʃˈeɪk."
+  },
+  "It is Mime Jr.. It grows from Mime Jr. and becomes Mr. Mime.": {
+    "said": "It is Mime Junior. It grows from Mime Junior and becomes Mister Mime.",
+    "before": "ɪt ɪz mˈaɪm dʒˌeɪˈɑː. | ɪt ɡɹˈəʊz fɹɒm mˈaɪm dʒˌeɪˈɑː and bɪkˌʌmz mˈɪstə. | mˈaɪm.",
+    "after": "ɪt ɪz mˈaɪm dʒˈuːnjə. | ɪt ɡɹˈəʊz fɹɒm mˈaɪm dʒˈuːnjə and bɪkˌʌmz mˈɪstə mˈaɪm."
+  }
+}
