@@ -5,18 +5,33 @@ import { PIPER_VOICE_ID } from "../piper-voice";
 import { YOTO_VOICES } from "../yoto-icons";
 import { SAFARI_CAST } from "./safari";
 import { CATCH_SOUND_PATH, STORY_SOUNDS, withoutCues } from "./story-sound";
+import { RECONNECT_YOTO } from "../yoto-error";
+import { labsRefusal, sendSummary, speechKey } from "../yoto-fact-audio";
 import {
   castVoices,
+  fallbackVoices,
   NARRATOR,
   partKey,
+  piperParts,
   readTrackParts,
+  slotPieces,
   speakerLines,
   storyChunks,
   trackParts,
   type SpeakerLine,
+  type TrackPart,
 } from "./story-voices";
+import { adventureSendId, pollFailureFallsBack, VOICE_FALLBACK_NOTE } from "./voice-fallback";
 
-const [LILY, GEORGE, BRIAN] = YOTO_VOICES.map((voice) => voice.id) as [string, string, string];
+const voice = (name: string) => YOTO_VOICES.find((item) => item.name === name)?.id as string;
+const [LILY, GEORGE, ALICE, MATILDA, LIAM, WILL] = ["Lily", "George", "Alice", "Matilda", "Liam", "Will"].map(voice) as [
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+];
 
 function who(lines: SpeakerLine[]): string[] {
   return lines.map((line) => ("sound" in line ? `[${line.sound}]` : `${line.speaker}: ${line.text}`));
@@ -102,22 +117,25 @@ describe("story lines by speaker", () => {
 });
 
 describe("story voices", () => {
-  it("reads the narration in the Settings voice and gives each character a different one", () => {
+  it("reads the narration in the Settings voice and gives each character a real voice of their own", () => {
     const voices = castVoices(LILY, SAFARI_CAST);
     assert.deepEqual(voices[NARRATOR], { voiceId: LILY, pitch: 0, tempo: 1 });
-    assert.equal(voices.marigold?.voiceId, LILY);
-    assert.ok((voices.marigold?.pitch ?? 0) < 0, "Marigold is lower and older");
-    assert.ok((voices.marigold?.tempo ?? 1) < 1, "and a touch slower");
-    assert.equal(voices.barnaby?.voiceId, GEORGE);
-    assert.ok((voices.barnaby?.pitch ?? 0) > 0, "Barnaby is younger");
-    assert.ok((voices.barnaby?.tempo ?? 1) > 1, "and quicker");
+    assert.deepEqual(voices.marigold, { voiceId: ALICE, pitch: 0, tempo: 0.97 });
+    assert.deepEqual(voices.barnaby, { voiceId: LIAM, pitch: 0, tempo: 1.03 });
+    const george = castVoices(GEORGE, SAFARI_CAST);
+    assert.equal(george.marigold?.voiceId, ALICE);
+    assert.equal(george.barnaby?.voiceId, LIAM);
   });
 
-  it("moves Barnaby off George when George is the narrator", () => {
-    const voices = castVoices(GEORGE, SAFARI_CAST);
-    assert.equal(voices[NARRATOR]?.voiceId, GEORGE);
-    assert.equal(voices.barnaby?.voiceId, BRIAN);
-    assert.equal(voices.marigold?.voiceId, LILY);
+  it("moves a character off the narrator's voice", () => {
+    assert.equal(castVoices(ALICE, SAFARI_CAST).marigold?.voiceId, MATILDA);
+    assert.equal(castVoices(LIAM, SAFARI_CAST).barnaby?.voiceId, WILL);
+  });
+
+  it("gives every speaker a Piper voice to fall back to, told apart by pitch and speed", () => {
+    const backup = fallbackVoices(SAFARI_CAST);
+    for (const id of [NARRATOR, "marigold", "barnaby"]) assert.equal(backup[id]?.voiceId, PIPER_VOICE_ID);
+    assert.ok((backup.marigold?.pitch ?? 0) < 0 && (backup.barnaby?.pitch ?? 0) > 0);
   });
 
   it("keeps every character on Piper when Piper narrates, told apart by pitch and speed", () => {
@@ -129,6 +147,105 @@ describe("story voices", () => {
 
   it("falls back to Lily for an unknown narrator voice", () => {
     assert.equal(castVoices("not-a-voice", SAFARI_CAST)[NARRATOR]?.voiceId, LILY);
+  });
+});
+
+describe("names recorded on their own", () => {
+  it("cuts a line around the names, keeping the punctuation with the name", () => {
+    assert.deepEqual(slotPieces("Click! It's a Dodrio! Its three heads argue.", ["Dodrio"]), [
+      { text: "Click! It's a", slot: false },
+      { text: "Dodrio!", slot: true },
+      { text: "Its three heads argue.", slot: false },
+    ]);
+    assert.deepEqual(slotPieces("Morning, Mia.", ["Mia", "Mr Mime"]), [
+      { text: "Morning,", slot: false },
+      { text: "Mia.", slot: true },
+    ]);
+  });
+
+  it("only cuts whole names, longest first", () => {
+    assert.deepEqual(slotPieces("Mia's hat", ["Mia"]), [
+      { text: "Mia's", slot: true },
+      { text: "hat", slot: false },
+    ]);
+    assert.deepEqual(slotPieces("Miami beach", ["Mia"]), [{ text: "Miami beach", slot: false }]);
+    assert.deepEqual(
+      slotPieces("A Kabutops, not a Kabuto.", ["Kabuto", "Kabutops"]).map((piece) => piece.text),
+      ["A", "Kabutops,", "not a", "Kabuto."],
+    );
+    assert.deepEqual(slotPieces("No names here.", []), [{ text: "No names here.", slot: false }]);
+  });
+
+  it("records the same wording for every Pokémon, so it can be reused", () => {
+    const voices = castVoices(LILY, SAFARI_CAST);
+    const options = { slots: ["Dodrio", "Ditto"], fallback: fallbackVoices(SAFARI_CAST) };
+    const words = (text: string) =>
+      (trackParts(text, voices, SAFARI_CAST, (w) => w, options) ?? []).flatMap((part) => ("text" in part ? [part.text] : []));
+    assert.deepEqual(words("Click! It's a Dodrio! [fanfare]"), ["Click! It's a", "Dodrio!"]);
+    assert.deepEqual(words("Click! It's a Ditto! [fanfare]"), ["Click! It's a", "Ditto!"]);
+    const [first, name] = trackParts("It's a Dodrio!", voices, SAFARI_CAST, (w) => w, options) ?? [];
+    assert.equal(first && "tight" in first ? first.tight : undefined, undefined);
+    assert.equal(name && "tight" in name ? name.tight : undefined, true, "the name joins straight on");
+    assert.deepEqual(name && "fallback" in name ? name.fallback : undefined, fallbackVoices(SAFARI_CAST)[NARRATOR]);
+  });
+
+  it("keeps a line's recording under its words and voice alone", () => {
+    assert.equal(speechKey("Click! It's a", LILY), speechKey("Click! It's a", LILY));
+    assert.notEqual(speechKey("Click! It's a", LILY), speechKey("Click! It's a", ALICE));
+    assert.notEqual(speechKey("Dodrio!", LILY), speechKey("Dodrio.", LILY));
+    assert.match(speechKey("Dodrio!", LILY), /^[a-f0-9]{64}$/);
+  });
+});
+
+describe("falling back to Piper", () => {
+  it("decides from Yoto's answer", () => {
+    assert.equal(labsRefusal(429), "piper", "a 429 that outlasted the retries");
+    assert.equal(labsRefusal(400), "piper");
+    assert.equal(labsRefusal(403), "piper", "a voice Yoto no longer offers");
+    assert.equal(labsRefusal(404), "piper");
+    assert.equal(labsRefusal(undefined, true), "piper", "a failed recording job");
+    assert.equal(labsRefusal(401), "reconnect");
+    assert.equal(labsRefusal(500), "retry");
+    assert.equal(labsRefusal(503), "retry");
+    assert.equal(labsRefusal(undefined), "retry");
+  });
+
+  it("decides from what the browser saw while waiting for a recording", () => {
+    assert.equal(pollFailureFallsBack({ message: "Yoto could not finish the recording." }), true);
+    assert.equal(pollFailureFallsBack({ message: "Timed out", gateway: true }), false);
+    assert.equal(pollFailureFallsBack({ message: RECONNECT_YOTO }), false);
+  });
+
+  it("swaps every line for its Piper voice, and only accepts Piper as a fallback", () => {
+    const parts = trackParts("'Boo,' he says.", castVoices(LILY, SAFARI_CAST), SAFARI_CAST, (w) => w, {
+      fallback: fallbackVoices(SAFARI_CAST),
+    }) as TrackPart[];
+    const piper = piperParts(parts);
+    assert.ok(piper.every((part) => !("voiceId" in part) || part.voiceId === PIPER_VOICE_ID));
+    assert.deepEqual(readTrackParts(JSON.parse(JSON.stringify(parts))), parts);
+    assert.equal(readTrackParts([{ text: "Hi", voiceId: LILY, fallback: { voiceId: GEORGE } }]), null);
+    assert.deepEqual(readTrackParts([{ text: "Hi", voiceId: LILY, tight: true }]), [
+      { text: "Hi", voiceId: LILY, pitch: 0, tempo: 1, tight: true },
+    ]);
+  });
+
+  it("names a send by when it started, and logs counts with no words or names", () => {
+    assert.equal(adventureSendId(1_000_000), "slfls");
+    const line = sendSummary("slfls", {
+      tracks: 3,
+      labsNew: 4,
+      piperNew: 0,
+      cached: 9,
+      refused429: 1,
+      refusedOther: 0,
+      failedJobs: 0,
+      fallback: true,
+    });
+    assert.equal(
+      line,
+      "[adventure voices] send slfls: 3 tracks, 4 new Yoto voice lines, 0 new Piper lines, 9 reused; refused 429 x1, other x0, failed jobs x0, reading with Piper",
+    );
+    assert.match(VOICE_FALLBACK_NOTE, /Piper/);
   });
 });
 

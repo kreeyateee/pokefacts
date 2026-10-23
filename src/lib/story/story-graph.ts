@@ -62,4 +62,9 @@ export type StoryGraph = {
   nodes: StoryNode[];
   /** Characters who speak, each in their own voice. Without a cast, the narrator reads everything. */
   cast?: StoryCharacter[];
+  /**
+   * Words that change from one send to the next, such as Pokémon names and the child's name. Each is
+   * recorded as its own short clip, so the wording around it is the same every time and can be reused.
+   */
+  slots?: string[];
 };

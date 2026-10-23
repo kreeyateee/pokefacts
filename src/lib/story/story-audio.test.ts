@@ -19,9 +19,12 @@ import type { StoryGraph } from "./story-graph";
 import { bedClips } from "../story-audio";
 import { POKEBALL_PIXEL } from "./pokeball";
 import { CATCH_SOUND_PATH, readStoryBed, STORY_AMBIENCE, STORY_MUSIC, STORY_SOUNDS } from "./story-sound";
-import { castVoices, trackParts, type TrackPart } from "./story-voices";
+import { PIPER_VOICE_ID } from "../piper-voice";
+import { castVoices, fallbackVoices, trackParts, type TrackPart } from "./story-voices";
 
-const [LILY, GEORGE] = YOTO_VOICES.map((voice) => voice.id) as [string, string];
+const voice = (name: string) => YOTO_VOICES.find((item) => item.name === name)?.id as string;
+const [LILY, ALICE, LIAM] = ["Lily", "Alice", "Liam"].map(voice) as [string, string, string];
+const PIPER = PIPER_VOICE_ID;
 
 /** A one-second tone as an MP3 (or a WAV), standing in for a recorded line. */
 function tone(frequency: number, wav = false): Promise<Buffer> {
@@ -104,6 +107,23 @@ function rms(samples: Float32Array, from: number, to: number): number {
   return Math.sqrt(sum / Math.max(1, last - first));
 }
 
+/** Runs a track through every step, as the browser does, until it is uploaded. */
+async function drive(fetchImpl: typeof fetch, roots: Parameters<typeof prepareFactTrack>[3], body: ReturnType<typeof factTrackBody>) {
+  let request = body;
+  for (let step = 0; step < 40; step += 1) {
+    const result = await prepareFactTrack("x".repeat(24), request, fetchImpl, roots);
+    if (result.phase === "ready") return result;
+    if (result.phase === "speech") {
+      request = { ...request, speechJobId: result.speechJobId, speechPart: result.speechPart, speechCardId: `card${Number(result.speechJobId?.slice(4))}` };
+    } else if (result.phase === "upload") {
+      request = { ...request, uploadId: result.uploadId };
+    } else {
+      throw new Error(`Stopped at ${result.phase}`);
+    }
+  }
+  throw new Error("The track did not finish.");
+}
+
 describe("adventure track audio", () => {
   it("shifts a character's pitch without changing how fast they talk", () => {
     const filter = joinFilter([{ pitch: 0, tempo: 1 }, { pitch: 12, tempo: 1 }, {}]);
@@ -117,7 +137,8 @@ describe("adventure track audio", () => {
     try {
       const lines = new Map([
         [LILY, await tone(440)],
-        [GEORGE, await tone(220)],
+        [LIAM, await tone(220)],
+        [ALICE, await tone(330)],
       ]);
       const cry = await tone(880);
       const voices = castVoices(LILY, SAFARI_CAST);
@@ -146,14 +167,14 @@ describe("adventure track audio", () => {
       }
       assert.equal(phases.at(-1), "ready");
 
-      // Five spoken lines, each recorded once: Barnaby in George, everyone else on Lily (Marigold shifted lower).
+      // Five spoken lines, each recorded once: Barnaby is Liam, Marigold is Alice, the narrator Lily.
       assert.deepEqual(
         yoto.jobs.map((job) => [job.voiceId, job.text]),
         [
           [LILY, "Barnaby throws."],
-          [GEORGE, "Mine!"],
+          [LIAM, "Mine!"],
           [LILY, "he shouts."],
-          [LILY, "Not for long,"],
+          [ALICE, "Not for long,"],
           [LILY, "says Marigold."],
         ],
       );
@@ -177,7 +198,8 @@ describe("adventure track audio", () => {
     try {
       const lines = new Map([
         [LILY, await tone(440)],
-        [GEORGE, await tone(220)],
+        [LIAM, await tone(220)],
+        [ALICE, await tone(330)],
       ]);
       const yoto = fakeYoto(lines, await tone(880));
       const parts = trackParts("[catch] 'Boo,' says Barnaby.", castVoices(LILY, SAFARI_CAST), SAFARI_CAST);
@@ -188,7 +210,7 @@ describe("adventure track audio", () => {
         { speech: dir, wait: async () => undefined },
       );
       assert.equal(result.cryFirst, false);
-      assert.deepEqual(yoto.jobs.map((job) => job.voiceId), [GEORGE, LILY]);
+      assert.deepEqual(yoto.jobs.map((job) => job.voiceId), [LIAM, LILY]);
       assert.ok((await audioDurationSeconds(result.audio, "joined.wav")) > 4);
     } finally {
       await rm(dir, { recursive: true, force: true });
@@ -215,10 +237,11 @@ describe("adventure track audio", () => {
     assert.doesNotMatch(first?.text ?? "", /\[catch\]/, "the cue is never read out");
     assert.deepEqual(
       first?.parts?.map((part) => ("sound" in part ? part.sound : part.voiceId)),
-      [LILY, "catch", LILY, LILY],
+      [LILY, "catch", ALICE, LILY],
     );
-    assert.ok(first?.parts?.some((part) => "pitch" in part && part.pitch < 0), "Marigold is lower");
-    assert.equal(jobs.find((job) => job.key === "ba")?.parts, undefined, "a plain line records as before");
+    assert.ok(first?.parts?.every((part) => !("text" in part) || part.fallback?.voiceId === PIPER), "every line has a Piper fallback");
+    const plain = jobs.find((job) => job.key === "ba")?.parts;
+    assert.equal(plain?.length, 1, "a plain line is one part, so it is cached and can fall back too");
     assert.deepEqual(factTrackBody({ text: "x", title: "y", parts: first?.parts }).parts, first?.parts);
   });
 
@@ -278,6 +301,66 @@ describe("adventure track audio", () => {
     }
   });
 
+  it("records the wording once and only the new name on the next card", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-story-slots-"));
+    try {
+      const lines = new Map([[LILY, await tone(440)]]);
+      const yoto = fakeYoto(lines, await tone(880));
+      const roots = { speech: path.join(dir, "speech"), rendered: path.join(dir, "rendered") };
+      const record = async (name: string) => {
+        const parts = trackParts(`Click! It's a ${name}! That's one in the bag.`, castVoices(LILY, SAFARI_CAST), SAFARI_CAST, (w) => w, {
+          slots: [name],
+        }) as TrackPart[];
+        await drive(yoto.fetchImpl, roots, factTrackBody({ text: name, title: "Stop 1", voiceId: LILY, parts }));
+      };
+      await record("Dodrio");
+      assert.deepEqual(yoto.jobs.map((job) => job.text), ["Click! It's a", "Dodrio!", "That's one in the bag."]);
+      await record("Ditto");
+      assert.deepEqual(yoto.jobs.map((job) => job.text).slice(3), ["Ditto!"], "only the new name is recorded");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("carries on with Piper when Yoto's voices turn a line away, and says so in the log", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "champdex-story-fallback-"));
+    const logged: string[] = [];
+    const info = console.info;
+    console.info = (line: string) => logged.push(line);
+    try {
+      let piperLines = 0;
+      const piperWav = await tone(300, true);
+      const roots = {
+        speech: path.join(dir, "speech"),
+        rendered: path.join(dir, "rendered"),
+        piper: { bin: "piper", model: "voice", download: false, run: async () => ((piperLines += 1), piperWav) },
+      };
+      const yoto = fakeYoto(new Map(), await tone(880));
+      const refusing: typeof fetch = async (input, init) => {
+        if (String(input).startsWith("https://labs.api.yotoplay.com/content/job?")) {
+          return Response.json({ error: "Too many requests" }, { status: 429, headers: { "retry-after": "0" } });
+        }
+        return yoto.fetchImpl(input, init);
+      };
+      const parts = trackParts("'Boo,' says Barnaby.", castVoices(LILY, SAFARI_CAST), SAFARI_CAST, (w) => w, {
+        fallback: fallbackVoices(SAFARI_CAST),
+      }) as TrackPart[];
+      const body = factTrackBody({ text: "Boo", title: "Stop 2", voiceId: LILY, parts, sendId: "stest01" });
+      const first = await prepareFactTrack("x".repeat(24), body, refusing, roots);
+      assert.equal(first.phase, "voice-fallback");
+      assert.equal(piperLines, 0);
+      // The browser sends the track again, and every track after it, with fallbackOnly.
+      await drive(refusing, roots, { ...body, fallbackOnly: true });
+      assert.equal(piperLines, 2, "both lines read by Piper");
+      assert.ok(logged.some((line) => /send stest01: .*refused 429 x1.*reading with Piper/.test(line)), logged.join("\n"));
+      assert.ok(logged.some((line) => /send stest01: 1 tracks, 0 new Yoto voice lines, 2 new Piper lines, 0 reused/.test(line)));
+      assert.ok(logged.every((line) => !/Boo|Barnaby|x{24}/.test(line)), "no words, names or tokens in the log");
+    } finally {
+      console.info = info;
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("records a narrator-only scene with a bed as one part, and leaves the repeating question plain", () => {
     const graph: StoryGraph = {
       id: "bed",
@@ -301,9 +384,10 @@ describe("adventure track audio", () => {
     const jobs = renderJobs("Bed", card, upload);
     const narration = jobs.find((job) => job.key === "aa");
     assert.deepEqual(narration?.bed, { ambience: "lake", music: "calm" });
-    assert.deepEqual(narration?.parts, [{ text: "The lake is calm.", voiceId: LILY, pitch: 0, tempo: 1 }]);
-    assert.equal(jobs.find((job) => job.key === "aq")?.bed, undefined);
-    assert.equal(jobs.find((job) => job.key === "aq")?.parts, undefined);
+    assert.deepEqual(narration?.parts, [
+      { text: "The lake is calm.", voiceId: LILY, pitch: 0, tempo: 1, fallback: { voiceId: PIPER, pitch: 0, tempo: 1 } },
+    ]);
+    assert.equal(jobs.find((job) => job.key === "aq")?.bed, undefined, "the repeating question has no bed");
     assert.deepEqual(factTrackBody({ text: "x", title: "y", parts: narration?.parts, bed: narration?.bed }).bed, narration?.bed);
   });
 });

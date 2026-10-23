@@ -388,6 +388,11 @@ describe("safari adventure from the catalogue", () => {
     }
   });
 
+  it("records the child's name on its own, and leaves Pokémon names in their lines", () => {
+    assert.deepEqual(safariAdventure({ seed: 1, owner: "Mia" }).slots, ["Mia"]);
+    assert.deepEqual(safariAdventure({ seed: 1 }).slots, []);
+  });
+
   it("walks the golden path through every stop", () => {
     const graph = safariAdventure({ seed: 1, owner: "Mia" });
     const walk = goldenWalk(graph);

@@ -22,6 +22,8 @@ export async function POST(request: Request) {
     parts?: unknown;
     speechPart?: string;
     bed?: unknown;
+    fallbackOnly?: boolean;
+    sendId?: string;
     cryVolume?: number;
     voiceVolume?: number;
     pauseSeconds?: number;

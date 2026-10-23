@@ -126,6 +126,7 @@ import {
 import { isYotoCoverUrl, yotoPlaylistUrl } from "@/lib/yoto-playlist";
 import { storyCard, storyPixels } from "@/lib/story/story-card";
 import { storyTrackCount } from "@/lib/story/story-check";
+import { adventureSendId, pollFailureFallsBack, VOICE_FALLBACK_NOTE } from "@/lib/story/voice-fallback";
 import type { StoryGraph } from "@/lib/story/story-graph";
 import {
   CARD_KEY,
@@ -1344,7 +1345,9 @@ export function Studio({
     let last = new SendFailure("This track did not finish.", false);
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        for (let step = 0; step < 40; step += 1) {
+        // An adventure track records each of its lines in turn, two steps each, so it may need more steps.
+        const steps = 40 + 3 * (job.parts?.length ?? 0);
+        for (let step = 0; step < steps; step += 1) {
           throwIfCancelled();
           setJob({ status: "sending", detail: job.progress, done: mark.done, total: mark.total });
           const response = await yotoFetch("/api/yoto/track", {
@@ -1362,6 +1365,8 @@ export function Studio({
                 speechPart,
                 parts: job.parts,
                 bed: job.bed,
+                fallbackOnly: Boolean(pendingRef.current?.voiceFallback),
+                sendId: pendingRef.current ? adventureSendId(pendingRef.current.startedAt) : undefined,
                 uploadId,
                 mix: voice.mix,
               }),
@@ -1392,10 +1397,30 @@ export function Studio({
           if (payload.phase === "ready" && payload.trackUrl?.startsWith("yoto:#")) {
             return payload as FinishedAudio;
           }
+          if (payload.phase === "voice-fallback") {
+            // Yoto's voices turned a line away: this track and the rest of the send are read by Piper.
+            switchToPiper();
+            speechJobId = undefined;
+            speechCardId = undefined;
+            speechPart = undefined;
+            continue;
+          }
           if (payload.phase === "speech" && payload.speechJobId) {
             speechJobId = payload.speechJobId;
             speechPart = payload.speechPart;
-            const finished = await pollJob(payload.speechJobId, job.progress, mark);
+            let finished: Awaited<ReturnType<typeof pollJob>>;
+            try {
+              finished = await pollJob(payload.speechJobId, job.progress, mark);
+            } catch (error) {
+              if (!job.parts || error instanceof SendCancelled) throw error;
+              const failure = asSendFailure(error, "Yoto could not finish the recording.");
+              if (!pollFailureFallsBack(failure)) throw failure;
+              switchToPiper();
+              speechJobId = undefined;
+              speechCardId = undefined;
+              speechPart = undefined;
+              continue;
+            }
             const cardId = scratchCardId(finished);
             if (!cardId) throw new SendFailure("The voice did not return a recording.", false);
             speechCardId = cardId;
@@ -1553,6 +1578,13 @@ export function Studio({
     return cardId;
   }
 
+  /** From now on this send's adventure lines are read by Piper; the parent hears why at the end. */
+  function switchToPiper() {
+    if (pendingRef.current?.voiceFallback) return;
+    changePending((send) => ({ ...send, voiceFallback: true }));
+    toast("Yoto's voices are busy, so the rest of this adventure is being read by Piper.");
+  }
+
   function finishSend(send: PendingSend, cardId: string | undefined) {
     if (send.bulk) {
       const { total, dexNote } = send.bulk;
@@ -1567,9 +1599,10 @@ export function Studio({
       return;
     }
     const finish = send.finish;
+    const done = finish?.detail ?? `${send.title} is in your Yoto library.`;
     setJob({
       status: "completed",
-      detail: finish?.detail ?? `${send.title} is in your Yoto library.`,
+      detail: send.voiceFallback ? `${done} ${VOICE_FALLBACK_NOTE}` : done,
       done: finish?.tracks,
       total: finish?.tracks,
       cardId,

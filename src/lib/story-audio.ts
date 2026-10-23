@@ -52,7 +52,7 @@ export async function joinTrackParts(
   for (const part of parts) {
     clips.push(
       isSpokenPart(part)
-        ? { audio: await speechFor(part), pitch: part.pitch, tempo: part.tempo }
+        ? { audio: await speechFor(part), pitch: part.pitch, tempo: part.tempo, speech: true, tight: part.tight }
         : { audio: await storySound(part.sound, soundRoot) },
     );
   }

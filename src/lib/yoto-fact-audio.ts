@@ -16,7 +16,7 @@ import { synthesizePiper, type PiperSynthOptions } from "@/lib/piper";
 import { chosenVoice, isPiperVoice, piperCacheToken } from "@/lib/piper-voice";
 import { isSpokenPart, joinTrackParts, type SpokenPart } from "@/lib/story-audio";
 import { readStoryBed } from "@/lib/story/story-sound";
-import { partKey, readTrackParts } from "@/lib/story/story-voices";
+import { partKey, piperParts, readTrackParts } from "@/lib/story/story-voices";
 import { RECONNECT_YOTO, reconnectMessage, yotoErrorText } from "@/lib/yoto-error";
 
 type FactCryRequest = {
@@ -347,10 +347,15 @@ type TrackPrepareRequest = {
   speechPart?: string;
   /** Ambience and music to lay under an adventure track. Needs `parts`. */
   bed?: unknown;
+  /** Yoto's voice service turned this send away earlier: read every line in its Piper fallback. */
+  fallbackOnly?: boolean;
+  /** A random id for one send, so the server log can count its recordings. Nothing personal. */
+  sendId?: string;
 };
 
 type TrackPrepareResult = {
-  phase: "speech" | "upload" | "ready" | "discarded";
+  /** `voice-fallback`: Yoto's voice service turned a line away; send again with `fallbackOnly`. */
+  phase: "speech" | "upload" | "ready" | "discarded" | "voice-fallback";
   speechJobId?: string;
   speechPart?: string;
   speechCardId?: string;
@@ -364,6 +369,69 @@ type TrackPrepareResult = {
 
 const SPEECH_ROOT = path.join(/* turbopackIgnore: true */ process.cwd(), "data", "speech");
 const RENDER_ROOT = path.join(/* turbopackIgnore: true */ process.cwd(), "data", "rendered");
+
+/**
+ * What to do when Yoto Labs turns a line away. A 429 that outlasted the retries, any other 4xx and a
+ * failed recording job all mean the voice is not coming, so the line falls back to Piper. A 401 means
+ * the login has run out, which Connect Yoto fixes, and a 5xx or a network fault is worth a retry.
+ */
+export function labsRefusal(status: number | undefined, failedJob = false): "piper" | "reconnect" | "retry" {
+  if (failedJob) return "piper";
+  if (status === 401) return "reconnect";
+  if (status !== undefined && status >= 400 && status < 500) return "piper";
+  return "retry";
+}
+
+/** What one send has needed so far. Counts only: no tokens, names or words. */
+type SendStats = {
+  tracks: number;
+  labsNew: number;
+  piperNew: number;
+  cached: number;
+  refused429: number;
+  refusedOther: number;
+  failedJobs: number;
+  fallback: boolean;
+  /** Speech keys recorded during this send, so a line reused later in the same send counts as cached. */
+  recorded: Set<string>;
+};
+
+const SEND_STATS = new Map<string, SendStats>();
+const SEND_STATS_LIMIT = 50;
+
+function sendStats(sendId: string): SendStats {
+  const known = sendId ? SEND_STATS.get(sendId) : undefined;
+  if (known) return known;
+  const fresh: SendStats = {
+    tracks: 0,
+    labsNew: 0,
+    piperNew: 0,
+    cached: 0,
+    refused429: 0,
+    refusedOther: 0,
+    failedJobs: 0,
+    fallback: false,
+    recorded: new Set(),
+  };
+  if (!sendId) return fresh;
+  SEND_STATS.set(sendId, fresh);
+  if (SEND_STATS.size > SEND_STATS_LIMIT) SEND_STATS.delete(SEND_STATS.keys().next().value as string);
+  return fresh;
+}
+
+/** One line per finished adventure track, and one per refusal: how much was new and how much was reused. */
+export function sendSummary(sendId: string, stats: Pick<SendStats, Exclude<keyof SendStats, "recorded">>, note = ""): string {
+  return (
+    `[adventure voices] send ${sendId || "unnamed"}: ${stats.tracks} tracks, ` +
+    `${stats.labsNew} new Yoto voice lines, ${stats.piperNew} new Piper lines, ${stats.cached} reused; ` +
+    `refused 429 x${stats.refused429}, other x${stats.refusedOther}, failed jobs x${stats.failedJobs}` +
+    `${stats.fallback ? ", reading with Piper" : ""}${note ? ` (${note})` : ""}`
+  );
+}
+
+function logSend(sendId: string, stats: SendStats, note = "") {
+  console.info(sendSummary(sendId, stats, note));
+}
 
 /** Cache identity for a finished mix: voice, cry gain, voice gain, pause, dex number, and the script. */
 export function renderedCacheKey(
@@ -390,7 +458,8 @@ function legacyRenderedKey(text: string, dexId: number | undefined, voiceId: str
   return sha256(Buffer.from(`${chosenVoice(voiceId)}\n${dexId ?? 0}\n${line}`));
 }
 
-function speechKey(text: string, voiceId: string): string {
+/** Where a line's recording is kept: by its words and its voice only, so any card can reuse it. */
+export function speechKey(text: string, voiceId: string): string {
   const synth = piperCacheToken(voiceId);
   return sha256(Buffer.from(synth ? `${voiceId}\n${synth}\n${text}` : `${voiceId}\n${text}`));
 }
@@ -806,8 +875,10 @@ export async function prepareFactTrack(
   if (request.uploadId && !/^[\w-]{4,120}$/.test(request.uploadId)) {
     throw new Error("That upload id does not look right.");
   }
-  const parts = request.parts === undefined ? null : readTrackParts(request.parts);
-  if (request.parts !== undefined && !parts) throw new Error("The lines for this adventure track could not be read.");
+  const asked = request.parts === undefined ? null : readTrackParts(request.parts);
+  if (request.parts !== undefined && !asked) throw new Error("The lines for this adventure track could not be read.");
+  const parts = asked && request.fallbackOnly ? piperParts(asked) : asked;
+  const sendId = request.sendId && /^[a-z0-9]{4,32}$/.test(request.sendId) ? request.sendId : "";
   if (request.speechPart && !/^[a-z0-9]{1,16}$/.test(request.speechPart)) {
     throw new Error("That line id does not look right.");
   }
@@ -957,6 +1028,22 @@ export async function prepareFactTrack(
    */
   const fromParts = async (lines: NonNullable<typeof parts>): Promise<TrackPrepareResult> => {
     const spoken = lines.filter(isSpokenPart);
+    const stats = sendStats(sendId);
+    /** Yoto Labs turned a line away. Fall back to Piper if every line has a Piper voice to fall back to. */
+    const refused = (status: number | undefined, failedJob: boolean, message: string): TrackPrepareResult => {
+      const decision = labsRefusal(status, failedJob);
+      if (status === 429) stats.refused429 += 1;
+      else if (failedJob) stats.failedJobs += 1;
+      else stats.refusedOther += 1;
+      const canFallBack = spoken.every((part) => isPiperVoice(part.voiceId) || part.fallback);
+      if (decision !== "piper" || !canFallBack) {
+        logSend(sendId, stats, `stopped: ${failedJob ? "a failed recording job" : `status ${status ?? "unknown"}`}`);
+        throw new Error(message);
+      }
+      stats.fallback = true;
+      logSend(sendId, stats, `Yoto voices refused (${failedJob ? "failed job" : `status ${status}`}); reading with Piper`);
+      return { phase: "voice-fallback" };
+    };
     const fileFor = (part: SpokenPart) =>
       path.join(
         /* turbopackIgnore: true */ roots.speech,
@@ -971,6 +1058,8 @@ export async function prepareFactTrack(
       const speech = Buffer.from(await response.arrayBuffer());
       if (speech.length < 128 || !inputContainer(speech)) throw new Error("This line's recording was empty.");
       await writeBytesAtomic(fileFor(part), speech);
+      stats.labsNew += 1;
+      stats.recorded.add(speechKey(part.text, part.voiceId));
       const ids = new Set<string>([cardId]);
       if (playable.cardId) ids.add(playable.cardId);
       for (const id of ids) await discardCard(token, id, fetchImpl);
@@ -982,6 +1071,8 @@ export async function prepareFactTrack(
         const wav = await synthesizePiper(part.text, roots.piper);
         if (inputContainer(wav) !== "wav" || wav.length < 44) throw new Error("Piper did not write a recording.");
         await writeBytesAtomic(fileFor(part), wav);
+        stats.piperNew += 1;
+        stats.recorded.add(speechKey(part.text, part.voiceId));
         continue;
       }
       const key = partKey(part);
@@ -998,8 +1089,12 @@ export async function prepareFactTrack(
           15_000,
         );
         const fields = jobFields(await readJson(status));
-        if (!status.ok) throw new Error(fields.error || "Could not check this line's recording.");
-        if (fields.status === "failed") throw new Error(fields.error || "Yoto could not record this line.");
+        if (!status.ok) {
+          const message = fields.error || "Could not check this line's recording.";
+          if (status.status >= 400 && status.status < 500) return refused(status.status, false, message);
+          throw new Error(message);
+        }
+        if (fields.status === "failed") return refused(undefined, true, fields.error || "Yoto could not record this line.");
         if (fields.status !== "completed" || !fields.cardId) {
           return { phase: "speech", speechJobId: request.speechJobId, speechPart: key };
         }
@@ -1019,10 +1114,14 @@ export async function prepareFactTrack(
         20_000,
       );
       const started = jobFields(await readJson(created));
-      if (!created.ok || !started.jobId) throw new Error(started.error || "Yoto did not start this line.");
+      if (!created.ok) return refused(created.status, false, started.error || "Yoto did not start this line.");
+      if (!started.jobId) throw new Error(started.error || "Yoto did not start this line.");
       return { phase: "speech", speechJobId: started.jobId, speechPart: key };
     }
     await releaseScratch();
+    for (const part of spoken) if (!stats.recorded.has(speechKey(part.text, part.voiceId))) stats.cached += 1;
+    stats.tracks += 1;
+    logSend(sendId, stats);
     const joined = await joinTrackParts(lines, (part) => readFile(fileFor(part)), roots.sounds, bed);
     return finishSpeech(joined);
   };

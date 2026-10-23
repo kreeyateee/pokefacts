@@ -420,19 +420,34 @@ export async function assertCryFirst(
   }
 }
 
-/** One clip to join: a voice line shifted in pitch (semitones) and speed, or a sound effect left as it is. */
-export type JoinClip = { audio: Buffer; pitch?: number; tempo?: number };
+/**
+ * One clip to join: a voice line shifted in pitch (semitones) and speed, or a sound effect left as it is.
+ * `speech` trims the silence a voice leaves at each end; `tight` joins the clip straight on to the one
+ * before, for a name recorded on its own in the middle of a sentence.
+ */
+export type JoinClip = { audio: Buffer; pitch?: number; tempo?: number; speech?: boolean; tight?: boolean };
 
 /** Silence after each clip, so lines do not run into each other. */
 const JOIN_GAP_SECONDS = 0.22;
+/** The breath between a name and the words around it. */
+const TIGHT_GAP_SECONDS = 0.05;
+
+/** Takes the quiet off both ends of a recording. */
+const TRIM_SILENCE =
+  "silenceremove=start_periods=1:start_threshold=-50dB:start_silence=0.02,areverse," +
+  "silenceremove=start_periods=1:start_threshold=-50dB:start_silence=0.02,areverse";
 
 /**
  * The ffmpeg filter that joins clips end to end at 44.1 kHz mono. A pitch shift resamples the clip
  * and then corrects its speed, so a character can sound higher or lower without talking faster.
  */
-export function joinFilter(clips: ReadonlyArray<{ pitch?: number; tempo?: number }>, gap = JOIN_GAP_SECONDS): string {
+export function joinFilter(
+  clips: ReadonlyArray<{ pitch?: number; tempo?: number; speech?: boolean; tight?: boolean }>,
+  gap = JOIN_GAP_SECONDS,
+): string {
   const steps = clips.map((clip, index) => {
     const filters = ["aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=mono"];
+    if (clip.speech) filters.push(TRIM_SILENCE);
     const pitch = clip.pitch ?? 0;
     const tempo = clip.tempo ?? 1;
     if (pitch !== 0) {
@@ -441,7 +456,8 @@ export function joinFilter(clips: ReadonlyArray<{ pitch?: number; tempo?: number
     } else if (tempo !== 1) {
       filters.push(`atempo=${tempo.toFixed(4)}`);
     }
-    filters.push(`apad=pad_dur=${gap}`);
+    const pause = clips[index + 1]?.tight ? TIGHT_GAP_SECONDS : gap;
+    filters.push(`apad=pad_dur=${pause}`);
     return `[${index}:a]${filters.join(",")}[p${index}]`;
   });
   const inputs = clips.map((_, index) => `[p${index}]`).join("");

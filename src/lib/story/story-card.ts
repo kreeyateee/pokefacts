@@ -5,7 +5,15 @@ import { checkStory, endingCount, storyLines } from "@/lib/story/story-check";
 import type { StoryGraph, StoryIcon, StoryNode, StoryNodeId } from "@/lib/story/story-graph";
 import { POKEBALL_ICON, POKEBALL_PIXEL } from "@/lib/story/pokeball";
 import { withoutCues, type StoryBed } from "@/lib/story/story-sound";
-import { castVoices, NARRATOR, trackParts, type StoryCharacter, type VoiceStyle } from "@/lib/story/story-voices";
+import {
+  castVoices,
+  fallbackVoices,
+  NARRATOR,
+  trackParts,
+  type StoryCharacter,
+  type TrackPart,
+  type VoiceStyle,
+} from "@/lib/story/story-voices";
 import type {
   YotoContent,
   YotoEditSettings,
@@ -119,8 +127,14 @@ function chapterOrder(graph: StoryGraph): StoryNode[] {
   return [...start, ...graph.nodes.filter((node) => node.id !== graph.start)];
 }
 
-/** Who speaks in this story and in which voice. */
-type Voicing = { voiceId: string; voices: Record<string, VoiceStyle>; cast: readonly StoryCharacter[] };
+/** Who speaks in this story, in which voice, which words are recorded on their own, and the Piper fallbacks. */
+type Voicing = {
+  voiceId: string;
+  voices: Record<string, VoiceStyle>;
+  cast: readonly StoryCharacter[];
+  slots: readonly string[];
+  fallback: Record<string, VoiceStyle>;
+};
 
 /**
  * One track. The page shows the words without sound cues. A track with dialogue or a sound also
@@ -137,10 +151,14 @@ function storyTrack(
 ): KidTrack {
   const shown = withoutCues(text);
   const spoken = pronounce(shown);
-  // A bed needs the joined recording, so a plain narrator line with one becomes a single part.
-  const parts =
-    trackParts(text, voicing.voices, voicing.cast, pronounce) ??
-    (bed ? [{ text: spoken, ...(voicing.voices[NARRATOR] as VoiceStyle) }] : null);
+  // Every adventure line goes through the joined recording, even a plain one, so each line is cached
+  // by its words and voice and every line can fall back to Piper if Yoto's voices turn it away.
+  const narrator = voicing.voices[NARRATOR] as VoiceStyle;
+  const backup = voicing.fallback[NARRATOR];
+  const parts: TrackPart[] = trackParts(text, voicing.voices, voicing.cast, pronounce, {
+    slots: voicing.slots,
+    fallback: voicing.fallback,
+  }) ?? [{ text: spoken, ...narrator, ...(backup && backup.voiceId !== narrator.voiceId ? { fallback: backup } : {}) }];
   return {
     key,
     title,
@@ -149,8 +167,8 @@ function storyTrack(
     icon,
     overlay,
     voiceId: voicing.voiceId,
-    ...(parts ? { parts } : {}),
-    ...(parts && bed ? { bed } : {}),
+    parts,
+    ...(bed ? { bed } : {}),
   };
 }
 
@@ -193,7 +211,13 @@ export function storyCard(
   if (problems.length > 0) throw new Error(`${graph.title || "This story"} is not ready. ${problems.join(" ")}`);
   const voiceId = chosenVoice(options.voiceId ?? LILY_VOICE_ID);
   const cast = graph.cast ?? [];
-  const voicing: Voicing = { voiceId, voices: castVoices(voiceId, cast), cast };
+  const voicing: Voicing = {
+    voiceId,
+    voices: castVoices(voiceId, cast),
+    cast,
+    slots: graph.slots ?? [],
+    fallback: fallbackVoices(cast),
+  };
   const endings = endingCount(graph);
   const nodes = chapterOrder(graph);
   const chapters = nodes.map((node, index) => {

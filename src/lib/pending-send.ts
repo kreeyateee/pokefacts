@@ -63,6 +63,8 @@ export type PendingSend = {
   bulk: PendingBulk | null;
   /** Why the last run stopped. A failed send waits for Retry instead of starting by itself. */
   failed?: string;
+  /** Yoto's voice service turned adventure lines away, so the rest is read by Piper. */
+  voiceFallback?: boolean;
 };
 
 export function startPendingSend(input: {

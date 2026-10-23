@@ -15,7 +15,7 @@ import {
 } from "@/lib/yoto-fact-audio";
 import { joinTrackParts } from "@/lib/story-audio";
 import { readStoryBed, type StoryBed } from "@/lib/story/story-sound";
-import { readTrackParts, type TrackPart } from "@/lib/story/story-voices";
+import { piperParts, readTrackParts, type TrackPart } from "@/lib/story/story-voices";
 import { reconnectMessage, yotoErrorText } from "@/lib/yoto-error";
 import { spokenForDemo } from "@/lib/voice-choice";
 
@@ -260,15 +260,26 @@ async function partsDemo(
   mix: MixSettings,
   bed: StoryBed | null,
 ): Promise<DemoAudio> {
-  const joined = await joinTrackParts(
-    parts,
-    (part) =>
-      isPiperVoice(part.voiceId)
-        ? synthesizePiper(part.text, options.piper)
-        : recordVoice(token, part.text, title, part.voiceId, fetchImpl, options),
-    options.sounds,
-    bed,
-  );
+  const join = (lines: readonly TrackPart[]) =>
+    joinTrackParts(
+      lines,
+      (part) =>
+        isPiperVoice(part.voiceId)
+          ? synthesizePiper(part.text, options.piper)
+          : recordVoice(token, part.text, title, part.voiceId, fetchImpl, options),
+      options.sounds,
+      bed,
+    );
+  let joined: Buffer;
+  try {
+    joined = await join(parts);
+  } catch (error) {
+    // Yoto's voices turned a line away: play the scene in the Piper voices instead, unless the login ran out.
+    const message = error instanceof Error ? error.message : "";
+    const piper = piperParts(parts);
+    if (reconnectMessage(message) || piper.some((part) => "voiceId" in part && !isPiperVoice(part.voiceId))) throw error;
+    joined = await join(piper);
+  }
   if (!dexId) return { audio: joined, cryFirst: false };
   try {
     const loadCry = options.loadCry ?? ((id: number) => ensureCry(id, fetchImpl));

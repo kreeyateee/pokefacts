@@ -56,19 +56,26 @@ function voiceNamed(name: (typeof YOTO_VOICES)[number]["name"]): string {
 }
 
 /**
- * Who speaks in the Safari. The narrator reads in the voice chosen in Settings.
- * Marigold is older and warm: Lily, lower and a touch slower. Barnaby is young and pleased with
- * himself: George, or Brian when George is narrating, higher and quicker.
+ * Who speaks in the Safari. The narrator reads in the voice chosen in Settings. Marigold is older and
+ * warm: Alice, or Matilda when Alice is narrating. Barnaby is young and pleased with himself: Liam, or
+ * Will. With Piper, everyone shares one voice, so each gets a bigger pitch and speed shift instead.
  */
 export const SAFARI_CAST: StoryCharacter[] = [
-  { id: "marigold", name: "Marigold", pronoun: "she", voices: [voiceNamed("Lily")], pitch: -3, tempo: 0.92 },
+  {
+    id: "marigold",
+    name: "Marigold",
+    pronoun: "she",
+    voices: [voiceNamed("Alice"), voiceNamed("Matilda"), voiceNamed("Lily")],
+    tempo: 0.97,
+    piper: { pitch: -3, tempo: 0.92 },
+  },
   {
     id: "barnaby",
     name: "Barnaby",
     pronoun: "he",
-    voices: [voiceNamed("George"), voiceNamed("Brian")],
-    pitch: 2.5,
-    tempo: 1.08,
+    voices: [voiceNamed("Liam"), voiceNamed("Will"), voiceNamed("Charlie")],
+    tempo: 1.03,
+    piper: { pitch: 2.5, tempo: 1.08 },
   },
 ];
 
@@ -818,6 +825,10 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
     start: "start",
     nodes,
     cast: SAFARI_CAST,
+    // The child's name is recorded on its own, so the same adventure for a brother or sister reuses every
+    // other line. Pokémon names stay in their lines: the words around them are that Pokémon's own, so
+    // cutting them out would mean more recordings, not fewer (measured over thirty sends).
+    slots: plan.owner ? [plan.owner] : [],
   };
 }
 

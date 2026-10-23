@@ -16,6 +16,7 @@ import {
 } from "@/lib/story/story-sound";
 import {
   castVoices,
+  fallbackVoices,
   NARRATOR,
   speakerLines,
   trackParts,
@@ -46,8 +47,9 @@ export function nodeParts(
   const cast = story.cast ?? [];
   const voices = castVoices(voiceId, cast);
   const narrator = voices[NARRATOR] as VoiceStyle;
+  const options = { slots: story.slots ?? [], fallback: fallbackVoices(cast) };
   const partsOf = (text: string): TrackPart[] =>
-    trackParts(text, voices, cast, pronounce) ?? [{ text: pronounce(withoutCues(text)), ...narrator }];
+    trackParts(text, voices, cast, pronounce, options) ?? [{ text: pronounce(withoutCues(text)), ...narrator }];
   return [...partsOf(lines.narration), ...(lines.question ? partsOf(lines.question) : [])];
 }
 

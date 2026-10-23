@@ -85,6 +85,8 @@ export function factTrackBody(input: {
   speechPart?: string;
   parts?: TrackPart[];
   bed?: StoryBed;
+  fallbackOnly?: boolean;
+  sendId?: string;
   uploadId?: string;
   mix?: Partial<MixSettings>;
 }): {
@@ -98,6 +100,8 @@ export function factTrackBody(input: {
   speechPart?: string;
   parts?: TrackPart[];
   bed?: StoryBed;
+  fallbackOnly?: boolean;
+  sendId?: string;
   uploadId?: string;
   cryVolume?: number;
   voiceVolume?: number;
@@ -114,6 +118,8 @@ export function factTrackBody(input: {
     ...(input.speechPart ? { speechPart: input.speechPart } : {}),
     ...(input.parts?.length ? { parts: input.parts } : {}),
     ...(input.parts?.length && input.bed ? { bed: input.bed } : {}),
+    ...(input.parts?.length && input.fallbackOnly ? { fallbackOnly: true } : {}),
+    ...(input.parts?.length && input.sendId ? { sendId: input.sendId } : {}),
     ...(input.uploadId ? { uploadId: input.uploadId } : {}),
     ...(input.mix
       ? {
