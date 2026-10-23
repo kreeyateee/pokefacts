@@ -2344,7 +2344,7 @@ export function Studio({
       </main>
 
       <footer className="mx-auto w-full max-w-5xl px-4 pb-8 text-xs leading-5 font-bold text-ink sm:px-6">
-        Unofficial fan catalogue and cards. Not made by Nintendo, Game Freak, Creatures, or Yoto.
+        Works with Yoto. An independent fan project, not made by or affiliated with Yoto, Nintendo, Game Freak, Creatures, or The Pokémon Company.
         Pokémon names and the Pokédex lines are from the games. The short notes are written for this app.{" "}
         <a className="underline decoration-poke-red decoration-2" href={DONATE_URL} target="_blank" rel="noreferrer">
           Buy me a coffee

@@ -19,7 +19,7 @@ Pokefacts is **free**. There is no account to pay for, and there is no paywall. 
 
 You can also run it on your own computer. That path is below. The first time takes a while: you install two free programs, leave a window open, and connect your own Yoto account. After that, starting it again is one line.
 
-This is a fan project. It is not made by Nintendo, Game Freak, Creatures, or Yoto.
+Works with Yoto. An independent fan project, not made by or affiliated with Yoto, Nintendo, Game Freak, Creatures, or The Pokémon Company.
 
 ## What it can do
 
