@@ -113,6 +113,9 @@ function nodeProblems(node: StoryNode, endings: number): string[] {
     if (!validDexId(iconDexId(icon))) {
       problems.push(`${name} shows Pokémon ${iconDexId(icon)}, which is not in the national Pokédex.`);
     }
+    if (icon && "formId" in icon && !(Number.isInteger(icon.formId) && icon.formId > 10_000 && icon.formId < 11_000)) {
+      problems.push(`${name} shows form ${icon.formId}, which is not a Pokémon form.`);
+    }
   }
   return problems;
 }

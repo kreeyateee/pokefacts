@@ -21,7 +21,12 @@ export type StoryChoice = {
  * A 16×16 picture on the player screen: a Pokémon's pixel icon or shadow, one of the story's own
  * pictures (the Poké Ball), or a stock Yoto icon id.
  */
-export type StoryIcon = { dexId: number; shadow?: boolean } | { pixel: StoryPixel } | { yoto: string };
+export type StoryIcon =
+  | { dexId: number; shadow?: boolean }
+  /** A special form's pixel icon, such as a Gigantamax Pokémon, by its PokéAPI form id (10001 and up). */
+  | { formId: number }
+  | { pixel: StoryPixel }
+  | { yoto: string };
 
 type NodeBase = {
   id: StoryNodeId;

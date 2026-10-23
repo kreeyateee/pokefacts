@@ -89,6 +89,7 @@ function iconPath(icon: StoryIcon | undefined, kind: StoryNode["kind"]): string 
   if (!icon) return DEFAULT_ICONS[kind];
   if ("yoto" in icon) return icon.yoto.startsWith("yoto:#") ? icon.yoto : `yoto:#${icon.yoto}`;
   if ("pixel" in icon) return STORY_PIXELS[icon.pixel];
+  if ("formId" in icon) return `/api/artwork/pixel/${icon.formId}`;
   return icon.shadow ? shadowPixelPath(icon.dexId) : `/pixels/${icon.dexId}.png`;
 }
 
@@ -108,6 +109,8 @@ export function storyPixels(graph: StoryGraph): { real: number[]; shadow: number
   for (const node of graph.nodes) {
     for (const icon of [node.icon, node.kind === "choice" ? node.questionIcon : undefined]) {
       if (icon && "dexId" in icon) (icon.shadow ? shadow : real).add(icon.dexId);
+      // The icon route draws a form's pixel icon from its id, the same as a national number.
+      if (icon && "formId" in icon) real.add(icon.formId);
       if (icon && "pixel" in icon) named.add(icon.pixel);
     }
   }
@@ -125,6 +128,11 @@ function uploadedIcon(path: string, uploaded: UploadedPixels): string {
   const named = (Object.entries(STORY_PIXELS) as Array<[StoryPixel, string]>).find(([, file]) => file === path);
   if (named) {
     const media = uploaded.namedById[named[0]];
+    return media ? `yoto:#${media}` : path;
+  }
+  const form = /^\/api\/artwork\/pixel\/(\d+)$/.exec(path);
+  if (form) {
+    const media = uploaded.realById[Number(form[1])];
     return media ? `yoto:#${media}` : path;
   }
   const match = /^\/pixels\/(\d+)(-shadow)?\.png$/.exec(path);
