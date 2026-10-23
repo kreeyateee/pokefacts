@@ -14,6 +14,12 @@ import {
 import { clampMix, isDefaultMix, mixCacheToken, type MixSettings } from "@/lib/playback-settings";
 import { synthesizePiper, type PiperSynthOptions } from "@/lib/piper";
 import { chosenVoice, isPiperVoice, piperCacheToken } from "@/lib/piper-voice";
+import {
+  readRenderedFile,
+  recordRenderedAudio,
+  renderedAccount,
+  renderedAudioFor,
+} from "@/lib/rendered-media";
 import { isSpokenPart, joinTrackParts, levelledCryMix, type SpokenPart } from "@/lib/story-audio";
 import { readStoryBed } from "@/lib/story/story-sound";
 import { partKey, piperParts, readTrackParts } from "@/lib/story/story-voices";
@@ -509,7 +515,7 @@ export async function readCachedMergedMp3(
   return readMp3File(path.join(/* turbopackIgnore: true */ renderedRoot, `${renderedCacheKey(text, dexId, voiceId, mix)}.mp3`));
 }
 
-function readyPayload(cached: StoredAudio): TrackPrepareResult {
+function readyPayload(cached: UploadedAudio): TrackPrepareResult {
   return {
     phase: "ready",
     trackUrl: cached.trackUrl,
@@ -520,14 +526,20 @@ function readyPayload(cached: StoredAudio): TrackPrepareResult {
   };
 }
 
+/**
+ * The yoto:# this account already uploaded for the track. Another account's hash, or one written before
+ * uploads had an owner, is not reused: that account uploads the kept .mp3 itself.
+ */
 async function readReady(
   jsonFile: string,
   dexId: number | undefined,
+  account: string,
   mp3File?: string,
 ): Promise<TrackPrepareResult | undefined> {
-  const cached = await readRendered(jsonFile);
-  if (!cached?.trackUrl.startsWith("yoto:#")) return undefined;
-  if (dexId && cached.cryFirst !== true) return undefined;
+  const stored = await readRenderedFile(jsonFile);
+  const cached = renderedAudioFor(stored, account);
+  if (!cached) return undefined;
+  if (dexId && stored?.cryFirst !== true) return undefined;
   if (mp3File && !(await readMp3File(mp3File))) return undefined;
   return readyPayload(cached);
 }
@@ -609,23 +621,6 @@ function httpsAudio(card: CardPayload): string {
     }
   }
   return "";
-}
-
-type StoredAudio = UploadedAudio & { cryFirst?: boolean };
-
-async function readRendered(file: string): Promise<StoredAudio | undefined> {
-  try {
-    const parsed = JSON.parse(await readFile(file, "utf8")) as StoredAudio;
-    if (parsed.trackUrl?.startsWith("yoto:#")) return parsed;
-  } catch {
-    return undefined;
-  }
-  return undefined;
-}
-
-async function writeRendered(file: string, audio: UploadedAudio, cryFirst: boolean): Promise<void> {
-  await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, JSON.stringify({ ...audio, cryFirst }));
 }
 
 function uploadMarkPath(renderedRoot: string, uploadId: string): string {
@@ -856,6 +851,8 @@ export async function prepareFactTrack(
   const voiceId = chosenVoice(request.voiceId);
   const dexId = request.dexId;
   const mix = clampMix(request);
+  // Whose Yoto library a cached yoto:# belongs to. A one-way hash; the token itself is never stored.
+  const account = renderedAccount(token);
   const species = (request.name?.replace(/\s+/g, " ").trim() || title || (typeof dexId === "number" ? `Number ${dexId}` : "")).slice(0, 40);
   const cryFailure = (error?: unknown) => {
     if (error instanceof Error && error.message === RECONNECT_YOTO) return error;
@@ -906,7 +903,7 @@ export async function prepareFactTrack(
 
   // A supplied MP3 is the song file. Do not reuse a speech recording stored under the same title.
   if (!Buffer.isBuffer(request.audio)) {
-    const fresh = await readReady(renderedFile, dexId, dexId ? mergedFile : undefined);
+    const fresh = await readReady(renderedFile, dexId, account, dexId ? mergedFile : undefined);
     if (fresh) {
       await releaseScratch();
       return fresh;
@@ -916,6 +913,7 @@ export async function prepareFactTrack(
       const legacy = await readReady(
         path.join(/* turbopackIgnore: true */ roots.rendered, `${legacyRenderedKey(text, dexId, voiceId)}.json`),
         dexId,
+        account,
       );
       if (legacy) {
         await releaseScratch();
@@ -937,7 +935,7 @@ export async function prepareFactTrack(
       throw cryFailure(error);
     }
     if (!uploaded?.trackUrl.startsWith("yoto:#")) return { phase: "upload", uploadId };
-    if (persist) await writeRendered(renderedFile, uploaded, Boolean(dexId));
+    if (persist) await recordRenderedAudio(renderedFile, account, uploaded, Boolean(dexId));
     return {
       phase: "ready",
       trackUrl: uploaded.trackUrl,
@@ -957,17 +955,18 @@ export async function prepareFactTrack(
 
   if (request.uploadId) return readyFrom(request.uploadId, 8);
 
-  if (dexId) {
-    const cachedMix = await readMp3File(mergedFile);
-    if (cachedMix) {
-      await releaseScratch();
-      try {
-        const uploadId = await openUpload(token, label, cachedMix, fetchImpl);
-        await writeCryMark(uploadMarkPath(roots.rendered, uploadId));
-        return await readyFrom(uploadId, 8);
-      } catch (error) {
-        throw cryFailure(error);
-      }
+  // The finished mix is kept on disk. Another account, or one whose hash Yoto lost, uploads it again
+  // instead of recording and mixing it again. Yoto skips the PUT when it already has these bytes.
+  const cachedMix = await readMp3File(mergedFile);
+  if (cachedMix) {
+    await releaseScratch();
+    try {
+      const uploadId = await openUpload(token, label, cachedMix, fetchImpl);
+      if (dexId) await writeCryMark(uploadMarkPath(roots.rendered, uploadId));
+      return await readyFrom(uploadId, 8);
+    } catch (error) {
+      if (!dexId) throw error;
+      throw cryFailure(error);
     }
   }
 
@@ -1012,6 +1011,8 @@ export async function prepareFactTrack(
       }
     } else if (kind === "wav") {
       audio = await encodeYotoMp3(speech);
+      // A joined adventure track or a Piper reading took ffmpeg to make. Keep it for the next account.
+      await writeBytesAtomic(mergedFile, audio);
     }
 
     try {

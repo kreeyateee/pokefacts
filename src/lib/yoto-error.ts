@@ -121,12 +121,82 @@ export function reconnectMessage(text: string): string | null {
   return RECONNECT_YOTO;
 }
 
+/** Shown when Yoto lost recordings and a fresh upload did not bring them back. */
+export const MEDIA_EXPIRED =
+  "Some recordings had expired on Yoto and could not be re-uploaded. Try sending again.";
+
+/** What the job route says beside `missingMedia`. Plain words, and none that read as a deleted card. */
+export function missingMediaText(count: number): string {
+  return count === 1
+    ? "Yoto had lost 1 recording in this playlist."
+    : `Yoto had lost ${count} recordings in this playlist.`;
+}
+
+/** Yoto's transcoded sha256, as it appears after `yoto:#`: 43 base64url characters, or 64 hex. */
+export function isYotoMediaHash(value: unknown): value is string {
+  return typeof value === "string" && /^(?:[A-Za-z0-9_-]{43}=?|[a-fA-F0-9]{64})$/.test(value);
+}
+
+const MISSING_MEDIA_WORDS =
+  /media(?:\s+files?)?\b[^.]{0,200}?(?:not\s+found|(?:does|do)\s+not\s+exist|(?:is|are)\s+missing|no\s+longer\s+exists?)|(?:missing|unknown)\s+media(?:\s+files?)?\b/i;
+const MEDIA_HASH = /(?<![A-Za-z0-9_-])(?:yoto:#)?([A-Za-z0-9_-]{43}=?|[a-fA-F0-9]{64})(?![A-Za-z0-9_=-])/g;
+
+/**
+ * Every recording Yoto said it does not have, from "Media file not found: The track "Clues" references a
+ * media file (<hash>) that does not exist", or the same with several hashes. Empty for any other error.
+ * A JSON body, Yoto's raw text, or our own job route's `{ missingMedia }` all work.
+ */
+export function missingMediaHashes(data: unknown): string[] {
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    const listed = (data as { missingMedia?: unknown }).missingMedia;
+    if (Array.isArray(listed)) return [...new Set(listed.filter(isYotoMediaHash))];
+  }
+  const text = serialized(data);
+  if (!MISSING_MEDIA_WORDS.test(text)) return [];
+  const found = new Set<string>();
+  for (const match of text.matchAll(MEDIA_HASH)) {
+    const hash = match[1] ?? "";
+    // A base64url sha256 is a jumble of cases and digits. A long plain word is not one.
+    if (hash.length !== 64 && !(/[A-Z]/.test(hash) && /[a-z]/.test(hash))) continue;
+    if (isYotoMediaHash(hash)) found.add(hash);
+  }
+  return [...found];
+}
+
+/**
+ * One short line for the page. Raw JSON bodies and Yoto's trailing error code (bad-request) are left out;
+ * they belong in the console. Our own two-sentence messages are kept whole.
+ */
+export function plainErrorSentence(text: string, fallback: string): string {
+  let clean = text.replace(/\s+/g, " ").trim();
+  const json = clean.search(/[{[]\s*"/);
+  if (json >= 0) clean = clean.slice(0, json).trim();
+  clean = clean.replace(/\s+[a-z]+(?:[-_][a-z]+)+$/, "").trim();
+  if (!clean) return fallback;
+  if (clean.length <= 220) return clean;
+  const cut = clean.slice(0, 220);
+  const end = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
+  return end > 40 ? cut.slice(0, end + 1) : `${cut.slice(0, 217).trimEnd()}...`;
+}
+
 /** Status text for the page. Gateway and HTML bodies become one short sentence. */
 export function statusErrorText(status: number, data: unknown, fallback: string): string {
   if (looksLikeGateway(status, data)) return PUBLIC_LINK_TIMEOUT;
-  const text = yotoErrorText(data, fallback);
+  if (missingMediaHashes(data).length > 0) return MEDIA_EXPIRED;
+  const text = yotoErrorText(withoutRawBody(data), fallback);
   if (looksLikeGateway(0, text)) return PUBLIC_LINK_TIMEOUT;
-  return reconnectMessage(text) ?? text;
+  return reconnectMessage(text) ?? reconnectMessage(serialized(data)) ?? plainErrorSentence(text, fallback);
+}
+
+/** Our routes repeat Yoto's raw response as `yotoBody` for the console. The page shows the message only. */
+function withoutRawBody(data: unknown): unknown {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return data;
+  const row = data as Record<string, unknown>;
+  if (!("yotoBody" in row)) return data;
+  const rest = { ...row };
+  delete rest.yotoBody;
+  const said = [rest.message, rest.error, rest.detail].some((item) => typeof item === "string" && item.trim());
+  return said ? rest : data;
 }
 
 export function asSendFailure(error: unknown, fallback: string): SendFailure {
@@ -165,8 +235,8 @@ export function yotoUpstreamFailure(text: string): {
   const detail = yotoErrorText(parsed, "Yoto did not accept this card.");
   const reconnect = reconnectMessage(detail) ?? reconnectMessage(yotoBody);
   if (reconnect) return { error: reconnect, message: reconnect, yotoBody: "" };
-  const message = yotoBody && !detail.includes(yotoBody) ? `${detail} ${yotoBody}` : detail;
-  return { error: message, message, yotoBody };
+  // Yoto's words once. The raw body rides along as `yotoBody` for the console, not in the message.
+  return { error: detail, message: detail, yotoBody };
 }
 
 /**
@@ -175,6 +245,8 @@ export function yotoUpstreamFailure(text: string): {
  */
 export function savedCardIsGone(status: number, data: unknown): boolean {
   if (status === 404) return true;
+  // "Media file not found … does not exist" is about a recording, not the card. The card is still there.
+  if (missingMediaHashes(data).length > 0) return false;
   const text = yotoErrorText(data, "");
   if (/does not exist|not found|unknown card|no longer available|has been deleted|card .* gone/i.test(text)) {
     return true;

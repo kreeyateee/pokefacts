@@ -217,6 +217,22 @@ export function withTrackDone(send: PendingSend, key: string, audio: FinishedAud
   return { ...send, audio: { ...send.audio, [key]: audio } };
 }
 
+/** Track keys whose finished audio is one of these Yoto media hashes (without the `yoto:#`). */
+export function tracksUsingMedia(audio: Record<string, FinishedAudio>, hashes: readonly string[]): string[] {
+  const dead = new Set(hashes.map((hash) => `yoto:#${hash}`));
+  return Object.entries(audio)
+    .filter(([, item]) => dead.has(item.trackUrl))
+    .map(([key]) => key);
+}
+
+/** Yoto lost these recordings: forget them, so a resumed send prepares those tracks again. */
+export function withoutTracks(send: PendingSend, keys: readonly string[]): PendingSend {
+  if (!keys.some((key) => Object.prototype.hasOwnProperty.call(send.audio, key))) return send;
+  const audio = { ...send.audio };
+  for (const key of keys) delete audio[key];
+  return { ...send, audio };
+}
+
 export function withScratch(send: PendingSend, cardId: string): PendingSend {
   if (send.scratch.includes(cardId)) return send;
   return { ...send, scratch: [...send.scratch, cardId] };

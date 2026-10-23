@@ -16,6 +16,7 @@ import { assertCryFirst, audioContainer, audioDurationSeconds, cryLeads, cryUrl,
 import { ffmpegCommand, ffprobeCommand } from "./ffmpeg-bin";
 import { guessUpload, LILY_VOICE_ID, type KidCard } from "./kid-cards";
 import { applyFinishedAudio, factsBulkUpload, mapPool, renderJobs, TRACK_POOL_SIZE, trackPoolSize } from "./yoto-send";
+import { renderedAccount } from "./rendered-media";
 import { attachCry, prepareFactTrack, renderedCacheKey } from "./yoto-fact-audio";
 
 function sine(file: string, frequency = 440): Promise<void> {
@@ -1120,12 +1121,16 @@ describe("fact audio", () => {
     await writeFile(
       path.join(rendered, `${key}.json`),
       JSON.stringify({
-        trackUrl: "yoto:#cachedmix",
-        duration: 2,
-        fileSize: merged.length,
-        format: "mp3",
-        channels: "mono",
         cryFirst: true,
+        accounts: {
+          [renderedAccount("x".repeat(24))]: {
+            trackUrl: "yoto:#cachedmix",
+            duration: 2,
+            fileSize: merged.length,
+            format: "mp3",
+            channels: "mono",
+          },
+        },
       }),
     );
     let ffmpegCalls = 0;
@@ -1168,7 +1173,17 @@ describe("Pokefacts scratch", () => {
     const key = renderedCacheKey(text, undefined, LILY_VOICE_ID);
     await writeFile(
       path.join(rendered, `${key}.json`),
-      JSON.stringify({ trackUrl: "yoto:#introhash", duration: 1, fileSize: 20, format: "mp3", channels: "mono" }),
+      JSON.stringify({
+        accounts: {
+          [renderedAccount("x".repeat(24))]: {
+            trackUrl: "yoto:#introhash",
+            duration: 1,
+            fileSize: 20,
+            format: "mp3",
+            channels: "mono",
+          },
+        },
+      }),
     );
     const deleted: string[] = [];
     const fetchImpl: typeof fetch = async (input, init) => {
