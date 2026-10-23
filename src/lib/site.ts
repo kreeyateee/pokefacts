@@ -7,6 +7,9 @@ export const PUBLIC_SITE_ORIGIN = "https://pokefacts.online";
 /** One-off tip jar. Donations are optional. The app stays free. */
 export const DONATE_URL = "https://buymeacoffee.com/kreeyate";
 
+/** The server-costs goal shown above the footer. Set up the same goal on the Buy Me a Coffee page. */
+export const SUPPORT_GOAL = "$200";
+
 /** Public source. People clone this and run it on their own computer. */
 export const SOURCE_URL = "https://github.com/kreeyateee/pokefacts";
 

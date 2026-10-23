@@ -52,6 +52,10 @@ export function SetupGuide({
             </li>
             <li>Choose to create a public app. There is no secret code to invent.</li>
             <li>
+              Make sure the app allows <code className="rounded bg-white px-1">offline_access</code>. Pokefacts
+              needs it to stay signed in while a long playlist records. Without it, Yoto turns the login away.
+            </li>
+            <li>
               Copy the long Client ID. It looks like a jumble of letters and numbers.
             </li>
           </ol>
@@ -172,7 +176,8 @@ export function SetupGuide({
                 {scope}
               </code>
             ))}
-            If you already connected, reconnect so the new permissions are included.
+            <span className="font-bold">offline_access</span> must be on, or Yoto turns the login away. If you
+            already connected, reconnect so the new permissions are included.
           </li>
           <li>
             <span className="font-bold">7. Connect Yoto.</span> Paste the client ID and

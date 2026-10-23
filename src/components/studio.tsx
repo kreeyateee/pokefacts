@@ -13,7 +13,7 @@ import { CoffeeNudge } from "@/components/coffee-nudge";
 import { FavouritesBar, FavouritesDialog, useFavourites } from "@/components/favourites";
 import { JokeBox } from "@/components/joke-box";
 import { FAVOURITES_ASKED_KEY } from "@/lib/favourites";
-import { coverPng } from "@/components/cover-art";
+import { playlistCoverPng } from "@/components/cover-art";
 import { SendBanner, toastSendAllReady, toastSendReady, toastSendStarted } from "@/components/send-banner";
 import { SetupGuide } from "@/components/setup-guide";
 import { CardOptionsDialog } from "@/components/card-options-dialog";
@@ -25,6 +25,7 @@ import { YotoScreen } from "@/components/yoto-screen";
 import { PrintablesPanel } from "@/components/printables-panel";
 import { nextFreeTitle, playlistNamed, type NameClash } from "@/lib/playlist-names";
 import { StickerStudio } from "@/components/sticker-studio";
+import { SupportBox } from "@/components/support-box";
 import { Button } from "@/components/ui/button";
 import {
   isReadyKind,
@@ -78,6 +79,8 @@ import { riddleParts } from "@/lib/dex-facts";
 import { pronounce } from "@/lib/pronounce";
 import { spokenDexLine, statusWithDexNote, WIKI_DEX_NOTE } from "@/lib/spoken-wiki";
 import { selectionUpload } from "@/lib/selection-playlist";
+import { adventureCoverCard, coverUploadRequest } from "@/lib/playlist-cover";
+import { stickerCard } from "@/lib/sticker-cover";
 import { DONATE_URL, SOURCE_URL } from "@/lib/site";
 import { defaultPlayback, readPlayback, type MixSettings, type PlaybackSettings } from "@/lib/playback-settings";
 import {
@@ -282,20 +285,16 @@ async function uploadIconFrom(path: string): Promise<string> {
   throw new SendFailure(fallback, false);
 }
 
-/** The playlist's cover with its name on it, drawn in this page; the bare artwork if drawing fails. */
+/**
+ * The playlist's cover: the card's sticker front with the playlist's name on it, drawn in this page.
+ * The bare artwork if drawing fails. A Who's That card never falls back to its first answer's artwork.
+ */
 async function uploadCover(current: PendingPlaylist): Promise<string | undefined> {
-  const id = current.coverId;
   try {
-    const drawn = await coverPng({
-      title: current.libraryTitle,
-      pictureId: id,
-      hidden: current.coverHidden,
-      scene: current.coverScene,
-    }).catch(() => null);
-    if (!drawn && !id) return undefined;
-    const response = drawn
-      ? await yotoFetch("/api/yoto/cover", { method: "POST", headers: { "Content-Type": "image/png" }, body: drawn })
-      : await yotoFetch(`/api/yoto/cover?id=${id}`, { method: "POST" });
+    const drawn = await playlistCoverPng(current).catch(() => null);
+    const request = coverUploadRequest(drawn, current.coverHidden ? undefined : current.coverId);
+    if (!request) return undefined;
+    const response = await yotoFetch(request.path, request.init);
     const payload = await readBody(response);
     if (!response.ok) return undefined;
     const imageL = (payload as { imageL?: unknown } | null)?.imageL;
@@ -1593,6 +1592,7 @@ export function Studio({
       rangeLabel: playlist.rangeLabel,
       coverId: coverArtworkId(playlist),
       coverHidden: playlist.kind === "guess" || undefined,
+      coverCard: stickerCard(playlist),
       upload,
       jobs: renderJobs(libraryTitle, playlist, upload),
     };
@@ -1993,12 +1993,12 @@ export function Studio({
         const built = storyCard(story, { voiceId: voiceIdRef.current, realById, shadowById, namedById });
         return newSend({
           title: story.title,
-          // No Pokémon on the cover: the first one with a cry may be a secret the child has to work out.
+          // The cover shows the adventure's place and the child's partner. Its other Pokémon may be secrets.
           current: {
             ...pendingPlaylist(built.card, built.upload, story.title),
             coverId: undefined,
             coverHidden: undefined,
-            coverScene: story.id.startsWith("gym") ? "city" : "grassland",
+            coverCard: adventureCoverCard(story, favourites[0]),
           },
           finish: {
             detail: `${story.title} is in your Yoto library.`,
@@ -2556,6 +2556,8 @@ export function Studio({
           />
         ) : null}
       </main>
+
+      <SupportBox />
 
       <footer className="mx-auto w-full max-w-5xl px-4 pb-8 text-xs leading-5 font-bold text-ink sm:px-6">
         Works with Yoto. An independent fan project, not made by or affiliated with Yoto, Nintendo, Game Freak, Creatures, or The Pokémon Company.

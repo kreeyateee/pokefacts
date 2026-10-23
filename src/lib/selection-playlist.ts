@@ -400,6 +400,31 @@ function pickStamp(ids: readonly number[]): string {
   return (hash >>> 0).toString(36);
 }
 
+/** The id the sticker studio saves a picked card's design under: its kind, its place in the pick, and who is on it. */
+export function selectionStickerId(kind: SelectionKind, index: number, ids: readonly number[]): string {
+  return `selection-${kind}-${index}-${pickStamp(ids)}`;
+}
+
+const SENT_SELECTION_KINDS: Readonly<Record<string, SelectionKind>> = {
+  "selection-facts": "facts",
+  "selection-advanced": "advanced",
+  "selection-whos-that": "whos-that",
+};
+
+/**
+ * The id a card's sticker design is saved under. A picked playlist is sent under its kind's id, but its
+ * stickers are saved by what was picked, so the cover finds the design the child made for this pick.
+ */
+export function stickerCardId(card: { id: string; chapters: ReadonlyArray<{ dexId?: number; formId?: number }> }): string {
+  const kind = SENT_SELECTION_KINDS[card.id];
+  if (!kind) return card.id;
+  const ids = card.chapters.flatMap((chapter) => {
+    const id = chapter.formId ?? chapter.dexId;
+    return id ? [id] : [];
+  });
+  return selectionStickerId(kind, 1, ids);
+}
+
 /**
  * One Yoto card per full playlist in the catalogue pick.
  * A pick longer than one card is split in pick order, so each printed row is a different card.
@@ -427,7 +452,7 @@ export function selectionStickerCards(
     const ids = chunk.map((item) => item.id);
     return {
       ...built.card,
-      id: `selection-${kind}-${index + 1}-${pickStamp(ids)}`,
+      id: selectionStickerId(kind, index + 1, ids),
       title: label,
       rangeLabel: range,
       libraryTitle: label,

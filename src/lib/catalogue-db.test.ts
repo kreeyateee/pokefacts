@@ -157,6 +157,19 @@ describe("catalogue database", () => {
     assert.equal(cataloguePick([3])[0]?.name, "Venusaur");
   });
 
+  it("tells a playlist cover where each pick lives, its types, and how rare it is", () => {
+    const [articuno, magikarp, megaX, sprigatito] = cataloguePick([144, 129, 10034, 906]);
+    assert.equal(articuno?.legendary, true);
+    assert.deepEqual(articuno?.types, ["Ice", "Flying"]);
+    assert.equal(magikarp?.habitat, "waters-edge");
+    assert.equal(magikarp?.legendary, false);
+    // A form has its own types and its species' habitat.
+    assert.deepEqual(megaX?.types, ["Fire", "Dragon"]);
+    assert.equal(megaX?.habitat, "mountain");
+    assert.equal(sprigatito?.habitat, null);
+    assert.deepEqual(sprigatito?.types, ["Grass"]);
+  });
+
   it("skips death wording and prefers a metric line over feet or pounds", () => {
     const charizard = getCatalogueEntry(6);
     assert.match(charizard?.info ?? "", /hot enough to melt boulders/);

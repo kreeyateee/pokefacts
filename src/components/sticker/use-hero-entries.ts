@@ -2,7 +2,27 @@
 
 import { useCallback, useRef, useState } from "react";
 
-export type HeroEntry = { types: string[]; genus: string };
+import type { HeroEntry } from "@/lib/sticker-spec";
+
+export type { HeroEntry };
+
+/** One star's types and kind from the Pokédex, or null when it could not be read. */
+export async function fetchHeroEntry(id: number): Promise<HeroEntry | null> {
+  try {
+    const response = await fetch(`/api/catalogue/${id}`);
+    const payload = (await response.json().catch(() => null)) as {
+      entry?: { types?: unknown; genus?: unknown };
+    } | null;
+    if (!response.ok) return null;
+    const types = Array.isArray(payload?.entry?.types)
+      ? payload.entry.types.filter((type): type is string => typeof type === "string")
+      : [];
+    const genus = typeof payload?.entry?.genus === "string" ? payload.entry.genus : "";
+    return { types, genus };
+  } catch {
+    return null;
+  }
+}
 
 /** Types and kind for the star Pokémon, read from the Pokédex once per number. */
 export function useHeroEntries() {
@@ -13,20 +33,9 @@ export function useHeroEntries() {
     if (!Number.isInteger(id) || id < 1) return Promise.resolve();
     const waiting = asked.current.get(id);
     if (waiting) return waiting;
-    const promise = fetch(`/api/catalogue/${id}`)
-      .then(async (response) => {
-        const payload = (await response.json().catch(() => null)) as {
-          entry?: { types?: unknown; genus?: unknown };
-        } | null;
-        const types = Array.isArray(payload?.entry?.types)
-          ? payload.entry.types.filter((type): type is string => typeof type === "string")
-          : [];
-        const genus = typeof payload?.entry?.genus === "string" ? payload.entry.genus : "";
-        setEntries((current) => ({ ...current, [id]: response.ok ? { types, genus } : null }));
-      })
-      .catch(() => {
-        setEntries((current) => ({ ...current, [id]: null }));
-      });
+    const promise = fetchHeroEntry(id).then((entry) => {
+      setEntries((current) => ({ ...current, [id]: entry }));
+    });
     asked.current.set(id, promise);
     return promise;
   }, []);
