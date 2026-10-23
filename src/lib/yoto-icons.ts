@@ -106,3 +106,6 @@ export function voiceOrLily(id?: string): string {
  */
 export const YOTO_SCOPES =
   "user:content:manage user:content:view user:icons:manage family:library:view offline_access profile";
+
+/** The permissions to tick on the Yoto dashboard. `profile` comes with the sign-in itself, so it is not listed. */
+export const YOTO_DASHBOARD_SCOPES: readonly string[] = YOTO_SCOPES.split(" ").filter((scope) => scope !== "profile");

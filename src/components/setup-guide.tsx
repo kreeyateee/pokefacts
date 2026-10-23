@@ -1,9 +1,20 @@
 "use client";
 
 import { LOCAL_APP_ORIGIN, YOTO_REDIRECT_URI } from "@/lib/local-origin";
-import { YOTO_SCOPES } from "@/lib/yoto-icons";
+import { YOTO_DASHBOARD_SCOPES } from "@/lib/yoto-icons";
 
-const SCOPES = YOTO_SCOPES.split(" ");
+/** The boxes to tick on the Yoto dashboard, each in a small code chip. */
+export function ScopeList() {
+  return (
+    <span className="mt-1 flex flex-wrap gap-1">
+      {YOTO_DASHBOARD_SCOPES.map((scope) => (
+        <code key={scope} className="break-all rounded bg-white px-1">
+          {scope}
+        </code>
+      ))}
+    </span>
+  );
+}
 
 export function SetupGuide({
   onConnect,
@@ -52,8 +63,10 @@ export function SetupGuide({
             </li>
             <li>Choose to create a public app. There is no secret code to invent.</li>
             <li>
-              Make sure the app allows <code className="rounded bg-white px-1">offline_access</code>. Pokefacts
-              needs it to stay signed in while a long playlist records. Without it, Yoto turns the login away.
+              Under Scopes, tick these. Pokefacts needs them to make playlists and their icons, and{" "}
+              <code className="rounded bg-white px-1">offline_access</code> keeps it signed in while a long playlist
+              records. Without them, Yoto turns the login away. The other boxes are not needed.
+              <ScopeList />
             </li>
             <li>
               Copy the long Client ID. It looks like a jumble of letters and numbers.
@@ -170,14 +183,9 @@ export function SetupGuide({
             <code className="break-all rounded bg-white px-1">{YOTO_REDIRECT_URI}</code>.
           </li>
           <li>
-            <span className="font-bold">6. Allow these permissions.</span>{" "}
-            {SCOPES.map((scope) => (
-              <code key={scope} className="mr-1 inline-block break-all rounded bg-white px-1">
-                {scope}
-              </code>
-            ))}
-            <span className="font-bold">offline_access</span> must be on, or Yoto turns the login away. If you
-            already connected, reconnect so the new permissions are included.
+            <span className="font-bold">6. Tick these scopes.</span> All of them must be on, or Yoto turns the
+            login away. If you already connected, reconnect so the new permissions are included.
+            <ScopeList />
           </li>
           <li>
             <span className="font-bold">7. Connect Yoto.</span> Paste the client ID and
