@@ -834,7 +834,13 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
 
   for (let number = 1; number <= total; number += 1) {
     const name = W.ENDING_NAMES[number - 1] ?? "Safari Trainer";
-    const base = { id: ID.ending(number), kind: "ending" as const, title: `Ending ${number}: ${name}` };
+    // Back at the gate as the sun goes down: birdsong, and music to match the day.
+    const base = {
+      id: ID.ending(number),
+      kind: "ending" as const,
+      title: `Ending ${number}: ${name}`,
+      bed: { ambience: "gate", music: number === total ? "magical" : number === 1 ? "calm" : "bright" } satisfies StoryBed,
+    };
     if (number === total) {
       nodes.push({
         ...base,

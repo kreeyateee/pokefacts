@@ -21,7 +21,7 @@ const PUBLIC_ROOT = path.join(/* turbopackIgnore: true */ process.cwd(), "public
  * about 15 dB under a normal reading between lines, and ducking presses them down further while anyone
  * speaks, so every word stays clear.
  */
-export const AMBIENCE_VOLUME = 0.13;
+export const AMBIENCE_VOLUME = 0.16;
 export const MUSIC_VOLUME = 0.1;
 
 export type SpokenPart = Extract<TrackPart, { text: string }>;

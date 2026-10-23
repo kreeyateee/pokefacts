@@ -280,14 +280,22 @@ const EFFECTS: Record<StorySound, () => Float32Array> = {
     return edges(normalise(out, 0.38));
   },
   footsteps() {
-    const out = buffer(2.0);
+    // Soft steps through long grass: each one a slow swish and a muffled pad, never a click.
+    const out = buffer(2.4);
     const random = rng(43);
-    for (let step = 0; step < 4; step += 1) {
-      const crunch = bandNoise(random, 200, 3000);
-      const thump = lowNoise(random, 120);
-      add(out, 0.05 + step * 0.45, 0.22, (t) => 0.7 * crunch() * decay(t, 18, 0.01) + 1.5 * thump() * decay(t, 25));
-    }
-    return edges(normalise(out, 0.6));
+    const starts = [0.08, 0.6, 1.08, 1.62];
+    starts.forEach((at, step) => {
+      const swish = bandNoise(random, 350, 2200 - step * 120);
+      const pad = lowNoise(random, 90);
+      const length = 0.42;
+      // A rounded rise over 60 ms and a gentle fall, so nothing snaps.
+      const shape = (t: number) => Math.sin(Math.PI * Math.min(1, t / 0.06) / 2) ** 2 * Math.exp(-t * 7);
+      add(out, at, length, (t) => (0.45 * swish() + 1.1 * pad()) * shape(t) * (step % 2 === 0 ? 1 : 0.85));
+    });
+    // A little rustle of grass under the whole walk.
+    const rustle = bandNoise(random, 1200, 5000);
+    add(out, 0, 2.3, (t) => 0.05 * rustle() * swell(t, 2.3));
+    return edges(normalise(reverb(out, 0.12), 0.42), 0.05, 0.3);
   },
   fanfare() {
     const out = buffer(2.2);
@@ -414,8 +422,9 @@ const AMBIENCE: Record<StoryAmbience, () => Float32Array> = {
     const rustle = bandNoise(random, 1500, 7000);
     const sway = lowNoise(random, 0.6);
     add(out, 0, BED_SECONDS, (t) => 0.5 * rustle() * Math.max(0.15, 0.5 + 6 * sway()) * (0.6 + 0.4 * Math.sin(TAU * 0.13 * t) ** 2));
-    crickets(out, random, 0.07);
-    chirps(out, random, 4, 0.07);
+    breeze(out, random, 0.12, 120, 700, 0.07);
+    crickets(out, random, 0.05);
+    chirps(out, random, 6, 0.06);
     return out;
   },
   woods() {
@@ -464,15 +473,18 @@ const AMBIENCE: Record<StoryAmbience, () => Float32Array> = {
   canyon() {
     const out = buffer(BED_SECONDS);
     const random = rng(131);
-    breeze(out, random, 0.4, 300, 2500, 0.11);
-    for (let n = 0; n < 6; n += 1) {
-      const at = 1 + Math.abs(random()) * (BED_SECONDS - 3);
-      for (let k = 0; k < 3; k += 1) {
-        const tick = bandNoise(random, 1500, 6000);
-        add(out, at + k * (0.08 + k * 0.03), 0.03, (t) => 0.35 * tick() * decay(t, 120));
+    breeze(out, random, 0.4, 300, 2200, 0.11);
+    breeze(out, random, 0.2, 80, 400, 0.05);
+    // A hawk, far away, crying twice and gliding on.
+    for (const at of [3.2, 11.4]) {
+      for (const [offset, length] of [[0, 0.7], [0.9, 0.9]] as const) {
+        add(out, at + offset, length, (t) => {
+          const pitch = 2300 - 900 * (t / length) + 60 * Math.sin(TAU * 7 * t);
+          return 0.07 * Math.sin(TAU * pitch * t) * swell(t, length);
+        });
       }
     }
-    return out;
+    return reverb(out, 0.35);
   },
   sea() {
     const out = buffer(BED_SECONDS);
@@ -483,7 +495,16 @@ const AMBIENCE: Record<StoryAmbience, () => Float32Array> = {
       const wave = Math.sin(Math.PI * ((t % 5.8) / 5.8)) ** 3;
       return 1.4 * surf() * (0.25 + wave) + 0.12 * hiss() * wave;
     });
-    return out;
+    // Gulls, high and far off.
+    for (const at of [2.2, 7.9, 13.5]) {
+      for (const [offset, length] of [[0, 0.35], [0.45, 0.3], [0.85, 0.45]] as const) {
+        add(out, at + offset, length, (t) => {
+          const pitch = 1500 + 500 * Math.sin(Math.PI * (t / length)) - 300 * (t / length);
+          return 0.05 * Math.sin(TAU * pitch * t) * swell(t, length);
+        });
+      }
+    }
+    return reverb(out, 0.15);
   },
   lake() {
     const out = buffer(BED_SECONDS);
@@ -494,23 +515,25 @@ const AMBIENCE: Record<StoryAmbience, () => Float32Array> = {
       const at = Math.abs(random()) * (BED_SECONDS - 1);
       add(out, at, 0.2, (t) => 0.2 * Math.sin(TAU * (700 * t - 900 * t * t)) * decay(t, 18));
     }
+    // A frog, croaking softly from the reeds.
     for (const at of [3.1, 3.5, 11.2]) {
-      add(out, at, 0.3, (t) => 0.2 * Math.sign(Math.sin(TAU * 140 * t)) * Math.sin(TAU * 18 * t) ** 2 * swell(t, 0.3));
+      add(out, at, 0.3, (t) => 0.16 * (Math.sin(TAU * 140 * t) + 0.3 * Math.sin(TAU * 280 * t)) * Math.sin(TAU * 18 * t) ** 2 * swell(t, 0.3));
     }
     chirps(out, random, 3, 0.05);
     return out;
   },
   house() {
+    // A warm, quiet room with the window open: birds outside, and a wind chime now and then.
     const out = buffer(BED_SECONDS);
     const random = rng(149);
     const room = lowNoise(random, 300);
-    add(out, 0, BED_SECONDS, () => 0.6 * room());
-    for (let at = 0.2; at < BED_SECONDS; at += 1) {
-      const pitch = Math.round(at) % 2 === 0 ? 2400 : 2000;
-      add(out, at, 0.04, (t) => 0.18 * Math.sin(TAU * pitch * t) * decay(t, 120));
+    add(out, 0, BED_SECONDS, () => 0.5 * room());
+    breeze(out, random, 0.06, 300, 1500, 0.08);
+    chirps(out, random, 7, 0.05);
+    for (const [at, name] of [[2.4, "E6"], [2.9, "B5"], [9.6, "G6"], [10.2, "D6"], [10.7, "B5"]] as const) {
+      add(out, at, 2.2, (t) => 0.035 * bell(note(name), t) * Math.min(1, t / 0.02));
     }
-    chirps(out, random, 4, 0.04);
-    return out;
+    return reverb(out, 0.2);
   },
   stadium() {
     const out = buffer(BED_SECONDS);

@@ -473,6 +473,7 @@ export function buildGym(plan: GymPlan): StoryGraph {
       kind: "ending",
       title: `Ending ${index + 1}: ${W.ENDING_NAMES[index]}`,
       icon: picture(round.foe),
+      bed: { ambience: "stadium", music: "calm" },
       text: join(missText(round, undefined, words), loss, "[ending]"),
       ending: { number: index + 1, name: W.ENDING_NAMES[index] ?? "The End" },
     });
@@ -482,6 +483,7 @@ export function buildGym(plan: GymPlan): StoryGraph {
     kind: "ending",
     title: `Ending 4: ${W.ENDING_NAMES[3]}`,
     icon: TROPHY,
+    bed: { ambience: "stadium", music: "magical" },
     text: join(W.throwEnding(legendInfo.name, owner), "[ending]"),
     ending: { number: 4, name: W.ENDING_NAMES[3] ?? "Champion" },
   });
@@ -490,6 +492,7 @@ export function buildGym(plan: GymPlan): StoryGraph {
     kind: "ending",
     title: `Ending 5: ${W.ENDING_NAMES[4]}`,
     icon: picture(plan.legend),
+    bed: { ambience: "stadium", music: "magical" },
     text: join(W.restEnding(legendInfo.name, owner), "[golden]"),
     ending: { number: 5, name: W.ENDING_NAMES[4] ?? "Friend of Legends", golden: true },
   });
