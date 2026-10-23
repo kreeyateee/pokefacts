@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { AdventurePanel } from "@/components/adventure-panel";
@@ -917,6 +917,20 @@ export function Studio({
     stopDemo();
     setView("setup");
   }
+
+  // Random 100 first renders from a fixed seed, so the server page and the browser agree.
+  // Straight after it appears, it is shuffled once more, so every visit gets its own hundred.
+  const reshuffleOnArrival = useEffectEvent(() => {
+    const next = randomPokedexCard(factPool);
+    const firstKey = randomCard.chapters[0]?.key;
+    setRandomCard(next);
+    setChapterKey((key) => (key === firstKey ? (next.chapters[0]?.key ?? "start") : key));
+  });
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => reshuffleOnArrival());
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   function shufflePokedex() {
     const next = randomPokedexCard(factPool);
