@@ -305,3 +305,15 @@ describe("expressive voice sample", () => {
     assert.match(withoutVoiceTags(VOICE_SAMPLE_TEXT), /^Pikachu! This Pokémon stores electricity/);
   });
 });
+
+describe("Joke Book", () => {
+  it("ends each joke with a laugh, once, without touching the page text", async () => {
+    const { expressTrack } = await import("./voice-expression");
+    const { withoutVoiceTags } = await import("./voice-tags");
+    const joke = "Here's a joke about Psyduck. Why is Psyduck always confused? ... It forgot!";
+    const sent = expressTrack("joke", joke);
+    assert.equal(sent, `${joke} {laughs}`);
+    assert.equal(expressTrack("joke", sent), sent);
+    assert.equal(withoutVoiceTags(sent), joke);
+  });
+});

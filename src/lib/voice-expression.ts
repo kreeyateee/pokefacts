@@ -162,11 +162,18 @@ export function expressHowTo(script: string): string {
   return insertTags(script, [{ at: script.search(/\S/), tag: "excited" }]);
 }
 
-/** The script a Yoto voice reads for one kind of track. Unknown kinds, such as jokes, are left as written. */
+/** A Joke Book joke ends with a laugh, as the adventures' jokes do (jokeBookText in jokes.ts). */
+export function expressJoke(script: string): string {
+  if (!script.trim() || hasVoiceTags(script)) return script;
+  return `${script.trimEnd()} {laughs}`;
+}
+
+/** The script a Yoto voice reads for one kind of track. Unknown kinds are left as written. */
 export function expressTrack(key: string, script: string, seat: VoiceSeat = {}): string {
   if (key === "entry") return expressFact(script, seat);
   if (key === "clues") return expressClues(script, seat);
   if (key === "answer") return expressAnswer(script, seat);
   if (key === "how") return expressIntro(script);
+  if (key === "joke") return expressJoke(script);
   return script;
 }

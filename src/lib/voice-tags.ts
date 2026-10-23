@@ -41,13 +41,18 @@ export function forElevenLabs(text: string): string {
 
 /** The script with its expression tags taken out, for Piper, browser voices and the page. */
 export function withoutVoiceTags(text: string): string {
-  return text
-    .replace(VOICE_TAG, " ")
-    .replace(/[ \t]{2,}/g, " ")
-    .replace(/ +([,.!?;:])/g, "$1")
-    // A tag just inside an opening quote ("'{gasps} Look!'") leaves no gap after the quote mark.
-    .replace(/(^|\s)(['‘“"]) +/g, "$1$2")
-    .replace(/^ +| +$/gm, "");
+  // Only the gap a tag leaves is tidied. Everything else keeps its spacing, so "Why? ... It forgot!" stays as written.
+  return text.replace(new RegExp(`[ \\t]*${VOICE_TAG.source}[ \\t]*`, "gi"), (match: string, ...rest: unknown[]) => {
+    const offset = rest[rest.length - 2] as number;
+    const whole = rest[rest.length - 1] as string;
+    const before = whole[offset - 1];
+    const after = whole[offset + match.length];
+    // At the start of a line, or just inside an opening quote ("'{gasps} Look!'"): no gap.
+    if (before === undefined || before === "\n" || /['‘“"(]/.test(before)) return "";
+    // At the end of a line, or before punctuation or a closing quote: no gap.
+    if (after === undefined || after === "\n" || /[,.!?;:'’”")]/.test(after)) return "";
+    return " ";
+  });
 }
 
 /** True when the text carries at least one expression tag. */
