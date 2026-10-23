@@ -918,13 +918,21 @@ export function Studio({
     setView("setup");
   }
 
-  // Random 100 first renders from a fixed seed, so the server page and the browser agree.
-  // Straight after it appears, it is shuffled once more, so every visit gets its own hundred.
+  // Random 100 and the random Who's That card first render from a fixed seed, so the server page
+  // and the browser agree. Straight after they appear they are shuffled once more, so every visit
+  // gets its own.
   const reshuffleOnArrival = useEffectEvent(() => {
-    const next = randomPokedexCard(factPool);
-    const firstKey = randomCard.chapters[0]?.key;
-    setRandomCard(next);
-    setChapterKey((key) => (key === firstKey ? (next.chapters[0]?.key ?? "start") : key));
+    const nextFacts = randomPokedexCard(factPool);
+    const nextGuess = randomGuessCard(guessPool);
+    const firstFacts = randomCard.chapters[0]?.key;
+    const firstGuess = guessCard.chapters[0]?.key;
+    setRandomCard(nextFacts);
+    setGuessCard(nextGuess);
+    setChapterKey((key) => {
+      if (key === firstFacts) return nextFacts.chapters[0]?.key ?? "start";
+      if (key === firstGuess) return nextGuess.chapters[0]?.key ?? "start";
+      return key;
+    });
   });
 
   useEffect(() => {

@@ -3,6 +3,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 
 import { BrandHomeButton } from "@/components/brand-logo";
+import { DONATE_LABEL } from "@/lib/send-cheer";
+import { DONATE_URL } from "@/lib/site";
 import type { YotoSession } from "@/lib/yoto-session";
 
 export function AppHeader({
@@ -94,6 +96,9 @@ export function AppHeader({
                 Connect Yoto
               </button>
             )}
+            <a className="pk-banner-btn pk-banner-btn-quiet" href={DONATE_URL} target="_blank" rel="noreferrer">
+              {DONATE_LABEL}
+            </a>
           </div>
         </div>
         <h1 className="mt-3 text-2xl font-bold tracking-tight text-white sm:mt-4 sm:text-4xl">{title}</h1>

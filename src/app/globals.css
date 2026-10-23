@@ -343,6 +343,15 @@
   box-shadow: none;
 }
 
+/* The tip jar sits with the banner buttons, in white so it never looks like the next step. */
+.pk-banner-btn.pk-banner-btn-quiet {
+  background: white;
+}
+
+.pk-banner-btn.pk-banner-btn-quiet:hover {
+  background: #fff4c2;
+}
+
 .pk-tab,
 .pk-pill {
   border: 3px solid var(--ink);
