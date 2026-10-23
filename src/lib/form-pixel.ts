@@ -23,7 +23,7 @@ export async function ensureFormPixel(formId: number, options: FormPixelOptions 
   }
   const cacheDir = options.cacheDir ?? FORM_PIXEL_CACHE;
   await mkdir(cacheDir, { recursive: true });
-  const file = path.join(cacheDir, `${formId}.png`);
+  const file = path.join(/* turbopackIgnore: true */ cacheDir, `${formId}.png`);
   try {
     const cached = await readFile(file);
     if (isPng(cached)) return cached;
@@ -32,7 +32,7 @@ export async function ensureFormPixel(formId: number, options: FormPixelOptions 
   }
   const artwork = options.artwork ?? (await ensureArtwork(formId, options.fetchImpl));
   if (!isPng(artwork)) throw new Error(`That picture is not a form icon (${formId}).`);
-  const source = path.join(cacheDir, `${formId}.source.png`);
+  const source = path.join(/* turbopackIgnore: true */ cacheDir, `${formId}.source.png`);
   await writeFile(source, artwork);
   try {
     await paintColourPixel(source, file);

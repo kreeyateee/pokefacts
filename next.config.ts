@@ -6,6 +6,11 @@ const nextConfig: NextConfig = {
   // so the running site never loses its build. Everywhere else this stays the usual .next.
   distDir: process.env.POKEFACTS_DIST_DIR || ".next",
   allowedDevOrigins: ["127.0.0.1", "**.trycloudflare.com"],
+  // The server runs from this folder, so traces are never shipped. data/ holds gigabytes of recorded
+  // speech on the live server, and tracing it ran next build out of memory there.
+  outputFileTracingExcludes: {
+    "/*": ["./data/**/*"],
+  },
   cacheComponents: true,
   partialPrefetching: true,
   async headers() {

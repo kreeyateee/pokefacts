@@ -229,8 +229,8 @@ export async function transcodeToYotoMp3(bytes: Buffer, ffmpegFormat?: string): 
     throw new Error("That audio format cannot be converted.");
   }
   const dir = await mkdtemp(path.join(tmpdir(), "champdex-yoto-mp3-"));
-  const inPath = path.join(dir, `in.${ffmpegFormat || "bin"}`);
-  const outPath = path.join(dir, "out.mp3");
+  const inPath = path.join(/* turbopackIgnore: true */ dir, `in.${ffmpegFormat || "bin"}`);
+  const outPath = path.join(/* turbopackIgnore: true */ dir, "out.mp3");
   try {
     await writeFile(inPath, bytes);
     await run(ffmpegCommand(), [
@@ -256,8 +256,8 @@ export async function encodeYotoMp3(speech: Buffer): Promise<Buffer> {
   const kind = inputContainer(speech);
   if (!kind) throw new Error("The recording was not playable audio.");
   const dir = await mkdtemp(path.join(tmpdir(), "champdex-speech-"));
-  const inPath = path.join(dir, `speech.${kind}`);
-  const outPath = path.join(dir, "speech.mp3");
+  const inPath = path.join(/* turbopackIgnore: true */ dir, `speech.${kind}`);
+  const outPath = path.join(/* turbopackIgnore: true */ dir, "speech.mp3");
   try {
     await writeFile(inPath, speech);
     await run(ffmpegCommand(), [
@@ -286,9 +286,9 @@ export async function mergeCryFirst(
   const speechKind = inputContainer(speech);
   assertCryDecodable(await describeClip(cry, `cry.${cryKind}`));
   const dir = await mkdtemp(path.join(tmpdir(), "champdex-cry-"));
-  const cryPath = path.join(dir, `cry.${cryKind}`);
-  const speechPath = path.join(dir, `speech.${speechKind ?? "mp3"}`);
-  const outPath = path.join(dir, "merged.mp3");
+  const cryPath = path.join(/* turbopackIgnore: true */ dir, `cry.${cryKind}`);
+  const speechPath = path.join(/* turbopackIgnore: true */ dir, `speech.${speechKind ?? "mp3"}`);
+  const outPath = path.join(/* turbopackIgnore: true */ dir, "merged.mp3");
   try {
     await writeFile(cryPath, cry);
     await writeFile(speechPath, speech);
@@ -342,8 +342,8 @@ export async function audioDurationSeconds(bytes: Buffer, name = "clip.mp3"): Pr
 
 async function pcm(bytes: Buffer, name: string, filter?: string): Promise<Int16Array> {
   const dir = await mkdtemp(path.join(tmpdir(), "champdex-pcm-"));
-  const file = path.join(dir, name);
-  const rawPath = path.join(dir, "audio.raw");
+  const file = path.join(/* turbopackIgnore: true */ dir, name);
+  const rawPath = path.join(/* turbopackIgnore: true */ dir, "audio.raw");
   try {
     await writeFile(file, bytes);
     const args = ["-y", "-v", "error", ...inputArgs(bytes, file)];

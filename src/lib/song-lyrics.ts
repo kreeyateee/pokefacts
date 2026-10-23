@@ -38,7 +38,7 @@ export function lyricsFromHtml(html: string): string {
 }
 
 function cacheFile(cacheDir: string, page: string): string {
-  return path.join(cacheDir, `${encodeURIComponent(page)}.json`);
+  return path.join(/* turbopackIgnore: true */ cacheDir, `${encodeURIComponent(page)}.json`);
 }
 
 /** Lyrics for one song page. A saved copy is reused. A network failure is not saved. */

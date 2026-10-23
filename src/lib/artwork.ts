@@ -40,7 +40,7 @@ export async function ensureArtwork(
 
 async function loadArtwork(id: number, fetchImpl: typeof fetch, cacheDir: string): Promise<Buffer> {
   await mkdir(cacheDir, { recursive: true });
-  const file = path.join(cacheDir, `${id}.png`);
+  const file = path.join(/* turbopackIgnore: true */ cacheDir, `${id}.png`);
   try {
     const cached = await readFile(file);
     if (isPng(cached)) return cached;

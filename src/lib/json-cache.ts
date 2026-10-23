@@ -33,7 +33,7 @@ export async function readJsonObject(file: string): Promise<Record<string, unkno
 
 async function writeJsonAtomic(file: string, value: Record<string, unknown>): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
-  const tmp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.${Date.now()}.tmp`);
+  const tmp = path.join(/* turbopackIgnore: true */ path.dirname(file), `.${path.basename(file)}.${process.pid}.${Date.now()}.tmp`);
   await writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`);
   try {
     await rename(tmp, file);
@@ -41,7 +41,7 @@ async function writeJsonAtomic(file: string, value: Record<string, unknown>): Pr
     const code = (error as NodeJS.ErrnoException).code;
     await rm(tmp, { force: true }).catch(() => undefined);
     if (code !== "EEXIST" && code !== "EPERM" && code !== "EACCES") throw error;
-    const retry = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.${Date.now()}.retry.tmp`);
+    const retry = path.join(/* turbopackIgnore: true */ path.dirname(file), `.${path.basename(file)}.${process.pid}.${Date.now()}.retry.tmp`);
     await writeFile(retry, `${JSON.stringify(value, null, 2)}\n`);
     await rm(file, { force: true });
     try {

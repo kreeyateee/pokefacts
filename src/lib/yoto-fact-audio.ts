@@ -129,7 +129,7 @@ export async function ensureCry(
   const remembered = cryMemory.get(memoryKey);
   if (remembered) return remembered;
   await mkdir(cacheDir, { recursive: true });
-  const file = path.join(cacheDir, `${id}.ogg`);
+  const file = path.join(/* turbopackIgnore: true */ cacheDir, `${id}.ogg`);
   try {
     const cached = await readFile(file);
     if (audioContainer(cached)) {
@@ -426,7 +426,7 @@ export async function readCachedMergedMp3(
   renderedRoot: string = RENDER_ROOT,
   mix?: Partial<MixSettings> | null,
 ): Promise<Buffer | undefined> {
-  return readMp3File(path.join(renderedRoot, `${renderedCacheKey(text, dexId, voiceId, mix)}.mp3`));
+  return readMp3File(path.join(/* turbopackIgnore: true */ renderedRoot, `${renderedCacheKey(text, dexId, voiceId, mix)}.mp3`));
 }
 
 function readyPayload(cached: StoredAudio): TrackPrepareResult {
@@ -549,7 +549,7 @@ async function writeRendered(file: string, audio: UploadedAudio, cryFirst: boole
 }
 
 function uploadMarkPath(renderedRoot: string, uploadId: string): string {
-  return path.join(renderedRoot, `upload-${uploadId}.json`);
+  return path.join(/* turbopackIgnore: true */ renderedRoot, `upload-${uploadId}.json`);
 }
 
 async function readCryMark(file: string): Promise<boolean> {
@@ -821,7 +821,7 @@ export async function prepareFactTrack(
     // Hashes written before the volume was part of the key. Those mixes used volume 4, voice 1, and a 0.35s pad.
     if (isDefaultMix(mix)) {
       const legacy = await readReady(
-        path.join(roots.rendered, `${legacyRenderedKey(text, dexId, voiceId)}.json`),
+        path.join(/* turbopackIgnore: true */ roots.rendered, `${legacyRenderedKey(text, dexId, voiceId)}.json`),
         dexId,
       );
       if (legacy) {

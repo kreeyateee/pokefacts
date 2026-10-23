@@ -238,7 +238,7 @@ async function recordVoice(
   options: DemoOptions,
 ): Promise<Buffer> {
   const root = options.speech ?? DEMO_ROOT;
-  const file = path.join(root, `${sha256(Buffer.from(`${voiceId}\n${text}`))}.mp3`);
+  const file = path.join(/* turbopackIgnore: true */ root, `${sha256(Buffer.from(`${voiceId}\n${text}`))}.mp3`);
   try {
     const cached = await readFile(file);
     if (audioContainer(cached) && cached.length >= 128) return cached;

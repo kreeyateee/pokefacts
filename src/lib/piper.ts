@@ -186,11 +186,11 @@ async function findExe(root: string, depth = 0): Promise<string | null> {
   }
   const wanted = exeName().toLowerCase();
   for (const entry of entries) {
-    if (entry.isFile() && entry.name.toLowerCase() === wanted) return path.join(root, entry.name);
+    if (entry.isFile() && entry.name.toLowerCase() === wanted) return path.join(/* turbopackIgnore: true */ root, entry.name);
   }
   for (const entry of entries) {
     if (!entry.isDirectory() || entry.name === "espeak-ng-data" || entry.name === "voices") continue;
-    const found = await findExe(path.join(root, entry.name), depth + 1);
+    const found = await findExe(path.join(/* turbopackIgnore: true */ root, entry.name), depth + 1);
     if (found) return found;
   }
   return null;
@@ -199,7 +199,7 @@ async function findExe(root: string, depth = 0): Promise<string | null> {
 async function installedModel(): Promise<{ model: string; modelName: string } | null> {
   const voices = path.join(PIPER_DIR, "voices");
   for (const voice of VOICE_FILES) {
-    const model = path.join(voices, `${voice.name}.onnx`);
+    const model = path.join(/* turbopackIgnore: true */ voices, `${voice.name}.onnx`);
     const config = `${model}.json`;
     if ((await fileAtLeast(model, 1_000_000)) && (await fileAtLeast(config, 100))) {
       return { model, modelName: voice.name };
@@ -231,7 +231,7 @@ async function installVoice(): Promise<{ model: string; modelName: string }> {
   await mkdir(voices, { recursive: true });
   let last = "Piper could not be downloaded.";
   for (const voice of VOICE_FILES) {
-    const model = path.join(voices, `${voice.name}.onnx`);
+    const model = path.join(/* turbopackIgnore: true */ voices, `${voice.name}.onnx`);
     const config = `${model}.json`;
     try {
       if (!(await fileAtLeast(model, 1_000_000))) await downloadTo(voice.onnx, model);

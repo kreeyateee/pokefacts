@@ -65,7 +65,7 @@ function attachDeno(
 ): { args: string[]; deno: string | null } {
   const deno = packagedDenoPath(root);
   if (!exists(deno)) return { args, deno: null };
-  env.DENO_DIR = path.join(root, "vendor", "deno", "cache");
+  env.DENO_DIR = path.join(/* turbopackIgnore: true */ root, "vendor", "deno", "cache");
   env.DENO_NO_UPDATE_CHECK = "1";
   return { args: [...args, "--js-runtimes", `deno:${deno}`], deno };
 }
@@ -185,7 +185,7 @@ export function ytdlpMp3Args(input: {
     "--audio-quality",
     "192",
     "-o",
-    path.join(input.outputDir, template),
+    path.join(/* turbopackIgnore: true */ input.outputDir, template),
     "--print",
     "after_move:%(id)s\u001f%(title)s\u001f%(filepath)s",
   ];
@@ -327,7 +327,7 @@ export async function parseDownloadedAudio(bytes: Buffer): Promise<Buffer> {
 
 function cacheFile(cacheDir: string, youtubeId: string): string {
   if (!isYoutubeVideoId(youtubeId)) throw new Error("That YouTube video id does not look right.");
-  return path.join(cacheDir, `${youtubeId}.mp3`);
+  return path.join(/* turbopackIgnore: true */ cacheDir, `${youtubeId}.mp3`);
 }
 
 export async function readCachedMp3(youtubeId: string, cacheDir = CACHE_DIR): Promise<ParsedMp3 | null> {
