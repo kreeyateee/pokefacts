@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # One step of raising the site's limit for Yoto voice jobs (src/lib/labs-jobs.ts, siteJobLimit).
-# Run hourly. If the last hour's sends met no 429 from Yoto, the limit goes up by STEP. If they did, it
-# goes back to the last limit that met none, and a stop file ends the stepping. The server reads
+# Run hourly. If sends had to wait in line in the last hour and none met a 429 from Yoto, the limit goes
+# up by STEP; if nobody waited, it stays where it is. If any send met a 429, it goes back to the last
+# limit that met none, and a stop file ends the stepping. The server reads
 # data/labs-limit.json again within half a minute, so no restart is needed.
 #   Loop:  nohup setsid bash -c 'while [ ! -f ~/labs-limit.stop ]; do bash scripts/labs-limit-step.sh; sleep 3600; done' &
 set -euo pipefail
@@ -26,8 +27,10 @@ if [ "$refused" -gt 0 ]; then
   printf '{"siteJobs": %d}\n' "$back" > "$FILE"
   touch ~/labs-limit.stop
   echo "$(date -Is) limit $now met Yoto 429s ($refused summaries, $sends sends, $waited waits): back to $back, stopped" >> "$LOG"
-else
+elif [ "$waited" -gt 0 ]; then
   up=$(( now + STEP ))
   printf '{"siteJobs": %d}\n' "$up" > "$FILE"
-  echo "$(date -Is) limit $now: no 429s ($sends sends, $waited waits in line); raised to $up" >> "$LOG"
+  echo "$(date -Is) limit $now: sends waited in line ($waited waits, $sends sends) and no 429s; raised to $up" >> "$LOG"
+else
+  echo "$(date -Is) limit $now: nobody waited in line ($sends sends) and no 429s; kept at $now" >> "$LOG"
 fi
