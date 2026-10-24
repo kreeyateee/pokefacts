@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { ColouringMaker } from "@/components/colouring-maker";
 import { PosterMaker } from "@/components/poster-maker";
 import { StickerStudio } from "@/components/sticker-studio";
 import { Button } from "@/components/ui/button";
@@ -58,7 +59,7 @@ function OwnPickStickers({ units }: { units: MeasureUnits }) {
   );
 }
 
-/** Printables: A4 posters of any group of Pokémon, then stickers for a Yoto card. */
+/** Printables: A4 posters of any group of Pokémon, colouring sheets, then stickers for a Yoto card. */
 export function PrintablesPanel({
   card,
   rangeCards,
@@ -77,6 +78,8 @@ export function PrintablesPanel({
   return (
     <div className="grid min-w-0 gap-5">
       <PosterMaker playlist={card} onOwnPick={onOwnPick} />
+
+      <ColouringMaker />
 
       <section className="pk-panel grid min-w-0 content-start gap-3" aria-labelledby="stickers-heading">
         <h2 id="stickers-heading" className="font-display text-3xl leading-tight">
