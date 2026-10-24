@@ -376,9 +376,10 @@ describe("adventure track audio", () => {
         piper: { bin: "piper", model: "voice", download: false, run: async () => ((piperLines += 1), piperWav) },
       };
       const yoto = fakeYoto(new Map(), await tone(880));
+      // A voice Yoto no longer offers. (A 429 only asks for a pause: see labs-jobs.test.ts.)
       const refusing: typeof fetch = async (input, init) => {
         if (String(input).startsWith("https://labs.api.yotoplay.com/content/job?")) {
-          return Response.json({ error: "Too many requests" }, { status: 429, headers: { "retry-after": "0" } });
+          return Response.json({ error: "That voice is not available" }, { status: 403 });
         }
         return yoto.fetchImpl(input, init);
       };
@@ -392,7 +393,7 @@ describe("adventure track audio", () => {
       // The browser sends the track again, and every track after it, with fallbackOnly.
       await drive(refusing, roots, { ...body, fallbackOnly: true });
       assert.equal(piperLines, 2, "both lines read by Piper");
-      assert.ok(logged.some((line) => /send stest01: .*refused 429 x1.*reading with Piper/.test(line)), logged.join("\n"));
+      assert.ok(logged.some((line) => /send stest01: .*refused 429 x0, other x1.*reading with Piper/.test(line)), logged.join("\n"));
       assert.ok(logged.some((line) => /send stest01: 1 tracks, 0 new Yoto voice lines, 2 new Piper lines, 0 reused/.test(line)));
       assert.ok(logged.every((line) => !/Boo|Barnaby|x{24}/.test(line)), "no words, names or tokens in the log");
     } finally {

@@ -113,6 +113,7 @@ import {
   type PendingSend,
 } from "@/lib/pending-send";
 import { forgetMissingMedia, healingText, missingMediaError, postWithMediaHeal } from "@/lib/media-heal";
+import { lineWatch, recordingNote, SCRATCH_SETTLE_ROUNDS, stepWait } from "@/lib/track-steps";
 import { demoHearBody, factTrackBody, readVoiceId, writeVoiceId } from "@/lib/voice-choice";
 import {
   asSendFailure,
@@ -1306,6 +1307,14 @@ export function Studio({
     if (cancelRef.current) throw new SendCancelled();
   }
 
+  /** Wait a second at a time, so Cancel still stops the send during a long wait. */
+  async function waitCancellable(ms: number) {
+    for (let left = ms; left > 0; left -= 1_000) {
+      throwIfCancelled();
+      await delay(Math.min(1_000, left));
+    }
+  }
+
   function holdSendLock(): boolean {
     if (!lockOwner.current) lockOwner.current = Math.random().toString(36).slice(2);
     const owner = lockOwner.current;
@@ -1469,15 +1478,30 @@ export function Studio({
     return id && /^[\w-]{4,80}$/.test(id) ? id : undefined;
   }
 
+  /**
+   * Delete the send's scratch cards. Lines a stopped track left recording are saved first and their scratch
+   * cards deleted as they finish, so this waits up to about half a minute for them before the library sweep.
+   */
   async function discardScratch(cardIds: string[]) {
-    try {
-      await yotoFetch("/api/yoto/track", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ discardCardIds: cardIds, sweepScratch: true }),
-      });
-    } catch {
-      // A leftover scratch card is not the playlist.
+    for (let round = 0; round < SCRATCH_SETTLE_ROUNDS; round += 1) {
+      try {
+        const response = await yotoFetch("/api/yoto/track", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            discardCardIds: round === 0 ? cardIds : [],
+            sweepScratch: true,
+            // The last round sweeps the library whatever is still recording.
+            settleJobs: round < SCRATCH_SETTLE_ROUNDS - 1,
+          }),
+        });
+        const body = (await readBody(response)) as { recording?: unknown; waitMs?: unknown } | null;
+        if (!response.ok || typeof body?.recording !== "number" || body.recording < 1) return;
+        await delay(Math.min(5_000, Math.max(1_000, typeof body.waitMs === "number" ? body.waitMs : 2_000)));
+      } catch {
+        // A leftover scratch card is not the playlist.
+        return;
+      }
     }
   }
 
@@ -1495,6 +1519,9 @@ export function Studio({
     let last = new SendFailure("This track did not finish.", false);
     let gatewayMisses = 0;
     for (let attempt = 0; attempt < 3; attempt += 1) {
+      // Waiting while lines record is not a step. A try whose lines stop coming in is stopped instead.
+      const stalled = lineWatch(Date.now());
+      const stillRecording = () => new SendFailure("This track is still recording. Retry.", false);
       try {
         // An adventure track records each of its lines in turn, two steps each, so it may need more steps.
         const steps = 40 + 3 * (job.parts?.length ?? 0);
@@ -1526,6 +1553,15 @@ export function Studio({
           });
           const body = await readBody(response);
           if (isRateLimited(response.status, body)) {
+            const wait = stepWait(body);
+            if (wait !== undefined) {
+              // Yoto asked for a pause before this track's next line, and the server timed it.
+              if (stalled(undefined, Date.now())) throw stillRecording();
+              setJob({ status: "sending", detail: `${job.progress}. ${recordingNote(0, true)}`, done: mark.done, total: mark.total });
+              await waitCancellable(wait);
+              step -= 1;
+              continue;
+            }
             await delay(Math.min(8_000, 700 * (step + 1)));
             continue;
           }
@@ -1540,6 +1576,9 @@ export function Studio({
             phase?: string;
             speechJobId?: string;
             speechPart?: string;
+            waitMs?: number;
+            recording?: number;
+            linesLeft?: number;
             uploadId?: string;
             trackUrl?: string;
             duration?: number;
@@ -1549,6 +1588,23 @@ export function Studio({
           };
           if (payload.phase === "ready" && payload.trackUrl?.startsWith("yoto:#")) {
             return payload as FinishedAudio;
+          }
+          const wait = job.parts && payload.phase === "speech" ? stepWait(payload) : undefined;
+          if (wait !== undefined) {
+            // A few of this track's lines are recording at once. The next step checks them all on the server.
+            if (stalled(payload.linesLeft, Date.now())) throw stillRecording();
+            setJob({
+              status: "sending",
+              detail: `${job.progress}. ${recordingNote(payload.recording)}`,
+              done: mark.done,
+              total: mark.total,
+            });
+            speechJobId = undefined;
+            speechCardId = undefined;
+            speechPart = undefined;
+            await waitCancellable(wait);
+            step -= 1;
+            continue;
           }
           if (payload.phase === "voice-fallback") {
             // Yoto's voices turned a line away: this track and the rest of the send are read by Piper.

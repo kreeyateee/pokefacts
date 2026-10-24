@@ -1,4 +1,4 @@
-import { prepareFactTrack } from "@/lib/yoto-fact-audio";
+import { prepareFactTrack, trackStepResponse } from "@/lib/yoto-fact-audio";
 import { looksLikeGateway, PUBLIC_LINK_TIMEOUT } from "@/lib/yoto-error";
 import { bearerToken, jsonError } from "@/lib/yoto-proxy";
 
@@ -17,6 +17,8 @@ export async function POST(request: Request) {
     discardCardId?: string;
     discardCardIds?: string[];
     sweepScratch?: boolean;
+    /** With sweepScratch: wait for lines still recording before sweeping the library. */
+    settleJobs?: boolean;
     voiceId?: string;
     /** Adventure lines in several voices, with sounds. Checked by prepareFactTrack. */
     parts?: unknown;
@@ -36,7 +38,7 @@ export async function POST(request: Request) {
 
   try {
     const result = await prepareFactTrack(token, body);
-    return Response.json(result);
+    return trackStepResponse(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "This track did not record.";
     const text = looksLikeGateway(0, message) ? PUBLIC_LINK_TIMEOUT : message;

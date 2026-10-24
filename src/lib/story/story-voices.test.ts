@@ -214,7 +214,7 @@ describe("names recorded on their own", () => {
 
 describe("falling back to Piper", () => {
   it("decides from Yoto's answer", () => {
-    assert.equal(labsRefusal(429), "piper", "a 429 that outlasted the retries");
+    assert.equal(labsRefusal(429), "wait", "a 429 asks for a pause, never Piper");
     assert.equal(labsRefusal(400), "piper");
     assert.equal(labsRefusal(403), "piper", "a voice Yoto no longer offers");
     assert.equal(labsRefusal(404), "piper");
