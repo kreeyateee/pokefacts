@@ -18,6 +18,7 @@ import {
   LabsJobs,
   labsLinesPerJob,
   oneLinePerJob,
+  takeTurn,
   type LabsLine,
 } from "@/lib/labs-jobs";
 import { clampMix, isDefaultMix, mixCacheToken, type MixSettings } from "@/lib/playback-settings";
@@ -390,7 +391,9 @@ type TrackPrepareResult = {
    * `voice-fallback`: Yoto's voice service turned a line away; send again with `fallbackOnly`.
    * `wait`: Yoto asked for a pause and none of this track's lines is recording; ask again after `waitMs`.
    */
-  phase: "speech" | "upload" | "ready" | "discarded" | "voice-fallback" | "wait";
+  phase: "speech" | "upload" | "ready" | "discarded" | "voice-fallback" | "wait" | "queued";
+  /** With `queued`: this account's place in the site's line for Yoto voices, 1 being next. */
+  position?: number;
   /** On an adventure track, the oldest of its recordings: a page from before parallel lines polls it. */
   speechJobId?: string;
   speechPart?: string;
@@ -420,16 +423,23 @@ function labsJobsRoot(speechRoot: string): string {
 /** How long the page waits between steps while a track's lines are recording. */
 export const LABS_POLL_MS = 1_500;
 
+/** How long the page waits between steps while it waits in line for a Yoto voice. */
+export const LABS_QUEUE_POLL_MS = 2_000;
+
 /**
- * The HTTP answer to one track step. A pause Yoto asked for, with none of the track's lines recording, is
- * a 429 with Retry-After: every page, including one loaded before parallel lines, waits that out and asks
- * again. It never reads as Yoto turning the voice away.
+ * The HTTP answer to one track step. A pause Yoto asked for, or a place in the site's line for Yoto
+ * voices, with none of the track's lines recording, is a 429 with Retry-After: every page, including one
+ * loaded before parallel lines, waits that out and asks again. It never reads as Yoto turning the voice away.
  */
 export function trackStepResponse(result: TrackPrepareResult): Response {
-  if (result.phase !== "wait") return Response.json(result);
+  if (result.phase !== "wait" && result.phase !== "queued") return Response.json(result);
   const waitMs = result.waitMs ?? LABS_POLL_MS;
+  const error =
+    result.phase === "queued"
+      ? "Other families are using the Yoto voices. This send is in line for the next free one."
+      : "Yoto asked for a short pause before the next line.";
   return Response.json(
-    { ...result, error: "Yoto asked for a short pause before the next line." },
+    { ...result, error },
     { status: 429, headers: { "Retry-After": String(Math.max(1, Math.ceil(waitMs / 1000))), "Cache-Control": "no-store" } },
   );
 }
@@ -1399,6 +1409,8 @@ export async function prepareFactTrack(
 
       // Check the jobs already going: keep the finished lines, and give up on a failed job.
       let wait = jobs.pausedFor(Date.now());
+      /** This account's place in the site's line for Labs, when it has to wait for a slot. */
+      let place: number | undefined;
       const asked = new Set<string>();
       for (const part of labs) {
         const key = keyOf(part);
@@ -1465,6 +1477,12 @@ export async function prepareFactTrack(
         const going = jobs.jobsFor(left.keys());
         if (going >= LABS_TRACK_JOBS) break;
         if (going > 0 && jobs.recording(Date.now()) >= LABS_ACCOUNT_JOBS) break;
+        // The site's own limit, shared fairly: wait in line while others are ahead or every slot is taken.
+        const turn = takeTurn(account, Date.now());
+        if (!turn.ok) {
+          place = turn.position;
+          break;
+        }
         const held = jobs.reserve(batch.map(keyOf));
         const lines = batch.filter((part) => held.includes(keyOf(part)));
         const voiceId = lines[0]?.voiceId;
@@ -1522,6 +1540,9 @@ export async function prepareFactTrack(
       const recording = [...left.keys()].filter((key) => jobs.isRecording(key)).length;
       const oldest = [...left.values()].find((part) => jobs.line(keyOf(part)));
       const line = oldest ? jobs.line(keyOf(oldest)) : undefined;
+      if ((!oldest || !line) && place !== undefined && wait === 0) {
+        return { phase: "queued", position: place, waitMs: LABS_QUEUE_POLL_MS, recording, linesLeft: left.size };
+      }
       if (!oldest || !line) return { phase: "wait", waitMs, recording, linesLeft: left.size };
       return {
         phase: "speech",

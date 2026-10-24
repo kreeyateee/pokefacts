@@ -6,11 +6,21 @@ import path from "node:path";
 import { describe, it } from "node:test";
 
 import { ffmpegCommand } from "./ffmpeg-bin";
-import { dropLabsJobMemory, LABS_ACCOUNT_JOBS, LABS_FORGET_MS, LABS_LINES_PER_JOB, LabsJobs } from "./labs-jobs";
+import {
+  dropLabsJobMemory,
+  holdSlot,
+  LABS_ACCOUNT_JOBS,
+  LABS_FORGET_MS,
+  LABS_LINES_PER_JOB,
+  LABS_SITE_JOBS,
+  LabsJobs,
+  releaseSlot,
+  takeTurn,
+} from "./labs-jobs";
 import { PIPER_VOICE_ID } from "./piper-voice";
 import { renderedAccount } from "./rendered-media";
 import { partKey, type TrackPart } from "./story/story-voices";
-import { lineWatch, recordingNote, stepWait, TRACK_STALL_MS } from "./track-steps";
+import { lineWatch, queueNote, recordingNote, stepWait, TRACK_STALL_MS } from "./track-steps";
 import { factTrackBody } from "./voice-choice";
 import { isRateLimited } from "./yoto-error";
 import { YOTO_VOICES } from "./yoto-icons";
@@ -811,5 +821,81 @@ describe("pacing a track's steps in the page", () => {
     assert.equal(stalled(9, TRACK_STALL_MS * 2), false);
     assert.equal(stalled(9, TRACK_STALL_MS * 2 + 1), true);
     assert.equal(stalled(undefined, TRACK_STALL_MS * 3), true, "a pause does not count as a line");
+  });
+});
+
+describe("the site's line for Yoto voices", () => {
+  const A = renderedAccount("a".repeat(24));
+  const B = renderedAccount("b".repeat(24));
+  const C = renderedAccount("c".repeat(24));
+
+  it("keeps to the site's limit, says each account's place, and lets them through in order", () => {
+    dropLabsJobMemory();
+    try {
+      for (let slot = 0; slot < LABS_SITE_JOBS; slot += 1) holdSlot(A);
+      assert.deepEqual(takeTurn(B, 1_000), { ok: false, position: 1 });
+      assert.deepEqual(takeTurn(C, 1_000), { ok: false, position: 2 });
+      assert.deepEqual(takeTurn(B, 2_000), { ok: false, position: 1 }, "asking again keeps the place");
+      releaseSlot(A);
+      // A wants another, but B and C were waiting first: A goes to the back.
+      assert.deepEqual(takeTurn(A, 3_000), { ok: false, position: 3 });
+      assert.deepEqual(takeTurn(C, 3_000), { ok: false, position: 2 }, "only the first in line goes");
+      assert.deepEqual(takeTurn(B, 3_000), { ok: true });
+      holdSlot(B);
+      assert.deepEqual(takeTurn(C, 3_500), { ok: false, position: 1 });
+      releaseSlot(A);
+      assert.deepEqual(takeTurn(C, 4_000), { ok: true });
+    } finally {
+      dropLabsJobMemory();
+    }
+  });
+
+  it("drops a page that stopped asking, so it holds nobody up", () => {
+    dropLabsJobMemory();
+    try {
+      for (let slot = 0; slot < LABS_SITE_JOBS; slot += 1) holdSlot(A);
+      assert.deepEqual(takeTurn(B, 0), { ok: false, position: 1 });
+      assert.deepEqual(takeTurn(C, 1_000), { ok: false, position: 2 });
+      releaseSlot(A);
+      assert.deepEqual(takeTurn(C, 20_000), { ok: true }, "B closed its page long ago");
+    } finally {
+      dropLabsJobMemory();
+    }
+  });
+
+  it("tells a track with nothing recording its place in line, as a 429 every page waits out", async (t) => {
+    t.mock.timers.enable({ apis: ["Date"], now: 13_000_000 });
+    dropLabsJobMemory();
+    const { dir, roots } = await setting();
+    try {
+      const labs = fakeLabs();
+      for (let slot = 0; slot < LABS_SITE_JOBS; slot += 1) holdSlot(A);
+      const request = trackBody([[LILY, "One."]], "Stop 1", "stest21");
+      const queued = await quietly([], () => prepareFactTrack("q".repeat(24), request, labs.fetchImpl, roots));
+      assert.equal(queued.phase, "queued");
+      assert.equal(queued.position, 1);
+      assert.equal(labs.jobs.length, 0, "nothing is sent to Yoto while it waits");
+      const response = trackStepResponse(queued);
+      assert.equal(response.status, 429);
+      const body = (await response.json()) as { phase?: string; position?: number; waitMs?: number };
+      assert.deepEqual([body.phase, body.position], ["queued", 1]);
+      assert.equal(queueNote(body), "Waiting for Yoto: you're next in line…");
+      assert.ok(stepWait(body), "the page waits and asks again");
+      releaseSlot(A);
+      t.mock.timers.tick(2_000);
+      const going = await quietly([], () => prepareFactTrack("q".repeat(24), request, labs.fetchImpl, roots));
+      assert.equal(going.phase, "speech");
+      assert.equal(labs.jobs.length, 1);
+    } finally {
+      dropLabsJobMemory();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("names the place in line", () => {
+    assert.equal(queueNote({ phase: "queued", position: 3 }), "Waiting for Yoto: you're 3rd in line…");
+    assert.equal(queueNote({ phase: "queued", position: 12 }), "Waiting for Yoto: you're 12th in line…");
+    assert.equal(queueNote({ phase: "queued", position: 22 }), "Waiting for Yoto: you're 22nd in line…");
+    assert.equal(queueNote({ phase: "wait", waitMs: 2_000 }), undefined);
   });
 });

@@ -344,9 +344,69 @@ export class LabsJobs {
   }
 }
 
+/**
+ * Labs jobs the whole site keeps going at once, across everyone sending. When they are all taken, an
+ * account that wants another waits in line, and the first in line goes when one frees up, so a big send
+ * cannot crowd out a small one.
+ */
+export const LABS_SITE_JOBS = 6;
+
+/** A place in line is kept this long without the page asking again; a closed page drops out. */
+const LINE_KEPT_MS = 15_000;
+
+/** Accounts waiting for a site slot, in order, with when each last asked. Memory only: after a restart they line up again. */
+const line: Array<{ account: string; seen: number }> = [];
+
+/** Jobs held outside the per-account lists, by account: a Hear recording, which runs inside one request. */
+const held = new Map<string, number>();
+
+function siteRecording(now: number): number {
+  let count = 0;
+  for (const jobs of LOADED.values()) count += jobs.recording(now);
+  for (const jobs of held.values()) count += jobs;
+  return count;
+}
+
+export type LabsTurn = { ok: true } | { ok: false; position: number };
+
+/**
+ * May this account start a Labs job now? Yes when the site has a slot free and nobody is waiting ahead of
+ * it. Otherwise it joins the line, or keeps its place, and hears its position (1 is next).
+ */
+export function takeTurn(account: string, now: number): LabsTurn {
+  for (let index = line.length - 1; index >= 0; index -= 1) {
+    const entry = line[index] as { account: string; seen: number };
+    if (entry.account !== account && now - entry.seen > LINE_KEPT_MS) line.splice(index, 1);
+  }
+  let at = line.findIndex((entry) => entry.account === account);
+  if (at >= 0) (line[at] as { seen: number }).seen = now;
+  if (siteRecording(now) < LABS_SITE_JOBS && (at === 0 || (at < 0 && line.length === 0))) {
+    if (at === 0) line.shift();
+    return { ok: true };
+  }
+  if (at < 0) {
+    line.push({ account, seen: now });
+    at = line.length - 1;
+  }
+  return { ok: false, position: at + 1 };
+}
+
+/** Hold a site slot for a job that is not in an account's list, such as a Hear recording. */
+export function holdSlot(account: string): void {
+  held.set(account, (held.get(account) ?? 0) + 1);
+}
+
+export function releaseSlot(account: string): void {
+  const left = (held.get(account) ?? 0) - 1;
+  if (left > 0) held.set(account, left);
+  else held.delete(account);
+}
+
 /** For tests: forget every account in memory, as a restarted server would. The files stay. */
 export function dropLabsJobMemory(): void {
   MEMORY.clear();
   LOADED.clear();
+  line.length = 0;
+  held.clear();
   linesPerJob = LABS_LINES_PER_JOB;
 }

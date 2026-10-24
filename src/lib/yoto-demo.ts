@@ -16,6 +16,8 @@ import {
 import { cuesAfterCry, joinTrackParts, levelledCryMix, type SoundCue } from "@/lib/story-audio";
 import { readStoryBed, type StoryBed } from "@/lib/story/story-sound";
 import { piperParts, readTrackParts, withSavedTakes, type TrackPart } from "@/lib/story/story-voices";
+import { holdSlot, releaseSlot, takeTurn } from "@/lib/labs-jobs";
+import { renderedAccount } from "@/lib/rendered-media";
 import { reconnectMessage, yotoErrorText } from "@/lib/yoto-error";
 import { spokenForDemo } from "@/lib/voice-choice";
 import { forElevenLabs } from "@/lib/voice-tags";
@@ -317,6 +319,10 @@ async function partsDemo(
   }
 }
 
+/** How often Hear asks again while it waits in line, and how long it waits before giving up. */
+const HEAR_QUEUE_POLL_MS = 2_000;
+const HEAR_QUEUE_LIMIT_MS = 60_000;
+
 async function recordVoice(
   token: string,
   text: string,
@@ -340,6 +346,31 @@ async function recordVoice(
   }
 
   const wait = options.wait ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+  // Hear takes its turn in the site's line for Yoto voices, like a send, and holds its slot while it records.
+  const account = renderedAccount(token);
+  for (let waited = 0; !takeTurn(account, Date.now()).ok; waited += HEAR_QUEUE_POLL_MS) {
+    if (waited >= HEAR_QUEUE_LIMIT_MS) throw new Error("Other families are using the Yoto voices right now. Try Hear again in a minute.");
+    await wait(HEAR_QUEUE_POLL_MS);
+  }
+  holdSlot(account);
+  try {
+    return await recordFresh(token, text, title, voiceId, fetchImpl, options, file, wait);
+  } finally {
+    releaseSlot(account);
+  }
+}
+
+/** Record one line with a Yoto Labs job, keep it as `file`, and delete the scratch card. */
+async function recordFresh(
+  token: string,
+  text: string,
+  title: string,
+  voiceId: string,
+  fetchImpl: typeof fetch,
+  options: DemoOptions,
+  file: string,
+  wait: (ms: number) => Promise<void>,
+): Promise<Buffer> {
   const created = await yoto(
     token,
     `https://labs.api.yotoplay.com/content/job?voiceId=${encodeURIComponent(voiceId)}`,

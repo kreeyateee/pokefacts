@@ -115,7 +115,7 @@ import {
   type PendingSend,
 } from "@/lib/pending-send";
 import { forgetMissingMedia, healingText, missingMediaError, postWithMediaHeal } from "@/lib/media-heal";
-import { lineWatch, recordingNote, SCRATCH_SETTLE_ROUNDS, stepWait } from "@/lib/track-steps";
+import { lineWatch, queueNote, recordingNote, SCRATCH_SETTLE_ROUNDS, stepWait } from "@/lib/track-steps";
 import { demoHearBody, factTrackBody, readVoiceId, writeVoiceId } from "@/lib/voice-choice";
 import {
   asSendFailure,
@@ -1574,9 +1574,16 @@ export function Studio({
           if (isRateLimited(response.status, body)) {
             const wait = stepWait(body);
             if (wait !== undefined) {
-              // Yoto asked for a pause before this track's next line, and the server timed it.
-              if (stalled(undefined, Date.now())) throw stillRecording();
-              setJob({ status: "sending", detail: `${job.progress}. ${recordingNote(0, true)}`, done: mark.done, total: mark.total });
+              // Yoto asked for a pause before this track's next line, or the send waits in the site's line
+              // for a Yoto voice. A place in line moves as other families finish, so it never counts as stuck.
+              const inLine = queueNote(body);
+              if (!inLine && stalled(undefined, Date.now())) throw stillRecording();
+              setJob({
+                status: "sending",
+                detail: `${job.progress}. ${inLine ?? recordingNote(0, true)}`,
+                done: mark.done,
+                total: mark.total,
+              });
               await waitCancellable(wait);
               step -= 1;
               continue;

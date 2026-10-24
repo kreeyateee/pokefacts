@@ -42,3 +42,16 @@ export function lineWatch(now: number): (linesLeft: unknown, at: number) => bool
     return at - movedAt > TRACK_STALL_MS;
   };
 }
+
+function ordinal(position: number): string {
+  const tens = position % 100;
+  const suffix = tens >= 11 && tens <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[position % 10] ?? "th";
+  return `${position}${suffix}`;
+}
+
+/** What the bar says while a send waits in the site's line for a Yoto voice. Undefined when it is not waiting in line. */
+export function queueNote(body: unknown): string | undefined {
+  const row = body && typeof body === "object" ? (body as { phase?: unknown; position?: unknown }) : {};
+  if (row.phase !== "queued" || typeof row.position !== "number" || row.position < 1) return undefined;
+  return row.position === 1 ? "Waiting for Yoto: you're next in line…" : `Waiting for Yoto: you're ${ordinal(Math.trunc(row.position))} in line…`;
+}
