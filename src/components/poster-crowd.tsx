@@ -7,14 +7,19 @@ import { useStoredState } from "@/components/use-stored-state";
 import { CATALOGUE_PICKS_KEY, LAST_SPECIES_ID, readCataloguePicks, serializeCataloguePicks } from "@/lib/catalogue-picks";
 import type { KidCard } from "@/lib/kid-cards";
 import { posterCollection, REGION_POSTERS, STARTER_POSTERS, type PosterCollection } from "@/lib/poster-collections";
+import { artworkSrc } from "@/lib/page-artwork";
 import { hidesNames, monsFor } from "@/lib/sticker-cover";
 
 export const MINE = "mine";
 export const FAVOURITES = "favourites";
 export const PLAYLIST = "playlist";
 
-/** Who goes on a poster or colouring sheet, its title, and whether they are shown as silhouettes. */
-export type Crowd = { title: string; dexIds: readonly number[]; hidden: boolean };
+/**
+ * Who goes on a poster or colouring sheet, its title, and whether they are shown as silhouettes.
+ * `forms` lines up with `dexIds`: a form's own picture (a Gigantamax, a Mega, an Alolan form) where the
+ * playlist has one, so it is drawn as that form and not as its plain species.
+ */
+export type Crowd = { title: string; dexIds: readonly number[]; hidden: boolean; forms?: readonly (string | undefined)[] };
 
 type Choice = { id: string; label: string; count?: number };
 
@@ -99,8 +104,10 @@ export function useCrowd(
   const crowd: Crowd | null = useMemo(() => {
     if (extraCrowd) return extraCrowd;
     if (sourceId === PLAYLIST) {
-      const dexIds = monsFor(playlist).flatMap((mon) => (mon.dexId ? [mon.dexId] : []));
-      return { title: playlist.title, dexIds, hidden: hidesNames(playlist) };
+      const mons = monsFor(playlist).filter((mon) => mon.dexId);
+      const dexIds = mons.map((mon) => mon.dexId as number);
+      const forms = mons.map((mon) => (mon.art && mon.art !== artworkSrc(mon.dexId as number) ? mon.art : undefined));
+      return { title: playlist.title, dexIds, hidden: hidesNames(playlist), forms };
     }
     if (sourceId === FAVOURITES) {
       if (favourites.length === 0) return null;

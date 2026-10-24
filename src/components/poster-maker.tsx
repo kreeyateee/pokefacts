@@ -27,8 +27,15 @@ function posterSize(dpi: number) {
 /** How the Pokémon are drawn on a poster. */
 type Drawn = "art" | "shiny" | "sprites";
 
-function pictureOf(dexId: number, drawn: Drawn): ImageEntry {
-  const src = drawn === "sprites" ? `/sprites/${dexId}.png` : drawn === "shiny" ? artworkApi("shiny", dexId) : artworkSrc(dexId);
+/** A Pokémon's picture in the chosen style. A form keeps its own picture (a Gigantamax, a Mega). */
+function pictureOf(dexId: number, drawn: Drawn, form?: string): ImageEntry {
+  const src = form
+    ? form
+    : drawn === "sprites"
+      ? `/sprites/${dexId}.png`
+      : drawn === "shiny"
+        ? artworkApi("shiny", dexId)
+        : artworkSrc(dexId);
   return [`picture:${src}`, src];
 }
 
@@ -53,10 +60,10 @@ export function PosterMaker({ playlist, onOwnPick }: { playlist: KidCard; onOwnP
 
   const title = (titles[sourceId] ?? crowd?.title ?? "").slice(0, 60);
   const entries = useMemo(
-    () => [...BRAND_FILES, ...(crowd?.dexIds ?? []).map((dexId) => pictureOf(dexId, drawn))],
+    () => [...BRAND_FILES, ...(crowd?.dexIds ?? []).map((dexId, index) => pictureOf(dexId, drawn, crowd?.forms?.[index]))],
     [crowd, drawn],
   );
-  const loaded = (crowd?.dexIds ?? []).filter((dexId) => images.current.has(pictureOf(dexId, drawn)[0])).length;
+  const loaded = (crowd?.dexIds ?? []).filter((dexId, index) => images.current.has(pictureOf(dexId, drawn, crowd?.forms?.[index])[0])).length;
 
   useEffect(() => {
     void loadAll(entries);
@@ -67,8 +74,8 @@ export function PosterMaker({ playlist, onOwnPick }: { playlist: KidCard; onOwnP
     return {
       title: title.trim() || "My Pokémon",
       hidden: crowd?.hidden ?? false,
-      crowd: (crowd?.dexIds ?? []).map((dexId) => ({
-        image: pictureOf(dexId, drawn)[0],
+      crowd: (crowd?.dexIds ?? []).map((dexId, index) => ({
+        image: pictureOf(dexId, drawn, crowd?.forms?.[index])[0],
         heightDm: sizes[dexId]?.heightDm ?? 0,
         color: sizes[dexId]?.color,
       })),

@@ -29,6 +29,35 @@ import { jpegPagesPdf } from "@/lib/sticker-pdf";
 
 type Named = { id: number; name: string };
 
+/** A Pokémon on a sheet, with the picture it is outlined from. */
+type Drawn = Named & { picture: Picture };
+
+/** The picture a Pokémon is outlined from, and the one to use if it will not load. */
+type Picture = { src: string; fallback: string };
+
+/** What the Pokémon are outlined from: Dream World's clean lines, the official art, shiny art, or the game sprites. */
+type Style = "clean" | "art" | "shiny" | "sprites";
+
+const STYLES: ReadonlyArray<{ id: Style; label: string }> = [
+  { id: "clean", label: "Clean lines" },
+  { id: "art", label: "Artwork" },
+  { id: "shiny", label: "Shiny artwork" },
+  { id: "sprites", label: "Game sprites" },
+];
+
+/**
+ * The picture a Pokémon is outlined from in each style. A form keeps its own picture (a Gigantamax, a Mega),
+ * since the other styles only have the plain species. Dream World's clean lines stop at No. 649.
+ */
+function pictureFor(dexId: number, style: Style, form?: string): Picture {
+  const art = artworkSrc(dexId);
+  if (form) return { src: form, fallback: art };
+  if (style === "sprites") return { src: `/sprites/${dexId}.png`, fallback: art };
+  if (style === "shiny") return { src: artworkApi("shiny", dexId), fallback: art };
+  if (style === "clean" && dexId <= LAST_DREAM_WORLD) return { src: artworkApi("dream", dexId), fallback: art };
+  return { src: art, fallback: art };
+}
+
 /** How the page is laid out: a grid of separate Pokémon, or the posters' group photo or pile. */
 type Layout = "grid" | "photo" | "pile";
 
@@ -62,17 +91,15 @@ function loadPicture(src: string): Promise<HTMLImageElement> {
 const outlines = new Map<string, Promise<HTMLCanvasElement>>();
 
 /** The artwork as black outlines, about `size` pixels across, kept for the next sheet that needs it. */
-function outlineOf(dexId: number, wanted: number): Promise<HTMLCanvasElement> {
+function outlineOf(source: Picture, wanted: number): Promise<HTMLCanvasElement> {
   const size = Math.max(64, Math.min(MAX_OUTLINE_PX, Math.round(wanted / 200) * 200 || 200));
-  const key = `${dexId}:${size}`;
+  const key = `${source.src}:${size}`;
   let made = outlines.get(key);
   if (!made) {
     made = (async () => {
-      // Dream World's vector art has clean outlines and stays sharp at any size; it stops at number 649.
-      const picture =
-        dexId <= LAST_DREAM_WORLD
-          ? await loadPicture(artworkApi("dream", dexId)).catch(() => loadPicture(artworkSrc(dexId)))
-          : await loadPicture(artworkSrc(dexId));
+      const picture = await loadPicture(source.src).catch(() => loadPicture(source.fallback));
+      // A game sprite is pixel art: it is enlarged in sharp squares, so its outlines follow the pixels.
+      const pixelArt = source.src.startsWith("/sprites/");
       const canvas = document.createElement("canvas");
       canvas.width = size;
       canvas.height = size;
@@ -83,6 +110,7 @@ function outlineOf(dexId: number, wanted: number): Promise<HTMLCanvasElement> {
       const scale = Math.min(size / naturalWidth, size / naturalHeight);
       const width = naturalWidth * scale;
       const height = naturalHeight * scale;
+      ctx.imageSmoothingEnabled = !pixelArt;
       ctx.drawImage(picture, (size - width) / 2, (size - height) / 2, width, height);
       const pixels = ctx.getImageData(0, 0, size, size);
       // Lines stay about the same width on paper whatever the size.
@@ -100,7 +128,7 @@ function outlineOf(dexId: number, wanted: number): Promise<HTMLCanvasElement> {
  * Draws one sheet in millimetres on `ctx`: a title in outline letters to colour, the Pokémon in a grid,
  * each with its name, and a footer. `pxPerMm` is how many canvas pixels make a millimetre on paper.
  */
-async function drawSheet(ctx: CanvasRenderingContext2D, entries: readonly Named[], perPage: PerPage, pxPerMm: number, heading: string) {
+async function drawSheet(ctx: CanvasRenderingContext2D, entries: readonly Drawn[], perPage: PerPage, pxPerMm: number, heading: string) {
   const fonts = canvasFonts();
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, A4_MM.width, A4_MM.height);
@@ -116,7 +144,7 @@ async function drawSheet(ctx: CanvasRenderingContext2D, entries: readonly Named[
   for (const [index, entry] of entries.entries()) {
     const cell = cells[index];
     if (!cell) continue;
-    const outline = await outlineOf(entry.id, cell.width * pxPerMm);
+    const outline = await outlineOf(entry.picture, cell.width * pxPerMm);
     ctx.drawImage(outline, cell.x, cell.y, cell.width, cell.height);
     if (perPage > 1) {
       ctx.fillStyle = "#000000";
@@ -143,17 +171,16 @@ function a4Canvas(dpi: number) {
 }
 
 /** A plain A4 sheet. */
-async function paintSheet(entries: readonly Named[], perPage: PerPage, dpi: number, heading: string): Promise<HTMLCanvasElement> {
+async function paintSheet(entries: readonly Drawn[], perPage: PerPage, dpi: number, heading: string): Promise<HTMLCanvasElement> {
   const { canvas, ctx, pxPerMm } = a4Canvas(dpi);
   ctx.scale(pxPerMm, pxPerMm);
   await drawSheet(ctx, entries, perPage, pxPerMm, heading);
   return canvas;
 }
 
-/** The picture a Pokémon is outlined from: Dream World's clean vector art up to No. 649, then official art. */
-function colouringPicture(dexId: number): ImageEntry {
-  const src = dexId <= LAST_DREAM_WORLD ? artworkApi("dream", dexId) : artworkSrc(dexId);
-  return [`colouring:${src}`, src];
+/** A Pokémon's picture as the posters' painter loads it. */
+function crowdPicture(picture: Picture): ImageEntry {
+  return [`colouring:${picture.src}`, picture.src];
 }
 
 /**
@@ -231,7 +258,7 @@ async function paintTiles(
 }
 
 /** The sheet's own drawing for a grid page, for paintTiles. */
-function gridDrawer(entries: readonly Named[], perPage: PerPage, heading: string) {
+function gridDrawer(entries: readonly Drawn[], perPage: PerPage, heading: string) {
   return (ctx: CanvasRenderingContext2D, pxPerMm: number) => drawSheet(ctx, entries, perPage, pxPerMm, heading);
 }
 
@@ -273,6 +300,7 @@ export function ColouringMaker({ playlist, onOwnPick }: { playlist: KidCard; onO
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Named[]>([]);
   const [layout, setLayout] = useState<Layout>("grid");
+  const [style, setStyle] = useState<Style>("clean");
   const [perPage, setPerPage] = useState<PerPage>(1);
   const [across, setAcross] = useState<PosterSize>(1);
   const [shake, setShake] = useState(0);
@@ -319,16 +347,25 @@ export function ColouringMaker({ playlist, onOwnPick }: { playlist: KidCard; onO
     };
   }, [grid, missing]);
 
-  const entries: Named[] = useMemo(
-    () => dexIds.map((id) => ({ id, name: known[id] ?? `No. ${id}` })),
-    [dexIds, known],
+  const forms = crowd?.forms;
+  const entries: Drawn[] = useMemo(
+    () =>
+      dexIds.map((id, index) => ({
+        id,
+        name: known[id] ?? `No. ${id}`,
+        picture: pictureFor(id, style, forms?.[index]),
+      })),
+    [dexIds, known, style, forms],
   );
   const pages = grid ? pagesOf(entries, perPage) : dexIds.length > 0 ? [entries] : [];
   const firstPage = pages[0];
-  const firstKey = firstPage?.map((entry) => `${entry.id}:${entry.name}`).join(",") ?? "";
+  const firstKey = firstPage?.map((entry) => `${entry.id}:${entry.name}:${entry.picture.src}`).join(",") ?? "";
 
   // The crowd layouts draw with the posters' painter, so their pictures and sizes load first.
-  const pictures = useMemo(() => (grid ? [] : [...BRAND_FILES, ...dexIds.map(colouringPicture)]), [grid, dexIds]);
+  const pictures = useMemo(
+    () => (grid ? [] : [...BRAND_FILES, ...entries.map((entry) => crowdPicture(entry.picture))]),
+    [grid, entries],
+  );
   useEffect(() => {
     if (grid) return;
     void loadAll(pictures);
@@ -339,12 +376,12 @@ export function ColouringMaker({ playlist, onOwnPick }: { playlist: KidCard; onO
     return {
       title,
       hidden: crowd?.hidden ?? false,
-      crowd: dexIds.map((dexId) => ({
-        image: colouringPicture(dexId)[0],
-        heightDm: sizes[dexId]?.heightDm ?? 0,
-        color: sizes[dexId]?.color,
+      crowd: entries.map((entry) => ({
+        image: crowdPicture(entry.picture)[0],
+        heightDm: sizes[entry.id]?.heightDm ?? 0,
+        color: sizes[entry.id]?.color,
       })),
-      pixelated: false,
+      pixelated: style === "sprites",
       scene: "plain",
       pileSeed: 7919 * (dexIds[0] ?? 1) + shake,
       images: images.current,
@@ -577,6 +614,7 @@ export function ColouringMaker({ playlist, onOwnPick }: { playlist: KidCard; onO
         chosen={layout}
         onChoose={(id) => setLayout(id as Layout)}
       />
+      <ChoiceRow label="Pokémon drawn as" choices={STYLES} chosen={style} onChoose={(id) => setStyle(id as Style)} />
       {grid ? (
         <ChoicePills
           label="Pokémon on each page"
