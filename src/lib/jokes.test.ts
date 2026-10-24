@@ -13,13 +13,12 @@ import { safariAdventure } from "./story/safari";
 import { speakerLines } from "./story/story-voices";
 
 describe("Pokémon jokes", () => {
-  it("has about fifty, one per Pokémon, each naming its Pokémon and ending properly", () => {
-    assert.ok(JOKES.length >= 45);
+  it("has plenty, one Pokémon picture each, each a question with a punchline", () => {
+    assert.ok(JOKES.length >= 60);
     assert.equal(new Set(JOKES.map((joke) => joke.dexId)).size, JOKES.length);
     for (const joke of JOKES) {
       const name = getCatalogueEntry(joke.dexId)?.name.replace(".", "") ?? "";
       assert.ok(name, `${joke.dexId} is a Pokémon`);
-      assert.ok(joke.setup.includes(name.split(" ")[0] as string), `${joke.setup} names ${name}`);
       assert.match(joke.setup, /\?$/);
       assert.match(joke.punchline, /[!?.]$/);
       assert.doesNotMatch(`${joke.setup} ${joke.punchline}`, /["“”‘’]|\d/);
@@ -41,7 +40,9 @@ describe("Pokémon jokes", () => {
     assert.equal(card.chapters.length, JOKES.length);
     assert.ok(countSpokenTracks(card.chapters) <= 100);
     assert.ok(card.chapters.every((chapter) => chapter.tracks[0]?.lead === "cry" && chapter.dexId));
-    assert.match(card.chapters[0]?.tracks[0]?.text ?? "", /^Here's a joke about Psyduck\. .+\?.*\.\.\. .+!$/);
+    assert.match(card.chapters[0]?.tracks[0]?.text ?? "", /^Here's a joke about Pikachu\. .+\?.*\.\.\. .+!$/);
+    // A joke about Ghost Pokémon in general doesn't claim to be about Gastly, whose picture it shows.
+    assert.match(card.chapters.find((chapter) => chapter.dexId === 92)?.tracks[0]?.text ?? "", /^Here's a joke\. Why are Ghost/);
   });
 
   it("picks jokes in a repeatable order, and can leave some Pokémon out", () => {

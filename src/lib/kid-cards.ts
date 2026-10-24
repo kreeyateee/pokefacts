@@ -2,7 +2,7 @@ import { artworkSrc as formArtworkSrc } from "@/lib/artwork-path";
 import { artworkSrc } from "@/lib/page-artwork";
 import type { BiologyBlock } from "@/lib/catalogue-types";
 import { dexBlurb, guessSpoken, pickDexEntry, quickFacts, type MonSheet } from "@/lib/dex-facts";
-import { JOKES } from "@/lib/jokes";
+import { jokeIntro, JOKES } from "@/lib/jokes";
 import type { FactLength } from "@/lib/playback-settings";
 import { pronounce } from "@/lib/pronounce";
 import { spokenWiki } from "@/lib/spoken-wiki";
@@ -973,7 +973,7 @@ export function jokePlaylist(sheets: readonly MonSheet[]): KidCard {
     if (!sheet) return [];
     const number = String(sheet.id);
     const icon = `/pixels/${sheet.id}.png`;
-    const text = `Here's a joke about ${sheet.name}. ${joke.setup} ... ${joke.punchline}`;
+    const text = `${jokeIntro(sheet.name, joke)} ${joke.setup} ... ${joke.punchline}`;
     return [
       picture(`joke-${sheet.slug}`, sheet.name, number, "this Pokémon", number, icon, [talk("joke", sheet.name, text, icon, number, undefined, "cry")], {
         sprite: artworkSrc(sheet.id),
@@ -987,8 +987,8 @@ export function jokePlaylist(sheets: readonly MonSheet[]): KidCard {
     title: "Pokémon Joke Book",
     rangeLabel: "Pokémon Joke Book",
     libraryTitle: "Pokémon Joke Book",
-    blurb: "The cry, then a joke about that Pokémon.",
-    childDoes: "Turn to a picture and press play. You hear the cry, then a joke about that Pokémon.",
+    blurb: "The cry, then a Pokémon joke.",
+    childDoes: "Turn to a picture and press play. You hear the cry, then a Pokémon joke.",
     chapters,
   };
 }
