@@ -67,14 +67,15 @@ describe("Expression in the adventures", () => {
     assert.equal(forElevenLabs("'{gasps} Look!'"), "'[gasps] Look!'");
   });
 
-  it("keeps a tag with the words after it when a name is cut out to be recorded on its own", () => {
+  it("keeps a tag with its sentence, and never cuts a name out of it", () => {
     const voices = castVoices("x", CAST);
     const parts = trackParts("'{gasps} Mia! You did it!' says Juno.", voices, CAST, undefined, {
       slots: ["Mia"],
       fallback: fallbackVoices(CAST),
     });
     const spoken = (parts ?? []).flatMap((part) => ("text" in part ? [part.text] : []));
-    assert.deepEqual(spoken.slice(0, 2), ["{gasps} Mia!", "You did it!"]);
+    // "You did it!" and "says Juno." are one sentence, so the narrator reads them together.
+    assert.deepEqual(spoken, ["{gasps} Mia!", "You did it! says Juno."]);
   });
 
   it("still finds the speaker when the tag comes after the words", () => {

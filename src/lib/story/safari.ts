@@ -926,7 +926,6 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
     // cutting them out would mean more recordings, not fewer (measured over thirty sends).
     slots: plan.owner ? [plan.owner] : [],
     // Each sentence is recorded on its own, so a new set of Pokémon only records the sentences that name them.
-    pieces: "sentences",
   };
 }
 

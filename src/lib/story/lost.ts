@@ -630,7 +630,6 @@ export function buildLost(plan: LostPlan): StoryGraph {
     // The partner's and child's names are recorded on their own, and each sentence too, so the same
     // dungeon for another partner of the same type reuses almost every line.
     slots: [partner.name, ...(owner ? [owner] : [])],
-    pieces: "sentences",
   };
 }
 

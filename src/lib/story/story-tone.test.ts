@@ -32,19 +32,17 @@ describe("the tone of an adventure's lines", () => {
     assert.equal(withStoryTone("   ", CHARACTER), "   ");
   });
 
-  it("never tags a name recorded on its own, so it stays reusable", () => {
+  it("tones a whole sentence, name and all, in its speaker's mood", () => {
     const narrator: VoiceStyle = { voiceId: LILY_VOICE_ID, pitch: 0, tempo: 1 };
     const rival: StoryCharacter = { id: "barnaby", name: "Barnaby", voices: [LILY_VOICE_ID], pitch: 2, mood: "smugly" };
     const voices = { narrator, barnaby: { voiceId: LILY_VOICE_ID, pitch: 2, tempo: 1 } };
-    const parts = trackParts("'Mia, I caught one!' says Barnaby.", voices, [rival], (text) => text, {
-      slots: ["Mia"],
-      tone: true,
-    });
+    const text = "Barnaby leaps up. 'Mia, I caught one!' Barnaby polishes his ball. 'I always do.'";
+    const parts = trackParts(text, voices, [rival], (words) => words, { slots: ["Mia"], tone: true });
     assert.deepEqual(
       parts?.map((part) => ("text" in part ? part.text : "")),
-      ["Mia,", "{excited} I caught one!", "says Barnaby."],
+      ["Barnaby leaps up.", "{excited} Mia, I caught one!", "Barnaby polishes his ball.", "{smugly} I always do."],
     );
-    const plain = trackParts("'Mia, I caught one!' says Barnaby.", voices, [rival], (text) => text, { slots: ["Mia"] });
+    const plain = trackParts(text, voices, [rival], (words) => words, { slots: ["Mia"] });
     assert.equal(plain?.some((part) => "text" in part && hasVoiceTags(part.text)), false, "off unless asked for");
   });
 

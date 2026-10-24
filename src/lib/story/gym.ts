@@ -542,7 +542,6 @@ export function buildGym(plan: GymPlan): StoryGraph {
     cast: cast(),
     slots: plan.owner ? [plan.owner] : [],
     // Each sentence is recorded on its own, so a new team only records the sentences that name it.
-    pieces: "sentences",
   };
 }
 

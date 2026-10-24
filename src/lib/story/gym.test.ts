@@ -48,7 +48,8 @@ describe("Gym Challenge", () => {
       }
     }
     const graph = gymAdventure({ seed: 1 });
-    assert.equal(graph.pieces, "sentences");
+    // Recorded by line: a recording never stops in the middle of a sentence or a speaker's turn.
+    assert.equal(graph.pieces, undefined);
     assert.match(graph.nodes.find((node) => node.id === "g4c")?.text ?? "", /good place to stop/);
     // Ronnie's jokes come just before a question, while a leader fetches the ace.
     const jokes = graph.nodes.filter((node) => node.text.includes("Want to hear a joke?"));
