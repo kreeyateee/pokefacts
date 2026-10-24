@@ -515,6 +515,14 @@ export const GOLDEN_FLED_AFTER =
 
 export const ENDING_NAMES = ["A Good Day Out", "Barnaby's Bad Day", "Safari Master", "Golden Legend"];
 
+/** What each ending gives you to take home, so every one is a prize of its own. */
+export const PRIZES: Readonly<Record<number, string>> = {
+  1: "Marigold sticks a Safari Zone sticker on your bag. 'For a good day out,' she says.",
+  2: "Marigold pins a bronze Safari badge on your jacket. Barnaby doesn't have one.",
+  3: "Marigold hands you a shiny silver Safari Master badge, and Barnaby asks for your autograph.",
+  4: "Then she gives you something she has kept for forty years: a golden Safari Ball, all your own.",
+};
+
 /** Marigold's parting tip at the gate, after a day when a few got away. Chosen by seed. */
 export const PARTING_TIPS = [
   "'Next time,' she says, 'listen to the cry first. It tells you more than your eyes do.'",

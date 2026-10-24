@@ -18,7 +18,7 @@
  * line is read in that character's voice.
  */
 import { drawSample, mulberry32 } from "@/lib/kid-cards";
-import { jokesFor, toldBy } from "@/lib/jokes";
+import { jokesFor, toldBy, type Joke } from "@/lib/jokes";
 import type { AdventureInput, Partner } from "@/lib/story/adventure-route";
 import type { StoryGraph, StoryIcon, StoryNode } from "@/lib/story/story-graph";
 import type { StoryBed } from "@/lib/story/story-sound";
@@ -463,7 +463,8 @@ export function buildIsland(plan: IslandPlan, seed: number, ownerName = "", part
   const nodes: StoryNode[] = [];
   const last = plan.stages.length - 1;
   // One joke from Brine on the way, different for each voyage.
-  const joke = jokesFor(mulberry32((seed ^ 0x70e) >>> 0))[0] as NonNullable<ReturnType<typeof jokesFor>[number]>;
+  // Brine's joke scene has a copy for each way the voyage can be going, and each copy has its own joke.
+  const jokes = jokesFor(mulberry32((seed ^ 0x70e) >>> 0));
 
   plan.stages.forEach((stage, index) => {
     const moment = plan.moments[index] ?? "";
@@ -489,7 +490,7 @@ export function buildIsland(plan: IslandPlan, seed: number, ownerName = "", part
         icon: { dexId: 321 },
         bed: stage.bed,
         // Brine's joke takes the place of Mabel's moment, so the scene stays short.
-        text: [stage.good.text, index === 4 ? toldBy("Brine", joke) : moment, named(PARTNER_MOMENTS[index] ?? ""), progressLine(index, false, slips)]
+        text: [stage.good.text, index === 4 ? toldBy("Brine", jokes[slips] as Joke) : moment, named(PARTNER_MOMENTS[index] ?? ""), progressLine(index, false, slips)]
           .filter(Boolean)
           .join(" "),
         // A good answer after a bad patch wins a little time back, but only a perfect voyage is golden.

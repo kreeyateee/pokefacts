@@ -15,7 +15,7 @@ import { listMonSheets, listSafariSpecies } from "@/lib/catalogue-db";
 import type { MonSheet } from "@/lib/dex-facts";
 import { drawSample, mulberry32 } from "@/lib/kid-cards";
 import { pronounce } from "@/lib/pronounce";
-import { jokesFor, toldBy } from "@/lib/jokes";
+import { jokesFor, toldBy, type Joke } from "@/lib/jokes";
 import type { AdventureInput, Partner } from "@/lib/story/adventure-route";
 import { FIELD_NOTES, GOLDEN_STOPS, type FieldNotes } from "@/lib/story/safari-roster";
 import * as W from "@/lib/story/safari-words";
@@ -868,6 +868,8 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
     next: goldenEnding,
   });
 
+  // One joke for each ending, never about a Pokémon from today, and never the same one twice on a card.
+  const jokes = jokesFor(mulberry32((plan.seed ^ 0x70e) >>> 0), [...plan.stops.map((stop) => stop.mon.id), gold.id]);
   for (let number = 1; number <= total; number += 1) {
     const name = W.ENDING_NAMES[number - 1] ?? "Safari Trainer";
     // Back at the gate as the sun goes down: birdsong, and music to match the day.
@@ -885,6 +887,7 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
         text: join(
           revealed(gold, true),
           W.goldenText(capital(owner)),
+          W.PRIZES[number],
           plan.partner ? `${plan.partner.name} does a little victory dance all round you. [cry:${plan.partner.id}]` : "",
           "[golden]",
         ),
@@ -893,8 +896,9 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
     } else {
       const text = join(
         number === 1 ? join(W.goodDayText(owner), words.tip()) : number === 2 ? W.dayEndText(owner) : W.masterText(owner),
-        // Marigold's joke on the way to the gate, never about a Pokémon from today.
-        toldBy("Marigold", jokesFor(mulberry32((plan.seed ^ 0x70e) >>> 0), [...plan.stops.map((stop) => stop.mon.id), gold.id])[0]!),
+        W.PRIZES[number],
+        // A joke on the way to the gate: Barnaby, sulking, is talked into one on his bad day.
+        toldBy(number === 2 ? "Barnaby" : "Marigold", jokes[number - 1] as Joke),
         plan.partner ? `${plan.partner.name} yawns a big yawn, and you walk home together.` : "",
         "[ending]",
       );

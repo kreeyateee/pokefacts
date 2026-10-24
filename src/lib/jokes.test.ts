@@ -48,6 +48,37 @@ describe("Pokémon jokes", () => {
     assert.ok(jokesFor(mulberry32(3), [25, 143]).every((joke) => joke.dexId !== 25 && joke.dexId !== 143));
   });
 
+  it("never tells the same joke twice on one card, whichever way the story goes", () => {
+    const partners = [undefined, { id: 25, name: "Pikachu" }, { id: 909, name: "Fuecoco" }, { id: 143, name: "Snorlax" }];
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      for (const partner of partners) {
+        for (const graph of [
+          islandAdventure({ seed, partner }),
+          safariAdventure({ seed, partner }),
+          gymAdventure({ seed, partner }),
+          paldeaAdventure({ seed, partner }),
+          lostAdventure({ seed, partner }),
+        ]) {
+          for (const joke of JOKES) {
+            const told = graph.nodes.filter((node) => node.text.includes(joke.setup)).map((node) => node.id);
+            assert.ok(told.length <= 1, `${graph.title} seed ${seed}: "${joke.setup}" is told in ${told.join(", ")}`);
+          }
+        }
+      }
+    }
+  });
+
+  it("gives every Safari ending its own joke and its own prize", () => {
+    const graph = safariAdventure({ seed: 4 });
+    const endings = graph.nodes.filter((node) => node.kind === "ending");
+    assert.equal(endings.length, 4);
+    const prizes = endings.map((node) => /sticker|bronze|silver|golden Safari Ball/.exec(node.text)?.[0]);
+    assert.deepEqual(prizes, ["sticker", "bronze", "silver", "golden Safari Ball"]);
+    const jokes = endings.filter((node) => node.text.includes("Want to hear a joke?"));
+    assert.equal(jokes.length, 3, "the golden ending is a celebration, not a joke");
+    assert.match(endings[1]?.text ?? "", /says Barnaby\. '/, "Barnaby tells the joke on his bad day");
+  });
+
   it("puts a joke in every adventure", () => {
     for (const graph of [
       islandAdventure({ seed: 2 }),

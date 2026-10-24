@@ -438,7 +438,7 @@ export function buildLost(plan: LostPlan): StoryGraph {
   const tense: StoryBed = { ...theme.bed, music: "tense" };
   const you: StoryIcon = { dexId: partner.id };
   const power = `use your ${type} power`;
-  const joke = jokesFor(mulberry32((plan.seed ^ 0x70e) >>> 0), [partner.id])[0] as Joke;
+  const jokes = jokesFor(mulberry32((plan.seed ^ 0x70e) >>> 0), [partner.id]);
 
   const opening = [
     `You are ${partner.name}, the ${plan.genus}. [cry:${partner.id}]`,
@@ -545,8 +545,8 @@ export function buildLost(plan: LostPlan): StoryGraph {
         title: `${fix.title}: Onwards`,
         icon: you,
         bed,
-        // The guide tells a joke on the way down from floor two.
-        text: [fix.good, guideSays(guide, trainer, won, false), floor === 2 ? toldBy(guide, joke) : ""].filter(Boolean).join(" "),
+        // The guide tells a joke on the way down from floor two: its own joke for every copy of the scene.
+        text: [fix.good, guideSays(guide, trainer, won, false), floor === 2 ? toldBy(guide, jokes[behind] as Joke) : ""].filter(Boolean).join(" "),
         next: nextOnWin,
       });
       nodes.push({
