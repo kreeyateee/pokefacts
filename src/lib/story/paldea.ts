@@ -1,6 +1,7 @@
 /**
  * Paldea Picnic: your first week at a Paldea academy. You choose Sprigatito, Fuecoco or Quaxly, and
- * set off with your classmates Juno and Arlo to gather the ingredients for the Great Picnic Sandwich.
+ * set off with your classmates Juno and Arlo to gather the ingredients for the Great Picnic: a sandwich,
+ * a pizza, a stack of pancakes or a curry, different on each card.
  *
  * Three friendly battles on the way, each a type puzzle: pick the move that suits the wild Pokémon.
  * The middle one is a trick, where your partner's own type is the wrong choice. A miss never ends the
@@ -102,7 +103,7 @@ export const STARTERS: Starter[] = [
     ],
     sulk: [
       "Fuecoco shrugs, and eats a pine cone to cheer itself up. It works.",
-      "Fuecoco looks puzzled, then eats your sandwich bag. It feels much better.",
+      "Fuecoco looks puzzled, then eats your lunch bag. It feels much better.",
     ],
     first: [
       { name: "Smoliv", id: 928, type: "Grass", why: "Fire burns plants, so a Fire move hits it hard." },
@@ -158,7 +159,68 @@ function friendsOf(mine: Starter): { juno: Starter; arlo: Starter } {
 
 const ENDING_NAMES = ["Picnic Pals", "Big Steps", "Best Friends"] as const;
 
-export type PaldeaPlan = { seed: number; picks: Record<Starter["key"], { first: Foe; trick: Foe }> };
+/** What the Great Picnic is: two ingredients to fetch, then the Herba Mystica from the cliffs. */
+export type Menu = {
+  /** "the Great Picnic Sandwich". */
+  dish: string;
+  /** "sandwich", as in "the sandwich is on the roof". */
+  noun: string;
+  /** "sandwiches", as in "it rains sandwiches". */
+  plural: string;
+  /** How you make it: "build". */
+  make: string;
+  /** What you turn round to do when your partner eats it all. */
+  serve: string;
+  /** What Juno makes everyone after. */
+  another: string;
+  first: { food: string; place: string; sunny: string; spot: string; title: string; bit: string; pop: string };
+  cave: { food: string; cave: string; spot: string; title: string; pop: string };
+};
+
+export const MENUS: readonly Menu[] = [
+  {
+    dish: "the Great Picnic Sandwich",
+    noun: "sandwich",
+    plural: "sandwiches",
+    make: "build",
+    serve: "cut the sandwich",
+    another: "a second sandwich",
+    first: { food: "tomatoes", place: "the orchard", sunny: "the sunny tomato orchard", spot: "the tomato patch", title: "The Tomato Orchard", bit: "a tomato", pop: "The tomatoes go pop." },
+    cave: { food: "cheese", cave: "cheese cave", spot: "the biggest cheese of all", title: "The Cheese Cave", pop: "The cheese goes bang." },
+  },
+  {
+    dish: "the Great Picnic Pizza",
+    noun: "pizza",
+    plural: "pizzas",
+    make: "bake",
+    serve: "cut the pizza",
+    another: "a second pizza",
+    first: { food: "peppers", place: "the vegetable garden", sunny: "the sunny vegetable garden", spot: "the pepper patch", title: "The Pepper Patch", bit: "a pepper", pop: "The peppers go pop." },
+    cave: { food: "mushrooms", cave: "mushroom cave", spot: "the biggest mushroom of all", title: "The Mushroom Cave", pop: "The mushrooms go bang." },
+  },
+  {
+    dish: "the Great Picnic Pancake Stack",
+    noun: "pancake stack",
+    plural: "pancakes",
+    make: "stack up",
+    serve: "pour the syrup",
+    another: "a second stack",
+    first: { food: "strawberries", place: "the strawberry field", sunny: "the sunny strawberry field", spot: "the strawberry patch", title: "The Strawberry Field", bit: "a strawberry", pop: "The strawberries go pop." },
+    cave: { food: "honey", cave: "honey cave", spot: "the biggest honeycomb of all", title: "The Honey Cave", pop: "The honey goes splat." },
+  },
+  {
+    dish: "the Great Picnic Curry",
+    noun: "curry",
+    plural: "bowls of curry",
+    make: "cook",
+    serve: "fetch the spoons",
+    another: "a second pot",
+    first: { food: "carrots", place: "the vegetable garden", sunny: "the sunny vegetable garden", spot: "the carrot patch", title: "The Carrot Patch", bit: "a carrot", pop: "The carrots go pop." },
+    cave: { food: "mushrooms", cave: "mushroom cave", spot: "the biggest mushroom of all", title: "The Mushroom Cave", pop: "The mushrooms go bang." },
+  },
+];
+
+export type PaldeaPlan = { seed: number; picks: Record<Starter["key"], { first: Foe; trick: Foe }>; menu: Menu };
 
 export function planPaldea(seed: number): PaldeaPlan {
   const random = mulberry32((seed ^ 0x9a1dea) >>> 0);
@@ -166,7 +228,9 @@ export function planPaldea(seed: number): PaldeaPlan {
   const picks = Object.fromEntries(
     STARTERS.map((starter) => [starter.key, { first: pick(starter.first), trick: pick(starter.trick) }]),
   ) as PaldeaPlan["picks"];
-  return { seed, picks };
+  // The menu has its own draw, so the wild Pokémon for a seed stay the same.
+  const menu = MENUS[Math.floor(mulberry32((seed ^ 0xf00d) >>> 0)() * MENUS.length)] as Menu;
+  return { seed, picks, menu };
 }
 
 function an(word: string): string {
@@ -214,25 +278,26 @@ type Stage = { title: string; bed: StoryBed; foe: Foe; good: string; slip: strin
 
 function stagesFor(mine: Starter, plan: PaldeaPlan, owner: string): Stage[] {
   const seed = Math.abs(plan.seed);
+  const menu = plan.menu;
   const { first, trick } = plan.picks[mine.key];
   const titan = mine.titan;
   return [
     {
-      title: "The Tomato Orchard",
+      title: menu.first.title,
       bed: { ambience: "grass", music: "adventure" },
       foe: first,
       good: mine.own,
       slip: mine.plain,
-      scene: `[footsteps] ${seed % 2 ? "First, tomatoes from the orchard." : "First stop, the sunny tomato orchard."} But a wild ${first.name} is sitting in the tomato patch, and it won't let anyone near. [cry:${first.id}] Arlo grins. 'That's ${an(first.name)}. It's ${an(first.type)} type.' Juno turns to you. 'Your turn, ${owner}.'`,
+      scene: `[footsteps] ${seed % 2 ? `First, ${menu.first.food} from ${menu.first.place}.` : `First stop, ${menu.first.sunny}.`} But a wild ${first.name} is sitting in ${menu.first.spot}, and it won't let anyone near. [cry:${first.id}] Arlo grins. 'That's ${an(first.name)}. It's ${an(first.type)} type.' Juno turns to you. 'Your turn, ${owner}.'`,
       ask: `Which move should ${mine.name} use?`,
     },
     {
-      title: "The Cheese Cave",
+      title: menu.cave.title,
       bed: { ambience: "cave", music: "mysterious" },
       foe: trick,
       good: mine.plain,
       slip: mine.own,
-      scene: `[footsteps] ${seed % 3 ? "Next, cheese from the dark cave." : "Next stop, the cool cheese cave."} A wild ${trick.name} is curled up on the biggest cheese of all. [cry:${trick.id}] Arlo turns to you. 'It's ${an(trick.name)}. That's ${an(trick.type)} type. Think carefully.' ${mine.name} is already getting ready to use ${mine.own}, its favourite move.`,
+      scene: `[footsteps] ${seed % 3 ? `Next, ${menu.cave.food} from the dark cave.` : `Next stop, the cool ${menu.cave.cave}.`} A wild ${trick.name} is curled up on ${menu.cave.spot}. [cry:${trick.id}] Arlo turns to you. 'It's ${an(trick.name)}. That's ${an(trick.type)} type. Think carefully.' ${mine.name} is already getting ready to use ${mine.own}, its favourite move.`,
       ask: `Which move should ${mine.name} use?`,
     },
     {
@@ -263,47 +328,47 @@ function slipText(stage: Stage, mine: Starter, sulk: string, index: number, juno
 const VISITORS = [
   "A Pawmi sneaks a crumb and runs off giggling. [cry:921]",
   "Two Tandemaus share one tiny crumb, very politely. [cry:924]",
-  "A Smoliv rolls up, sniffs the sandwich, and rolls away again. [cry:928]",
+  "A Smoliv rolls up, sniffs the picnic, and rolls away again. [cry:928]",
   "A Wiglett pops out of the ground to see what the fuss is about. [cry:960]",
   "A Flittle floats down and lands on Ms Olwen's clipboard. [cry:955]",
 ];
 
-function endingText(band: number, mine: Starter, juno: Starter, arlo: Starter, owner: string, visitor = ""): string {
-  const intro = `At the top of the hill, on the biggest picnic blanket in Paldea, you build the Great Picnic Sandwich. It's enormous. Juno's ${juno.name} and Arlo's ${arlo.name} sit down beside ${mine.name}.`;
+function endingText(band: number, mine: Starter, juno: Starter, arlo: Starter, owner: string, menu: Menu, visitor = ""): string {
+  const intro = `At the top of the hill, on the biggest picnic blanket in Paldea, you ${menu.make} ${menu.dish}. It's enormous. Juno's ${juno.name} and Arlo's ${arlo.name} sit down beside ${mine.name}.`;
   if (band === 2) {
     return `${intro} And then ${mine.name} begins to glow. [cry:${mine.id}] Brighter, and brighter, until with a flash it becomes ${mine.mid.name}! [cry:${mine.mid.id}] And it doesn't stop. It glows again, and becomes ${mine.final.name}! [cry:${mine.final.id}] [fanfare] Then a crown of shining crystal appears above its head, sparkling every colour of the rainbow. It has Terastallised! Ms Olwen speaks very quietly. '{whispers} In thirty years at this academy, I have never seen a partner trust its trainer so much. ${owner ? `${owner}, you` : "You"} two are best friends.' Juno is so amazed she forgets to be jealous. ${visitor} [golden]`;
   }
   if (band === 1) {
-    return `${intro} You share the sandwich out, and the moment ${mine.name} takes a bite, it begins to glow. [cry:${mine.id}] With a flash, it becomes ${mine.mid.name}! [cry:${mine.mid.id}] [fanfare] Ms Olwen is smiling. '{cheerfully} Look at that. Your partner is growing up, just like you.' Juno says hers is going to evolve tomorrow. Arlo writes it all down in his notebook. ${visitor} [ending]`;
+    return `${intro} You share out the ${menu.noun}, and the moment ${mine.name} takes a bite, it begins to glow. [cry:${mine.id}] With a flash, it becomes ${mine.mid.name}! [cry:${mine.mid.id}] [fanfare] Ms Olwen is smiling. '{cheerfully} Look at that. Your partner is growing up, just like you.' Juno says hers is going to evolve tomorrow. Arlo writes it all down in his notebook. ${visitor} [ending]`;
   }
-  return `${intro} You turn round to cut the sandwich, and when you turn back, it's gone. ${mine.name} has eaten the entire Great Picnic Sandwich and is lying on its back with a very round tummy. [cry:${mine.id}] Everybody laughs so much that Lechonk falls over. Ms Olwen nods. 'It'll evolve when it's ready. And it will, you know. It's already very fond of you.' Juno makes everyone a second sandwich. ${visitor} [ending]`;
+  return `${intro} You turn round to ${menu.serve}, and when you turn back, it's gone. ${mine.name} has eaten all of ${menu.dish} and is lying on its back with a very round tummy. [cry:${mine.id}] Everybody laughs so much that Lechonk falls over. Ms Olwen nods. 'It'll evolve when it's ready. And it will, you know. It's already very fond of you.' Juno makes everyone ${menu.another}. ${visitor} [ending]`;
 }
 
 /** What the picnic turns into when two of the same starter evolve together, and what ends up in Ms Olwen's hair. */
-const TWIN_CHAOS: Record<Starter["key"], { ask: string; labels: [string, string]; opener: string; chaos: string; bit: string }> = {
+const TWIN_CHAOS: Record<Starter["key"], { ask: string; labels: [string, string]; opener: string; chaos: (menu: Menu) => string; bit: (menu: Menu) => string }> = {
   fire: {
     ask: "Do the two Skeledirge sing a little song, or a really big one?",
     labels: ["sing a little song", "sing a really big one"],
     opener: "It turns out Skeledirge only know one kind of song: the loudest kind.",
-    chaos:
-      "The two Skeledirge take a deep breath, and sing. The tomatoes go pop. The cheese goes bang. The Herba Mystica goes whoosh. And then the Great Picnic Sandwich explodes. [hit] It rains sandwiches. Little ones, big ones, and one with a very surprised Lechonk riding on top of it. [cry:915] Ms Olwen's clipboard has caught fire, so one of the Skeledirge eats it. Juno has a tomato on her head. '{laughs} Best. Picnic. Ever!' [cheer] Everybody does the conga round the hill, with both Skeledirge at the front, singing, and setting fire to the odd twig, which they then eat.",
-    bit: "a tomato",
+    chaos: (menu) =>
+      `The two Skeledirge take a deep breath, and sing. ${menu.first.pop} ${menu.cave.pop} The Herba Mystica goes whoosh. And then ${menu.dish} explodes. [hit] It rains ${menu.plural}. Little ones, big ones, and one with a very surprised Lechonk riding on top of it. [cry:915] Ms Olwen's clipboard has caught fire, so one of the Skeledirge eats it. Juno has ${menu.first.bit} on her head. '{laughs} Best. Picnic. Ever!' [cheer] Everybody does the conga round the hill, with both Skeledirge at the front, singing, and setting fire to the odd twig, which they then eat.`,
+    bit: (menu) => menu.first.bit,
   },
   grass: {
     ask: "Do the two Meowscarada do a small magic trick, or a really big one?",
     labels: ["do a small trick", "do a really big one"],
     opener: "It turns out Meowscarada only know one kind of trick: the biggest kind.",
-    chaos:
-      "The two Meowscarada bow, very politely, and throw a cloth over the Great Picnic Sandwich. They wave their paws. They count to three. And the sandwich explodes. [hit] Not into crumbs, but into flowers. Thousands of them, then millions, bursting out of the blanket and rolling down the hill in a great pink wave. Lechonk vanishes under the petals and pops back up wearing a daisy chain. [cry:915] Ms Olwen sneezes so hard that her hat flies off and lands on Arlo. Juno they do. '{laughs} Do it again!' [cheer] Now the whole academy is a flower garden, the sandwich is on the roof, and nobody knows how it got there.",
-    bit: "a petal",
+    chaos: (menu) =>
+      `The two Meowscarada bow, very politely, and throw a cloth over ${menu.dish}. They wave their paws. They count to three. And the ${menu.noun} explodes. [hit] Not into crumbs, but into flowers. Thousands of them, then millions, bursting out of the blanket and rolling down the hill in a great pink wave. Lechonk vanishes under the petals and pops back up wearing a daisy chain. [cry:915] Ms Olwen sneezes so hard that her hat flies off and lands on Arlo. Juno shouts. '{laughs} Do it again!' And they do. [cheer] Now the whole academy is a flower garden, the ${menu.noun} is on the roof, and nobody knows how it got there.`,
+    bit: () => "a petal",
   },
   water: {
     ask: "Do the two Quaquaval do a little dance, or a really big one?",
     labels: ["dance a little", "dance a lot"],
     opener: "It turns out Quaquaval only know one kind of dance: the splashiest kind.",
-    chaos:
-      "The two Quaquaval stand up, stretch, and begin to dance. Left foot, right foot, a twirl and a splash. With every step, a fountain of water bursts out of the ground. The fountains get bigger, and bigger, and then the whole picnic goes up in one enormous watery explosion. [hit] When the spray clears, the top of the hill is a swimming pool. The Great Picnic Sandwich is floating across it like a little boat, and Lechonk is surfing on a tray. [cry:915] Juno jumps. '{laughs} Everyone in!' [cheer] Arlo jumps in with his notebook. Ms Olwen jumps in with her clipboard. The two Quaquaval keep on dancing on top of the water, which nobody can explain.",
-    bit: "a fish",
+    chaos: (menu) =>
+      `The two Quaquaval stand up, stretch, and begin to dance. Left foot, right foot, a twirl and a splash. With every step, a fountain of water bursts out of the ground. The fountains get bigger, and bigger, and then the whole picnic goes up in one enormous watery explosion. [hit] When the spray clears, the top of the hill is a swimming pool. ${menu.dish.replace(/^the/, "The")} is floating across it like a little boat, and Lechonk is surfing on a tray. [cry:915] Juno jumps. '{laughs} Everyone in!' [cheer] Arlo jumps in with his notebook. Ms Olwen jumps in with her clipboard. The two Quaquaval keep on dancing on top of the water, which nobody can explain.`,
+    bit: () => "a fish",
   },
 };
 
@@ -315,8 +380,8 @@ const TWIN_NAMES = ["Secret: Twice the Trouble", "Secret: Kaboom", "Secret: The 
  * them evolve together, twice, and the picnic does not survive. How many you got right decides the finish.
  */
 /** The twins evolve together, twice, just before the picnic, and look at you as if they have an idea. */
-function twinChoiceText(mine: Starter): string {
-  return `At the top of the hill, you build the Great Picnic Sandwich. It's enormous. Your ${mine.name} from home sits down next to the new ${mine.name}. They look at each other, and both begin to glow. [cry:${mine.id}] Arlo gasps. '{gasps} Two of them? That isn't in any Pokédex!' Flash! Two ${mine.mid.name}! [cry:${mine.mid.id}] Flash! Two ${mine.final.name}! [cry:${mine.final.id}] [fanfare] ${TWIN_CHAOS[mine.key].ask}`;
+function twinChoiceText(mine: Starter, menu: Menu): string {
+  return `At the top of the hill, you ${menu.make} ${menu.dish}. It's enormous. Your ${mine.name} from home sits down next to the new ${mine.name}. They look at each other, and both begin to glow. [cry:${mine.id}] Arlo gasps. '{gasps} Two of them? That isn't in any Pokédex!' Flash! Two ${mine.mid.name}! [cry:${mine.mid.id}] Flash! Two ${mine.final.name}! [cry:${mine.final.id}] [fanfare] ${TWIN_CHAOS[mine.key].ask}`;
 }
 
 /**
@@ -324,8 +389,11 @@ function twinChoiceText(mine: Starter): string {
  * them evolve together, twice, and whatever you ask of them, the picnic does not survive. How many you got
  * right decides the finish.
  */
-function twinEndingText(band: number, mine: Starter, owner: string): string {
-  const { opener, chaos, bit } = TWIN_CHAOS[mine.key];
+function twinEndingText(band: number, mine: Starter, owner: string, menu: Menu): string {
+  const twin = TWIN_CHAOS[mine.key];
+  const { opener } = twin;
+  const chaos = twin.chaos(menu);
+  const bit = twin.bit(menu);
   const finish = [
     `Arlo writes in his notebook, in very big letters: never let two ${mine.name} come to a picnic. Then he draws a little heart next to it. [ending]`,
     `Ms Olwen picks ${bit} out of her hair. '{laughs} Well, that is one way to have a picnic.' [ending]`,
@@ -399,7 +467,7 @@ export function buildPaldea(plan: PaldeaPlan, ownerName = "", partner?: Partner)
       title: `${mine.name}!`,
       icon: { dexId: mine.id },
       bed: { ambience: "house", music: "bright" },
-      text: `You choose ${mine.name}. [cry:${mine.id}] It jumps into your arms. ${meeting}Juno grabs ${juno.name}. Juno smirks. '{smugly} I'll have this one. It beats yours, obviously.' That leaves ${arlo.name} for Arlo. Arlo turns to you. 'Good. I wanted that one anyway.' Ms Olwen nods. 'This week is the Great Picnic. Fetch tomatoes, cheese and Herba Mystica for the Great Picnic Sandwich, and meet me at the top of the hill.'`,
+      text: `You choose ${mine.name}. [cry:${mine.id}] It jumps into your arms. ${meeting}Juno grabs ${juno.name}. Juno smirks. '{smugly} I'll have this one. It beats yours, obviously.' That leaves ${arlo.name} for Arlo. Arlo turns to you. 'Good. I wanted that one anyway.' Ms Olwen nods. 'This week is the Great Picnic. Fetch ${plan.menu.first.food}, ${plan.menu.cave.food} and Herba Mystica for ${plan.menu.dish}, and meet me at the top of the hill.'`,
       next: id.stage(p, 0, 0),
     });
     stages.forEach((stage, index) => {
@@ -460,7 +528,7 @@ export function buildPaldea(plan: PaldeaPlan, ownerName = "", partner?: Partner)
           title: `Two ${mine.final.name}!`,
           icon: { dexId: mine.final.id },
           bed: { ambience: "grass", music: "magical" },
-          text: twinChoiceText(mine),
+          text: twinChoiceText(mine, plan.menu),
           left: { to: id.ending(p, misses), label: little },
           right: { to: id.ending(p, misses), label: big },
         });
@@ -477,8 +545,8 @@ export function buildPaldea(plan: PaldeaPlan, ownerName = "", partner?: Partner)
         icon: { dexId: twin || band === 2 ? mine.final.id : band === 1 ? mine.mid.id : mine.id },
         bed: { ambience: "grass", music: twin ? "champion" : band === 2 ? "magical" : "bright" },
         text: twin
-          ? twinEndingText(band, mine, owner)
-          : withPartner(endingText(band, mine, juno, arlo, owner, VISITORS[(plan.seed + band) % VISITORS.length]), band, mine, partner),
+          ? twinEndingText(band, mine, owner, plan.menu)
+          : withPartner(endingText(band, mine, juno, arlo, owner, plan.menu, VISITORS[(plan.seed + band) % VISITORS.length]), band, mine, partner),
         ending: { number, name: twin ? name : `${mine.name}: ${name}`, golden: band === 2 },
       });
     }
@@ -488,7 +556,7 @@ export function buildPaldea(plan: PaldeaPlan, ownerName = "", partner?: Partner)
     id: `paldea-${plan.seed}`,
     title: "Paldea Picnic",
     description:
-      "Choose Sprigatito, Fuecoco or Quaxly, and gather ingredients for the Great Picnic Sandwich with your classmates Juno and Arlo. Every battle counts towards the picnic at the end.",
+      "Choose Sprigatito, Fuecoco or Quaxly, and gather ingredients for the Great Picnic with your classmates Juno and Arlo. Every battle counts towards the picnic at the end.",
     start: "start",
     nodes,
     cast: PALDEA_CAST,
