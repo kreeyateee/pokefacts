@@ -401,10 +401,18 @@ type SendStats = {
   fallback: boolean;
   /** Speech keys recorded during this send, so a line reused later in the same send counts as cached. */
   recorded: Set<string>;
+  /** When this server first saw the send. */
+  startedAt: number;
+  /** Seconds each new Yoto line took, from starting its job to finding it finished. */
+  jobSeconds: number[];
 };
 
 const SEND_STATS = new Map<string, SendStats>();
 const SEND_STATS_LIMIT = 50;
+
+/** When each recent adventure line's job started, so the log can say how long a Yoto line takes. */
+const JOB_STARTS = new Map<string, number>();
+const JOB_STARTS_LIMIT = 500;
 
 function sendStats(sendId: string): SendStats {
   const known = sendId ? SEND_STATS.get(sendId) : undefined;
@@ -419,6 +427,8 @@ function sendStats(sendId: string): SendStats {
     failedJobs: 0,
     fallback: false,
     recorded: new Set(),
+    startedAt: Date.now(),
+    jobSeconds: [],
   };
   if (!sendId) return fresh;
   SEND_STATS.set(sendId, fresh);
@@ -426,18 +436,43 @@ function sendStats(sendId: string): SendStats {
   return fresh;
 }
 
-/** One line per finished adventure track, and one per refusal: how much was new and how much was reused. */
-export function sendSummary(sendId: string, stats: Pick<SendStats, Exclude<keyof SendStats, "recorded">>, note = ""): string {
+type SummaryCounts = Omit<SendStats, "recorded" | "startedAt" | "jobSeconds"> & {
+  /** Seconds since the send's first track reached this server. */
+  seconds?: number;
+  /** The middle time a new Yoto line took to record. */
+  jobSeconds?: number;
+};
+
+function middle(values: readonly number[]): number | undefined {
+  if (values.length === 0) return undefined;
+  const sorted = [...values].sort((a, b) => a - b);
+  const half = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[half] : ((sorted[half - 1] as number) + (sorted[half] as number)) / 2;
+}
+
+/**
+ * One line per finished adventure track, and one per refusal: how much was new and how much was reused,
+ * and how long the send has taken so far.
+ */
+export function sendSummary(sendId: string, stats: SummaryCounts, note = ""): string {
+  const fresh = stats.labsNew + stats.piperNew;
+  const timing =
+    stats.seconds === undefined
+      ? ""
+      : `; ${Math.round(stats.seconds)} s` +
+        `${fresh > 0 ? `, ${(stats.seconds / fresh).toFixed(1)} s per new line` : ""}` +
+        `${stats.jobSeconds === undefined ? "" : `, a Yoto line records in ${stats.jobSeconds.toFixed(1)} s`}`;
   return (
     `[adventure voices] send ${sendId || "unnamed"}: ${stats.tracks} tracks, ` +
     `${stats.labsNew} new Yoto voice lines, ${stats.piperNew} new Piper lines, ${stats.cached} reused; ` +
     `refused 429 x${stats.refused429}, other x${stats.refusedOther}, failed jobs x${stats.failedJobs}` +
-    `${stats.fallback ? ", reading with Piper" : ""}${note ? ` (${note})` : ""}`
+    `${timing}${stats.fallback ? ", reading with Piper" : ""}${note ? ` (${note})` : ""}`
   );
 }
 
 function logSend(sendId: string, stats: SendStats, note = "") {
-  console.info(sendSummary(sendId, stats, note));
+  const seconds = (Date.now() - stats.startedAt) / 1000;
+  console.info(sendSummary(sendId, { ...stats, seconds, jobSeconds: middle(stats.jobSeconds) }, note));
 }
 
 /** Cache identity for a finished mix: voice, cry gain, voice gain, pause, dex number, and the script. */
@@ -1073,6 +1108,8 @@ export async function prepareFactTrack(
       await writeBytesAtomic(fileFor(part), speech);
       stats.labsNew += 1;
       stats.recorded.add(speechKey(part.text, part.voiceId));
+      const startedAt = request.speechJobId ? JOB_STARTS.get(request.speechJobId) : undefined;
+      if (startedAt !== undefined) stats.jobSeconds.push((Date.now() - startedAt) / 1000);
       const ids = new Set<string>([cardId]);
       if (playable.cardId) ids.add(playable.cardId);
       for (const id of ids) await discardCard(token, id, fetchImpl);
@@ -1129,6 +1166,8 @@ export async function prepareFactTrack(
       const started = jobFields(await readJson(created));
       if (!created.ok) return refused(created.status, false, started.error || "Yoto did not start this line.");
       if (!started.jobId) throw new Error(started.error || "Yoto did not start this line.");
+      JOB_STARTS.set(started.jobId, Date.now());
+      if (JOB_STARTS.size > JOB_STARTS_LIMIT) JOB_STARTS.delete(JOB_STARTS.keys().next().value as string);
       return { phase: "speech", speechJobId: started.jobId, speechPart: key };
     }
     await releaseScratch();

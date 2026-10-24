@@ -260,6 +260,22 @@ describe("falling back to Piper", () => {
       line,
       "[adventure voices] send slfls: 3 tracks, 4 new Yoto voice lines, 0 new Piper lines, 9 reused; refused 429 x1, other x0, failed jobs x0, reading with Piper",
     );
+    // And how long the send has taken, so two sends can be compared.
+    assert.equal(
+      sendSummary("slfls", {
+        tracks: 3,
+        labsNew: 4,
+        piperNew: 2,
+        cached: 9,
+        refused429: 0,
+        refusedOther: 0,
+        failedJobs: 0,
+        fallback: false,
+        seconds: 90.4,
+        jobSeconds: 7.25,
+      }),
+      "[adventure voices] send slfls: 3 tracks, 4 new Yoto voice lines, 2 new Piper lines, 9 reused; refused 429 x0, other x0, failed jobs x0; 90 s, 15.1 s per new line, a Yoto line records in 7.3 s",
+    );
     assert.match(VOICE_FALLBACK_NOTE, /Piper/);
   });
 });
