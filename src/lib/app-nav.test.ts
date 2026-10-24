@@ -29,13 +29,14 @@ describe("app navigation", () => {
   it("puts every ready-made set on one shelf", () => {
     assert.deepEqual(
       READY_CATEGORIES.map((item) => item.kind),
-      ["meet", "quick", "guess", "starter", "joke", "mega", "gmax", "alola", "hisui", "legendary", "mythical"],
+      ["meet", "quick", "guess", "companion", "starter", "joke", "mega", "gmax", "alola", "hisui", "legendary", "mythical"],
     );
     assert.equal(READY_CATEGORIES.find((item) => item.kind === "quick")?.label, "Quick Pokefacts");
     assert.equal(pageHeading({ view: "cards", kind: "quick" }).title, "Quick Pokefacts");
     // A refresh on Quick Pokefacts opens it again.
     assert.deepEqual(readSavedTab(JSON.stringify({ view: "cards", kind: "quick" })), { view: "cards", kind: "quick" });
-    assert.equal(COLLECTION_TABS.length, 8);
+    assert.equal(COLLECTION_TABS.length, 9);
+    assert.match(pageHeading({ view: "cards", kind: "companion" }).blurb, /the game your child is playing/);
     assert.equal(isCollectionKind("starter"), true);
     assert.match(pageHeading({ view: "cards", kind: "starter" }).blurb, /starter Pokémon, all three steps/);
     assert.equal(isCollectionKind("mega"), true);

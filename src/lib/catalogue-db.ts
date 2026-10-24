@@ -594,6 +594,18 @@ export function listSpecialSpecies(): Set<number> {
   return new Set(rows.map((row) => row.id));
 }
 
+/** Each species' base stats, by national dex number: "Speed" 100. */
+export function listBaseStats(): Map<number, Array<{ name: string; value: number }>> {
+  const rows = db().prepare("SELECT species_id AS id, stat_name AS name, base FROM species_stats").all() as Array<{
+    id: number;
+    name: string;
+    base: number;
+  }>;
+  const stats = new Map<number, Array<{ name: string; value: number }>>();
+  for (const row of rows) stats.set(row.id, [...(stats.get(row.id) ?? []), { name: row.name, value: row.base }]);
+  return stats;
+}
+
 /** Each species' base stat total, by national dex number. */
 export function listBaseTotals(): Map<number, number> {
   const rows = db()

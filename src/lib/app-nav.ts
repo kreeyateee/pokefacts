@@ -7,7 +7,7 @@ export type SectionId = "ready" | "own" | "adventures" | "printables" | "music";
 
 export type CollectionKind = Extract<
   KidCardKind,
-  "starter" | "joke" | "mega" | "gmax" | "alola" | "hisui" | "legendary" | "mythical"
+  "companion" | "starter" | "joke" | "mega" | "gmax" | "alola" | "hisui" | "legendary" | "mythical"
 >;
 
 /** "quick" is the Facts playlists read short, Quick Pokefacts. Its cards are the Facts cards. */
@@ -29,6 +29,7 @@ export const COLLECTION_TABS: ReadonlyArray<{
   label: string;
   title: string;
 }> = [
+  { kind: "companion", label: "Game Companion", title: "Game Companion" },
   { kind: "starter", label: "Starters", title: "Starter Pokémon" },
   { kind: "joke", label: "Jokes", title: "Pokémon Joke Book" },
   { kind: "mega", label: "Mega", title: "Mega Evolutions" },
@@ -147,7 +148,9 @@ export function pageHeading(input: {
     return {
       title: input.libraryTitle || tab?.title || "Collection Cards",
       blurb:
-        input.kind === "starter"
+        input.kind === "companion"
+          ? "For the game your child is playing: each Pokémon's number in that game, what it beats, what to watch out for, and how it evolves there."
+          : input.kind === "starter"
           ? "Every region's starter Pokémon, all three steps of each. Hear one, then send the set to Yoto."
           : input.kind === "joke"
             ? "Fifty Pokémon jokes, each with the Pokémon's cry. Hear one, then send the book to Yoto."

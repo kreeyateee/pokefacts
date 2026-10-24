@@ -10,6 +10,9 @@ import { EntryCard, EntryPager } from "@/components/entry-card";
 import { Catalogue } from "@/components/catalogue";
 import { PlaybackPanel } from "@/components/playback-panel";
 import { CoffeeNudge } from "@/components/coffee-nudge";
+import { CompanionGamePicker } from "@/components/companion-game-picker";
+import { useStoredState } from "@/components/use-stored-state";
+import { companionGame, COMPANION_GAMES, DEFAULT_COMPANION_GAME } from "@/lib/game-companion";
 import { FavouritesBar, FavouritesDialog, useFavourites } from "@/components/favourites";
 import { JokeBox } from "@/components/joke-box";
 import { FAVOURITES_ASKED_KEY } from "@/lib/favourites";
@@ -622,7 +625,17 @@ function revealChoice(nav: HTMLElement) {
   nav.scrollLeft += itemRect.left - navRect.left - (nav.clientWidth - selected.clientWidth) / 2;
 }
 
-type PlaylistMap = Record<FormPlaylistKind | "legendary" | "mythical" | "starter" | "joke", KidCard[]>;
+type PlaylistMap = Record<FormPlaylistKind | "legendary" | "mythical" | "starter" | "joke" | "companion", KidCard[]>;
+
+const COMPANION_GAME_KEY = "pokefacts.companion-game";
+const parseCompanionGame = (raw: string | null) =>
+  raw && COMPANION_GAMES.some((game) => game.id === raw) ? raw : DEFAULT_COMPANION_GAME;
+const keepCompanionGame = (id: string) => id;
+
+/** Whether the companion cards on hand are the chosen game's. They load from the server when a game is picked. */
+function companionFor(lists: PlaylistMap, gameId: string): boolean {
+  return lists.companion[0]?.id.startsWith(`companion-${gameId}`) ?? false;
+}
 
 /** One picture for each set on the ready-made shelf. Who's That shows a shadow. */
 function shelfPicturesFor(lists: PlaylistMap): Partial<Record<ReadyKind, ShelfPicture>> {
@@ -630,6 +643,8 @@ function shelfPicturesFor(lists: PlaylistMap): Partial<Record<ReadyKind, ShelfPi
     meet: { src: artworkSrc(25), fallback: artworkApi("species", 25) },
     quick: { src: artworkSrc(135), fallback: artworkApi("species", 135) },
     guess: { src: artworkSrc(133), fallback: artworkApi("species", 133), shadow: true },
+    // Rotom, who lives in the player's phone in the games.
+    companion: { src: artworkSrc(479), fallback: artworkApi("species", 479) },
   };
   for (const kind of Object.keys(lists) as Array<keyof PlaylistMap>) {
     for (const card of lists[kind]) {
@@ -648,7 +663,7 @@ function readsSpeciesBiology(kind: KidCardKind): boolean {
 
 /** A set whose cards are kept in the playlist map: the forms, the species sets, and the Joke Book. */
 function isPlaylistMapKind(kind: KidCardKind): kind is keyof PlaylistMap {
-  return kind === "joke" || isFormPlaylistKind(kind) || isSpeciesPlaylistKind(kind);
+  return kind === "joke" || kind === "companion" || isFormPlaylistKind(kind) || isSpeciesPlaylistKind(kind);
 }
 
 function activePlaylist(lists: PlaylistMap, kind: keyof PlaylistMap, id: string): KidCard | undefined {
@@ -693,8 +708,11 @@ export function Studio({
     mythical,
     starter,
     joke,
+    companion: [],
   };
   const [playlists, setPlaylists] = useState(initialPlaylists);
+  const [companionGameId, setCompanionGameId] = useStoredState(COMPANION_GAME_KEY, parseCompanionGame, keepCompanionGame);
+  const companionLoad = useRef<Record<string, Promise<void>>>({});
   const playlistsRef = useRef(initialPlaylists);
   const formLoad = useRef<Partial<Record<FormPlaylistKind, Promise<void>>>>({});
   const [playlistId, setPlaylistId] = useState<Record<keyof PlaylistMap, string>>({
@@ -706,6 +724,7 @@ export function Studio({
     mythical: mythical[0]?.id ?? "mythical",
     starter: starter[0]?.id ?? "starters",
     joke: joke[0]?.id ?? "jokes",
+    companion: "",
   });
   const [factSpeech, setFactSpeech] = useState<{ id: number; speech: string; url: string; notice: string } | null>(
     null,
@@ -924,6 +943,40 @@ export function Studio({
     playlistsRef.current = updated;
     setPlaylists(updated);
   }
+
+  /** The chosen game's companion cards, fetched once per game, then shown from its first card. */
+  function loadCompanion(gameId: string): Promise<void> {
+    if (companionFor(playlistsRef.current, gameId)) return Promise.resolve();
+    const existing = companionLoad.current[gameId];
+    if (existing) return existing;
+    const job = (async () => {
+      try {
+        const response = await fetch(`/api/companion/${encodeURIComponent(gameId)}`);
+        const payload = (await response.json().catch(() => null)) as { cards?: KidCard[] } | null;
+        const next = payload?.cards ?? [];
+        if (!response.ok || next.length === 0) throw new Error("No cards");
+        const updated = { ...playlistsRef.current, companion: next };
+        playlistsRef.current = updated;
+        setPlaylists(updated);
+        setPlaylistId((current) => ({ ...current, companion: next[0]?.id ?? "" }));
+        setChapterKey((current) =>
+          next[0]?.chapters.some((item) => item.key === current) ? current : (playableChapters(next[0] as KidCard)[0]?.key ?? "start"),
+        );
+      } catch {
+        delete companionLoad.current[gameId];
+        toast(`The ${companionGame(gameId).short} cards could not be loaded. Try again.`);
+      }
+    })();
+    companionLoad.current[gameId] = job;
+    return job;
+  }
+
+  const loadChosenCompanion = useEffectEvent(() => {
+    if (kind === "companion") void loadCompanion(companionGameId);
+  });
+  useEffect(() => {
+    loadChosenCompanion();
+  }, [kind, companionGameId]);
 
   function ensureFormProse(
     nextKind: FormPlaylistKind,
@@ -2185,7 +2238,7 @@ export function Studio({
         let dexNote = "";
         let spokenCard = card;
         // Facts and species cards read Bulbapedia's description; the Joke Book reads its jokes.
-        if (!formKind && card.kind !== "guess" && card.kind !== "joke") {
+        if (!formKind && card.kind !== "guess" && card.kind !== "joke" && card.kind !== "companion") {
           const factLength = quick ? "quick" : playbackRef.current.factLength;
           // Quick facts alone need no Bulbapedia reading, so none is fetched.
           const readings =
@@ -2463,9 +2516,24 @@ export function Studio({
             connected={Boolean(session)}
             mix={playback}
           />
+        ) : kind === "companion" && !companionFor(playlists, companionGameId) ? (
+          <section className="pk-panel grid min-w-0 gap-3" aria-labelledby="companion-heading">
+            <h2 id="companion-heading" className="pk-section-title">
+              Game Companion
+            </h2>
+            <CompanionGamePicker gameId={companionGameId} onPick={setCompanionGameId} />
+            <p className="text-sm leading-6 text-muted-foreground" role="status">
+              Getting the Pokémon in {companionGame(companionGameId).short}…
+            </p>
+          </section>
         ) : card && chapter ? (
           <div className="grid min-w-0 gap-5">
             <section className="pk-panel min-w-0" aria-labelledby="playlist-heading">
+              {kind === "companion" ? (
+                <div className="mb-4">
+                  <CompanionGamePicker gameId={companionGameId} onPick={setCompanionGameId} />
+                </div>
+              ) : null}
               <h2 id="playlist-heading" className="pk-section-title">
                 {rangeCards.length > 1 ? "Pick a playlist" : "This playlist"}
               </h2>

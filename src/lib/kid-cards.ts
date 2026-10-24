@@ -2,6 +2,7 @@ import { artworkSrc as formArtworkSrc } from "@/lib/artwork-path";
 import { artworkSrc } from "@/lib/page-artwork";
 import type { BiologyBlock } from "@/lib/catalogue-types";
 import type { MeasureUnits } from "@/lib/format";
+import { companionEntries, companionText, type BaseStats, type CompanionGame } from "@/lib/game-companion";
 import { dexBlurb, guessSpoken, measuresInUnits, pickDexEntry, quickFacts, type MonSheet } from "@/lib/dex-facts";
 import { jokeIntro, JOKES } from "@/lib/jokes";
 import type { FactLength } from "@/lib/playback-settings";
@@ -93,6 +94,7 @@ export type KidCardKind =
   | "mythical"
   | "starter"
   | "joke"
+  | "companion"
   | "story";
 
 export type FormPlaylistKind = "mega" | "gmax" | "alola" | "hisui";
@@ -241,6 +243,7 @@ export function rangeLabel(kind: KidCardKind, first: number, last: number, index
   if (kind === "mythical") return "Mythical Pokémon";
   if (kind === "starter") return "Starter Pokémon";
   if (kind === "joke") return "Pokémon Joke Book";
+  if (kind === "companion") return "Game Companion";
   const span = first === last ? String(first) : `${first}-${last}`;
   if (kind === "meet") return `${pokefactsTitle(index)} (${span})`;
   return `Who's That Pokémon ${span}`;
@@ -972,6 +975,58 @@ function speciesPlaylistChapter(sheet: MonSheet): KidChapter {
     icon,
     tracks: chapter.tracks.map((track) => ({ ...track, icon })),
   };
+}
+
+/**
+ * Game Companion cards for one game: its Pokémon in that game's Pokédex order, 100 to a card, each the
+ * cry then what a player asks about (see game-companion.ts).
+ */
+export function companionCards(
+  game: CompanionGame,
+  sheets: readonly MonSheet[],
+  statsById: ReadonlyMap<number, BaseStats>,
+): KidCard[] {
+  const byId = new Map(sheets.map((sheet) => [sheet.id, sheet]));
+  const idByName = new Map(sheets.map((sheet) => [sheet.name, sheet.id]));
+  const entries = companionEntries(game).filter((entry) => byId.has(entry.speciesId));
+  const inGame = new Set(entries.map((entry) => entry.speciesId));
+  const slices = entries.length === 0 ? [[]] : chunk(entries, YOTO_TRACK_LIMIT);
+  const title = `${game.short} Companion`;
+  return slices.map((group, index) => {
+    const chapters = group.map((entry) => {
+      const sheet = byId.get(entry.speciesId) as MonSheet;
+      const text = companionText({
+        sheet,
+        stats: statsById.get(sheet.id) ?? [],
+        game,
+        dexName: entry.dexName,
+        number: entry.number,
+        inGame,
+        idByName,
+      });
+      const number = String(entry.number);
+      const icon = `/pixels/${sheet.id}.png`;
+      return picture(sheet.slug, sheet.name, number, "this Pokémon", number, icon, [talk("companion", sheet.name, text, icon, number, undefined, "cry")], {
+        sprite: artworkSrc(sheet.id),
+        dexId: sheet.id,
+        types: sheet.types,
+      });
+    });
+    const first = group[0];
+    const last = group.at(-1);
+    const span = first && last ? (first.dexName === last.dexName ? `${first.dexName} ${first.number}-${last.number}` : `${first.dexName} ${first.number} to ${last.dexName} ${last.number}`) : "";
+    const several = slices.length > 1;
+    return {
+      id: several ? `companion-${game.id}-${index + 1}` : `companion-${game.id}`,
+      kind: "companion" as const,
+      title,
+      rangeLabel: several ? `${title} ${index + 1} (${span})` : title,
+      libraryTitle: several ? `${title} ${index + 1}` : title,
+      blurb: `For players of ${game.title}: each Pokémon's number in the game's Pokédex, its type, what it beats, what to watch out for, how it evolves in this game, and what it's best at.`,
+      childDoes: "Turn to the Pokémon you've just met in your game and press play. You hear its cry, then how to battle with it and how it evolves.",
+      chapters,
+    };
+  });
 }
 
 export const JOKE_PLAYLIST_ID = "jokes";
