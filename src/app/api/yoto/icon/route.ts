@@ -53,7 +53,7 @@ export async function POST(request: Request) {
   }
   const id = params.get("id") ?? "";
   const shadow = params.get("shadow") === "1";
-  // In a battle story, a Pokémon's icon is its little battle animation.
+  // A Pokémon's icon as its little battle animation, for every card and adventure.
   if (params.get("battle") === "1" && !shadow && /^[1-9]\d{0,3}$/.test(id) && Number(id) <= 1025) {
     try {
       return uploadDisplayIcon(token, await ensureBattlePixel(Number(id)), `pokefacts-battle-${id}`);
