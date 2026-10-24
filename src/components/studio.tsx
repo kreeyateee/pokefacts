@@ -2007,8 +2007,76 @@ export function Studio({
     if (!sendingRef.current) savePending(null);
   }
 
+  /** The waiting sends, as the send bar lists them. */
+  function showQueue() {
+    setQueued(sendQueue.current.map(({ id, title }) => ({ id, title })));
+  }
+
+  /**
+   * Adds a send to the line, with the voice, playlist and playback picked right now. It starts straight
+   * away when nothing else is recording; otherwise it waits its turn.
+   */
+  function enqueueSend(title: string, start: () => unknown) {
+    queueIds.current += 1;
+    sendQueue.current.push({ id: queueIds.current, title, start, choices: { voiceId, targetPlaylist, nameClash, playback } });
+    showQueue();
+    const ahead = sendQueue.current.length - 1 + (sendingRef.current || queueRunning.current ? 1 : 0);
+    if (ahead > 0) toast(`${title} is ${ordinal(ahead + 1)} in the queue. It starts by itself when the one before it is done.`);
+    void runQueue();
+  }
+
+  /** Works through the queue one send at a time. A failed or cancelled send stops it until Send next. */
+  async function runQueue() {
+    if (queueRunning.current) return;
+    queueRunning.current = true;
+    try {
+      while (sendQueue.current.length > 0 && !queueHeld.current) {
+        // A send started another way, such as one picked up from an earlier visit, finishes first.
+        if (sendingRef.current) {
+          await delay(1000);
+          continue;
+        }
+        const next = sendQueue.current.shift() as QueuedSend;
+        showQueue();
+        queuedChoices.current = next.choices;
+        voiceIdRef.current = next.choices.voiceId;
+        targetPlaylistRef.current = next.choices.targetPlaylist;
+        nameClashRef.current = next.choices.nameClash;
+        playbackRef.current = next.choices.playback;
+        try {
+          await next.start();
+        } catch {
+          // The bar already shows what went wrong.
+        } finally {
+          queuedChoices.current = null;
+          setChoicesBack((count) => count + 1);
+        }
+        if ((cancelRef.current || pendingRef.current?.failed) && sendQueue.current.length > 0) {
+          queueHeld.current = true;
+          setQueuePaused(true);
+        }
+      }
+    } finally {
+      queueRunning.current = false;
+    }
+  }
+
+  function removeQueued(id: number) {
+    sendQueue.current = sendQueue.current.filter((item) => item.id !== id);
+    showQueue();
+    if (sendQueue.current.length === 0) {
+      queueHeld.current = false;
+      setQueuePaused(false);
+    }
+  }
+
+  function sendNext() {
+    queueHeld.current = false;
+    setQueuePaused(false);
+    void runQueue();
+  }
+
   function askCardOptions(confirmLabel: string, newTitle: string, run: () => void | Promise<void>) {
-    if (sendingRef.current) return;
     setMyoCard(null);
     pendingCardAction.current = run;
     setNameClash("number");
@@ -2043,11 +2111,12 @@ export function Studio({
       setConnectOpen(true);
       return;
     }
+    // The dialog's own picks: while a queued send records, the refs hold that send's choices instead.
     const clash =
-      cardPrompt && !validYotoCardId(targetPlaylistRef.current) ? playlistNamed(library, cardPrompt.newTitle) : undefined;
+      cardPrompt && !validYotoCardId(targetPlaylist) ? playlistNamed(library, cardPrompt.newTitle) : undefined;
     if (
       clash &&
-      nameClashRef.current === "replace" &&
+      nameClash === "replace" &&
       !window.confirm(
         `Replace everything on "${clash.title}" with these tracks? The old tracks are removed. A card linked to it keeps working and plays the new ones.`,
       )
@@ -2057,7 +2126,7 @@ export function Studio({
     const run = pendingCardAction.current;
     pendingCardAction.current = null;
     setCardPrompt(null);
-    if (run) void run();
+    if (run) enqueueSend(cardPrompt?.newTitle ?? "Your playlist", run);
   }
 
   function newSend(input: Omit<Parameters<typeof startPendingSend>[0], "now" | "voiceId" | "mix">): PendingSend {
@@ -2389,7 +2458,7 @@ export function Studio({
         ) : view === "adventures" ? (
           <AdventurePanel
             sending={sending}
-            onSend={sendAdventure}
+            onSend={async (story) => enqueueSend(story.title, () => sendAdventure(story))}
             voiceId={voiceId}
             connected={Boolean(session)}
             mix={playback}
@@ -2447,7 +2516,7 @@ export function Studio({
                 <Button
                   type="button"
                   className="h-11 px-4"
-                  disabled={sending || !ready}
+                  disabled={!ready}
                   onClick={() =>
                     askCardOptions(
                       randomGuess
@@ -2460,7 +2529,7 @@ export function Studio({
                     )
                   }
                 >
-                  {sending && !bulkActive ? "Recording in the background…" : "Create card"}
+                  {sending ? "Add to the queue" : "Create card"}
                 </Button>
                 <MyoCardButton
                   onClick={() =>
@@ -2479,7 +2548,7 @@ export function Studio({
                     type="button"
                     variant="outline"
                     className="h-11 px-4"
-                    disabled={sending || !ready}
+                    disabled={!ready}
                     onClick={() =>
                       askCardOptions(
                         `Send all ${factsPlaylists.length} playlists — ${factsPlaylists.length} blank cards`,
@@ -2488,9 +2557,7 @@ export function Studio({
                       )
                     }
                   >
-                    {sending && bulkActive
-                      ? "Recording in the background…"
-                      : `Send all ${factsPlaylists.length} playlists`}
+                    {sending ? `Queue all ${factsPlaylists.length} playlists` : `Send all ${factsPlaylists.length} playlists`}
                   </Button>
                 ) : null}
               </div>
@@ -2834,6 +2901,10 @@ export function Studio({
         onDismiss={dismissJob}
         onCancel={sending ? cancelSend : undefined}
         onRetry={pendingSend?.failed && !sending ? () => void retrySend() : undefined}
+        queue={queued}
+        queuePaused={queuePaused}
+        onRemoveQueued={removeQueued}
+        onSendNext={sendNext}
         onPrintStickers={view === "cards" && card ? () => setStickersOpen(true) : undefined}
         onShowMyoCard={() =>
           showMyoCard({

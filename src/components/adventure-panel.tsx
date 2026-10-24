@@ -359,12 +359,12 @@ export function AdventurePanel({
           <Button
             type="button"
             className="h-11 w-full"
-            disabled={!story || sending}
+            disabled={!story}
             onClick={() => {
               if (story) void onSend(story);
             }}
           >
-            {sending ? "Sending…" : "Send to Yoto"}
+            {sending ? "Add to the queue" : "Send to Yoto"}
           </Button>
         </div>
         {story ? (

@@ -63,6 +63,10 @@ export function SendBanner({
   onShowMyoCard,
   onCancel,
   onRetry,
+  queue = [],
+  queuePaused = false,
+  onRemoveQueued,
+  onSendNext,
 }: {
   job: SendJobView | null;
   onDismiss?: () => void;
@@ -72,11 +76,17 @@ export function SendBanner({
   onCancel?: () => void;
   /** Pick a failed send up from its last finished track. */
   onRetry?: () => void;
+  /** Sends waiting their turn, in order. */
+  queue?: ReadonlyArray<{ id: number; title: string }>;
+  /** The line stopped after a send failed or was cancelled, until the parent starts the next one. */
+  queuePaused?: boolean;
+  onRemoveQueued?: (id: number) => void;
+  onSendNext?: () => void;
 }) {
-  if (!job) return null;
-  const failed = job.status === "failed";
-  const done = job.status === "completed";
-  const playlistHref = done ? yotoPlaylistUrl(job.cardId) : undefined;
+  if (!job && queue.length === 0) return null;
+  const failed = job?.status === "failed";
+  const done = job?.status === "completed";
+  const playlistHref = done ? yotoPlaylistUrl(job?.cardId) : undefined;
   const kicker = failed
     ? "Could not finish"
     : done
@@ -85,15 +95,51 @@ export function SendBanner({
   return (
     <div className="pk-send-dock">
       <div className="pk-send-dock-card">
-        <p className="pk-send-kicker">{kicker}</p>
-        <StatusBar label={job.detail} done={job.done} total={job.total} failed={failed} />
+        {job ? (
+          <>
+            <p className="pk-send-kicker">{kicker}</p>
+            <StatusBar label={job.detail} done={job.done} total={job.total} failed={failed} />
+          </>
+        ) : null}
         {done ? (
           <p className="mt-2 text-xs leading-5">
             Open it in the Yoto app, choose Link to a card, then hold a blank Make Your Own card
             to the player. Paper stickers are optional after that.
           </p>
         ) : null}
-        {onShowMyoCard || done || failed ? (
+        {queue.length > 0 ? (
+          <div className="mt-2">
+            <p className="pk-send-kicker">{queuePaused ? "Waiting for you" : "Up next"}</p>
+            <ol className="mt-1 grid gap-1 text-xs leading-5">
+              {queue.map((item, index) => (
+                <li key={item.id} className="flex items-center justify-between gap-2">
+                  <span className="min-w-0 truncate">
+                    {index + 1}. {item.title}
+                  </span>
+                  {onRemoveQueued ? (
+                    <button
+                      type="button"
+                      className="pk-send-dismiss shrink-0"
+                      aria-label={`Take ${item.title} out of the queue`}
+                      onClick={() => onRemoveQueued(item.id)}
+                    >
+                      Remove
+                    </button>
+                  ) : null}
+                </li>
+              ))}
+            </ol>
+            {queuePaused && onSendNext ? (
+              <div className="pk-send-actions">
+                <p className="text-xs leading-5">The queue stopped after the last send. Carry on when you&apos;re ready.</p>
+                <button type="button" className="pk-banner-btn" onClick={onSendNext}>
+                  Send next
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {job && (onShowMyoCard || done || failed) ? (
           <div className="pk-send-actions">
             {onShowMyoCard ? (
               <button type="button" className="pk-banner-btn" onClick={onShowMyoCard}>

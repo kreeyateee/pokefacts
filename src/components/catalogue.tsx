@@ -768,13 +768,13 @@ export function Catalogue({
           <Button
             type="button"
             className="mt-3 h-11 w-full"
-            disabled={picked.length === 0 || building || sending}
+            disabled={picked.length === 0 || building}
             onClick={() => {
               setBuildOpen(false);
               openAfterDialog(() => onPrepareSend?.("Send this pick", pickTitle(), () => buildPlaylist()));
             }}
           >
-            {building || sending ? "Recording in the background…" : "Send this pick"}
+            {building ? "Recording in the background…" : sending ? "Add to the queue" : "Send this pick"}
           </Button>
           <Button
             type="button"
