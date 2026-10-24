@@ -321,12 +321,15 @@ describe("adventure track audio", () => {
     }
   });
 
-  it("uploads the Poké Ball picture for catch tracks", async () => {
+  it("uploads the animated Poké Ball for catch tracks, as a GIF that keeps moving", async () => {
     const original = globalThis.fetch;
     let uploaded: Buffer | undefined;
+    let type: string | null = null;
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      // autoConvert=false keeps the animation; Yoto would flatten it to a still otherwise.
       assert.match(String(input), /displayIcons\/user\/me\/upload\?autoConvert=false&filename=pokefacts-pokeball/);
       uploaded = Buffer.from(init?.body as Uint8Array);
+      type = new Headers(init?.headers).get("Content-Type");
       return Response.json({ displayIcon: { mediaId: `yoto:#${"b".repeat(43)}` } });
     }) as typeof fetch;
     try {
@@ -335,7 +338,11 @@ describe("adventure track audio", () => {
       );
       assert.deepEqual(await response.json(), { mediaId: "b".repeat(43) });
       assert.deepEqual(uploaded, await readFile(path.join(process.cwd(), "public", POKEBALL_PIXEL)));
-      assert.equal(uploaded?.subarray(1, 4).toString("ascii"), "PNG");
+      assert.equal(uploaded?.subarray(0, 4).toString("ascii"), "GIF8");
+      assert.equal(type, "image/gif");
+      // 16 by 16, as Yoto requires: the logical screen size in the GIF header.
+      assert.equal(uploaded?.readUInt16LE(6), 16);
+      assert.equal(uploaded?.readUInt16LE(8), 16);
     } finally {
       globalThis.fetch = original;
     }

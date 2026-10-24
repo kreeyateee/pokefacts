@@ -464,8 +464,92 @@ const PIXEL_COLOURS: Record<string, [number, number, number, number]> = {
   Y: [255, 206, 40, 255],
 };
 
+/** The ball rocking: its top half moved a pixel left or right, so it tilts on the spot. */
+function tilted(art: string[], dx: -1 | 1): string[] {
+  return art.map((row, y) => (y > 8 ? row : dx > 0 ? `.${row.slice(0, -1)}` : `${row.slice(1)}.`));
+}
+
+/** The caught ball with its sparkles off, so they twinkle. Only sparkles are yellow outside the ball. */
+function unsparkled(art: string[]): string[] {
+  return art.map((row) => [...row].map((cell, x) => (cell === "Y" && (x < 4 || x > 11) ? "." : cell)).join(""));
+}
+
+const hold = (art: string[], frames: number): string[][] => Array.from({ length: frames }, () => art);
+
+/** One wobble at 10 frames a second: still, tip left, back, tip right, back. */
+const wobbleArt = (art: string[]): string[][] => [
+  ...hold(art, 2),
+  ...hold(tilted(art, -1), 2),
+  art,
+  ...hold(tilted(art, 1), 2),
+  art,
+];
+
+/**
+ * The animated 16×16 Poké Balls for the Yoto screen. They loop for as long as the track plays: the
+ * ball rocking now and then while you choose a throw; three wobbles, then the click and twinkling
+ * sparkles, for a catch; two wobbles and a burst for one that broke free.
+ */
+const PIXEL_ANIMATIONS: Partial<Record<StoryPixel, () => string[][]>> = {
+  pokeball: () => [...hold(PIXEL_ART.pokeball, 8), ...wobbleArt(PIXEL_ART.pokeball)],
+  "pokeball-caught": () => {
+    const caught = PIXEL_ART["pokeball-caught"];
+    const twinkle = [...hold(caught, 4), ...hold(unsparkled(caught), 2)];
+    const wobbles = [...wobbleArt(PIXEL_ART.pokeball), ...wobbleArt(PIXEL_ART.pokeball), ...wobbleArt(PIXEL_ART.pokeball)];
+    return [...wobbles, ...twinkle, ...twinkle, ...twinkle];
+  },
+  "pokeball-broken": () => [
+    ...wobbleArt(PIXEL_ART.pokeball),
+    ...wobbleArt(PIXEL_ART.pokeball),
+    ...hold(PIXEL_ART["pokeball-broken"], 16),
+  ],
+};
+
+function pixelRaw(art: string[], colours: Record<string, RGBA>): Buffer {
+  if (art.length !== 16 || art.some((row) => row.length !== 16)) throw new Error("A picture is not 16 by 16.");
+  const raw = Buffer.alloc(16 * 16 * 4);
+  art.forEach((row, y) => [...row].forEach((cell, x) => raw.set(colours[cell] ?? [0, 0, 0, 0], (y * 16 + x) * 4)));
+  return raw;
+}
+
+/** An animated 16×16 GIF with a clear background, looping forever at 10 frames a second. */
+function writeAnimatedPixel(name: StoryPixel, frames: string[][], colours: Record<string, RGBA>) {
+  const output = path.join(process.cwd(), "public", STORY_PIXELS[name]);
+  mkdirSync(path.dirname(output), { recursive: true });
+  execFileSync(
+    ffmpegCommand(),
+    [
+      "-y",
+      "-loglevel",
+      "error",
+      "-f",
+      "rawvideo",
+      "-pix_fmt",
+      "rgba",
+      "-s",
+      "16x16",
+      "-r",
+      "10",
+      "-i",
+      "pipe:0",
+      "-vf",
+      "split[a][b];[a]palettegen=max_colors=16:reserve_transparent=1:stats_mode=full[p];[b][p]paletteuse=dither=none:alpha_threshold=128",
+      "-loop",
+      "0",
+      output,
+    ],
+    { input: Buffer.concat(frames.map((frame) => pixelRaw(frame, colours))) },
+  );
+  console.log(`Wrote ${STORY_PIXELS[name]} (${frames.length} frames, looping)`);
+}
+
 function writePixel(name: StoryPixel) {
   const { art, colours } = artFor(name);
+  const animate = PIXEL_ANIMATIONS[name];
+  if (animate) {
+    writeAnimatedPixel(name, animate(), colours);
+    return;
+  }
   if (art.length !== 16 || art.some((row) => row.length !== 16)) throw new Error(`${name} is not 16 by 16.`);
   const output = path.join(process.cwd(), "public", STORY_PIXELS[name]);
   mkdirSync(path.dirname(output), { recursive: true });
