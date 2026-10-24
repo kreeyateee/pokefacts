@@ -2101,7 +2101,8 @@ export function Studio({
         );
         return newSend({
           title: target.title,
-          current: pendingPlaylist(card, upload, target.title),
+          // The spoken card, so each fact track is recorded in its pieces (quick facts, then the reading).
+          current: pendingPlaylist(readyForm, upload, target.title),
           finish: {
             detail: statusWithDexNote(done.line, dexNote),
             toastTitle: done.toast,
