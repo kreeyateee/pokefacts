@@ -331,17 +331,22 @@ function missText(round: Round, gymType: PokemonType | undefined, words: Decks):
   return join(fill(line, gaps), fill(words.backIn(), gaps));
 }
 
+/** How some of the leaders sound when a line has no tag of its own. */
+const GYM_MOODS: Readonly<Record<string, string>> = { Fern: "whispers", Volta: "excited", Skye: "excited", Wyn: "proudly" };
+
 /** Everyone who speaks: Ronnie first, so a line no one else claims is his. */
 function cast(): StoryCharacter[] {
   return [
-    { id: W.RONNIE.id, name: W.RONNIE.name, voices: W.RONNIE.voices, tempo: 1.05, piper: { pitch: 2, tempo: 1.1 } },
+    { id: W.RONNIE.id, name: W.RONNIE.name, voices: W.RONNIE.voices, tempo: 1.05, piper: { pitch: 2, tempo: 1.1 }, mood: "excited" },
     ...W.GYMS.map((gym, index) => ({
       id: gym.leader.toLowerCase(),
       name: gym.leader,
       voices: gym.voices,
       piper: { pitch: [-3, 2, -1, 3, 2.5, -2, -2.5, -4][index] ?? 0, tempo: [0.9, 1.05, 0.95, 1.15, 1.08, 1, 0.9, 0.95][index] ?? 1 },
+      // Fern speaks softly, Volta and Skye can't keep still, Wyn is proud. The rest are cheerful.
+      ...(GYM_MOODS[gym.leader] ? { mood: GYM_MOODS[gym.leader] } : {}),
     })),
-    { id: W.AURELIA.id, name: W.AURELIA.name, voices: W.AURELIA.voices, tempo: 0.97, piper: { pitch: -1.5, tempo: 0.94 } },
+    { id: W.AURELIA.id, name: W.AURELIA.name, voices: W.AURELIA.voices, tempo: 0.97, piper: { pitch: -1.5, tempo: 0.94 }, mood: "proudly" },
   ];
 }
 

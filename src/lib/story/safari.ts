@@ -81,6 +81,8 @@ export const SAFARI_CAST: StoryCharacter[] = [
     id: "barnaby",
     name: "Barnaby",
     pronoun: "he",
+    // Pleased with himself, always: every untagged line of his is read smugly.
+    mood: "smugly",
     voices: [voiceNamed("Liam"), voiceNamed("Will"), voiceNamed("Charlie")],
     tempo: 1.03,
     piper: { pitch: 2.5, tempo: 1.08 },

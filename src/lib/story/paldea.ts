@@ -19,9 +19,9 @@ import type { StoryCharacter } from "@/lib/story/story-voices";
 
 export const PALDEA_CAST: StoryCharacter[] = [
   // Jessica, then Laura: loud, kind and very competitive.
-  { id: "juno", name: "Juno", voices: ["cgSgspJ2msm6clMCkdW9", "FGY2WhTYpPnrIDTdsKH5"], tempo: 1.06, piper: { pitch: 3, tempo: 1.1 } },
+  { id: "juno", name: "Juno", voices: ["cgSgspJ2msm6clMCkdW9", "FGY2WhTYpPnrIDTdsKH5"], tempo: 1.06, piper: { pitch: 3, tempo: 1.1 }, mood: "excited" },
   // Liam, then Will: knows every Pokédex entry by heart.
-  { id: "arlo", name: "Arlo", voices: ["TX3LPaxmHKxFdv7VOQHJ", "bIHbv24MWmeRgasZH58o"], tempo: 1.02, piper: { pitch: 1, tempo: 1.04 } },
+  { id: "arlo", name: "Arlo", voices: ["TX3LPaxmHKxFdv7VOQHJ", "bIHbv24MWmeRgasZH58o"], tempo: 1.02, piper: { pitch: 1, tempo: 1.04 }, mood: "curious" },
   // Sarah, then Matilda: the head of the academy, calm and dry, with a Lechonk that follows her everywhere.
   { id: "olwen", name: "Olwen", voices: ["EXAVITQu4vr4xnSDxMaL", "XrExE9yKIg1WjnnlVkGX"], tempo: 0.96, piper: { pitch: -1.5, tempo: 0.94 } },
 ];

@@ -389,7 +389,7 @@ export const LOST_CAST = (guide: Mon, boss: Mon): StoryCharacter[] => [
   // Jessica, then Laura: small, bright and brave.
   { id: "guide", name: guide.name, voices: ["cgSgspJ2msm6clMCkdW9", "FGY2WhTYpPnrIDTdsKH5"], tempo: 1.06, piper: { pitch: 3, tempo: 1.1 } },
   // George, then Bill: big, grumbly and soft-hearted. Speaks as "the" Pokémon, so its name is its species.
-  { id: "boss", name: boss.name, voices: ["JBFqnCBsd6RMkjVDRZzb", "pqHfZKP75CvOlQylNhV4"], tempo: 0.9, piper: { pitch: -4, tempo: 0.9 } },
+  { id: "boss", name: boss.name, voices: ["JBFqnCBsd6RMkjVDRZzb", "pqHfZKP75CvOlQylNhV4"], tempo: 0.9, piper: { pitch: -4, tempo: 0.9 }, mood: "sighs" },
 ];
 
 const id = {
