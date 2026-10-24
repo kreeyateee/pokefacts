@@ -4,18 +4,14 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { BRAND_FILES, canvasFonts, downloadPdf, jpegPage } from "@/components/sticker/print-kit";
-import { useFavourites } from "@/components/favourites";
 import { SceneChooser } from "@/components/sticker/scene-chooser";
 import { useImageCache, type ImageEntry } from "@/components/sticker/use-image-cache";
 import { useSpeciesSizes } from "@/components/sticker/use-species-sizes";
 import { Button } from "@/components/ui/button";
-import { useStoredState } from "@/components/use-stored-state";
-import { CATALOGUE_PICKS_KEY, LAST_SPECIES_ID, readCataloguePicks, serializeCataloguePicks } from "@/lib/catalogue-picks";
+import { ChoiceRow, CrowdPicker, useCrowd } from "@/components/poster-crowd";
 import type { KidCard } from "@/lib/kid-cards";
 import { artworkSrc as artworkApi } from "@/lib/artwork-path";
 import { artworkSrc } from "@/lib/page-artwork";
-import { posterCollection, REGION_POSTERS, STARTER_POSTERS, type PosterCollection } from "@/lib/poster-collections";
-import { hidesNames, monsFor } from "@/lib/sticker-cover";
 import { mmToPx, posterFilename, PRINT_DPI, SHEET_PREVIEW_DPI } from "@/lib/sticker-layout";
 import { paintPoster, type CrowdPaint } from "@/lib/sticker-paint";
 import type { Scene } from "@/lib/sticker-scenes";
@@ -23,15 +19,6 @@ import { jpegPagesPdf } from "@/lib/sticker-pdf";
 import { POSTER_PAPER_MM, type PosterStyle } from "@/lib/sticker-styles";
 
 const SOURCE_KEY = "pokefacts.poster-source";
-const MINE = "mine";
-const FAVOURITES = "favourites";
-const PLAYLIST = "playlist";
-
-const keepSource = (raw: string | null) => raw || "region-kanto";
-const writeSource = (id: string) => id;
-
-/** Who goes on the poster, what its ribbon says, and whether they are shown as silhouettes. */
-type Crowd = { title: string; dexIds: readonly number[]; hidden: boolean };
 
 function posterSize(dpi: number) {
   return { width: mmToPx(POSTER_PAPER_MM.width, dpi), height: mmToPx(POSTER_PAPER_MM.height, dpi) };
@@ -45,60 +32,13 @@ function pictureOf(dexId: number, drawn: Drawn): ImageEntry {
   return [`picture:${src}`, src];
 }
 
-/** Your Make your own picks, as national dex numbers. Regional forms stand in as their species. */
-async function pickedSpecies(ids: readonly number[]): Promise<number[]> {
-  const forms = ids.filter((id) => id > LAST_SPECIES_ID);
-  if (forms.length === 0) return [...ids];
-  const response = await fetch(`/api/catalogue?pick=${forms.join(",")}`);
-  const payload = (await response.json().catch(() => null)) as { items?: Array<{ id: number; speciesId?: number }> } | null;
-  const species = new Map((payload?.items ?? []).map((item) => [item.id, item.speciesId ?? 0]));
-  return ids.flatMap((id) => {
-    const dexId = id > LAST_SPECIES_ID ? (species.get(id) ?? 0) : id;
-    return dexId > 0 && dexId <= LAST_SPECIES_ID ? [dexId] : [];
-  });
-}
-
-function ChoiceRow({
-  label,
-  choices,
-  chosen,
-  onChoose,
-}: {
-  label: string;
-  choices: ReadonlyArray<{ id: string; label: string; count?: number }>;
-  chosen: string;
-  onChoose: (id: string) => void;
-}) {
-  return (
-    <div className="grid gap-1.5">
-      <p className="pk-kicker">{label}</p>
-      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={label}>
-        {choices.map((choice) => (
-          <button
-            key={choice.id}
-            type="button"
-            role="radio"
-            aria-checked={chosen === choice.id}
-            className="pk-chip"
-            onClick={() => onChoose(choice.id)}
-          >
-            {choice.label}
-            {choice.count ? <span className="ml-1 opacity-70">{choice.count}</span> : null}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 /**
  * A4 posters, on their own: pick who goes on it (a region, the starters, your picks or a playlist),
  * a group photo or a pile, artwork or game sprites, a title, then save a PDF to print.
  */
 export function PosterMaker({ playlist, onOwnPick }: { playlist: KidCard; onOwnPick: () => void }) {
-  const [picks] = useStoredState(CATALOGUE_PICKS_KEY, readCataloguePicks, serializeCataloguePicks);
-  const [sourceId, setSourceId] = useStoredState(SOURCE_KEY, keepSource, writeSource);
-  const [favourites] = useFavourites();
+  const crowdState = useCrowd(playlist, SOURCE_KEY, "region-kanto");
+  const { crowd, sourceId, setSourceId } = crowdState;
   const [style, setStyle] = useState<PosterStyle>("photo");
   const [drawn, setDrawn] = useState<Drawn>("art");
   const sprites = drawn === "sprites";
@@ -106,40 +46,10 @@ export function PosterMaker({ playlist, onOwnPick }: { playlist: KidCard; onOwnP
   const scene: Scene = pickedScene ?? (style === "pile" ? "plain" : "sky");
   const [shake, setShake] = useState(0);
   const [titles, setTitles] = useState<Record<string, string>>({});
-  const [mine, setMine] = useState<number[] | null>(null);
   const [busy, setBusy] = useState(false);
   const previewRef = useRef<HTMLCanvasElement>(null);
   const { images, version, loadAll } = useImageCache();
   const { sizes, loadAll: loadSizes } = useSpeciesSizes();
-
-  const pickIds = picks.ids.join(",");
-  useEffect(() => {
-    if (sourceId !== MINE || !pickIds) return;
-    let cancelled = false;
-    void pickedSpecies(pickIds.split(",").map(Number)).then((ids) => {
-      if (!cancelled) setMine(ids);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [sourceId, pickIds]);
-
-  const crowd: Crowd | null = useMemo(() => {
-    if (sourceId === PLAYLIST) {
-      const dexIds = monsFor(playlist).flatMap((mon) => (mon.dexId ? [mon.dexId] : []));
-      return { title: playlist.title, dexIds, hidden: hidesNames(playlist) };
-    }
-    if (sourceId === FAVOURITES) {
-      if (favourites.length === 0) return null;
-      return { title: "My Favourite Pokémon", dexIds: favourites, hidden: false };
-    }
-    if (sourceId === MINE) {
-      if (picks.ids.length === 0) return null;
-      return { title: picks.title.trim() || "My Pokémon", dexIds: mine ?? [], hidden: false };
-    }
-    const collection: PosterCollection = posterCollection(sourceId) ?? REGION_POSTERS[0]!;
-    return { title: collection.title, dexIds: collection.dexIds, hidden: false };
-  }, [sourceId, playlist, picks, mine, favourites]);
 
   const title = (titles[sourceId] ?? crowd?.title ?? "").slice(0, 60);
   const entries = useMemo(
@@ -222,28 +132,6 @@ export function PosterMaker({ playlist, onOwnPick }: { playlist: KidCard; onOwnP
   }
 
   const total = crowd?.dexIds.length ?? 0;
-  const yours = [
-    ...(favourites.length > 0 ? [{ id: FAVOURITES, label: "My favourites", count: favourites.length }] : []),
-    ...(picks.ids.length > 0 ? [{ id: MINE, label: "My picks", count: picks.ids.length }] : []),
-    { id: PLAYLIST, label: playlist.rangeLabel || playlist.title },
-  ];
-
-  // Who goes on the poster, a tab for each kind: the regions, the starters, or your own.
-  const groups = [
-    {
-      id: "regions",
-      label: "Regions",
-      row: "Every Pokémon from",
-      choices: REGION_POSTERS.map((item) => ({ id: item.id, label: item.label, count: item.dexIds.length })),
-    },
-    { id: "starters", label: "Starters", row: "Starter Pokémon", choices: STARTER_POSTERS.map((item) => ({ id: item.id, label: item.label })) },
-    { id: "yours", label: "Your own", row: "Your own", choices: yours },
-  ];
-  const group = groups.find((item) => item.choices.some((choice) => choice.id === sourceId)) ?? groups[0]!;
-  const openGroup = (id: string) => {
-    const next = groups.find((item) => item.id === id);
-    if (next && next !== group && next.choices[0]) choose(next.choices[0].id);
-  };
 
   return (
     <section className="pk-panel min-w-0" aria-labelledby="poster-heading">
@@ -254,45 +142,7 @@ export function PosterMaker({ playlist, onOwnPick }: { playlist: KidCard; onOwnP
 
       <div className="mt-4 grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
         <div className="grid content-start gap-4">
-          <div
-            className="pk-entry-tabs"
-            role="tablist"
-            aria-label="Who goes on the poster"
-            onKeyDown={(event) => {
-              const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
-              if (!step) return;
-              event.preventDefault();
-              const index = groups.indexOf(group);
-              const next = groups[(index + step + groups.length) % groups.length]!;
-              openGroup(next.id);
-              document.getElementById(`poster-tab-${next.id}`)?.focus();
-            }}
-          >
-            {groups.map((item) => (
-              <button
-                key={item.id}
-                id={`poster-tab-${item.id}`}
-                type="button"
-                role="tab"
-                aria-selected={item === group}
-                tabIndex={item === group ? 0 : -1}
-                className="pk-tab"
-                onClick={() => openGroup(item.id)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-          <ChoiceRow label={group.row} choices={group.choices} chosen={sourceId} onChoose={choose} />
-          {group.id === "yours" && picks.ids.length === 0 ? (
-            <p className="text-sm leading-6 text-muted-foreground">
-              Pick Pokémon in{" "}
-              <button type="button" className="font-bold underline" onClick={onOwnPick}>
-                Make your own
-              </button>{" "}
-              to put your own choice on a poster.
-            </p>
-          ) : null}
+          <CrowdPicker state={crowdState} label="Who goes on the poster" idPrefix="poster" onChoose={choose} onOwnPick={onOwnPick} />
 
           <label className="grid gap-1 text-sm font-bold" htmlFor="poster-title">
             Title on the ribbon

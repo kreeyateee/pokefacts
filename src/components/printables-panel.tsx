@@ -125,7 +125,7 @@ export function PrintablesPanel({
       <div id="print-panel" role="tabpanel" aria-labelledby={`print-tab-${tab}`} className="grid min-w-0 gap-5">
         {tab === "posters" ? <PosterMaker playlist={card} onOwnPick={onOwnPick} /> : null}
 
-        {tab === "colouring" ? <ColouringMaker /> : null}
+        {tab === "colouring" ? <ColouringMaker playlist={card} onOwnPick={onOwnPick} /> : null}
 
         {tab === "stickers" ? (
           <section className="pk-panel grid min-w-0 content-start gap-3" aria-labelledby="stickers-heading">
