@@ -413,10 +413,10 @@ function caughtUp(behind: number): number {
 function guideSays(guide: string, trainer: string, behind: number, slipped: boolean): string {
   if (slipped) {
     return behind >= MOST_SLIPS
-      ? `'{nervously} It's getting late,' says ${guide}. 'But we'll find ${trainer}.'`
-      : `'Never mind,' says ${guide}. 'This way.'`;
+      ? `${guide} looks worried. '{nervously} It's getting late. But we'll find ${trainer}.'`
+      : `${guide} shrugs. 'Never mind. This way.'`;
   }
-  return behind === 0 ? `'{excited} You're so quick!' says ${guide}.` : `'That's more like it,' says ${guide}.`;
+  return behind === 0 ? `${guide} beams. '{excited} You're so quick!'` : `${guide} smiles. 'That's more like it.'`;
 }
 
 /** The clue on each floor that tells you which way your trainer went. */
@@ -444,7 +444,7 @@ export function buildLost(plan: LostPlan): StoryGraph {
     `You are ${partner.name}, the ${plan.genus}. [cry:${partner.id}]`,
     `You and ${trainer} were ${theme.fall}.`,
     `[footsteps] Now you're alone, deep in ${theme.place}.`,
-    `A little ${theme.guide.kind} peeks out at you. [cry:${theme.guide.id}] '{curious} Are you lost?' says ${guide}. 'I'll help you find your way.'`,
+    `A little ${theme.guide.kind} called ${guide} peeks out at you. [cry:${theme.guide.id}] '{curious} Are you lost? I'll help you find your way.'`,
   ].join(" ");
 
   for (let floor = 1; floor <= 3; floor += 1) {
@@ -492,7 +492,7 @@ export function buildLost(plan: LostPlan): StoryGraph {
     {
       title: "A Wild Pokémon",
       icon: { dexId: wild.id },
-      text: `A wild ${wild.name} jumps out in front of you! [cry:${wild.id}] It's ${an(wild.types.join(" and "))} type, and it won't let you by. '{whispers} You're ${an(type)} type,' whispers ${guide}. 'What will you do?'`,
+      text: `A wild ${wild.name} jumps out in front of you! [cry:${wild.id}] It's ${an(wild.types.join(" and "))} type, and it won't let you by. ${guide} leans in. '{whispers} You're ${an(type)} type. What will you do?'`,
       labels: [power, "run back the way you came"],
       good:
         effectiveness(type, wild.types) >= 2
@@ -503,7 +503,7 @@ export function buildLost(plan: LostPlan): StoryGraph {
     {
       title: "The Way Is Blocked",
       icon: { dexId: theme.guide.id },
-      text: `${theme.block.what} '{curious} You're strong,' says ${guide}. 'Could your power clear it?'`,
+      text: `${theme.block.what} ${guide} looks at you. '{curious} You're strong. Could your power clear it?'`,
       labels: [power, "squeeze past"],
       good: `You use your ${type} power, ${POWER[type]}. [hit] The way is clear!`,
       bad: `${theme.block.squeeze} [fizzle] So you use your ${type} power, and the way is clear.`,
@@ -511,7 +511,7 @@ export function buildLost(plan: LostPlan): StoryGraph {
     {
       title: "Fast Asleep",
       icon: { dexId: theme.sleeper.id },
-      text: `A huge ${theme.sleeper.name} is fast asleep across the path. [cry:${theme.sleeper.id}] Every snore shakes the floor. '{whispers} Shh,' whispers ${guide}. 'Don't wake it.'`,
+      text: `A huge ${theme.sleeper.name} is fast asleep across the path. [cry:${theme.sleeper.id}] Every snore shakes the floor. ${guide} leans in. '{whispers} Shh. Don't wake it.'`,
       labels: ["tiptoe past", power],
       good: `You tiptoe past, one careful step at a time. The ${theme.sleeper.name} snores on, and smiles in its sleep.`,
       bad: `You use your power, and the ${theme.sleeper.name} wakes with a yawn so big it blows you back to the stairs. [fizzle] Then it's asleep again. You tiptoe past, the second time.`,
@@ -572,7 +572,7 @@ export function buildLost(plan: LostPlan): StoryGraph {
       title: "The Way Out",
       icon: { dexId: boss.id },
       bed: bossBed,
-      text: `At the very bottom, daylight shines through the way out. But a big ${boss.name} is lying across it, grumbling. [cry:${boss.id}] '{sighs} Go away,' groans the ${boss.name}. Then you see why: ${boss.trouble}. '{whispers} It's not cross,' whispers ${guide}. 'It's hurt.'`,
+      text: `At the very bottom, daylight shines through the way out. But a big ${boss.name} is lying across it, grumbling. [cry:${boss.id}] The ${boss.name} groans. '{sighs} Go away.' Then you see why: ${boss.trouble}. ${guide} leans in. '{whispers} It's not cross. It's hurt.'`,
       left: plan.bossLeft ? good : bad,
       right: plan.bossLeft ? bad : good,
     });
@@ -585,7 +585,7 @@ export function buildLost(plan: LostPlan): StoryGraph {
       title: "The Way Out: A Friend",
       icon: { dexId: boss.id },
       bed: { ...theme.bed, music: "bright" },
-      text: `${boss.help} '{laughs} Thank you,' says the ${boss.name}. 'Off you go, little one.'`,
+      text: `${boss.help} The ${boss.name} looks at you. '{laughs} Thank you. Off you go, little one.'`,
       next: id.ending(helped),
     });
     nodes.push({
@@ -604,7 +604,7 @@ export function buildLost(plan: LostPlan): StoryGraph {
     `The stars are out by the time you find each other. ${reunion} ${capital(trainer)} scoops you up in the biggest hug, and doesn't let go all the way home. [ending]`,
     `The moon is up when you come out. ${reunion} ${capital(trainer)} has been calling your name all evening. Now you're together, and that's all that matters. You fall asleep in their arms on the way home. [ending]`,
     `The sun is just setting. ${reunion} ${capital(trainer)} hugs you so tight your ears squish. ${guide} waves goodbye from the doorway. 'Come back and visit!' [ending]`,
-    `The sun is still high. ${reunion} ${capital(trainer)} spins you round and round. Then ${guide} peeks out from behind you. '{whispers} Can I come too?' says ${guide}. ${capital(trainer)} laughs. Of course you can. Now you're three best friends, and the ${boss.name} waves you all goodbye. [cry:${theme.guide.id}] [golden]`,
+    `The sun is still high. ${reunion} ${capital(trainer)} spins you round and round. Then ${guide} peeks out from behind you. '{whispers} Can I come too?' ${capital(trainer)} laughs. Of course you can. Now you're three best friends, and the ${boss.name} waves you all goodbye. [cry:${theme.guide.id}] [golden]`,
   ];
   endings.forEach((text, index) => {
     const number = index + 1;

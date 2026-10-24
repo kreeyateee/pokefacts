@@ -76,7 +76,7 @@ describe("Pokémon jokes", () => {
     assert.deepEqual(prizes, ["sticker", "bronze", "silver", "golden Safari Ball"]);
     const jokes = endings.filter((node) => node.text.includes("Want to hear a joke?"));
     assert.equal(jokes.length, 3, "the golden ending is a celebration, not a joke");
-    assert.match(endings[1]?.text ?? "", /says Barnaby\. '/, "Barnaby tells the joke on his bad day");
+    assert.match(endings[1]?.text ?? "", /Barnaby grins\. '/, "Barnaby tells the joke on his bad day");
   });
 
   it("puts a joke in every adventure", () => {

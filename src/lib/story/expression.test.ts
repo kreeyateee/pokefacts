@@ -41,6 +41,27 @@ describe("Expression in the adventures", () => {
     }
   });
 
+  it("lets the characters speak in their own voices: every quote is a whole sentence of its own", () => {
+    // A recording changes voice only where a sentence ends, so "'Gotcha,' says Marigold." is read by the
+    // narrator. The stories put the speaker first ("Marigold grins. 'Gotcha!'"), and this keeps it so.
+    const words = (text: string) => withoutVoiceTags(text).split(/\s+/).filter(Boolean).length;
+    for (const [title, make] of ADVENTURES) {
+      const graph = make({ seed: 1, owner: "Mia" });
+      const cast = graph.cast ?? [];
+      const voices = castVoices("pFZP5JQG7iQjIQuC4Bku", cast);
+      const narrator = voices[NARRATOR] as { voiceId: string; pitch: number };
+      let quoted = 0;
+      let voiced = 0;
+      for (const node of graph.nodes) {
+        for (const line of speakerLines(node.text, cast)) if ("speaker" in line && line.speaker !== NARRATOR) quoted += words(line.text);
+        for (const part of trackParts(node.text, voices, cast) ?? []) {
+          if ("text" in part && (part.voiceId !== narrator.voiceId || part.pitch !== narrator.pitch)) voiced += words(part.text);
+        }
+      }
+      assert.ok(voiced / quoted >= 0.95, `${title}: only ${Math.round((100 * voiced) / quoted)}% of the characters' lines are in their own voices`);
+    }
+  });
+
   it("puts each tag in the voice of whoever says the words, never the narrator's", () => {
     for (const [title, make] of ADVENTURES) {
       const graph = make({ seed: 2, owner: "Mia" });

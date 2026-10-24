@@ -145,7 +145,7 @@ export const TYPE_SIGNS: Readonly<Record<string, { signs: readonly string[]; nev
   Normal: {
     signs: [
       "There are paw prints in the mud, and a half-eaten berry. Nothing fancy. A Normal type came this way.",
-      "Something has chewed a hole in the fence. Marigold sniffs. 'Normal type,' she says. 'No doubt about it.'",
+      "Something has chewed a hole in the fence. Marigold sniffs. 'Normal type. No doubt about it.'",
     ],
     never: ["sea", "waters-edge"],
   },
@@ -173,14 +173,14 @@ export const TYPE_SIGNS: Readonly<Record<string, { signs: readonly string[]; nev
   Bug: {
     signs: [
       "There's a silky thread across the path, and a leaf with neat little bites out of it. A Bug type has been here.",
-      "You hear buzzing, and chirping, and a tiny click, click, click. 'Bug type,' says Marigold.",
+      "You hear buzzing, and chirping, and a tiny click, click, click. Marigold nods. 'Bug type.'",
     ],
     never: ["sea", "cave", "rough-terrain"],
   },
   Rock: {
     signs: [
       "There's a trail of crumbly gravel, as if a rock went for a walk. A Rock type.",
-      "A boulder on the path has moved. Boulders don't usually move. 'Rock type,' says Marigold.",
+      "A boulder on the path has moved. Boulders don't usually move. Marigold smiles. 'Rock type.'",
     ],
     never: ["grassland"],
   },
@@ -194,7 +194,7 @@ export const TYPE_SIGNS: Readonly<Record<string, { signs: readonly string[]; nev
   Ice: {
     signs: [
       "There's frost on the leaves, in the middle of the day. An Ice type has been through here.",
-      "Your breath turns to clouds, and a puddle has frozen solid. 'Ice type,' says Marigold, shivering.",
+      "Your breath turns to clouds, and a puddle has frozen solid. Marigold is shivering. 'Ice type.'",
     ],
     never: ["rough-terrain", "grassland"],
   },
@@ -208,7 +208,7 @@ export const TYPE_SIGNS: Readonly<Record<string, { signs: readonly string[]; nev
   Ghost: {
     signs: [
       "It goes cold all of a sudden, and you hear a giggle with nobody there. A Ghost type is about.",
-      "Something taps you on the shoulder. Nobody's there. '{nervously} Ghost type,' says Marigold, not quite calmly.",
+      "Something taps you on the shoulder. Nobody's there. Marigold looks worried. '{nervously} Ghost type.'",
     ],
     never: ["grassland", "sea"],
   },
@@ -240,18 +240,18 @@ export const SLOW_LINES = [
 export function introText(owner: string, partner?: { id: number; name: string }): string {
   return [
     "Welcome to the Safari Zone! [gate] The big wooden gate creaks open.",
-    `A woman in an enormous hat stomps over. 'Marigold,' she says. 'Head warden. Morning, ${owner}.'`,
+    `A woman in an enormous hat stomps over and shakes your hand. 'Marigold. Head warden. Morning, ${owner}.'`,
     partner ? `She spots ${partner.name}. [cry:${partner.id}] 'Your partner can come, as long as it stays close.'` : "",
     "Behind her, a boy in a spotless jacket is polishing a gold Safari Ball.",
-    "'That's Barnaby,' Marigold mutters. 'He says he'll catch more than you today.'",
-    "'{smugly} I don't say it,' says Barnaby. 'I know it.'",
-    "'Five stops,' says Marigold. 'Finish the day ahead of Barnaby, and something very special comes out to meet you. Want my quick lesson on throwing first?'",
+    "Marigold mutters. 'That's Barnaby. He says he'll catch more than you today.'",
+    "Barnaby smirks. '{smugly} I don't say it. I know it.'",
+    "Marigold turns to you. 'Five stops. Finish the day ahead of Barnaby, and something very special comes out to meet you. Want my quick lesson on throwing first?'",
   ].join(" ");
 }
 
 export const LESSON_TEXT = [
   "Marigold takes you to a pond. A small Pokémon is nibbling a crust, not caring who's watching. She lobs a ball. [throw] [catch]",
-  "'Common ones, just throw the ball,' she says. 'Rare ones are shy. Rare and fast? Bait. Nobody runs while they're chewing. Rare and slow? A rock beside it. Off you go.'",
+  "She turns to you. 'Common ones, just throw the ball. Rare ones are shy. Rare and fast? Bait. Nobody runs while they're chewing. Rare and slow? A rock beside it. Off you go.'",
 ].join(" ");
 
 /** The lesson choice. Replays skip straight in. */
@@ -262,7 +262,7 @@ export const LESSON_LABELS = { hear: "hear the lesson", skip: "skip it and set o
 
 export const FIRST_OPENERS = [
   "Marigold marches off down the path. You jog to keep up.",
-  "The gate clangs shut behind you. 'Right,' says Marigold. 'Stop one.'",
+  "The gate clangs shut behind you. Marigold nods. 'Right. Stop one.'",
   "You set off down the first path. Barnaby has already gone, of course.",
 ];
 
@@ -276,27 +276,27 @@ export const MIDDLE_OPENERS = [
 ];
 
 export const LAST_OPENERS = [
-  "The sun is getting low. 'Last stop,' says Marigold. 'Make it count.'",
-  "The shadows are long now. 'One more,' says Marigold.",
+  "The sun is getting low. Marigold smiles. 'Last stop. Make it count.'",
+  "The shadows are long now. Marigold grins. 'One more.'",
   "You can see the gate from here. But Marigold is pointing. One last stop.",
 ];
 
 /** Barnaby, always one step ahead. Shown at some of the stops. */
 export const BARNABY_LINES = [
-  "Barnaby jogs past. '{smugly} Got another one!' he calls, and nearly drops his gold Safari Ball.",
-  "There's a splash up ahead. Barnaby has fallen in a stream. 'Meant to do that,' he says, and squelches off.",
+  "Barnaby jogs past, waving his gold Safari Ball. '{smugly} Got another one!' He nearly drops it.",
+  "There's a splash up ahead. Barnaby has fallen in a stream. 'Meant to do that.' He squelches off.",
   "A note on a tree says: Barnaby was here first. Ha ha. Marigold tears it down.",
-  "Barnaby zooms past on a bike. '{shouts} I'm winning!' he shouts. Bikes are not allowed.",
-  "Barnaby is sitting on a log with a sandwich. '{smugly} Oh, are you still going?' he says.",
-  "Barnaby pops up from behind a bush. '{laughs} Boo,' he says, and pops back down again.",
+  "Barnaby zooms past on a bike. '{shouts} I'm winning!' Bikes are not allowed.",
+  "Barnaby is sitting on a log with a sandwich. '{smugly} Oh, are you still going?'",
+  "Barnaby pops up from behind a bush. '{laughs} Boo!' Then he pops back down again.",
 ];
 
 /** The end of an area stop's clue, just before the choice. */
 export const WHERE_LINES = [
-  "'So,' says Marigold. 'Where would a {type} type go?'",
-  "'Which way would a {type} type pick?' says Marigold.",
-  "'You tell me,' says Marigold. 'Where does a {type} type live?'",
-  "'{whispers} Think like a {type} type,' whispers Marigold.",
+  "Marigold grins. 'So. Where would a {type} type go?'",
+  "Marigold looks at you. 'Which way would a {type} type pick?'",
+  "Marigold turns to you. 'You tell me. Where does a {type} type live?'",
+  "Marigold leans in. '{whispers} Think like a {type} type.'",
 ];
 
 /** A spot stop: two Pokémon, and only one is rare. The cry plays first. */
@@ -308,9 +308,9 @@ export const SPOT_LINES = [
 
 /** The tell: a rare one is shy, a common one doesn't care. Marigold says so at every spot stop. */
 export const SPOT_ASK = [
-  "'{whispers} Rare ones are shy,' whispers Marigold.",
-  "'{whispers} Creep up on the shy one,' whispers Marigold.",
-  "'Rare ones peek,' whispers Marigold. 'Which one?'",
+  "Marigold leans in. '{whispers} Rare ones are shy.'",
+  "Marigold leans in. '{whispers} Creep up on the shy one.'",
+  "Marigold leans in. 'Rare ones peek. Which one?'",
 ];
 
 /** How the rare one at a spot stop behaves: shy. Said after its colour and what it's doing. */
@@ -331,13 +331,13 @@ export const FOUND_LINES = [
 
 /** At an area stop, whether the one you found is common or rare, so the throw is fair. */
 export const RARITY_LINES: Record<"common" | "rare", readonly string[]> = {
-  common: ["'Oh, you see those everywhere,' says Marigold. 'A common one.'", "It doesn't care one bit who's watching. A common one."],
-  rare: ["'{gasps} A rare one,' whispers Marigold.", "It peeks at you, very shy. A rare one."],
+  common: ["Marigold nods. 'Oh, you see those everywhere. A common one.'", "It doesn't care one bit who's watching. A common one."],
+  rare: ["Marigold leans in. '{gasps} A rare one.'", "It peeks at you, very shy. A rare one."],
 };
 
 /** Marigold's rule, said before every throw. */
 export const RULE_LINES = [
-  "'{whispers} Common, ball. Rare and fast, bait. Rare and slow, rock,' whispers Marigold.",
+  "Marigold leans in. '{whispers} Common, ball. Rare and fast, bait. Rare and slow, rock.'",
   "Remember Marigold's rule: common, ball. Rare and fast, bait. Rare and slow, rock.",
 ];
 
@@ -416,19 +416,19 @@ export const FLED_LINES: Record<WrongThrow, readonly string[]> = {
 /** Marigold, after a wrong throw, keyed by the throw that was right. */
 export const RIGHT_THROW_LINES: Record<SafariThrow, readonly string[]> = {
   ball: [
-    "'Common as crumbs, that one,' says Marigold. 'Just throw the ball.'",
-    "'Common ones, straight in with the ball,' says Marigold.",
-    "'Don't overthink the common ones,' says Marigold. 'Ball.'",
+    "Marigold smiles. 'Common as crumbs, that one. Just throw the ball.'",
+    "Marigold turns to you. 'Common ones, straight in with the ball.'",
+    "Marigold grins. 'Don't overthink the common ones. Ball.'",
   ],
   bait: [
-    "'Rare and quick,' says Marigold. 'That's a job for bait.'",
+    "Marigold turns to you. 'Rare and quick. That's a job for bait.'",
     "Marigold sighs. '{sighs} A rare one that fast? Bait.'",
-    "'Fidgety and rare,' says Marigold. 'Bait keeps them busy.'",
+    "Marigold nods. 'Fidgety and rare. Bait keeps them busy.'",
   ],
   rock: [
-    "'Rare, but slow,' says Marigold. 'A rock beside it would have done it.'",
+    "Marigold smiles. 'Rare, but slow. A rock beside it would have done it.'",
     "Marigold pats your arm. 'Rare and slow? Rock.'",
-    "'That one couldn't hurry if it tried,' says Marigold. 'Rock, next time.'",
+    "Marigold grins. 'That one couldn't hurry if it tried. Rock, next time.'",
   ],
 };
 
@@ -437,15 +437,15 @@ export const RIGHT_THROW_LINES: Record<SafariThrow, readonly string[]> = {
 
 /** Searching the wrong place, then the true place. */
 export const GONE_LINES = [
-  "By the time you get to {home}, there's nothing there but fresh tracks. 'That was {a},' says Marigold.",
+  "By the time you get to {home}, there's nothing there but fresh tracks. Marigold nods. 'That was {a}.'",
   "You hurry over to {home}, just in time to see {a} disappear over a hill.",
-  "At {home}, Barnaby is walking away, tossing a Safari Ball. '{laughs} Thanks!' he calls. 'He's only gone and caught {a},' says Marigold.",
+  "At {home}, Barnaby is walking away, tossing a Safari Ball. '{laughs} Thanks!' Marigold smiles. 'He's only gone and caught {a}.'",
 ];
 
 export const HOME_LINES = [
-  "'{type} types love {home},' says Marigold. '{Decoy}? Hardly ever.'",
-  "'{type} type? You want {home},' says Marigold. 'Not {decoy}.'",
-  "'A {type} type, {decoyAt}?' says Marigold. 'No. {Home}.'",
+  "Marigold turns to you. '{type} types love {home}. {Decoy}? Hardly ever.'",
+  "Marigold nods. '{type} type? You want {home}. Not {decoy}.'",
+  "Marigold looks at you. 'A {type} type, {decoyAt}? No. {Home}.'",
 ];
 
 /** At a spot stop, after creeping up on the common one. {colour} is the one you picked. */
@@ -456,21 +456,21 @@ export const COMMON_LINES = [
 
 /** Then the rare one slips away. {other} is its colour. */
 export const RARE_GONE_LINES = [
-  "Behind you, the {other} one slips away. '{sighs} That was {a},' sighs Marigold.",
-  "When you look round, the {other} one has gone. '{sadly} That,' says Marigold sadly, 'was {a}.'",
+  "Behind you, the {other} one slips away. Marigold sighs. '{sighs} That was {a}.'",
+  "When you look round, the {other} one has gone. Marigold sighs. '{sadly} That was {a}.'",
 ];
 
 /** One gone, and the day goes on. */
 export const FIRST_SLIP_LINES = [
-  "That's one gone, and Barnaby's ahead. '{sighs} It happens,' says Marigold.",
-  "One got away. 'They're wild,' says Marigold. 'Catch the next one.'",
+  "That's one gone, and Barnaby's ahead. Marigold sighs. '{sighs} It happens.'",
+  "One got away. Marigold smiles. 'They're wild. Catch the next one.'",
 ];
 
 /** Another gone, after the first. The day still goes on. */
 export const SECOND_SLIP_LINES = [
-  "Another one gone. 'Never mind,' says Marigold. 'The day's not over yet.'",
+  "Another one gone. Marigold grins. 'Never mind. The day's not over yet.'",
   "That one was quick. Marigold pats your shoulder. 'On to the next.'",
-  "Gone. 'The Pokémon have to win sometimes,' says Marigold.",
+  "Gone. Marigold grins. 'The Pokémon have to win sometimes.'",
 ];
 
 /** A slip at the last stop with nothing else lost. */
@@ -492,19 +492,19 @@ export const RACE_LINES: Record<"ahead" | "closer", readonly string[]> = {
 // The secret stop
 
 export const GOLDEN_FIND = [
-  "You're nearly at the gate when Marigold goes very still. '{gasps} You beat Barnaby,' she whispers.",
+  "You're nearly at the gate when Marigold goes very still. She grabs your sleeve. '{gasps} You beat Barnaby.'",
   "'And that cry is the rarest Pokémon in my whole Safari Zone. It only comes out for a trainer like you.'",
   "Through her binoculars, you can just see it, {glimpse}.",
 ].join(" ");
 
-export const GOLDEN_WHERE = "'{whispers} If you know who that is,' says Marigold, 'you know where to look.'";
+export const GOLDEN_WHERE = "Marigold leans in. '{whispers} If you know who that is, you know where to look.'";
 
 export const GOLDEN_MEET = "And there it is, right in front of you.";
 
 export const GOLDEN_ASK = "Your hands are shaking. Marigold isn't even breathing. One throw. What will it be?";
 
 export const GOLDEN_GONE =
-  "When you get back, Marigold is looking at one perfect footprint. 'That was {a},' she says softly. 'They live {homeAt}. Next time.'";
+  "When you get back, Marigold is looking at one perfect footprint. '{sadly} That was {a}. They live {homeAt}. Next time.'";
 
 export const GOLDEN_FLED_AFTER =
   "Marigold puts a hand on your shoulder. 'Beating Barnaby is still the best day anyone has had here in years.'";
@@ -517,7 +517,7 @@ export const ENDING_NAMES = ["A Good Day Out", "Barnaby's Bad Day", "Safari Mast
 
 /** What each ending gives you to take home, so every one is a prize of its own. */
 export const PRIZES: Readonly<Record<number, string>> = {
-  1: "Marigold sticks a Safari Zone sticker on your bag. 'For a good day out,' she says.",
+  1: "Marigold sticks a Safari Zone sticker on your bag. 'For a good day out!'",
   2: "Marigold pins a bronze Safari badge on your jacket. Barnaby doesn't have one.",
   3: "Marigold hands you a shiny silver Safari Master badge, and Barnaby asks for your autograph.",
   4: "Then she gives you something she has kept for forty years: a golden Safari Ball, all your own.",
@@ -525,12 +525,12 @@ export const PRIZES: Readonly<Record<number, string>> = {
 
 /** Marigold's parting tip at the gate, after a day when a few got away. Chosen by seed. */
 export const PARTING_TIPS = [
-  "'Next time,' she says, 'listen to the cry first. It tells you more than your eyes do.'",
-  "'Remember,' she says. 'Common ones, just throw the ball. Don't overthink it.'",
-  "'Fidgety and rare?' says Marigold. 'Bait. Nobody runs off while they're chewing.'",
-  "'Slow and rare?' says Marigold. 'A rock beside it. Never at it. Beside it.'",
-  "'Follow the signs,' she says. 'Footprints, feathers, scorch marks. A Pokémon always leaves a clue.'",
-  "'Think about where it would like to live,' she says. 'A Fire type won't be paddling in the sea.'",
+  "She smiles. 'Next time, listen to the cry first. It tells you more than your eyes do.'",
+  "She smiles. 'Remember. Common ones, just throw the ball. Don't overthink it.'",
+  "Marigold looks at you. 'Fidgety and rare? Bait. Nobody runs off while they're chewing.'",
+  "Marigold looks at you. 'Slow and rare? A rock beside it. Never at it. Beside it.'",
+  "She smiles. 'Follow the signs. Footprints, feathers, scorch marks. A Pokémon always leaves a clue.'",
+  "She smiles. 'Think about where it would like to live. A Fire type won't be paddling in the sea.'",
 ];
 
 /** Ending 1: Barnaby finished ahead, and you still saw all five stops. */
@@ -539,7 +539,7 @@ export function goodDayText(owner: string): string {
     "The sun sets, and Marigold walks you back to the gate.",
     "A few Pokémon got away today, but you saw every one of them up close.",
     "Barnaby is waiting at the gate, looking very pleased with himself.",
-    `'Tomorrow, ${owner},' says Marigold, 'you'll beat him. I've seen how you think.'`,
+    `Marigold smiles. 'Tomorrow, ${owner}, you'll beat him. I've seen how you think.'`,
   ].join(" ");
 }
 
@@ -547,14 +547,14 @@ export function dayEndText(owner: string): string {
   return [
     "The sun sets, and Marigold walks you back to the gate.",
     "Barnaby holds up his Safari Balls. Then he sees your bag, and goes very quiet. He only just beat you.",
-    `'Not bad at all, ${owner},' says Marigold. 'Finish ahead of him, and someone very special comes to visit.'`,
+    `Marigold turns to you. 'Not bad at all, ${owner}. Finish ahead of him, and someone very special comes to visit.'`,
   ].join(" ");
 }
 
 export function masterText(owner: string): string {
   return [
     "The sun sets, gold and pink, and you walk back to the gate ahead of Barnaby. Barnaby has to sit down.",
-    `Marigold shakes your hand like an old friend. 'You're a proper Safari Master, ${owner},' she says.`,
+    `Marigold shakes your hand like an old friend. 'You're a proper Safari Master, ${owner}.'`,
     "'And you saw it. Most trainers never even see it. Next time, you catch it.'",
   ].join(" ");
 }
@@ -563,6 +563,6 @@ export function goldenText(owner: string): string {
   return [
     "Marigold takes off her enormous hat, which she has never done for anyone, and bows.",
     "Barnaby sees what you've caught, and drops his gold Safari Ball. It rolls all the way down the hill and into the lake. Plop.",
-    `'{excited} What a day,' says Marigold. '${owner}, I'm putting your name on the gate.'`,
+    `Marigold beams. '{excited} What a day. ${owner}, I'm putting your name on the gate.'`,
   ].join(" ");
 }
