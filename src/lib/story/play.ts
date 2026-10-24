@@ -214,6 +214,8 @@ export function buildPlay(plan: PlayPlan): StoryGraph {
     nodes,
     cast: PLAY_CAST,
     slots: [P, ...(owner ? [owner] : [])],
+    // The page shows each friend as its animated battle sprite.
+    battles: true,
   };
 }
 

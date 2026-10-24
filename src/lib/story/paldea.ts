@@ -561,6 +561,8 @@ export function buildPaldea(plan: PaldeaPlan, ownerName = "", partner?: Partner)
     nodes,
     cast: PALDEA_CAST,
     slots: owner ? [owner] : [],
+    // Every stop is a battle: the page shows the Pokémon as animated battle sprites.
+    battles: true,
   };
 }
 
