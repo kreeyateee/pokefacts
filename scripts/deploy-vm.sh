@@ -6,8 +6,15 @@
 # Why a separate copy: the live folder's data/ holds gigabytes of recorded speech. Turbopack
 # scans the project folder, and building there needed more than the VM's 11 GB and starved the
 # site. In the clean copy (code plus the few data files a build reads) it needs under 1 GB.
-# Builds share one lock, so two never run at once.
+# A whole deploy holds one lock, so a second deploy waits for the first to finish instead of
+# reinstalling packages and restarting the site underneath it.
 set -euo pipefail
+
+exec 9>/tmp/pokefacts-deploy.lock
+if ! flock -n 9; then
+  echo "Another deploy is running. Waiting for it to finish..."
+  flock -w 3600 9 || { echo "Gave up waiting for the other deploy."; exit 1; }
+fi
 
 LIVE="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD="${POKEFACTS_BUILD_DIR:-$HOME/pf-build}"
@@ -17,7 +24,13 @@ BUILD_DATA=(champdex.sqlite bulbapedia music-youtube.json)
 cd "$LIVE"
 git fetch origin
 git merge --ff-only origin/main
-npm ci --no-audit --no-fund
+# npm ci deletes node_modules before installing, and the running site loads modules from there,
+# so the live folder reinstalls only when the package list has changed.
+LOCK_HASH="$(sha256sum package-lock.json | cut -d' ' -f1)"
+if [ ! -d node_modules ] || [ "$(cat .installed-lock-hash 2>/dev/null)" != "$LOCK_HASH" ]; then
+  npm ci --no-audit --no-fund
+  echo "$LOCK_HASH" > .installed-lock-hash
+fi
 COMMIT="$(git rev-parse HEAD)"
 
 if [ ! -e "$BUILD/.git" ]; then
