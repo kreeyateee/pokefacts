@@ -550,7 +550,8 @@ export function levelCryGain(cryLufs: number | null, speechLufs: number | null, 
 }
 
 /** A loop to play under a recording, and how loud: 1 is as recorded. */
-export type BedClip = { audio: Buffer; volume: number };
+/** A loop under a reading. Music is shaped to sit around the voice; ambience plays as recorded. */
+export type BedClip = { audio: Buffer; volume: number; kind?: "music" | "ambience" };
 
 /** Seconds the bed carries on after the last word, fading out. */
 const BED_TAIL_SECONDS = 1.2;
@@ -560,18 +561,25 @@ const BED_TAIL_SECONDS = 1.2;
  * further whenever someone speaks (side-chain ducking), so every word stays clear. The result is as
  * long as the reading plus a short tail.
  */
-export function bedFilter(beds: ReadonlyArray<{ volume: number }>, seconds: number, tail = BED_TAIL_SECONDS): string {
+export function bedFilter(
+  beds: ReadonlyArray<{ volume: number; kind?: "music" | "ambience" }>,
+  seconds: number,
+  tail = BED_TAIL_SECONDS,
+): string {
   const format = "aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=mono";
   const length = seconds + tail;
   const steps = [`[0:a]${format},apad=pad_dur=${tail},asplit=2[voice][key]`];
-  beds.forEach((bed, index) => steps.push(`[${index + 1}:a]${format},volume=${bed.volume.toFixed(3)}[b${index}]`));
+  // Music steps out of the voice's way: a gentle dip where speech is clearest, and no rumble below it.
+  const shape = (bed: { kind?: string }) => (bed.kind === "music" ? ",highpass=f=70,equalizer=f=2500:t=q:w=1.2:g=-5" : "");
+  beds.forEach((bed, index) => steps.push(`[${index + 1}:a]${format}${shape(bed)},volume=${bed.volume.toFixed(3)}[b${index}]`));
   const labels = beds.map((_, index) => `[b${index}]`).join("");
   steps.push(
     beds.length > 1
       ? `${labels}amix=inputs=${beds.length}:normalize=0:duration=longest,afade=t=in:d=0.8[bed]`
       : `${labels}afade=t=in:d=0.8[bed]`,
   );
-  steps.push("[bed][key]sidechaincompress=threshold=0.015:ratio=8:attack=15:release=450[ducked]");
+  // The bed dips smoothly while anyone speaks and swells back between lines, without pumping.
+  steps.push("[bed][key]sidechaincompress=threshold=0.015:ratio=8:attack=60:release=650:knee=4[ducked]");
   steps.push(
     `[voice][ducked]amix=inputs=2:normalize=0:duration=first,afade=t=out:st=${Math.max(0, length - 0.9).toFixed(2)}:d=0.9,alimiter=limit=0.95:level=false:latency=1[out]`,
   );

@@ -32,7 +32,6 @@ import {
   VOWELS,
   add,
   bandNoise,
-  bell,
   between,
   blendVowel,
   brighter,
@@ -67,7 +66,6 @@ import {
   svf,
   swell,
   timpani,
-  warm,
   type Vowel,
 } from "./sound-kit";
 
@@ -77,7 +75,7 @@ import {
  */
 const LOUDNESS: Record<StorySound, number> & Record<`bed-${StoryAmbience}`, number> = {
   catch: -18.5,
-  escape: -17.9,
+  escape: -20.5,
   throw: -13.6,
   run: -19.4,
   gate: -15.6,
@@ -87,7 +85,7 @@ const LOUDNESS: Record<StorySound, number> & Record<`bed-${StoryAmbience}`, numb
   ending: -17.9,
   golden: -19.2,
   hit: -14.6,
-  fizzle: -14.0,
+  fizzle: -19.5,
   cheer: -17.2,
   badge: -18.4,
   "bed-gate": -19.0,
@@ -259,30 +257,23 @@ const EFFECTS: Record<StorySound, () => Float32Array> = {
     return edges(room(out, { size: 0.45, mix: 0.18, damp: 0.5 }), 0.002, 0.25);
   },
   escape() {
+    // Two wobbles, then the ball opens with a soft pop and a happy little bloop, and the Pokémon skips off
+    // with a twinkle: no burst, nothing harsh. It got away, and that's fine.
     const out = buffer(2.3);
     const random = rng(7);
     wobble(out, CATCH_WOBBLES[0], random);
-    wobble(out, CATCH_WOBBLES[1], random, 1.1);
+    wobble(out, CATCH_WOBBLES[1], random, 0.9);
     const pop = 1.0;
-    // The ball bursts open: a puff of air that falls from bright to dull, a soft whump, and the shell.
     const puff = svf("low");
-    add(out, pop, 0.4, (t) => 1.2 * puff(random(), 500 + 7000 * Math.exp(-t * 14)) * strike(t, 0.002, 12));
-    add(out, pop, 0.45, (t) => 0.7 * Math.sin(TAU * (160 * t - 80 * t * t)) * strike(t, 0.004, 9));
-    const shell = modes(SHELL, 0.001);
-    add(out, pop, 0.25, (t) => 0.3 * shell(t));
-    // A swirl of light as the Pokémon breaks free: an airy sweep rising, with a soft glow under it.
-    const sweep = svf("band");
-    add(out, pop + 0.03, 0.7, (t) => 1.6 * sweep(random(), 700 * 2 ** (t * 3.2), 6) * swell(t, 0.7));
-    const glows = [sine(), sine(0.3), sine(0.6)];
-    add(out, pop + 0.03, 0.7, (t) =>
-      0.05 * swell(t, 0.7) * glows.reduce((sum, glow, n) => sum + glow(note("G4") * 2 ** n * 2 ** (t * 1.2)), 0),
-    );
-    // Sparkles falling back down.
-    ["E6", "C6", "G5"].forEach((name, index) => {
-      const bar = glock(note(name));
-      add(out, pop + 0.12 + index * 0.08, 1, (t) => 0.12 * bar(t));
+    add(out, pop, 0.2, (t) => 0.5 * puff(random(), 1800) * strike(t, 0.004, 30));
+    const bloop = sine();
+    add(out, pop + 0.02, 0.22, (t) => 0.4 * bloop(380 * 2 ** (t * 6)) * strike(t, 0.006, 16));
+    // A light twinkle rising: off it goes.
+    ["G5", "C6", "E6"].forEach((name, index) => {
+      const bar = celesta(note(name));
+      add(out, pop + 0.15 + index * 0.09, 0.9, (t) => 0.14 * bar(t));
     });
-    return edges(room(out, { size: 0.5, mix: 0.2 }), 0.002, 0.2);
+    return edges(room(out, { size: 0.45, mix: 0.18 }), 0.002, 0.2);
   },
   throw() {
     // A ball spinning through the air: a rush that rises and falls as it passes, with the whirr of the spin.
@@ -487,26 +478,21 @@ const EFFECTS: Record<StorySound, () => Float32Array> = {
     return edges(room(out, { size: 0.45, mix: 0.15 }), 0.002, 0.15);
   },
   fizzle() {
-    // A muted trombone going "wah, wah, wahhh": a move that did nothing much.
-    const out = buffer(1.6);
-    const parts = [
-      ["G3", 0, 0.26, 0],
-      ["F#3", 0.3, 0.26, 0],
-      ["F3", 0.6, 0.85, 1],
-    ] as const;
-    for (const [name, at, length, sag] of parts) {
-      const [one, two] = [saw(0.1), saw(0.6)];
-      const mute = svf("band");
-      const freq = note(name);
-      add(out, at, length, (t) => {
-        const p = Math.min(1, t / length);
-        const pitch = freq * (1 - sag * 0.06 * p * p) * (1 + sag * 0.02 * p * Math.sin(TAU * 5.5 * t));
-        const wah = sag ? Math.abs(Math.sin(Math.PI * p * 1.5)) : Math.sin(Math.PI * p);
-        const buzz = (one(pitch) + two(pitch * 1.004)) / 2;
-        return 0.6 * Math.tanh(1.5 * mute(buzz, 350 + 1100 * wah, 2.5)) * held(t, length, 0.03, 0.08);
-      });
-    }
-    return edges(room(out, { size: 0.4, mix: 0.15 }), 0.005, 0.15);
+    // "Oh well": two soft marimba notes going gently down, and a little springy boing. Friendly, not sad.
+    const out = buffer(1.1);
+    const marimba = (freq: number) =>
+      modes([
+        [freq, 1, 7],
+        [freq * 3.99, 0.18, 22],
+        [freq * 9.9, 0.05, 40],
+      ] as const, 0.003);
+    const high = marimba(note("E5"));
+    const low = marimba(note("B4"));
+    add(out, 0.02, 0.6, (t) => 0.5 * high(t));
+    add(out, 0.2, 0.8, (t) => 0.5 * low(t));
+    const spring = sine();
+    add(out, 0.36, 0.45, (t) => 0.16 * spring(260 * (1 + 0.12 * Math.sin(TAU * 11 * t) * Math.exp(-t * 5))) * strike(t, 0.01, 7));
+    return edges(room(out, { size: 0.4, mix: 0.18 }), 0.005, 0.15);
   },
   cheer() {
     // The crowd in the stands: children and grown-ups shouting "yay" and "woo", clapping, in a big hall.
@@ -897,102 +883,305 @@ const AMBIENCE: Record<StoryAmbience, () => Float32Array> = {
 };
 
 // ---------------------------------------------------------------------------
-// Music: gentle loops, one mood each
+// Music: gentle loops, one mood each. Every loop is a whole number of bars, sixteen seconds long. It is
+// played on past its end and folded back onto its start, so the last bar flows into the first and the
+// reverb tail carries over the join: there is no seam to hear.
 
-const BEAT = 0.5;
+const LOOP_LENGTH = 16;
 
-/** Plays a list of [beat, note, beats] with a voice function. */
-function play(out: Float32Array, notes: Array<[number, string, number]>, voice: (freq: number, t: number, length: number) => number, beat = BEAT) {
-  for (const [at, name, beats] of notes) {
-    const length = beats * beat;
-    add(out, at * beat, length + 0.6, (t) => voice(note(name), t, length));
-  }
+/** Folds a rendering that runs past the loop back onto its start. */
+function fold(long: Float32Array, seconds = LOOP_LENGTH): Float32Array {
+  const size = Math.round(seconds * RATE);
+  const out = new Float32Array(size);
+  for (let index = 0; index < long.length; index += 1) out[index % size] = (out[index % size] ?? 0) + (long[index] ?? 0);
+  return out;
 }
 
-const pluck = (level: number) => (freq: number, t: number) => level * warm(freq, t) * decay(t, 5);
-const pad = (level: number) => (freq: number, t: number, length: number) =>
-  level * Math.sin(TAU * freq * t) * (1 + 0.3 * Math.sin(TAU * 2 * freq * t)) * swell(t, length + 0.5);
-const chime = (level: number) => (freq: number, t: number) => level * bell(freq, t);
-
-/** Repeats a pattern of `beats` beats `times` times. */
-function repeat(pattern: Array<[number, string, number]>, beats: number, times: number): Array<[number, string, number]> {
-  return Array.from({ length: times }, (_, n) => pattern.map(([at, name, length]) => [at + n * beats, name, length] as [number, string, number])).flat();
+/** A harp: a plucked string, bright for a moment, then round. */
+function harp(freq: number) {
+  return modes([
+    [freq, 1, 3.2],
+    [freq * 2, 0.35, 6],
+    [freq * 3, 0.12, 10],
+    [freq * 4, 0.05, 14],
+  ] as const, 0.002);
 }
+
+/** A soft bass: a round low note with a little edge to it, so small speakers still hear it. */
+function bass(freq: number, length: number) {
+  const body = sine();
+  const wave = saw(0.3);
+  const tone = svf("low");
+  return (t: number) => held(t, length, 0.02, Math.min(0.15, length / 3)) * (0.7 * body(freq) + 0.35 * tone(wave(freq), freq * 3, 0.7));
+}
+
+/** A shaker: a quick hiss of seeds. */
+function shaker(random: () => number) {
+  const hiss = svf("high");
+  return (t: number) => 0.5 * hiss(random(), 6000) * strike(t, 0.004, 40);
+}
+
+/** A soft kick drum. */
+const kick = (t: number) => Math.sin(TAU * (95 * t - 70 * t * t)) * strike(t, 0.002, 16);
+
+/** A brushed snare. */
+function snare(random: () => number) {
+  const band = svf("band");
+  return (t: number) => band(random(), 2500, 0.7) * strike(t, 0.002, 28);
+}
+
+/** Chords as [bass, pad notes, arpeggio notes]. */
+const CHORDS: Record<string, { bass: string; pad: string[]; arp: string[] }> = {
+  C: { bass: "C2", pad: ["C3", "G3", "E4"], arp: ["C4", "E4", "G4", "C5"] },
+  Cmaj7: { bass: "C2", pad: ["C3", "G3", "B3", "E4"], arp: ["C4", "E4", "G4", "B4"] },
+  F: { bass: "F2", pad: ["F2", "C3", "A3"], arp: ["F3", "A3", "C4", "F4"] },
+  Fmaj7: { bass: "F2", pad: ["F2", "C3", "E3", "A3"], arp: ["F3", "A3", "C4", "E4"] },
+  G: { bass: "G2", pad: ["G2", "D3", "B3"], arp: ["G3", "B3", "D4", "G4"] },
+  G7: { bass: "G2", pad: ["G2", "B3", "F4"], arp: ["G3", "B3", "D4", "F4"] },
+  Am: { bass: "A2", pad: ["A2", "E3", "C4"], arp: ["A3", "C4", "E4", "A4"] },
+  Am7: { bass: "A2", pad: ["A2", "E3", "G3", "C4"], arp: ["A3", "C4", "E4", "G4"] },
+  Dm: { bass: "D2", pad: ["D3", "A3", "F4"], arp: ["D4", "F4", "A4", "D5"] },
+  Dm7: { bass: "D2", pad: ["D3", "A3", "C4", "F4"], arp: ["D4", "F4", "A4", "C5"] },
+  Bb: { bass: "Bb1", pad: ["Bb2", "F3", "D4"], arp: ["Bb3", "D4", "F4", "Bb4"] },
+  E: { bass: "E2", pad: ["E3", "B3", "G#4"], arp: ["E4", "G#4", "B4", "E5"] },
+  Em: { bass: "E2", pad: ["E3", "B3", "G4"], arp: ["E4", "G4", "B4", "E5"] },
+  B: { bass: "B1", pad: ["B2", "F#3", "D#4"], arp: ["B3", "D#4", "F#4", "B4"] },
+  D: { bass: "D2", pad: ["D3", "A3", "F#4"], arp: ["D4", "F#4", "A4", "D5"] },
+  A: { bass: "A1", pad: ["A2", "E3", "C#4"], arp: ["A3", "C#4", "E4", "A4"] },
+  G6: { bass: "G2", pad: ["G2", "D3", "E3", "B3"], arp: ["G3", "B3", "D4", "E4"] },
+};
+
+const chordOf = (name: string) => CHORDS[name] ?? (CHORDS.C as (typeof CHORDS)[string]);
+
+type Song = {
+  /** Seconds in a beat; bars are four beats. */
+  beat: number;
+  chords: string[];
+  render: (out: Float32Array, at: (bar: number, beat?: number) => number, bar: number) => void;
+  /** Then each chord gets its pad, its bass and, if given, a harp pattern. */
+  pad?: number;
+  bassLevel?: number;
+  /** Bass notes in a bar, by beat. */
+  bassBeats?: number[];
+  /** Harp notes in a bar: [beat, which arpeggio note]. */
+  harpPattern?: Array<[number, number]>;
+  harpLevel?: number;
+  room?: { size: number; mix: number; damp?: number };
+};
+
+/** Plays a song's chords with its pad, bass and harp, then its own parts, folded into a seamless loop. */
+function song(spec: Song): Float32Array {
+  const out = buffer(LOOP_LENGTH + 5);
+  const barLength = spec.beat * 4;
+  const at = (bar: number, beat = 0) => bar * barLength + beat * spec.beat;
+  spec.chords.forEach((name, bar) => {
+    const chord = chordOf(name);
+    if (spec.pad) {
+      chord.pad.forEach((pitch, index) =>
+        add(out, at(bar), barLength + 0.8, strings(note(pitch), barLength + 0.15, { level: spec.pad, attack: 0.35, seed: 300 + bar * 7 + index })),
+      );
+    }
+    for (const beat of spec.bassBeats ?? []) {
+      const length = spec.beat * 0.9;
+      const low = bass(note(chord.bass), length);
+      add(out, at(bar, beat), length + 0.2, (t) => (spec.bassLevel ?? 0.12) * low(t));
+    }
+    for (const [beat, which] of spec.harpPattern ?? []) {
+      const pluck = harp(note(chord.arp[which] ?? chord.arp[0] ?? "C4"));
+      add(out, at(bar, beat), 1.6, (t) => (spec.harpLevel ?? 0.1) * pluck(t));
+    }
+    spec.render(out, at, bar);
+  });
+  return fold(room(out, spec.room ?? { size: 0.6, mix: 0.22, damp: 0.5 }));
+}
+
+/** A melody of [bar, beat, note, beats] on a voice. */
+function melody(out: Float32Array, at: (bar: number, beat?: number) => number, beat: number, notes: Array<[number, number, string, number]>, voice: (freq: number, length: number) => (t: number) => number) {
+  for (const [bar, start, name, beats] of notes) add(out, at(bar, start), beats * beat + 1.5, voice(note(name), beats * beat));
+}
+
+const celestaVoice = (level: number) => (freq: number) => {
+  const bar = celesta(freq);
+  return (t: number) => level * bar(t);
+};
+const glockVoice = (level: number) => (freq: number) => {
+  const bar = glock(freq);
+  return (t: number) => level * bar(t);
+};
+const hornVoice = (level: number) => (freq: number, length: number) => brass(freq, length, { level, bright: 2.5, fall: 0.3, seed: Math.round(freq) });
 
 const MUSIC: Record<StoryMusic, () => Float32Array> = {
   bright() {
-    const out = buffer(17.5);
-    const chords = [
-      ["C4", "E4", "G4", "E4"],
-      ["F4", "A4", "C5", "A4"],
-      ["G4", "B4", "D5", "B4"],
-      ["C4", "E4", "G4", "C5"],
-    ];
-    play(out, chords.flatMap((chord, bar) => chord.flatMap((name, k) => [[bar * 8 + k * 2, name, 1], [bar * 8 + k * 2 + 1, name, 1]] as Array<[number, string, number]>)).slice(0, 64), pluck(0.22), 0.25 * 2);
-    play(out, [[0, "C3", 7], [8, "F2", 7], [16, "G2", 7], [24, "C3", 7]], pad(0.18), 0.25 * 2);
-    play(out, [[2, "G5", 1], [3, "E5", 1], [10, "A5", 1], [11, "F5", 1], [18, "B5", 1], [19, "G5", 1], [28, "C6", 2]], chime(0.12), 0.5);
-    return loopable(reverb(out, 0.2));
+    const random = rng(401);
+    const shake = () => shaker(random);
+    return song({
+      beat: 0.5,
+      chords: ["C", "F", "G", "C", "Am", "F", "G", "C"],
+      pad: 0.07,
+      bassBeats: [0, 2],
+      harpPattern: [[0, 0], [0.5, 1], [1, 2], [1.5, 1], [2, 3], [2.5, 1], [3, 2], [3.5, 1]],
+      harpLevel: 0.09,
+      render(out, at, bar) {
+        for (let beat = 0.5; beat < 4; beat += 1) {
+          const hit = shake();
+          add(out, at(bar, beat), 0.1, (t) => 0.06 * hit(t));
+        }
+        if (bar === 0) {
+          melody(out, at, 0.5, [
+            [0, 0, "E5", 1], [0, 2, "G5", 1], [1, 0, "A5", 1], [1, 2, "G5", 1], [2, 0, "F5", 1], [2, 2, "D5", 1], [3, 0, "E5", 2],
+            [4, 0, "C5", 1], [4, 2, "E5", 1], [5, 0, "F5", 1], [5, 2, "A5", 1], [6, 0, "G5", 1], [6, 2, "B4", 1], [7, 0, "C5", 2],
+          ], celestaVoice(0.13));
+        }
+      },
+    });
   },
   calm() {
-    const out = buffer(17.5);
-    play(out, [[0, "F3", 8], [0, "A3", 8], [0, "E4", 8], [8, "C3", 8], [8, "G3", 8], [8, "E4", 8], [16, "F3", 8], [16, "A3", 8], [16, "C4", 8]], pad(0.16), 0.66);
-    play(out, [[1, "A5", 2], [4, "G5", 2], [9, "E5", 2], [12, "G5", 2], [17, "C6", 3]], chime(0.12), 0.66);
-    return loopable(reverb(out, 0.35));
+    return song({
+      beat: 1,
+      chords: ["Fmaj7", "Cmaj7", "Dm7", "Bb"],
+      pad: 0.07,
+      bassBeats: [0],
+      harpPattern: [[0, 0], [1, 1], [2, 2], [3, 3]],
+      harpLevel: 0.07,
+      room: { size: 0.8, mix: 0.3 },
+      render(out, at, bar) {
+        if (bar === 0) {
+          melody(out, at, 1, [[0, 1, "A5", 2], [1, 1, "G5", 2], [2, 1, "F5", 1], [2, 2, "E5", 1], [3, 1, "D5", 2.5]], celestaVoice(0.1));
+        }
+      },
+    });
   },
   mysterious() {
-    const out = buffer(17.5);
-    play(out, [[0, "A2", 8], [0, "E3", 8], [8, "F2", 8], [8, "C3", 8], [16, "A2", 8], [16, "E3", 8]], pad(0.2), 0.7);
-    play(out, [[1, "E5", 1], [2, "F#5", 1], [3, "G#5", 2], [9, "C5", 1], [10, "D5", 1], [11, "E5", 2], [17, "B4", 1], [18, "C5", 1], [19, "E5", 3]], chime(0.13), 0.7);
-    return loopable(reverb(out, 0.45));
+    return song({
+      beat: 0.6667,
+      chords: ["Am", "F", "Am", "E", "Am", "F"],
+      pad: 0.08,
+      bassBeats: [0],
+      room: { size: 0.85, mix: 0.35 },
+      render(out, at, bar) {
+        if (bar % 2 === 0) {
+          melody(out, at, 0.6667, [[bar, 1, "E5", 0.5], [bar, 1.5, "F5", 0.5], [bar, 2, "E5", 1], [bar, 3, "B4", 1]], glockVoice(0.07));
+        }
+      },
+    });
   },
   adventure() {
-    const out = buffer(17.5);
-    play(out, repeat([[0, "D3", 1], [1, "A3", 1], [2, "D4", 1], [3, "A3", 1], [4, "C3", 1], [5, "G3", 1], [6, "C4", 1], [7, "G3", 1]], 8, 4), pluck(0.2), 0.5);
-    const tick = bandNoise(rng(211), 3000, 9000);
-    for (let at = 0; at < 16; at += 0.5) add(out, at, 0.05, (t) => 0.06 * tick() * decay(t, 80));
-    play(out, [[2, "F4", 2], [4, "E4", 2], [10, "A4", 3], [18, "D5", 2], [20, "C5", 2], [26, "A4", 4]], pad(0.1), 0.5);
-    return loopable(reverb(out, 0.2));
+    const random = rng(403);
+    return song({
+      beat: 0.5,
+      chords: ["Dm", "C", "Bb", "C", "Dm", "C", "Bb", "A"],
+      pad: 0.06,
+      bassBeats: [0, 1.5, 2, 3.5],
+      harpPattern: [[0, 0], [0.5, 2], [1, 3], [1.5, 2], [2, 0], [2.5, 2], [3, 3], [3.5, 1]],
+      harpLevel: 0.08,
+      render(out, at, bar) {
+        for (const beat of [0, 2]) add(out, at(bar, beat), 0.4, (t) => 0.22 * kick(t));
+        for (let beat = 0.5; beat < 4; beat += 1) {
+          const hit = shaker(random);
+          add(out, at(bar, beat), 0.1, (t) => 0.05 * hit(t));
+        }
+        if (bar === 0) {
+          melody(out, at, 0.5, [[0, 0, "F4", 3], [1, 0, "E4", 3], [2, 0, "D4", 2], [2, 2, "F4", 2], [3, 0, "G4", 4], [4, 0, "A4", 3], [5, 0, "G4", 3], [6, 0, "F4", 4], [7, 0, "E4", 4]], hornVoice(0.07));
+        }
+      },
+    });
   },
   tense() {
-    const out = buffer(16.5);
-    play(out, repeat([[0, "E2", 0.5], [0.5, "E2", 0.5], [1, "F2", 0.5], [1.5, "E2", 0.5]], 2, 15), pluck(0.28), 0.5);
-    play(out, [[0, "B3", 8], [8, "C4", 8], [16, "B3", 8], [24, "A#3", 6]], pad(0.1), 0.5);
-    return loopable(reverb(out, 0.15), 1);
+    return song({
+      beat: 0.5,
+      chords: ["Em", "C", "Em", "B", "Em", "C", "Em", "B"],
+      pad: 0.06,
+      bassBeats: [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5],
+      room: { size: 0.5, mix: 0.2 },
+      render(out, at, bar) {
+        add(out, at(bar), 0.4, (t) => 0.2 * kick(t));
+        if (bar % 2 === 1) melody(out, at, 0.5, [[bar, 2, "B5", 1]], glockVoice(0.06));
+      },
+    });
   },
   homely() {
-    const out = buffer(17.5);
-    const box = chime(0.15);
-    play(out, repeat([[0, "C5", 1], [1, "E5", 1], [2, "G5", 1], [3, "E5", 1], [4, "F5", 1], [5, "A5", 1], [6, "G5", 2]], 8, 2), box, 0.55);
-    play(out, [[0, "C3", 4], [4, "F3", 4], [8, "C3", 4], [12, "G3", 4]], pad(0.12), 1.1);
-    return loopable(reverb(out, 0.25));
+    return song({
+      beat: 0.6667,
+      chords: ["C", "F", "G", "C", "F", "G7"],
+      pad: 0.05,
+      bassBeats: [0, 2],
+      harpPattern: [[1, 1], [2, 2], [3, 1]],
+      harpLevel: 0.06,
+      render(out, at, bar) {
+        if (bar === 0) {
+          melody(out, at, 0.6667, [
+            [0, 0, "C5", 1], [0, 1, "E5", 1], [0, 2, "G5", 2], [1, 0, "A5", 1], [1, 1, "G5", 1], [1, 2, "F5", 2], [2, 0, "D5", 1], [2, 1, "E5", 1], [2, 2, "F5", 2],
+            [3, 0, "E5", 1], [3, 1, "D5", 1], [3, 2, "C5", 2], [4, 0, "A4", 1], [4, 1, "C5", 1], [4, 2, "F5", 2], [5, 0, "D5", 2], [5, 2, "B4", 2],
+          ], celestaVoice(0.12));
+        }
+      },
+    });
   },
   magical() {
-    const out = buffer(17.5);
-    play(out, repeat([[0, "C5", 1], [1, "G5", 1], [2, "E6", 1], [3, "G5", 1], [4, "B4", 1], [5, "G5", 1], [6, "D6", 1], [7, "G5", 1]], 8, 4), chime(0.11), 0.25);
-    play(out, [[0, "C4", 16], [0, "E4", 16], [0, "G4", 16], [16, "A3", 16], [16, "E4", 16], [16, "C5", 16]], pad(0.12), 0.25 * 2);
-    return loopable(reverb(out, 0.4));
+    return song({
+      beat: 1,
+      chords: ["Cmaj7", "Am7", "Fmaj7", "G6"],
+      pad: 0.06,
+      bassBeats: [0],
+      room: { size: 0.9, mix: 0.35 },
+      render(out, at, bar) {
+        const chord = chordOf(["Cmaj7", "Am7", "Fmaj7", "G6"][bar] ?? "Cmaj7");
+        for (let step = 0; step < 16; step += 1) {
+          const pitch = chord.arp[[0, 1, 2, 3, 2, 1][step % 6] ?? 0] ?? "C4";
+          const sparkle = glock(note(pitch) * 2);
+          add(out, at(bar, step * 0.25), 1, (t) => 0.035 * sparkle(t));
+        }
+        chord.pad.slice(1).forEach((pitch, index) => add(out, at(bar), 4.6, choir(note(pitch), 4.1, { level: 0.1, seed: 500 + bar * 5 + index })));
+      },
+    });
   },
   battle() {
-    const out = buffer(16.5);
-    // A driving bass ostinato, a snare tick, and a short brassy hook.
-    play(out, repeat([[0, "A2", 0.5], [0.5, "A2", 0.5], [1, "C3", 0.5], [1.5, "A2", 0.5], [2, "D3", 0.5], [2.5, "A2", 0.5], [3, "E3", 0.5], [3.5, "G2", 0.5]], 4, 8), pluck(0.3), 0.5);
-    const snare = bandNoise(rng(223), 1500, 7000);
-    for (let at = 0.5; at < 16; at += 1) add(out, at, 0.08, (t) => 0.12 * snare() * decay(t, 40));
-    for (let at = 0; at < 16; at += 1) add(out, at, 0.12, (t) => 0.35 * Math.sin(TAU * (110 - 200 * t) * t) * decay(t, 25));
-    play(out, [[0, "E4", 1], [1, "A4", 1], [2, "C5", 2], [8, "D5", 1], [9, "C5", 1], [10, "A4", 2], [16, "E4", 1], [17, "A4", 1], [18, "E5", 2], [24, "D5", 1], [25, "C5", 1], [26, "B4", 3]], pad(0.12), 0.5);
-    return loopable(reverb(out, 0.15), 1);
+    const random = rng(409);
+    return song({
+      beat: 0.4,
+      chords: ["Am", "F", "G", "Em", "Am", "F", "G", "E", "Am", "F"],
+      pad: 0.05,
+      bassBeats: [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5],
+      room: { size: 0.45, mix: 0.18 },
+      render(out, at, bar) {
+        for (const beat of [0, 2]) add(out, at(bar, beat), 0.4, (t) => 0.3 * kick(t));
+        for (const beat of [1, 3]) {
+          const hit = snare(random);
+          add(out, at(bar, beat), 0.2, (t) => 0.12 * hit(t));
+        }
+        const chord = chordOf(["Am", "F", "G", "Em", "Am", "F", "G", "E", "Am", "F"][bar] ?? "Am");
+        chord.pad.forEach((pitch) => add(out, at(bar), 0.5, brass(note(pitch) * 2, 0.22, { level: 0.08, bright: 3, seed: 600 + bar })));
+      },
+    });
   },
   champion() {
-    const out = buffer(17.5);
-    play(out, repeat([[0, "D3", 1], [1, "D3", 0.5], [1.5, "D3", 0.5], [2, "F3", 1], [3, "G3", 1]], 4, 8), pluck(0.28), 0.55);
-    for (let at = 0; at < 17; at += 0.55 * 2) add(out, at, 0.15, (t) => 0.4 * Math.sin(TAU * (90 - 160 * t) * t) * decay(t, 18));
-    play(out, [[0, "D4", 8], [0, "A4", 8], [8, "Bb3", 8], [8, "F4", 8], [16, "C4", 8], [16, "G4", 8], [24, "A3", 8], [24, "E4", 8]], pad(0.12), 0.55);
-    play(out, [[2, "A5", 2], [6, "F5", 2], [10, "D6", 3], [18, "E5", 2], [22, "C6", 2], [26, "A5", 4]], chime(0.1), 0.55);
-    return loopable(reverb(out, 0.25));
+    const random = rng(411);
+    return song({
+      beat: 0.5,
+      chords: ["D", "Bb", "C", "D", "G", "A", "Bb", "A"],
+      pad: 0.06,
+      bassBeats: [0, 2],
+      harpPattern: [[0, 0], [1, 1], [2, 2], [3, 3]],
+      harpLevel: 0.06,
+      render(out, at, bar) {
+        const drum = timpani(note(chordOf(["D", "Bb", "C", "D", "G", "A", "Bb", "A"][bar] ?? "D").bass) * 2, random);
+        add(out, at(bar), 1.5, (t) => 0.3 * drum(t));
+        if (bar === 0 || bar === 4) {
+          const swish = cymbal(random, 0.8, 1.6);
+          add(out, at(bar), 2.5, (t) => 0.04 * swish(t));
+        }
+        if (bar === 0) {
+          melody(out, at, 0.5, [[0, 0, "D4", 2], [0, 2, "A4", 2], [1, 0, "F4", 3], [2, 0, "G4", 2], [2, 2, "E4", 2], [3, 0, "D4", 4], [4, 0, "B4", 2], [4, 2, "D5", 2], [5, 0, "C#5", 3], [6, 0, "D5", 2], [6, 2, "F5", 2], [7, 0, "E5", 4]], hornVoice(0.08));
+        }
+      },
+    });
   },
 };
 
 // ---------------------------------------------------------------------------
+
+/** How loud each music loop is, in LUFS, before the mix turns it down under the voices. */
+const MUSIC_LOUDNESS = -18;
 
 /** MP3 encoding takes about 0.3 dB of loudness (mostly the very top), so each sound is mastered that much over. */
 const ENCODER_LOSS = 0.3;
@@ -1015,5 +1204,6 @@ for (const [name, make] of Object.entries(AMBIENCE) as Array<[StoryAmbience, () 
   if (pick(name)) writeMp3(STORY_AMBIENCE[name], master(loopable(make()), LOUDNESS[`bed-${name}`] + ENCODER_LOSS, 0.5), true);
 }
 for (const [name, make] of Object.entries(MUSIC) as Array<[StoryMusic, () => Float32Array]>) {
-  if (pick(name)) writeMp3(STORY_MUSIC[name], normalise(make(), 0.7), true);
+  // Every mood at the same loudness, so a scene change never jumps in level.
+  if (pick(name)) writeMp3(STORY_MUSIC[name], master(make(), MUSIC_LOUDNESS + ENCODER_LOSS, 0.7), true);
 }
