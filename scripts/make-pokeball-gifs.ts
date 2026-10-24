@@ -533,7 +533,7 @@ function writeAnimatedPixel(name: StoryPixel, frames: string[][], colours: Recor
       "-i",
       "pipe:0",
       "-vf",
-      "split[a][b];[a]palettegen=max_colors=16:reserve_transparent=1:stats_mode=full[p];[b][p]paletteuse=dither=none:alpha_threshold=128",
+      "split[a][b];[a]palettegen=max_colors=16:reserve_transparent=0:stats_mode=full[p];[b][p]paletteuse=dither=none",
       "-loop",
       "0",
       output,
@@ -547,7 +547,9 @@ function writePixel(name: StoryPixel) {
   const { art, colours } = artFor(name);
   const animate = PIXEL_ANIMATIONS[name];
   if (animate) {
-    writeAnimatedPixel(name, animate(), colours);
+    // On black: Yoto ignores GIF transparency and shows its hidden colour (bright green). Black is an LED
+    // left off, so it looks clear on the player.
+    writeAnimatedPixel(name, animate(), { ...colours, ".": [0, 0, 0, 255] });
     return;
   }
   if (art.length !== 16 || art.some((row) => row.length !== 16)) throw new Error(`${name} is not 16 by 16.`);

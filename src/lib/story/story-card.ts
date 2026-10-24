@@ -92,7 +92,9 @@ function iconPath(icon: StoryIcon | undefined, kind: StoryNode["kind"]): string 
   if ("yoto" in icon) return icon.yoto.startsWith("yoto:#") ? icon.yoto : `yoto:#${icon.yoto}`;
   if ("pixel" in icon) return STORY_PIXELS[icon.pixel];
   if ("formId" in icon) return `/api/artwork/pixel/${icon.formId}`;
-  return icon.shadow ? shadowPixelPath(icon.dexId) : `/pixels/${icon.dexId}.png`;
+  if (icon.shadow) return shadowPixelPath(icon.dexId);
+  // The query marks the attack animation for the upload; the page still shows the plain icon.
+  return icon.attack ? `/pixels/${icon.dexId}.png?attack` : `/pixels/${icon.dexId}.png`;
 }
 
 /** The picture while a choice's question repeats: its own, or the node's. */
@@ -104,24 +106,27 @@ export function storyQuestionIconPath(node: StoryNode): string {
  * Pixels the story shows. Upload each Pokémon with /api/yoto/icon (shadow=1 for the shadows),
  * and each named picture with /api/yoto/icon?name=.
  */
-export function storyPixels(graph: StoryGraph): { real: number[]; shadow: number[]; named: string[] } {
+export function storyPixels(graph: StoryGraph): { real: number[]; shadow: number[]; attack: number[]; named: string[] } {
   const real = new Set<number>();
   const shadow = new Set<number>();
+  const attack = new Set<number>();
   const named = new Set<string>();
   for (const node of graph.nodes) {
     for (const icon of [node.icon, node.kind === "choice" ? node.questionIcon : undefined]) {
-      if (icon && "dexId" in icon) (icon.shadow ? shadow : real).add(icon.dexId);
+      if (icon && "dexId" in icon) (icon.shadow ? shadow : icon.attack ? attack : real).add(icon.dexId);
       // The icon route draws a form's pixel icon from its id, the same as a national number.
       if (icon && "formId" in icon) real.add(icon.formId);
       if (icon && "pixel" in icon) named.add(icon.pixel);
     }
   }
-  return { real: [...real], shadow: [...shadow], named: [...named] };
+  return { real: [...real], shadow: [...shadow], attack: [...attack], named: [...named] };
 }
 
 type UploadedPixels = {
   realById: Record<number, string>;
   shadowById: Record<number, string>;
+  /** Each Pokémon's attack animation, for the tracks where it attacks. */
+  attackById: Record<number, string>;
   namedById: Record<string, string>;
 };
 
@@ -135,6 +140,12 @@ function uploadedIcon(path: string, uploaded: UploadedPixels): string {
   const form = /^\/api\/artwork\/pixel\/(\d+)$/.exec(path);
   if (form) {
     const media = uploaded.realById[Number(form[1])];
+    return media ? `yoto:#${media}` : path;
+  }
+  const attack = /^\/pixels\/(\d+)\.png\?attack$/.exec(path);
+  if (attack) {
+    // Until the attack animation is uploaded, fall back to the Pokémon's ordinary icon.
+    const media = uploaded.attackById[Number(attack[1])] ?? uploaded.realById[Number(attack[1])];
     return media ? `yoto:#${media}` : path;
   }
   const match = /^\/pixels\/(\d+)(-shadow)?\.png$/.exec(path);
@@ -246,6 +257,7 @@ export function storyCard(
     realById?: Record<number, string>;
     shadowById?: Record<number, string>;
     namedById?: Record<string, string>;
+    attackById?: Record<number, string>;
   } = {},
 ): { card: KidCard; upload: PlaylistUpload } {
   const problems = checkStory(graph);
@@ -267,6 +279,7 @@ export function storyCard(
       realById: options.realById ?? {},
       shadowById: options.shadowById ?? {},
       namedById: options.namedById ?? {},
+      attackById: options.attackById ?? {},
     };
     const icon = uploadedIcon(storyIconPath(node), uploaded);
     return storyChapter(node, index, endings, icon, uploadedIcon(storyQuestionIconPath(node), uploaded), voicing);

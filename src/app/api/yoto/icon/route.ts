@@ -53,10 +53,11 @@ export async function POST(request: Request) {
   }
   const id = params.get("id") ?? "";
   const shadow = params.get("shadow") === "1";
-  // A Pokémon's icon as its little battle animation, for every card and adventure.
-  if (params.get("battle") === "1" && !shadow && /^[1-9]\d{0,3}$/.test(id) && Number(id) <= 1025) {
+  // A Pokémon's icon moving on the player: its battle loop in a battle story, a calm bob everywhere else.
+  const motion = params.get("battle") === "1" ? "battle" : params.get("move") === "1" ? "idle" : null;
+  if (motion && !shadow && /^[1-9]\d{0,3}$/.test(id) && Number(id) <= 1025) {
     try {
-      return uploadDisplayIcon(token, await ensureBattlePixel(Number(id)), `pokefacts-battle-${id}`);
+      return uploadDisplayIcon(token, await ensureBattlePixel(Number(id), undefined, motion), `pokefacts-${motion}-${id}`);
     } catch {
       return jsonError("That battle picture could not be made.");
     }

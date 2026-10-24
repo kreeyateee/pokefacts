@@ -287,6 +287,8 @@ export function AdventurePanel({
     setFound(new Set());
     setNodeId("");
     setKind(next);
+    // Every visit to an adventure is a new one.
+    setSeed(newSeed());
   }
 
   return (

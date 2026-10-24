@@ -161,6 +161,19 @@ import {
 
 const SAVED_CARDS = "champdex.kidCards";
 
+/** What a send was asked for with: the voice, the playlist to add to, how a name clash is settled, playback. */
+type SendChoices = { voiceId: string; targetPlaylist: string; nameClash: NameClash; playback: PlaybackSettings };
+
+/** A send waiting its turn: what it is called, how to start it, and the choices it was queued with. */
+type QueuedSend = { id: number; title: string; start: () => unknown; choices: SendChoices };
+
+/** "2nd", "3rd", "4th" in line. */
+function ordinal(place: number): string {
+  const tens = place % 100;
+  if (tens >= 11 && tens <= 13) return `${place}th`;
+  return `${place}${["th", "st", "nd", "rd"][place % 10] ?? "th"}`;
+}
+
 type SavedCards = Partial<Record<string, string>>;
 
 type JobView = {
@@ -275,11 +288,12 @@ function uploadNamedIcon(name: string): Promise<string> {
   return uploadIconFrom(`/api/yoto/icon?name=${encodeURIComponent(name)}`);
 }
 
-/** A Pokémon's 16×16 icon for the player: its little battle animation, or its still shadow for Who's That. */
-function uploadIcon(id: number, shadow = false): Promise<string> {
-  // Every Pokémon moves on the player: its icon is the little battle animation. A Who's That shadow stays
-  // still, and a special form keeps its still icon (the server only animates national Pokédex numbers).
-  return uploadIconFrom(`/api/yoto/icon?id=${id}${shadow ? "&shadow=1" : "&battle=1"}`);
+/**
+ * A Pokémon's 16×16 icon for the player. It moves: a battle loop in a battle story, a calm bob on every
+ * other card. A Who's That shadow stays still, and a special form keeps its still icon.
+ */
+function uploadIcon(id: number, shadow = false, battle = false): Promise<string> {
+  return uploadIconFrom(`/api/yoto/icon?id=${id}${shadow ? "&shadow=1" : battle ? "&battle=1" : "&move=1"}`);
 }
 
 async function uploadIconFrom(path: string): Promise<string> {
@@ -740,11 +754,21 @@ export function Studio({
   const voiceIdRef = useRef(voiceId);
   const targetPlaylistRef = useRef(targetPlaylist);
   const playbackRef = useRef(playback);
-  voiceIdRef.current = voiceId;
-  targetPlaylistRef.current = targetPlaylist;
   const nameClashRef = useRef(nameClash);
-  nameClashRef.current = nameClash;
-  playbackRef.current = playback;
+  // A queued send runs with the choices it was queued with, not whatever is picked by the time it starts.
+  const queuedChoices = useRef<SendChoices | null>(null);
+  voiceIdRef.current = queuedChoices.current?.voiceId ?? voiceId;
+  targetPlaylistRef.current = queuedChoices.current?.targetPlaylist ?? targetPlaylist;
+  nameClashRef.current = queuedChoices.current?.nameClash ?? nameClash;
+  playbackRef.current = queuedChoices.current?.playback ?? playback;
+  // Sends waiting behind the one recording now, in order.
+  const sendQueue = useRef<QueuedSend[]>([]);
+  const [queued, setQueued] = useState<Array<{ id: number; title: string }>>([]);
+  const [queuePaused, setQueuePaused] = useState(false);
+  const queueRunning = useRef(false);
+  const queueHeld = useRef(false);
+  const queueIds = useRef(0);
+  const [, setChoicesBack] = useState(0);
 
   const cardId = kind === "meet" ? factsId : guessId;
   const playlistCard =
@@ -2154,28 +2178,36 @@ export function Studio({
     }
   }
 
-  /** An adventure card: its pictures, then the interactive playlist. Always a new playlist, never added to one. */
+  /**
+   * An adventure card: its pictures, then the interactive playlist. By default it replaces the playlist
+   * already made for that adventure, so the library is not filled with copies; the card and anything
+   * linked to it keep working and play the new adventure. Without one, it makes a new playlist.
+   */
   async function sendAdventure(sent: StoryGraph) {
     if (sendingRef.current) return;
     if (!(await connectedSession())) return;
-    // Each send is a new adventure, so a second Safari Zone in the library becomes "Safari Zone 2".
-    const story = { ...sent, title: nextFreeTitle(sent.title, library.map((item) => item.title)) };
+    const existing = playlistNamed(library, sent.title);
+    const story = existing ? { ...sent, title: existing.title } : sent;
     try {
       await driveSend(story.title, false, async () => {
         setJob({ status: "sending", detail: `Sending ${story.title} to Yoto…` });
         const pixels = storyPixels(story);
         const pictures = [
-          ...pixels.real.map((id) => ({ id, shadow: false })),
-          ...pixels.shadow.map((id) => ({ id, shadow: true })),
+          ...pixels.real.map((id) => ({ id, shadow: false, attack: false })),
+          ...pixels.shadow.map((id) => ({ id, shadow: true, attack: false })),
+          ...pixels.attack.map((id) => ({ id, shadow: false, attack: true })),
         ];
         const realById: Record<number, string> = {};
         const shadowById: Record<number, string> = {};
+        const attackById: Record<number, string> = {};
         const namedById: Record<string, string> = {};
         // The Poké Ball shown on catch tracks.
         for (const name of pixels.named) namedById[name] = await uploadNamedIcon(name);
         let finished = 0;
-        await mapPool(pictures, async ({ id, shadow }) => {
-          (shadow ? shadowById : realById)[id] = await uploadIcon(id, shadow);
+        await mapPool(pictures, async ({ id, shadow, attack }) => {
+          // Most tracks bob gently; the tracks where a Pokémon attacks show its attack animation.
+          if (attack) attackById[id] = await uploadIcon(id, false, true);
+          else (shadow ? shadowById : realById)[id] = await uploadIcon(id, shadow);
           finished += 1;
           setJob({
             status: "sending",
@@ -2184,20 +2216,23 @@ export function Studio({
             total: pictures.length,
           });
         });
-        const built = storyCard(story, { voiceId: voiceIdRef.current, realById, shadowById, namedById });
+        const built = storyCard(story, { voiceId: voiceIdRef.current, realById, shadowById, namedById, attackById });
+        const upload = existing ? uploadForPlaylist(built.upload, existing.cardId, "replace") : built.upload;
         return newSend({
           title: story.title,
           // The cover shows the adventure's place and the child's partner. Its other Pokémon may be secrets.
           current: {
-            ...pendingPlaylist(built.card, built.upload, story.title),
+            ...pendingPlaylist(built.card, upload, story.title),
             coverId: undefined,
             coverHidden: undefined,
             coverCard: adventureCoverCard(story, favourites[0]),
           },
           finish: {
-            detail: `${story.title} is in your Yoto library.`,
+            detail: existing
+              ? `${story.title} on your Yoto now plays this new adventure.`
+              : `${story.title} is in your Yoto library.`,
             toastTitle: story.title,
-            updated: false,
+            updated: Boolean(existing),
             tracks: storyTrackCount(story),
           },
         });
