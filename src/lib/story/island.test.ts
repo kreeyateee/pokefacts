@@ -86,6 +86,9 @@ describe("Island Adventure", () => {
     for (const seed of [...SEEDS, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]) {
       assert.deepEqual(pacingProblems(islandAdventure({ seed, owner: "Mia" })), [], `seed ${seed}`);
       assert.deepEqual(pacingProblems(islandAdventure({ seed, partner: { id: 25, name: "Pikachu" } })), [], `seed ${seed} with a partner`);
+      for (const [owner, id, name] of [["Maximilian", 150, "Mewtwo"], ["Alexandria", 143, "Snorlax"]] as const) {
+        assert.deepEqual(pacingProblems(islandAdventure({ seed, owner, partner: { id, name } })), [], `seed ${seed}, ${owner} and ${name}`);
+      }
     }
   });
 

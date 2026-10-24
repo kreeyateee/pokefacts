@@ -605,8 +605,9 @@ function stopWords(stop: SafariStop, number: number, plan: SafariPlan, words: De
   const notes = notesOf(mon);
   const right = throwFor(mon);
   const barnaby = plan.barnaby.includes(number) ? words.barnaby() : "";
-  // Barnaby turning up opens the stop on his own. A spot stop starts right where the Pokémon are.
-  const opening = barnaby || (stop.kind === "area" ? opener(number, words) : "");
+  // Barnaby turning up opens an area stop on his own. A spot stop starts right where the Pokémon are, with
+  // no room for him: two Pokémon and the tell are plenty to listen to.
+  const opening = stop.kind === "area" ? barnaby || opener(number, words) : "";
   const rule = words.rule();
   const fled = join(words.fled[`${stop.wrongThrow}-${right}` as W.WrongThrow]());
   const fledReveal = join(revealed(mon, false), words.rightThrow[right]());

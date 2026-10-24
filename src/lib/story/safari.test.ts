@@ -500,6 +500,9 @@ describe("safari adventure from the catalogue", () => {
     for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
       assert.deepEqual(pacingProblems(safariAdventure({ seed, owner: "Mia" })), [], `seed ${seed}`);
       assert.deepEqual(pacingProblems(safariAdventure({ seed, owner: "Mia", partner: { id: 25, name: "Pikachu" } })), [], `seed ${seed} with a partner`);
+      for (const [owner, id, name] of [["Maximilian", 150, "Mewtwo"], ["Alexandria", 143, "Snorlax"]] as const) {
+        assert.deepEqual(pacingProblems(safariAdventure({ seed, owner, partner: { id, name } })), [], `seed ${seed}, ${owner} and ${name}`);
+      }
     }
     const graph = safariAdventure({ seed: 1 });
     assert.equal(graph.pieces, "sentences");

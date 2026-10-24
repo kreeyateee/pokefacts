@@ -293,10 +293,10 @@ export const BARNABY_LINES = [
 
 /** The end of an area stop's clue, just before the choice. */
 export const WHERE_LINES = [
-  "Marigold raises an eyebrow at you. 'So. Where would a {type} type go?'",
-  "'Two ways it could have gone,' says Marigold. 'Which one would a {type} type pick?'",
-  "Marigold folds her arms. 'You tell me. Where does a {type} type like to live?'",
-  "'{whispers} Think like a {type} type,' whispers Marigold. 'Where would you be?'",
+  "'So,' says Marigold. 'Where would a {type} type go?'",
+  "'Which way would a {type} type pick?' says Marigold.",
+  "'You tell me,' says Marigold. 'Where does a {type} type live?'",
+  "'{whispers} Think like a {type} type,' whispers Marigold.",
 ];
 
 /** A spot stop: two Pokémon, and only one is rare. The cry plays first. */
@@ -444,8 +444,8 @@ export const GONE_LINES = [
 
 export const HOME_LINES = [
   "'{type} types love {home},' says Marigold. '{Decoy}? Hardly ever.'",
-  "Marigold taps her nose. '{type} type? You want {home}. Not {decoy}.'",
-  "'A {type} type, {decoyAt}?' says Marigold, kindly. 'No. {Home}, every time.'",
+  "'{type} type? You want {home},' says Marigold. 'Not {decoy}.'",
+  "'A {type} type, {decoyAt}?' says Marigold. 'No. {Home}.'",
 ];
 
 /** At a spot stop, after creeping up on the common one. {colour} is the one you picked. */
