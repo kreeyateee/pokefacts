@@ -275,8 +275,9 @@ function uploadNamedIcon(name: string): Promise<string> {
   return uploadIconFrom(`/api/yoto/icon?name=${encodeURIComponent(name)}`);
 }
 
-function uploadIcon(id: number, shadow = false): Promise<string> {
-  return uploadIconFrom(`/api/yoto/icon?id=${id}${shadow ? "&shadow=1" : ""}`);
+/** A Pokémon's 16×16 icon, its shadow, or in a battle story its little battle animation. */
+function uploadIcon(id: number, shadow = false, battle = false): Promise<string> {
+  return uploadIconFrom(`/api/yoto/icon?id=${id}${shadow ? "&shadow=1" : battle ? "&battle=1" : ""}`);
 }
 
 async function uploadIconFrom(path: string): Promise<string> {
@@ -2165,7 +2166,7 @@ export function Studio({
         for (const name of pixels.named) namedById[name] = await uploadNamedIcon(name);
         let finished = 0;
         await mapPool(pictures, async ({ id, shadow }) => {
-          (shadow ? shadowById : realById)[id] = await uploadIcon(id, shadow);
+          (shadow ? shadowById : realById)[id] = await uploadIcon(id, shadow, Boolean(story.battles));
           finished += 1;
           setJob({
             status: "sending",

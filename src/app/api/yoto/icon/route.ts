@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { getAlternateForm } from "@/lib/catalogue-db";
 import { isStoryPixel, STORY_PIXELS } from "@/lib/story/pokeball";
+import { ensureBattlePixel } from "@/lib/battle-pixel";
 import { ensureFormPixel } from "@/lib/form-pixel";
 import { paintColourPixel, paintShadowPixel } from "@/lib/pixel-scale";
 import { safeHttpStatus, yotoUpstreamFailure } from "@/lib/yoto-error";
@@ -52,6 +53,14 @@ export async function POST(request: Request) {
   }
   const id = params.get("id") ?? "";
   const shadow = params.get("shadow") === "1";
+  // In a battle story, a Pokémon's icon is its little battle animation.
+  if (params.get("battle") === "1" && !shadow && /^[1-9]\d{0,3}$/.test(id) && Number(id) <= 1025) {
+    try {
+      return uploadDisplayIcon(token, await ensureBattlePixel(Number(id)), `pokefacts-battle-${id}`);
+    } catch {
+      return jsonError("That battle picture could not be made.");
+    }
+  }
   const file = pixelFile(id, shadow);
   const form = file ? null : getAlternateForm(Number(id));
   if (!file && !form) return jsonError("That picture is not a national Pokédex icon.");

@@ -1,0 +1,156 @@
+import { spawn } from "node:child_process";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+
+import { ffmpegCommand } from "@/lib/ffmpeg-bin";
+
+/**
+ * A Pokémon's 16×16 icon as a little battle animation for the Yoto screen, looping while the track
+ * plays: an idle bounce, a lunge forward to attack, then a white flash and a shake as it takes a hit.
+ * Made from the crisp pixel icon the cards already use, so it stays sharp on the player's LEDs.
+ */
+
+export const SIZE = 16;
+/** Frames a second in the GIF. */
+export const BATTLE_FPS = 10;
+
+/** One 16×16 RGBA frame. */
+export type Frame = Uint8Array;
+
+/** The frame moved `dx` right and `dy` down, with clear pixels where it moved from. */
+export function shifted(frame: Frame, dx: number, dy: number): Frame {
+  const out = new Uint8Array(SIZE * SIZE * 4);
+  for (let y = 0; y < SIZE; y += 1) {
+    for (let x = 0; x < SIZE; x += 1) {
+      const fromX = x - dx;
+      const fromY = y - dy;
+      if (fromX < 0 || fromY < 0 || fromX >= SIZE || fromY >= SIZE) continue;
+      const from = (fromY * SIZE + fromX) * 4;
+      out.set(frame.subarray(from, from + 4), (y * SIZE + x) * 4);
+    }
+  }
+  return out;
+}
+
+/** The frame washed towards white, as a Pokémon flashes when it is hit. Clear pixels stay clear. */
+export function flashed(frame: Frame, amount = 0.65): Frame {
+  const out = new Uint8Array(frame);
+  for (let at = 0; at < out.length; at += 4) {
+    if ((out[at + 3] ?? 0) < 128) continue;
+    for (let channel = 0; channel < 3; channel += 1) {
+      const value = out[at + channel] ?? 0;
+      out[at + channel] = Math.round(value + (255 - value) * amount);
+    }
+  }
+  return out;
+}
+
+/** The whole loop, about three seconds at BATTLE_FPS. */
+export function battleFrames(icon: Frame): Frame[] {
+  const still = icon;
+  const up = shifted(icon, 0, -1);
+  const hold = (frame: Frame, count: number) => Array.from({ length: count }, () => frame);
+  return [
+    // Ready: a bounce on the spot.
+    ...hold(still, 3),
+    ...hold(up, 3),
+    ...hold(still, 3),
+    ...hold(up, 3),
+    // Attack: a quick lunge forward and back.
+    shifted(icon, 1, 0),
+    ...hold(shifted(icon, 2, 0), 2),
+    shifted(icon, 1, 0),
+    ...hold(still, 4),
+    // Hit: two white flashes and a shake.
+    flashed(icon),
+    still,
+    flashed(icon),
+    shifted(icon, -1, 0),
+    shifted(icon, 1, 0),
+    still,
+    ...hold(still, 4),
+  ];
+}
+
+/** Runs ffmpeg with `input` on stdin and returns what it writes to stdout. */
+function ffmpeg(args: string[], input: Buffer): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(ffmpegCommand(), args, { windowsHide: true });
+    const chunks: Buffer[] = [];
+    const errors: Buffer[] = [];
+    child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
+    child.stderr.on("data", (chunk: Buffer) => errors.push(chunk));
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) resolve(Buffer.concat(chunks));
+      else reject(new Error(`ffmpeg could not make the picture: ${Buffer.concat(errors).toString().slice(-200)}`));
+    });
+    child.stdin.end(input);
+  });
+}
+
+/** The icon PNG as raw 16×16 RGBA. */
+async function decodeIcon(png: Buffer): Promise<Frame> {
+  const raw = await ffmpeg(
+    ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-vf", `scale=${SIZE}:${SIZE}:flags=neighbor`, "-f", "rawvideo", "-pix_fmt", "rgba", "pipe:1"],
+    png,
+  );
+  if (raw.length !== SIZE * SIZE * 4) throw new Error("The icon is not 16 by 16.");
+  return new Uint8Array(raw);
+}
+
+/** Frames as a looping GIF with a clear background, as Yoto takes it with autoConvert off. */
+async function encodeGif(frames: Frame[]): Promise<Buffer> {
+  return ffmpeg(
+    [
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-f",
+      "rawvideo",
+      "-pix_fmt",
+      "rgba",
+      "-s",
+      `${SIZE}x${SIZE}`,
+      "-r",
+      String(BATTLE_FPS),
+      "-i",
+      "pipe:0",
+      "-vf",
+      "split[a][b];[a]palettegen=max_colors=32:reserve_transparent=1:stats_mode=full[p];[b][p]paletteuse=dither=none:alpha_threshold=128",
+      "-loop",
+      "0",
+      "-f",
+      "gif",
+      "pipe:1",
+    ],
+    Buffer.concat(frames.map((frame) => Buffer.from(frame))),
+  );
+}
+
+const CACHE = path.join(/* turbopackIgnore: true */ process.cwd(), "data", "battle-pixels");
+const making = new Map<number, Promise<Buffer>>();
+
+/** A species' animated battle icon, made from its pixel icon once and kept. */
+export function ensureBattlePixel(id: number, cacheDir = CACHE): Promise<Buffer> {
+  if (!Number.isInteger(id) || id < 1 || id > 1025) return Promise.reject(new Error("That is not a national Pokédex number."));
+  let job = making.get(id);
+  if (!job) {
+    job = (async () => {
+      const file = path.join(/* turbopackIgnore: true */ cacheDir, `${id}.gif`);
+      try {
+        const cached = await readFile(file);
+        if (cached.subarray(0, 4).toString("ascii") === "GIF8") return cached;
+      } catch {
+        // Not made yet.
+      }
+      const icon = await readFile(path.join(/* turbopackIgnore: true */ process.cwd(), "public", "pixels", `${id}.png`));
+      const gif = await encodeGif(battleFrames(await decodeIcon(icon)));
+      await mkdir(cacheDir, { recursive: true });
+      await writeFile(file, gif);
+      return gif;
+    })().finally(() => making.delete(id));
+    making.set(id, job);
+  }
+  return job;
+}
