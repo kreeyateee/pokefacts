@@ -6,7 +6,7 @@ import { ffmpegCommand } from "@/lib/ffmpeg-bin";
 
 /**
  * A Pokémon's 16×16 icon as a little battle animation for the Yoto screen, looping while the track
- * plays: an idle bounce, a lunge forward to attack, then a white flash and a shake as it takes a hit.
+ * plays: an idle bounce, then a wind-up and a lunge forward to attack. Other cards get a calm bob.
  * Made from the crisp pixel icon the cards already use, so it stays sharp on the player's LEDs.
  */
 
@@ -32,20 +32,16 @@ export function shifted(frame: Frame, dx: number, dy: number): Frame {
   return out;
 }
 
-/** The frame washed towards white, as a Pokémon flashes when it is hit. Clear pixels stay clear. */
-export function flashed(frame: Frame, amount = 0.65): Frame {
-  const out = new Uint8Array(frame);
-  for (let at = 0; at < out.length; at += 4) {
-    if ((out[at + 3] ?? 0) < 128) continue;
-    for (let channel = 0; channel < 3; channel += 1) {
-      const value = out[at + channel] ?? 0;
-      out[at + channel] = Math.round(value + (255 - value) * amount);
-    }
-  }
-  return out;
+/**
+ * A calm loop for cards that are not battles: the Pokémon just bobs gently on the spot now and then.
+ */
+export function idleFrames(icon: Frame): Frame[] {
+  const up = shifted(icon, 0, -1);
+  const hold = (frame: Frame, count: number) => Array.from({ length: count }, () => frame);
+  return [...hold(icon, 12), ...hold(up, 4), ...hold(icon, 4), ...hold(up, 4), ...hold(icon, 6)];
 }
 
-/** The whole loop, about three seconds at BATTLE_FPS. */
+/** The whole battle loop, about three seconds at BATTLE_FPS. */
 export function battleFrames(icon: Frame): Frame[] {
   const still = icon;
   const up = shifted(icon, 0, -1);
@@ -56,19 +52,12 @@ export function battleFrames(icon: Frame): Frame[] {
     ...hold(up, 3),
     ...hold(still, 3),
     ...hold(up, 3),
-    // Attack: a quick lunge forward and back.
+    // Attack: a wind-up, a quick lunge forward, and back. It never flashes as if hit: it's the one attacking.
+    ...hold(shifted(icon, -1, 0), 2),
     shifted(icon, 1, 0),
     ...hold(shifted(icon, 2, 0), 2),
     shifted(icon, 1, 0),
-    ...hold(still, 4),
-    // Hit: two white flashes and a shake.
-    flashed(icon),
-    still,
-    flashed(icon),
-    shifted(icon, -1, 0),
-    shifted(icon, 1, 0),
-    still,
-    ...hold(still, 4),
+    ...hold(still, 8),
   ];
 }
 
@@ -99,7 +88,20 @@ async function decodeIcon(png: Buffer): Promise<Frame> {
   return new Uint8Array(raw);
 }
 
-/** Frames as a looping GIF with a clear background, as Yoto takes it with autoConvert off. */
+/**
+ * Clear pixels made black. Yoto ignores GIF transparency and lights up the hidden "clear" colour
+ * (bright green), but a black pixel is an LED left off, so black looks clear on the player.
+ */
+export function onBlack(frame: Frame): Frame {
+  const out = new Uint8Array(frame);
+  for (let at = 0; at < out.length; at += 4) {
+    if ((out[at + 3] ?? 0) < 128) out.set([0, 0, 0, 255], at);
+    else out[at + 3] = 255;
+  }
+  return out;
+}
+
+/** Frames as a looping GIF on black, as Yoto takes it with autoConvert off. */
 async function encodeGif(frames: Frame[]): Promise<Buffer> {
   return ffmpeg(
     [
@@ -117,27 +119,31 @@ async function encodeGif(frames: Frame[]): Promise<Buffer> {
       "-i",
       "pipe:0",
       "-vf",
-      "split[a][b];[a]palettegen=max_colors=32:reserve_transparent=1:stats_mode=full[p];[b][p]paletteuse=dither=none:alpha_threshold=128",
+      "split[a][b];[a]palettegen=max_colors=32:reserve_transparent=0:stats_mode=full[p];[b][p]paletteuse=dither=none",
       "-loop",
       "0",
       "-f",
       "gif",
       "pipe:1",
     ],
-    Buffer.concat(frames.map((frame) => Buffer.from(frame))),
+    Buffer.concat(frames.map((frame) => Buffer.from(onBlack(frame)))),
   );
 }
 
-const CACHE = path.join(/* turbopackIgnore: true */ process.cwd(), "data", "battle-pixels");
-const making = new Map<number, Promise<Buffer>>();
+/** v2: on black. The first ones were clear, which Yoto shows as bright green. */
+const CACHE = path.join(/* turbopackIgnore: true */ process.cwd(), "data", "animated-pixels-v2");
+const making = new Map<string, Promise<Buffer>>();
 
-/** A species' animated battle icon, made from its pixel icon once and kept. */
-export function ensureBattlePixel(id: number, cacheDir = CACHE): Promise<Buffer> {
+export type PixelMotion = "battle" | "idle";
+
+/** A species' animated icon, made from its pixel icon once and kept: a battle loop, or a calm bob. */
+export function ensureBattlePixel(id: number, cacheDir = CACHE, motion: PixelMotion = "battle"): Promise<Buffer> {
   if (!Number.isInteger(id) || id < 1 || id > 1025) return Promise.reject(new Error("That is not a national Pokédex number."));
-  let job = making.get(id);
+  const key = `${motion}:${cacheDir}:${id}`;
+  let job = making.get(key);
   if (!job) {
     job = (async () => {
-      const file = path.join(/* turbopackIgnore: true */ cacheDir, `${id}.gif`);
+      const file = path.join(/* turbopackIgnore: true */ cacheDir, `${motion}-${id}.gif`);
       try {
         const cached = await readFile(file);
         if (cached.subarray(0, 4).toString("ascii") === "GIF8") return cached;
@@ -145,12 +151,13 @@ export function ensureBattlePixel(id: number, cacheDir = CACHE): Promise<Buffer>
         // Not made yet.
       }
       const icon = await readFile(path.join(/* turbopackIgnore: true */ process.cwd(), "public", "pixels", `${id}.png`));
-      const gif = await encodeGif(battleFrames(await decodeIcon(icon)));
+      const frames = motion === "battle" ? battleFrames : idleFrames;
+      const gif = await encodeGif(frames(await decodeIcon(icon)));
       await mkdir(cacheDir, { recursive: true });
       await writeFile(file, gif);
       return gif;
-    })().finally(() => making.delete(id));
-    making.set(id, job);
+    })().finally(() => making.delete(key));
+    making.set(key, job);
   }
   return job;
 }

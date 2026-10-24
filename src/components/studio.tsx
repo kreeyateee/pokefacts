@@ -161,6 +161,19 @@ import {
 
 const SAVED_CARDS = "champdex.kidCards";
 
+/** What a send was asked for with: the voice, the playlist to add to, how a name clash is settled, playback. */
+type SendChoices = { voiceId: string; targetPlaylist: string; nameClash: NameClash; playback: PlaybackSettings };
+
+/** A send waiting its turn: what it is called, how to start it, and the choices it was queued with. */
+type QueuedSend = { id: number; title: string; start: () => unknown; choices: SendChoices };
+
+/** "2nd", "3rd", "4th" in line. */
+function ordinal(place: number): string {
+  const tens = place % 100;
+  if (tens >= 11 && tens <= 13) return `${place}th`;
+  return `${place}${["th", "st", "nd", "rd"][place % 10] ?? "th"}`;
+}
+
 type SavedCards = Partial<Record<string, string>>;
 
 type JobView = {
@@ -275,11 +288,12 @@ function uploadNamedIcon(name: string): Promise<string> {
   return uploadIconFrom(`/api/yoto/icon?name=${encodeURIComponent(name)}`);
 }
 
-/** A Pokémon's 16×16 icon for the player: its little battle animation, or its still shadow for Who's That. */
-function uploadIcon(id: number, shadow = false): Promise<string> {
-  // Every Pokémon moves on the player: its icon is the little battle animation. A Who's That shadow stays
-  // still, and a special form keeps its still icon (the server only animates national Pokédex numbers).
-  return uploadIconFrom(`/api/yoto/icon?id=${id}${shadow ? "&shadow=1" : "&battle=1"}`);
+/**
+ * A Pokémon's 16×16 icon for the player. It moves: a battle loop in a battle story, a calm bob on every
+ * other card. A Who's That shadow stays still, and a special form keeps its still icon.
+ */
+function uploadIcon(id: number, shadow = false, battle = false): Promise<string> {
+  return uploadIconFrom(`/api/yoto/icon?id=${id}${shadow ? "&shadow=1" : battle ? "&battle=1" : "&move=1"}`);
 }
 
 async function uploadIconFrom(path: string): Promise<string> {
@@ -740,11 +754,21 @@ export function Studio({
   const voiceIdRef = useRef(voiceId);
   const targetPlaylistRef = useRef(targetPlaylist);
   const playbackRef = useRef(playback);
-  voiceIdRef.current = voiceId;
-  targetPlaylistRef.current = targetPlaylist;
   const nameClashRef = useRef(nameClash);
-  nameClashRef.current = nameClash;
-  playbackRef.current = playback;
+  // A queued send runs with the choices it was queued with, not whatever is picked by the time it starts.
+  const queuedChoices = useRef<SendChoices | null>(null);
+  voiceIdRef.current = queuedChoices.current?.voiceId ?? voiceId;
+  targetPlaylistRef.current = queuedChoices.current?.targetPlaylist ?? targetPlaylist;
+  nameClashRef.current = queuedChoices.current?.nameClash ?? nameClash;
+  playbackRef.current = queuedChoices.current?.playback ?? playback;
+  // Sends waiting behind the one recording now, in order.
+  const sendQueue = useRef<QueuedSend[]>([]);
+  const [queued, setQueued] = useState<Array<{ id: number; title: string }>>([]);
+  const [queuePaused, setQueuePaused] = useState(false);
+  const queueRunning = useRef(false);
+  const queueHeld = useRef(false);
+  const queueIds = useRef(0);
+  const [, setChoicesBack] = useState(0);
 
   const cardId = kind === "meet" ? factsId : guessId;
   const playlistCard =
