@@ -258,8 +258,7 @@ async function piperDemo(
  */
 /** True when a Yoto-voice line is already recorded, in the shared speech folder or Hear's old one. */
 async function hasRecording(part: { text: string; voiceId: string }, options: DemoOptions): Promise<boolean> {
-  const name = `${sha256(Buffer.from(`${part.voiceId}
-${part.text}`))}.mp3`;
+  const name = `${sha256(Buffer.from(`${part.voiceId}\n${part.text}`))}.mp3`;
   for (const dir of options.speech ? [options.speech] : [SPEECH_ROOT, DEMO_ROOT]) {
     try {
       await access(path.join(/* turbopackIgnore: true */ dir, name));

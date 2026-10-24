@@ -82,7 +82,10 @@ describe("fact pieces", () => {
     const read = readTrackParts(voiced);
     assert.ok(read);
     const second = read[1];
-    assert.ok(second && "text" in second && second.saved);
+    assert.ok(second && "text" in second);
+    // The older script comes through the server's reader word for word.
+    assert.equal(second.saved, (voiced[1] as { saved: string }).saved);
+    assert.match(second.saved ?? "", /stores electricity/);
   });
 
   it("use an older recording of the reading instead of recording it again", async () => {

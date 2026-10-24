@@ -291,18 +291,42 @@ function withTagsAttached(pieces: Array<{ text: string; slot: boolean }>): Array
   return out.length > 0 ? out : pieces;
 }
 
+/** Full stops that do not end a sentence: "Mr. Mime", "Mime Jr.", "No. 25", an initial. */
+const NOT_AN_END = /(?:\b(?:Mr|Mrs|Ms|Jr|Sr|Dr|Prof|St|vs|etc|No)|\b[A-Z])\.$/;
+
+/**
+ * A line cut into its sentences. Recorded one sentence at a time, the sentences that are the same on
+ * every card are reused, and only the ones that change (a Pokémon's name or its facts) are new, instead
+ * of the whole line. An expression tag stays with the sentence it starts.
+ */
+export function sentencePieces(text: string): string[] {
+  const pieces: string[] = [];
+  let at = 0;
+  for (const match of text.matchAll(/([.!?…]+["'’”)]?)(\s+)(?=[{"'‘“(]?[A-Z0-9{])/g)) {
+    const end = (match.index ?? 0) + (match[1]?.length ?? 0);
+    if (NOT_AN_END.test(text.slice(Math.max(0, end - 6), end))) continue;
+    const piece = text.slice(at, end).trim();
+    if (piece) pieces.push(piece);
+    at = end + (match[2]?.length ?? 0);
+  }
+  const rest = text.slice(at).trim();
+  if (rest) pieces.push(rest);
+  return pieces.length > 0 ? pieces : [text];
+}
+
 /**
  * What to record for one track: each line in its speaker's voice, and each sound, in order.
  * `say` respells names for the voice. Names listed in `slots` are recorded as their own short pieces,
  * joined tight to the words around them. Each spoken part carries its Piper fallback when `fallback`
- * is given. Returns null when the track is one plain narrator line, so it records as it did before voices.
+ * is given. With `sentences`, each line is recorded a sentence at a time (see sentencePieces).
+ * Returns null when the track is one plain narrator line, so it records as it did before voices.
  */
 export function trackParts(
   text: string,
   voices: Record<string, VoiceStyle>,
   cast: readonly StoryCharacter[],
   say: (words: string) => string = (words) => words,
-  options: { slots?: readonly string[]; fallback?: Record<string, VoiceStyle> } = {},
+  options: { slots?: readonly string[]; fallback?: Record<string, VoiceStyle>; sentences?: boolean } = {},
 ): TrackPart[] | null {
   const lines = speakerLines(text, cast);
   const narrator = voices[NARRATOR] as VoiceStyle;
@@ -318,14 +342,17 @@ export function trackParts(
     }
     const style = voices[line.speaker] ?? narrator;
     const backup = options.fallback?.[line.speaker] ?? options.fallback?.[NARRATOR];
-    withTagsAttached(slotPieces(line.text, options.slots ?? [])).forEach((piece, index) => {
-      parts.push({
-        text: say(piece.text),
-        ...style,
-        ...(index > 0 ? { tight: true } : {}),
-        ...(backup && backup.voiceId !== style.voiceId ? { fallback: backup } : {}),
+    for (const sentence of options.sentences ? sentencePieces(line.text) : [line.text]) {
+      // A name cut out of a sentence joins it tight; a new sentence keeps the usual pause.
+      withTagsAttached(slotPieces(sentence, options.slots ?? [])).forEach((piece, index) => {
+        parts.push({
+          text: say(piece.text),
+          ...style,
+          ...(index > 0 ? { tight: true } : {}),
+          ...(backup && backup.voiceId !== style.voiceId ? { fallback: backup } : {}),
+        });
       });
-    });
+    }
   }
   const only = parts[0];
   const plain =
@@ -377,7 +404,7 @@ export function readTrackParts(value: unknown): TrackPart[] | null {
       if (!backup || !isPiperVoice(backup.voiceId)) return null;
       fallback = backup;
     }
-    const saved = typeof row.saved === "string" ? row.saved.replace(/s+/g, " ").trim() : "";
+    const saved = typeof row.saved === "string" ? row.saved.replace(/\s+/g, " ").trim() : "";
     if (saved.length > TEXT_LIMIT) return null;
     parts.push({
       text,
