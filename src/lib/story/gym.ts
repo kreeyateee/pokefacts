@@ -409,7 +409,13 @@ export function buildGym(plan: GymPlan): StoryGraph {
       icon: picture(ace.foe),
       questionIcon: POKEBALL,
       bed: { ...bed, music: "tense" },
-      text: join(winText(first, words), gym.ace, sendOutText(ace.foe, words)),
+      // Ronnie tells a joke while two of the leaders fetch their ace: it lands right before a question.
+      text: join(
+        winText(first, words),
+        number === 2 || number === 6 ? toldBy("Ronnie", jokes[number === 2 ? 0 : 1] as Joke) : "",
+        gym.ace,
+        sendOutText(ace.foe, words),
+      ),
       ...sides(ace, id("c"), id("n")),
     });
     nodes.push({
@@ -432,8 +438,8 @@ export function buildGym(plan: GymPlan): StoryGraph {
         winText(ace, words),
         gym.farewell,
         fill(words.badge(), { count: W.badgeCount(number) }),
-        // Ronnie celebrates two of the badges with a joke.
-        number === 2 || number === 6 ? toldBy("Ronnie", jokes[number === 2 ? 0 : 1] as Joke) : "",
+        // Halfway, a chance to stop: a Yoto card picks up where it stopped for 30 days.
+        number === 4 ? W.HALFWAY : "",
       ),
       next,
     });
@@ -530,6 +536,8 @@ export function buildGym(plan: GymPlan): StoryGraph {
     nodes,
     cast: cast(),
     slots: plan.owner ? [plan.owner] : [],
+    // Each sentence is recorded on its own, so a new team only records the sentences that name it.
+    pieces: "sentences",
   };
 }
 

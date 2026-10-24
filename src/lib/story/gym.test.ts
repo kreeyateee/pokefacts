@@ -6,6 +6,7 @@ import { effectiveness, type PokemonType } from "../type-chart";
 import { buildGym, gymAdventure, judge, loadBattlePool, planGym } from "./gym";
 import { GYMS, LEGENDS, TEAM_TYPES } from "./gym-words";
 import { checkStory, storyTrackCount } from "./story-check";
+import { pacingProblems } from "./story-metrics";
 import type { StoryGraph, StoryNode } from "./story-graph";
 import { CRY_CUE, withoutCues } from "./story-sound";
 import { speakerLines } from "./story-voices";
@@ -36,6 +37,19 @@ describe("Gym Challenge", () => {
       assert.ok(tracks <= 100, `seed ${seed} uses ${tracks} tracks`);
       assert.equal(graph.nodes.filter((each) => each.kind === "ending").length, 5);
     }
+  });
+
+  it("keeps a child pressing buttons, records a sentence at a time, and offers a place to stop halfway", () => {
+    for (const seed of SEEDS) {
+      assert.deepEqual(pacingProblems(gymAdventure({ seed, owner: "Mia" })), [], `seed ${seed}`);
+      assert.deepEqual(pacingProblems(gymAdventure({ seed, owner: "Mia", partner: { id: 25, name: "Pikachu" } })), [], `seed ${seed} with a partner`);
+    }
+    const graph = gymAdventure({ seed: 1 });
+    assert.equal(graph.pieces, "sentences");
+    assert.match(graph.nodes.find((node) => node.id === "g4c")?.text ?? "", /good place to stop/);
+    // Ronnie's jokes come just before a question, while a leader fetches the ace.
+    const jokes = graph.nodes.filter((node) => node.text.includes("Want to hear a joke?"));
+    assert.deepEqual(jokes.map((node) => node.id).sort(), ["g2b", "g6b"]);
   });
 
   it("is the same for one seed and different across seeds", () => {
