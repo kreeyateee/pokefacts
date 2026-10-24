@@ -79,4 +79,9 @@ export type StoryGraph = {
    * recorded as its own short clip, so the wording around it is the same every time and can be reused.
    */
   slots?: string[];
+  /**
+   * How lines are cut for recording. "sentences" records each sentence on its own, so a story whose
+   * Pokémon change on every send reuses every sentence that stays the same. Lines by default.
+   */
+  pieces?: "lines" | "sentences";
 };

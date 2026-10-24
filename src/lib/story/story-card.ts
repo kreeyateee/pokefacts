@@ -155,6 +155,8 @@ type Voicing = {
   cast: readonly StoryCharacter[];
   slots: readonly string[];
   fallback: Record<string, VoiceStyle>;
+  /** Record a sentence at a time (StoryGraph.pieces). */
+  sentences: boolean;
 };
 
 /**
@@ -180,6 +182,7 @@ function storyTrack(
   const parts: TrackPart[] = trackParts(text, voicing.voices, voicing.cast, pronounce, {
     slots: voicing.slots,
     fallback: voicing.fallback,
+    sentences: voicing.sentences,
   }) ?? [{ text: spoken, ...narrator, ...(backup && backup.voiceId !== narrator.voiceId ? { fallback: backup } : {}) }];
   return {
     key,
@@ -246,6 +249,7 @@ export function storyCard(
     cast,
     slots: graph.slots ?? [],
     fallback: fallbackVoices(cast),
+    sentences: graph.pieces === "sentences",
   };
   const endings = endingCount(graph);
   const nodes = chapterOrder(graph);
