@@ -14,8 +14,8 @@ describe("demos", () => {
     }
   });
 
-  it("has 19 bird tracks and 10 Pokémon tracks", () => {
-    assert.equal(findDemo("animalia-birds")?.tracks.length, 19);
+  it("has 18 bird tracks and 10 Pokémon tracks", () => {
+    assert.equal(findDemo("animalia-birds")?.tracks.length, 18);
     assert.equal(findDemo("pokefacts")?.tracks.length, 10);
   });
 

@@ -19,7 +19,7 @@ export type Demo = {
 };
 
 const BIRDS_QUICK = ["Robin", "Sparrow", "Blackbird", "Magpie", "Crow", "Pigeon", "Gull", "Mallard", "Swan", "Penguin"];
-const BIRDS_GUESS = ["Blackbird", "Pigeon", "Swan", "Eagle", "Flamingo", "Woodpecker", "Albatross", "Swallow", "Cuckoo"];
+const BIRDS_GUESS = ["Blackbird", "Pigeon", "Swan", "Eagle", "Flamingo", "Woodpecker", "Swallow", "Cuckoo"];
 const POKE_QUICK = ["Bulbasaur", "Charmander", "Squirtle", "Pikachu", "Meowth"];
 const POKE_GUESS = ["Charizard", "Blastoise", "Pidgey", "Clefairy", "Jigglypuff"];
 
@@ -36,7 +36,7 @@ export const DEMOS: readonly Demo[] = [
     slug: "animalia-birds",
     title: "Animalia bird demo",
     blurb:
-      "Nineteen bird tracks read by Sarah, a Yoto voice: ten Quick Facts, then nine Who's That riddles. Each one starts with the bird's real call. In a riddle, shout your guess before the answer plays.",
+      "Eighteen bird tracks read by Sarah, a Yoto voice: ten Quick Facts, then eight Who's That riddles. Each one starts with the bird's real call. In a riddle, shout your guess before the answer plays.",
     tracks: [...numbered("quick", BIRDS_QUICK, "Quick Facts"), ...numbered("guess", BIRDS_GUESS, "Who's That")],
   },
   {
