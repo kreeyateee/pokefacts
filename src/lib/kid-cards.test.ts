@@ -21,6 +21,7 @@ import {
   countSpokenTracks,
   factPoolFromCards,
   factsBulkPlaylists,
+  factsIdOf,
   factsPlaylistUpload,
   formPlaylist,
   formPlaylists,
@@ -32,12 +33,14 @@ import {
   LILY_VOICE_ID,
   mulberry32,
   pokedexUpload,
+  quickFactsCard,
   POKEDEX_HOWTO,
   randomGuessCard,
   randomPokedexCard,
   speciesPlaylists,
   shadowPixelPath,
   YOTO_TRACK_LIMIT,
+  type KidCard,
 } from "./kid-cards";
 import { spokenWiki } from "./spoken-wiki";
 import type { BiologyBlock } from "./catalogue-types";
@@ -1818,5 +1821,30 @@ describe("voice and playlist build-up", () => {
     } finally {
       globalThis.fetch = original;
     }
+  });
+});
+
+describe("Quick Pokefacts", () => {
+  const facts = factsBulkPlaylists(kidCardsFromDex(listMonSheets()));
+
+  it("is each Facts playlist under its own name and id, so it never replaces the full card", () => {
+    const first = facts[0] as KidCard;
+    const quick = quickFactsCard(first);
+    assert.equal(quick.libraryTitle, "Quick Pokefacts 1");
+    assert.equal(quick.rangeLabel, "Quick Pokefacts 1 (1-99)");
+    assert.notEqual(quick.id, first.id);
+    assert.equal(factsIdOf(quick.id), first.id);
+    assert.equal(factsIdOf(first.id), first.id);
+    assert.equal(quickFactsCard(quick), quick, "twice is the same card");
+    assert.deepEqual(quick.chapters, first.chapters);
+    assert.equal(quickFactsCard(randomPokedexCard(factPoolFromCards(kidCardsFromDex(listMonSheets())), mulberry32(1))).libraryTitle, "Quick Pokefacts random");
+  });
+
+  it("records each track as its cry and quick facts only", () => {
+    const first = facts[0] as KidCard;
+    const spoken = applySpeciesSpeech(first, { 1: "A long reading." }, "quick");
+    const parts = spoken.chapters.find((chapter) => chapter.dexId === 1)?.tracks[0]?.parts ?? [];
+    assert.equal(parts.length, 1);
+    assert.match("text" in (parts[0] ?? {}) ? (parts[0] as { text: string }).text : "", /^Bulbasaur. The Seed Pokémon. Grass and Poison type./);
   });
 });

@@ -10,7 +10,8 @@ export type CollectionKind = Extract<
   "starter" | "joke" | "mega" | "gmax" | "alola" | "hisui" | "legendary" | "mythical"
 >;
 
-export type ReadyKind = "meet" | "guess" | CollectionKind;
+/** "quick" is the Facts playlists read short, Quick Pokefacts. Its cards are the Facts cards. */
+export type ReadyKind = "meet" | "quick" | "guess" | CollectionKind;
 
 export const SECTIONS: ReadonlyArray<{
   id: SectionId;
@@ -44,6 +45,7 @@ export const READY_CATEGORIES: ReadonlyArray<{
   label: string;
 }> = [
   { kind: "meet", label: "Facts" },
+  { kind: "quick", label: "Quick Pokefacts" },
   { kind: "guess", label: "Who's That" },
   ...COLLECTION_TABS.map((tab) => ({ kind: tab.kind, label: tab.label })),
 ];
@@ -52,14 +54,14 @@ export function isCollectionKind(kind: KidCardKind): kind is CollectionKind {
   return COLLECTION_TABS.some((tab) => tab.kind === kind);
 }
 
-export function isReadyKind(kind: KidCardKind): kind is ReadyKind {
+export function isReadyKind(kind: string): kind is ReadyKind {
   return READY_CATEGORIES.some((item) => item.kind === kind);
 }
 
 /** The open tab is kept per browser tab so a Yoto login redirect or a refresh comes back to it. */
 export const SAVED_TAB_KEY = "pokefacts.tab";
 
-export type SavedTab = { view: StudioView; kind: KidCardKind };
+export type SavedTab = { view: StudioView; kind: KidCardKind | ReadyKind };
 
 const STUDIO_VIEWS: readonly StudioView[] = ["cards", "catalogue", "setup", "music", "adventures", "printables"];
 
@@ -74,7 +76,7 @@ export function readSavedTab(raw: string | null): SavedTab | null {
   if (!value || typeof value !== "object") return null;
   const row = value as { view?: unknown; kind?: unknown };
   if (!STUDIO_VIEWS.includes(row.view as StudioView)) return null;
-  const kind = row.kind as KidCardKind;
+  const kind = typeof row.kind === "string" ? row.kind : "";
   return { view: row.view as StudioView, kind: isReadyKind(kind) ? kind : "meet" };
 }
 
@@ -94,7 +96,7 @@ export function viewForSection(section: Exclude<SectionId, "ready">): StudioView
 
 export function pageHeading(input: {
   view: StudioView;
-  kind: KidCardKind;
+  kind: KidCardKind | ReadyKind;
   libraryTitle?: string;
   randomFacts?: boolean;
 }): { title: string; blurb: string } {
@@ -126,6 +128,12 @@ export function pageHeading(input: {
     return {
       title: "Adventures",
       blurb: "Choose-your-own-adventure cards. Try one here, then send it to Yoto.",
+    };
+  }
+  if (input.kind === "quick") {
+    return {
+      title: "Quick Pokefacts",
+      blurb: "Short fact playlists: each Pokémon's cry, then its quick facts. Hear one, then send the list to Yoto.",
     };
   }
   if (input.kind === "guess") {

@@ -42,6 +42,8 @@ import {
 } from "@/lib/app-nav";
 import {
   applySpeciesSpeech,
+  factsIdOf,
+  quickFactsCard,
   bulkProgressLabel,
   chapterPictureId,
   coverArtworkId,
@@ -609,6 +611,7 @@ type PlaylistMap = Record<FormPlaylistKind | "legendary" | "mythical" | "starter
 function shelfPicturesFor(lists: PlaylistMap): Partial<Record<ReadyKind, ShelfPicture>> {
   const pictures: Partial<Record<ReadyKind, ShelfPicture>> = {
     meet: { src: artworkSrc(25), fallback: artworkApi("species", 25) },
+    quick: { src: artworkSrc(135), fallback: artworkApi("species", 135) },
     guess: { src: artworkSrc(133), fallback: artworkApi("species", 133), shadow: true },
   };
   for (const kind of Object.keys(lists) as Array<keyof PlaylistMap>) {
@@ -693,6 +696,8 @@ export function Studio({
   const [view, setView] = useState<StudioView>("cards");
   const [playback, setPlayback] = useState<PlaybackSettings>(defaultPlayback);
   const [kind, setKind] = useState<KidCardKind>("meet");
+  /** The Quick Pokefacts set is open: the Facts playlists, sent with their quick facts only. */
+  const [quickShelf, setQuickShelf] = useState(false);
   const [factsId, setFactsId] = useState(RANDOM_POKEDEX_ID);
   const [guessId, setGuessId] = useState(RANDOM_GUESS_ID);
   const [chapterKey, setChapterKey] = useState(randomCard.chapters[0]?.key ?? "start");
@@ -811,11 +816,12 @@ export function Studio({
   useEffect(() => {
     if (!tabRestored.current) return;
     try {
-      sessionStorage.setItem(SAVED_TAB_KEY, JSON.stringify({ view, kind } satisfies SavedTab));
+      const saved: SavedTab = { view, kind: quickShelf && kind === "meet" ? "quick" : kind };
+      sessionStorage.setItem(SAVED_TAB_KEY, JSON.stringify(saved));
     } catch {
       // Without sessionStorage a refresh opens Fact Cards, as before.
     }
-  }, [view, kind]);
+  }, [view, kind, quickShelf]);
 
   const factFallback = chapter ? chapterDexText(chapter) : "";
 
@@ -956,10 +962,21 @@ export function Studio({
   }
 
 
+  /** A playlist as the open set shows it: a Facts playlist on Quick Pokefacts is its Quick Pokefacts twin. */
+  function asShelved(item: KidCard): KidCard {
+    return quickShelf && item.kind === "meet" ? quickFactsCard(item) : item;
+  }
+
+  /** Open a set on the ready-made shelf. Quick Pokefacts shows the Facts playlists, sent short. */
+  function showReady(next: ReadyKind) {
+    setQuickShelf(next === "quick");
+    showKind(next === "quick" ? "meet" : next);
+  }
+
   function chooseSection(id: SectionId) {
     if (id === "ready") {
       // Back to the set that was open last.
-      showKind(isReadyKind(kind) ? kind : "meet");
+      showReady(quickShelf ? "quick" : isReadyKind(kind) ? kind : "meet");
       return;
     }
     stopDemo();
@@ -967,11 +984,12 @@ export function Studio({
   }
 
   function restoreTab(saved: SavedTab) {
-    if (saved.view === "cards") showKind(saved.kind);
+    if (saved.view === "cards") showReady(isReadyKind(saved.kind) ? saved.kind : "meet");
     else if (saved.view === "setup") chooseHelp();
     else {
       // Keep the ready-made set, so Ready-made opens on it again.
-      setKind(saved.kind);
+      setQuickShelf(saved.kind === "quick");
+      setKind(saved.kind === "quick" ? "meet" : saved.kind);
       setView(saved.view);
     }
   }
@@ -1753,13 +1771,15 @@ export function Studio({
 
   /** "Send all" reads and pictures each numbered playlist only when it is next. */
   async function prepareBulkPlaylist(id: string, bulk: PendingBulk, voiceId: string): Promise<PendingPlaylist> {
-    const playlist = factsPlaylists.find((item) => item.id === id);
+    const playlist = factsPlaylists.find((item) => item.id === factsIdOf(id));
     if (!playlist) throw new SendFailure("That Pokefacts playlist is not on this page any more.", false);
+    // Quick Pokefacts sends each playlist as its own card, read with its quick facts only.
+    const quick = id !== playlist.id;
     const index = bulk.total - bulk.remaining.length + 1;
     const headline = bulkProgressLabel(index, bulk.total);
     setJob({ status: "sending", detail: headline, done: index - 1, total: bulk.total });
     let dexNote = "";
-    const factLength = playbackRef.current.factLength;
+    const factLength = quick ? "quick" : playbackRef.current.factLength;
     // Quick facts alone need no Bulbapedia reading, so none is fetched.
     const readings =
       factLength === "quick"
@@ -1784,7 +1804,11 @@ export function Studio({
         total,
       });
     });
-    return pendingPlaylist(playlist, factsBulkUpload(spoken, pixels, voiceId), headline);
+    const upload = factsBulkUpload(spoken, pixels, voiceId);
+    // The spoken playlist, so each fact track is recorded in its pieces (quick facts, then the reading).
+    if (!quick) return pendingPlaylist(spoken, upload, headline);
+    const shelved = quickFactsCard(spoken);
+    return pendingPlaylist(shelved, retitledUpload(upload, shelved.libraryTitle), headline);
   }
 
   /** Work through the saved send until every playlist in it is in the Yoto library. */
@@ -1808,7 +1832,8 @@ export function Studio({
         throw new SendFailure(
           bulkFailureText({
             headline: bulkProgressLabel(index, bulk.total),
-            rangeLabel: current?.rangeLabel ?? factsPlaylists.find((item) => item.id === nextId)?.rangeLabel ?? "",
+            rangeLabel:
+              current?.rangeLabel ?? factsPlaylists.find((item) => item.id === factsIdOf(nextId ?? ""))?.rangeLabel ?? "",
             reason: failure.message,
             createdTitles: bulk.created,
             playlistIndex: index,
@@ -2045,17 +2070,20 @@ export function Studio({
   async function send() {
     if (!card || sendingRef.current) return;
     if (!(await connectedSession())) return;
+    // On Quick Pokefacts the Facts playlist goes as its own card, read with its quick facts only.
+    const sent = asShelved(card);
+    const quick = sent !== card;
     try {
-      await driveSend(card.libraryTitle, false, async () => {
-        setJob({ status: "sending", detail: `Sending ${card.rangeLabel} to Yoto…` });
-        const target = plannedTarget(card.libraryTitle);
+      await driveSend(sent.libraryTitle, false, async () => {
+        setJob({ status: "sending", detail: `Sending ${sent.rangeLabel} to Yoto…` });
+        const target = plannedTarget(sent.libraryTitle);
         if (target.cardId && target.mode === "append") await assertRoom(target.cardId, card.chapters);
         const formKind = isFormPlaylistKind(card.kind);
         let dexNote = "";
         let spokenCard = card;
         // Facts and species cards read Bulbapedia's description; the Joke Book reads its jokes.
         if (!formKind && card.kind !== "guess" && card.kind !== "joke") {
-          const factLength = playbackRef.current.factLength;
+          const factLength = quick ? "quick" : playbackRef.current.factLength;
           // Quick facts alone need no Bulbapedia reading, so none is fetched.
           const readings =
             factLength === "quick"
@@ -2097,12 +2125,12 @@ export function Studio({
         const upload = uploadForPlaylist({ ...named, voiceId: voiceIdRef.current }, target.cardId, target.mode);
         const done = finishCopy(
           target,
-          target.title === card.libraryTitle ? `${card.rangeLabel} is in your Yoto library.` : `${target.title} is in your Yoto library.`,
+          target.title === sent.libraryTitle ? `${sent.rangeLabel} is in your Yoto library.` : `${target.title} is in your Yoto library.`,
         );
         return newSend({
           title: target.title,
           // The spoken card, so each fact track is recorded in its pieces (quick facts, then the reading).
-          current: pendingPlaylist(readyForm, upload, target.title),
+          current: pendingPlaylist(quick ? quickFactsCard(readyForm) : readyForm, upload, target.title),
           finish: {
             detail: statusWithDexNote(done.line, dexNote),
             toastTitle: done.toast,
@@ -2169,16 +2197,19 @@ export function Studio({
     }
   }
 
-  async function sendAllFacts() {
+  /** Every numbered Facts playlist, each to its own card. `quick`: as Quick Pokefacts, with quick facts only. */
+  async function sendAllFacts(quick = false) {
     if (sendingRef.current) return;
     if (!(await connectedSession())) return;
+    const lists = quick ? factsPlaylists.map(quickFactsCard) : factsPlaylists;
+    const first = lists[0]?.libraryTitle ?? "Pokefacts 1";
     try {
-      await driveSend("Pokefacts 1", true, async () => {
-        for (const playlist of factsPlaylists) forgetCard(playlist.id);
+      await driveSend(first, true, async () => {
+        for (const playlist of lists) forgetCard(playlist.id);
         return newSend({
-          title: "Pokefacts 1",
+          title: first,
           bulk: {
-            remaining: factsPlaylists.map((playlist) => playlist.id),
+            remaining: lists.map((playlist) => playlist.id),
             created: [],
             total: factsPlaylists.length,
             dexNote: "",
@@ -2224,20 +2255,21 @@ export function Studio({
 
   const heading = pageHeading({
     view,
-    kind,
+    kind: quickShelf && kind === "meet" ? "quick" : kind,
     libraryTitle: card?.libraryTitle,
     randomFacts,
   });
-  const thisPlaylist = card
+  const shownCard = card ? asShelved(card) : card;
+  const thisPlaylist = shownCard
     ? playlistNote({
         randomGuess,
         randomFacts,
         splitSet,
         formMode,
         speciesSet,
-        rangeLabel: card.rangeLabel,
-        libraryTitle: card.libraryTitle,
-        blurb: card.blurb,
+        rangeLabel: shownCard.rangeLabel,
+        libraryTitle: shownCard.libraryTitle,
+        blurb: shownCard.blurb,
       })
     : "";
   const playlistHref = job?.status === "completed" ? yotoPlaylistUrl(job.cardId) : undefined;
@@ -2263,11 +2295,11 @@ export function Studio({
       />
       <AppNav
         section={sectionFor(view)}
-        kind={isReadyKind(kind) ? kind : "meet"}
+        kind={quickShelf && kind === "meet" ? "quick" : isReadyKind(kind) ? kind : "meet"}
         pictures={shelfPictures}
         onSection={chooseSection}
         onCategory={(nextKind) => {
-          showKind(nextKind);
+          showReady(nextKind);
           // On Printables the shelf picks the set to print, and the page stays put.
           if (view === "printables") setView("printables");
         }}
@@ -2342,7 +2374,7 @@ export function Studio({
                         onClick={() => chooseCard(item)}
                         className="pk-pill"
                       >
-                        {item.rangeLabel}
+                        {asShelved(item).rangeLabel}
                       </button>
                     </li>
                   ))}
@@ -2377,8 +2409,8 @@ export function Studio({
                         ? "Send these 50 riddles"
                         : randomFacts
                           ? "Send these 100"
-                          : `Send ${card.rangeLabel} to Yoto`,
-                      card.libraryTitle,
+                          : `Send ${asShelved(card).rangeLabel} to Yoto`,
+                      asShelved(card).libraryTitle,
                       () => send(),
                     )
                   }
@@ -2388,7 +2420,7 @@ export function Studio({
                 <MyoCardButton
                   onClick={() =>
                     showMyoCard({
-                      title: card.libraryTitle,
+                      title: asShelved(card).libraryTitle,
                       cardId: validYotoCardId(targetPlaylist) ?? job?.cardId,
                       sending,
                     })
@@ -2406,8 +2438,8 @@ export function Studio({
                     onClick={() =>
                       askCardOptions(
                         `Send all ${factsPlaylists.length} playlists — ${factsPlaylists.length} blank cards`,
-                        "Pokefacts 1",
-                        () => sendAllFacts(),
+                        quickShelf ? "Quick Pokefacts 1" : "Pokefacts 1",
+                        () => sendAllFacts(quickShelf),
                       )
                     }
                   >
@@ -2418,7 +2450,7 @@ export function Studio({
                 ) : null}
               </div>
               <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                Sends this whole list ({card.rangeLabel}), not only the Pokémon on screen. Paper stickers come after
+                Sends this whole list ({asShelved(card).rangeLabel}), not only the Pokémon on screen. Paper stickers come after
                 the playlist is in Yoto.
               </p>
               {playlistHref ? (
@@ -2662,7 +2694,7 @@ export function Studio({
                             // Quick facts first, then the reading: the same pieces a send records.
                             const quick = chapter.tracks[0]?.quick;
                             if (quick) {
-                              const reading = playbackRef.current.factLength === "full" && shown ? shown : "";
+                              const reading = playbackRef.current.factLength === "full" && !quickShelf && shown ? shown : "";
                               parts = factParts({ quick, reading, howTo: Boolean(prefix), seat: chapter });
                               line = parts.map((part) => ("text" in part ? part.text : "")).join(" ");
                             }
