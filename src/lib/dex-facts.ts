@@ -577,6 +577,81 @@ export function riddleParts(script: string): { numberLabel: string; clues: strin
   };
 }
 
+/** A height a child can picture: centimetres under a metre, metres from there. */
+export function quickHeight(decimetres: number): string {
+  if (decimetres < 10) return centimetresSpeech(decimetres);
+  const metres = (decimetres / 10).toFixed(1).replace(/\.0$/, "");
+  return `${metres} ${metres === "1" ? "metre" : "metres"}`;
+}
+
+/** A weight a child can picture: grams under a kilogram, kilograms from there. */
+export function quickWeight(hectograms: number): string {
+  if (hectograms < 10) return `${hectograms * 100} grams`;
+  return kilogramsSpeech(hectograms).replace(/^1 kilograms$/, "1 kilogram");
+}
+
+/** The shortest whole Pokédex sentence that says something on its own: one line, quick to hear. */
+export function shortDexLine(sheet: MonSheet): string {
+  const sentences = prepareEntries(sheet.entries).flatMap(
+    (entry) => withSubject(entry.text, sheet.name).match(/[^.!?]+[.!?]+/g) ?? [],
+  );
+  // Older games print the name in capitals: "WAILORD is the largest…".
+  const shouted = new RegExp(`\\b${escapeRegExp(sheet.name.toUpperCase())}\\b`, "g");
+  const usable = sentences
+    .map((sentence) => sentence.trim().replace(shouted, sheet.name))
+    // Five words or more, so it stands alone.
+    .filter((sentence) => wordCount(sentence) >= 5 && sentence.length <= 160);
+  // A sentence that starts the way a sentence on its own does, not "Said to appear…" or "This is why…".
+  const opener = new RegExp(
+    `^(?:${escapeRegExp(sheet.name)}|It|When|If|The|A|An|In|On|At|After|Although|Because|By|From|Once|Even|Some|Many|Its)\\b`,
+  );
+  const standalone = usable.filter((sentence) => opener.test(sentence) && !/^Its\b.*\bit\b/.test(sentence));
+  const pool = standalone.length > 0 ? standalone : usable;
+  return pool.sort((a, b) => a.length - b.length)[0] ?? "";
+}
+
+/** "Evolves from Pichu, into Raichu." Up to three names, then how many more. */
+function quickEvolution(sheet: MonSheet): string {
+  const from = sheet.evolvesFrom?.trim();
+  const into = (sheet.evolvesInto ?? []).filter(Boolean);
+  const intoText =
+    into.length === 0
+      ? ""
+      : into.length <= 3
+        ? into.length === 1
+          ? (into[0] as string)
+          : `${into.slice(0, -1).join(", ")} or ${into.at(-1)}`
+        : `${into.slice(0, 3).join(", ")}, and ${into.length - 3} more`;
+  if (from && intoText) return `Evolves from ${from}, into ${intoText}.`;
+  if (from) return `Evolves from ${from}.`;
+  if (intoText) return `Evolves into ${intoText}.`;
+  return "Does not evolve.";
+}
+
+/**
+ * Quick facts, always in the same order so a child learns where to listen: name, kind, type,
+ * one short Pokédex line, height and weight, ability, evolution. Calm full stops, no exclamations.
+ */
+export function quickFacts(sheet: MonSheet): string {
+  const name = sheet.name.replace(/\.$/, "");
+  const genus = sheet.genus.replace(/POK[eé]MON/gi, "Pokémon").trim();
+  const types = sheet.types.map((type) => type.charAt(0).toUpperCase() + type.slice(1));
+  const dex = shortDexLine(sheet);
+  return [
+    `${name}.`,
+    genus ? `The ${genus}.` : "",
+    types.length > 0 ? `${types.join(" and ")} type.` : "",
+    dex ? `The Pokédex says: ${dex.replace(/!$/, ".")}` : "",
+    `${quickHeight(sheet.heightDecimetres)} tall, ${quickWeight(sheet.weightHectograms)}.`,
+    sheet.abilityName ? `Ability: ${sheet.abilityName}.` : "",
+    quickEvolution(sheet),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /** Spoken Who's That Pokémon scripts. The cry is joined in front of each track later. */
 export function guessSpoken(sheet: MonSheet): { clue: string; answer: string } {
   const clues = shortClues(sheet);

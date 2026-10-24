@@ -9,16 +9,22 @@ const sheets = listMonSheets().filter((sheet) => [1, 25, 94, 150, 151].includes(
 const speech = { 25: "Pikachu. Pikachu is an Electric-type Pokémon. It stores electricity in its cheeks." };
 const scripts = radioScripts(sheets, speech);
 
-/** The words each track of a card is sent with, exactly as the send route receives them. */
+/**
+ * The words each track of a card is recorded under, exactly as the send route keys them. A track in
+ * pieces is recorded piece by piece; its last piece is the full reading.
+ */
 function sent(card: KidCard): Array<{ dexId: number; key: string; text: string }> {
   const content = buildKidCard(card);
   return content.content.chapters.flatMap((chapter, index) => {
     const source = card.chapters[index];
-    return (chapter.tracks ?? []).map((track, trackIndex) => ({
-      dexId: source?.dexId ?? 0,
-      key: source?.tracks[trackIndex]?.key ?? "",
-      text: flat(String(track.trackUrl ?? "")),
-    }));
+    return (chapter.tracks ?? []).map((track, trackIndex) => {
+      const reading = source?.tracks[trackIndex]?.parts?.filter((part) => "text" in part).at(-1);
+      return {
+        dexId: source?.dexId ?? 0,
+        key: source?.tracks[trackIndex]?.key ?? "",
+        text: flat(reading && "text" in reading ? reading.text : String(track.trackUrl ?? "")),
+      };
+    });
   });
 }
 

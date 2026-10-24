@@ -1,13 +1,14 @@
 import { artworkSrc as formArtworkSrc } from "@/lib/artwork-path";
 import { artworkSrc } from "@/lib/page-artwork";
 import type { BiologyBlock } from "@/lib/catalogue-types";
-import { dexBlurb, guessSpoken, pickDexEntry, type MonSheet } from "@/lib/dex-facts";
+import { dexBlurb, guessSpoken, pickDexEntry, quickFacts, type MonSheet } from "@/lib/dex-facts";
 import { JOKES } from "@/lib/jokes";
+import type { FactLength } from "@/lib/playback-settings";
 import { pronounce } from "@/lib/pronounce";
 import { spokenWiki } from "@/lib/spoken-wiki";
 import { chosenVoice, isPiperVoice } from "@/lib/piper-voice";
 import type { StoryBed } from "@/lib/story/story-sound";
-import type { TrackPart } from "@/lib/story/story-voices";
+import { SEND_VOICE, type TrackPart } from "@/lib/story/story-voices";
 import { expressHowTo, expressTrack, type VoiceSeat } from "@/lib/voice-expression";
 import { iconForType, YOTO_ICONS } from "@/lib/yoto-icons";
 
@@ -40,8 +41,13 @@ export type KidTrack = {
   source?: string;
   /** Play the Pokémon cry before this script. The how-to intro leaves this off. */
   lead?: "cry";
-  /** An adventure track with characters or sounds: each line in its own voice, recorded as one track. */
+  /**
+   * A track recorded in pieces and joined: an adventure's lines, each in its own voice, or a fact's quick
+   * facts then its full reading, each kept on its own so the reading reuses an earlier recording.
+   */
   parts?: TrackPart[];
+  /** On a fact track: name, kind, type, a Pokédex line, size, ability and evolution, read before the rest. */
+  quick?: string;
   /** Ambience and music under an adventure track. */
   bed?: StoryBed;
 };
@@ -261,15 +267,10 @@ function factChapter(sheet: MonSheet): KidChapter {
     number,
     icon,
     [
-      talk(
-        "entry",
-        sheet.name,
-        dexBlurb(sheet, number),
-        icon,
-        number,
-        entry.version || undefined,
-        "cry",
-      ),
+      {
+        ...talk("entry", sheet.name, dexBlurb(sheet, number), icon, number, entry.version || undefined, "cry"),
+        quick: quickFacts(sheet),
+      },
     ],
     {
       sprite: artworkSrc(sheet.id),
@@ -730,23 +731,69 @@ export function chaptersForCries(card: KidCard): Array<{ key: string; dexId: num
   });
 }
 
+function oneLine(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
 /**
- * Replace a Facts track with the species Biology speech.
+ * The pieces a fact track is recorded in, in the voice picked for the send: the quick facts, calm and
+ * untagged, then the full reading with its expression tags. Each piece is recorded and kept on its own,
+ * so the reading reuses the recording a card made before quick facts existed (`saved` is that script),
+ * and both lengths share the quick facts.
+ */
+export function factParts(input: { quick: string; reading?: string; howTo?: boolean; seat?: VoiceSeat }): TrackPart[] {
+  const quick = pronounce(oneLine(input.quick));
+  const parts: TrackPart[] = [
+    { text: input.howTo ? `${expressHowTo(POKEDEX_HOWTO)}${quick}` : quick, voiceId: SEND_VOICE, pitch: 0, tempo: 1 },
+  ];
+  const reading = input.reading ? pronounce(oneLine(input.reading)) : "";
+  if (reading) {
+    parts.push({
+      text: expressTrack("entry", reading, input.seat),
+      voiceId: SEND_VOICE,
+      pitch: 0,
+      tempo: 1,
+      saved: reading,
+    });
+  }
+  return parts;
+}
+
+/**
+ * Replace a Facts track with quick facts, then the species Biology speech (or the quick facts alone).
  * Guess Who is left as it is. The random how-to stays on the first track.
  */
-export function applySpeciesSpeech(card: KidCard, speechByDexId: Record<number, string>): KidCard {
+export function applySpeciesSpeech(
+  card: KidCard,
+  speechByDexId: Record<number, string>,
+  length: FactLength = "full",
+): KidCard {
   if (card.kind !== "meet" && !isSpeciesPlaylistKind(card.kind)) return card;
   return {
     ...card,
     chapters: card.chapters.map((chapter) => {
       if (!chapter.dexId) return chapter;
-      const speech = speechByDexId[chapter.dexId]?.replace(/\s+/g, " ").trim();
-      if (!speech) return chapter;
+      const speech = oneLine(speechByDexId[chapter.dexId] ?? "");
+      // Without the Biology reading, a full-length track keeps the card's own entry.
+      if (!speech && length === "full") return chapter;
       return {
         ...chapter,
         tracks: chapter.tracks.map((track) => {
-          const prefix = track.text.startsWith(POKEDEX_HOWTO) ? POKEDEX_HOWTO : "";
-          const text = `${prefix}${speech}`.replace(/\s+/g, " ").trim();
+          const howTo = track.text.startsWith(POKEDEX_HOWTO);
+          const prefix = howTo ? POKEDEX_HOWTO : "";
+          if (track.quick) {
+            const reading = length === "full" ? speech : "";
+            const text = oneLine(`${prefix}${track.quick} ${reading}`);
+            return {
+              ...track,
+              text,
+              spoken: pronounce(text),
+              source: undefined,
+              parts: factParts({ quick: track.quick, reading, howTo, seat: chapter }),
+            };
+          }
+          if (!speech) return track;
+          const text = oneLine(`${prefix}${speech}`);
           return { ...track, text, spoken: pronounce(text), source: undefined };
         }),
       };

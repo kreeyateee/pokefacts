@@ -42,7 +42,16 @@ export type VoiceStyle = { voiceId: string; pitch: number; tempo: number };
  * voice service turns it away.
  */
 export type TrackPart =
-  | ({ text: string; tight?: boolean; fallback?: VoiceStyle } & VoiceStyle)
+  | ({
+      text: string;
+      tight?: boolean;
+      fallback?: VoiceStyle;
+      /**
+       * An older script for the same line. When this line has no recording in its voice yet but the older
+       * script has, that recording is used instead of making a new one: a fact read before expression tags.
+       */
+      saved?: string;
+    } & VoiceStyle)
   | { sound: StorySound }
   | { cry: number };
 
@@ -368,10 +377,46 @@ export function readTrackParts(value: unknown): TrackPart[] | null {
       if (!backup || !isPiperVoice(backup.voiceId)) return null;
       fallback = backup;
     }
-    parts.push({ text, ...style, ...(row.tight === true ? { tight: true } : {}), ...(fallback ? { fallback } : {}) });
+    const saved = typeof row.saved === "string" ? row.saved.replace(/s+/g, " ").trim() : "";
+    if (saved.length > TEXT_LIMIT) return null;
+    parts.push({
+      text,
+      ...style,
+      ...(row.tight === true ? { tight: true } : {}),
+      ...(fallback ? { fallback } : {}),
+      ...(saved && saved !== text ? { saved } : {}),
+    });
   }
   if (spoken === 0 || spoken > TEXT_LIMIT) return null;
   return parts;
+}
+
+/** Stands for the voice picked for the whole send. The browser swaps it in before a part is recorded. */
+export const SEND_VOICE = "send-voice";
+
+/** Parts with the send's voice put in wherever a part asks for it. */
+export function withSendVoice(parts: readonly TrackPart[], voiceId: string): TrackPart[] {
+  const voice = chosenVoice(voiceId);
+  return parts.map((part) => ("text" in part && part.voiceId === SEND_VOICE ? { ...part, voiceId: voice } : part));
+}
+
+/**
+ * Each spoken part with no recording yet in its voice, read from its older script when that one is
+ * recorded. Piper is quick to run again, so a Piper part is always read as written.
+ */
+export async function withSavedTakes(
+  parts: readonly TrackPart[],
+  recorded: (part: { text: string; voiceId: string }) => Promise<boolean>,
+): Promise<TrackPart[]> {
+  const out: TrackPart[] = [];
+  for (const part of parts) {
+    if (!("text" in part) || !part.saved || isPiperVoice(part.voiceId) || (await recorded(part))) {
+      out.push(part);
+      continue;
+    }
+    out.push((await recorded({ text: part.saved, voiceId: part.voiceId })) ? { ...part, text: part.saved } : part);
+  }
+  return out;
 }
 
 /** The same parts read entirely in their Piper fallback voices. */

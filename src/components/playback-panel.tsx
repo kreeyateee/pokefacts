@@ -93,6 +93,30 @@ export function PlaybackPanel({
     </div>
   );
 
+  const length = (
+    <fieldset className="grid gap-2 text-sm">
+      <legend className="font-medium">Fact cards read</legend>
+      <label className="flex items-center gap-2">
+        <input
+          type="radio"
+          name={`${idPrefix}-fact-length`}
+          checked={settings.factLength === "full"}
+          onChange={() => update({ ...settings, factLength: "full" })}
+        />
+        Quick facts, then the full story
+      </label>
+      <label className="flex items-center gap-2">
+        <input
+          type="radio"
+          name={`${idPrefix}-fact-length`}
+          checked={settings.factLength === "quick"}
+          onChange={() => update({ ...settings, factLength: "quick" })}
+        />
+        Quick facts only: the cry, type, a Pokédex line, size, ability and evolution
+      </label>
+    </fieldset>
+  );
+
   const voices =
     voiceId !== undefined && onVoiceId ? (
       <VoiceField id={`${idPrefix}-voice`} value={voiceId} onChange={onVoiceId} />
@@ -103,6 +127,7 @@ export function PlaybackPanel({
     return (
       <div className="grid gap-4">
         {voices}
+        {voicesOnly ? null : length}
         {voicesOnly ? null : mix}
       </div>
     );
@@ -121,6 +146,7 @@ export function PlaybackPanel({
       </p>
       <div className="mt-3 grid gap-3">
         {voices}
+        {length}
         <details>
           <summary className="cursor-pointer text-sm font-bold">Cry, loudness, and units</summary>
           <div className="mt-3 grid gap-4">

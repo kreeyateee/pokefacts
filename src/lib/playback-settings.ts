@@ -6,6 +6,9 @@ const PLAYBACK_STORAGE_KEY = "pokefacts.playback";
 
 export type MeasureUnits = "metric" | "imperial";
 
+/** Fact cards read quick facts then the full reading, or the quick facts alone. */
+export type FactLength = "full" | "quick";
+
 export type MixSettings = {
   cryVolume: number;
   voiceVolume: number;
@@ -14,6 +17,7 @@ export type MixSettings = {
 
 export type PlaybackSettings = MixSettings & {
   units: MeasureUnits;
+  factLength: FactLength;
 };
 
 export function defaultPlayback(): PlaybackSettings {
@@ -22,6 +26,7 @@ export function defaultPlayback(): PlaybackSettings {
     voiceVolume: DEFAULT_VOICE_VOLUME,
     pauseSeconds: DEFAULT_PAUSE_SECONDS,
     units: "metric",
+    factLength: "full",
   };
 }
 
@@ -45,6 +50,7 @@ function clampPlayback(input?: Partial<PlaybackSettings> | null): PlaybackSettin
   return {
     ...clampMix(input),
     units: input?.units === "imperial" ? "imperial" : "metric",
+    factLength: input?.factLength === "quick" ? "quick" : "full",
   };
 }
 

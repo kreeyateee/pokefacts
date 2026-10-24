@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { audioContainer, inputContainer, mergeCryFirst } from "@/lib/cry-audio";
@@ -15,7 +15,7 @@ import {
 } from "@/lib/yoto-fact-audio";
 import { cuesAfterCry, joinTrackParts, levelledCryMix, type SoundCue } from "@/lib/story-audio";
 import { readStoryBed, type StoryBed } from "@/lib/story/story-sound";
-import { piperParts, readTrackParts, type TrackPart } from "@/lib/story/story-voices";
+import { piperParts, readTrackParts, withSavedTakes, type TrackPart } from "@/lib/story/story-voices";
 import { reconnectMessage, yotoErrorText } from "@/lib/yoto-error";
 import { spokenForDemo } from "@/lib/voice-choice";
 import { forElevenLabs } from "@/lib/voice-tags";
@@ -256,9 +256,24 @@ async function piperDemo(
  * An adventure track: every line in its own voice, the sounds between them, and the cry in front.
  * If the cry cannot be mixed, the lines still play.
  */
+/** True when a Yoto-voice line is already recorded, in the shared speech folder or Hear's old one. */
+async function hasRecording(part: { text: string; voiceId: string }, options: DemoOptions): Promise<boolean> {
+  const name = `${sha256(Buffer.from(`${part.voiceId}
+${part.text}`))}.mp3`;
+  for (const dir of options.speech ? [options.speech] : [SPEECH_ROOT, DEMO_ROOT]) {
+    try {
+      await access(path.join(/* turbopackIgnore: true */ dir, name));
+      return true;
+    } catch {
+      // Not in this folder.
+    }
+  }
+  return false;
+}
+
 async function partsDemo(
   token: string,
-  parts: TrackPart[],
+  asked: TrackPart[],
   title: string,
   dexId: number | undefined,
   fetchImpl: typeof fetch,
@@ -266,6 +281,8 @@ async function partsDemo(
   mix: MixSettings,
   bed: StoryBed | null,
 ): Promise<DemoAudio> {
+  // As on a send: a line whose older script is already recorded plays that recording.
+  const parts = await withSavedTakes(asked, (part) => hasRecording(part, options));
   const join = (lines: readonly TrackPart[]) =>
     joinTrackParts(
       lines,

@@ -22,7 +22,7 @@ import {
 } from "@/lib/rendered-media";
 import { isSpokenPart, joinTrackParts, levelledCryMix, type SpokenPart } from "@/lib/story-audio";
 import { readStoryBed } from "@/lib/story/story-sound";
-import { partKey, piperParts, readTrackParts } from "@/lib/story/story-voices";
+import { partKey, piperParts, readTrackParts, withSavedTakes } from "@/lib/story/story-voices";
 import { forElevenLabs } from "@/lib/voice-tags";
 import { RECONNECT_YOTO, reconnectMessage, yotoErrorText } from "@/lib/yoto-error";
 
@@ -1030,7 +1030,16 @@ export async function prepareFactTrack(
    * with the sounds. A Yoto Labs line uses the same speech job and scratch card steps as a plain track,
    * tagged with `speechPart` so a recording always lands on the line it was made for.
    */
-  const fromParts = async (lines: NonNullable<typeof parts>): Promise<TrackPrepareResult> => {
+  const fromParts = async (asked: NonNullable<typeof parts>): Promise<TrackPrepareResult> => {
+    // A line with no recording in its voice yet, but an older script that has one, uses that recording.
+    const lines = await withSavedTakes(asked, (part) =>
+      fileExists(
+        path.join(
+          /* turbopackIgnore: true */ roots.speech,
+          `${speechKey(part.text, part.voiceId)}.${isPiperVoice(part.voiceId) ? "wav" : "mp3"}`,
+        ),
+      ),
+    );
     const spoken = lines.filter(isSpokenPart);
     const stats = sendStats(sendId);
     /** Yoto Labs turned a line away. Fall back to Piper if every line has a Piper voice to fall back to. */

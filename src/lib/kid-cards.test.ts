@@ -1250,7 +1250,7 @@ const GMAX_CHARIZARD: BiologyBlock[] = [
 ];
 
 describe("biology speech and form playlists", () => {
-  it("uses the first two biology paragraphs for a fact and leaves the dex blurb off", () => {
+  it("reads quick facts, then the first two biology paragraphs, and leaves the dex blurb off", () => {
     const cards = kidCardsFromDex(fixtureSheets());
     const facts = cards[0];
     assert.ok(facts);
@@ -1260,10 +1260,23 @@ describe("biology speech and form playlists", () => {
       { kind: "paragraph", text: "Three. The third biology paragraph is about the soil." },
     ]);
     const next = applySpeciesSpeech(facts, { 1: speech });
-    const text = next.chapters.find((chapter) => chapter.dexId === 1)?.tracks[0]?.text ?? "";
+    const track = next.chapters.find((chapter) => chapter.dexId === 1)?.tracks[0];
+    const text = track?.text ?? "";
+    assert.match(text, /^Bulbasaur\. The Seed Pokémon\. Grass and Poison type\./);
+    assert.ok(text.indexOf("kilograms") < text.indexOf("first biology paragraph"), "quick facts come first");
     assert.match(text, /first biology paragraph is about the bulb/);
     assert.match(text, /second biology paragraph is about the sun/);
-    assert.doesNotMatch(text, /third biology paragraph|Bulbapedia|kilograms|Creative Commons/i);
+    assert.doesNotMatch(text, /third biology paragraph|Bulbapedia|It is number|Creative Commons/i);
+    // Recorded in two pieces, so the reading reuses the recording made before quick facts.
+    const pieces = (track?.parts ?? []).filter((part) => "text" in part);
+    assert.equal(pieces.length, 2);
+    assert.match("text" in pieces[0]! ? pieces[0].text : "", /^Bulbasaur\. The Seed Pokémon/);
+    assert.equal("saved" in pieces[1]! ? pieces[1].saved : "", pronounce(speech));
+    // Quick facts alone, even with no Biology reading. (The fixture gives every Pokémon the same details.)
+    const quickOnly = applySpeciesSpeech(facts, {}, "quick").chapters.find((chapter) => chapter.dexId === 4)?.tracks[0];
+    assert.match(quickOnly?.text ?? "", /^Charmander\. The Seed Pokémon\./);
+    assert.doesNotMatch(quickOnly?.text ?? "", /It is number/);
+    assert.equal(quickOnly?.parts?.length, 1);
     const untouched = next.chapters.find((chapter) => chapter.dexId === 4)?.tracks[0]?.text ?? "";
     assert.match(untouched, /kilograms/);
     const guess = cards.find((card) => card.kind === "guess");
@@ -1275,7 +1288,7 @@ describe("biology speech and form playlists", () => {
     const applied = applySpeciesSpeech(random, { [firstId]: "Pikachu. It stores electricity in its cheeks." });
     assert.match(applied.chapters[0]?.tracks[0]?.text ?? "", new RegExp(`^${POKEDEX_HOWTO.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
     assert.match(applied.chapters[0]?.tracks[0]?.text ?? "", /stores electricity/);
-    assert.doesNotMatch(applied.chapters[0]?.tracks[0]?.text ?? "", /kilograms/);
+    assert.doesNotMatch(applied.chapters[0]?.tracks[0]?.text ?? "", /It is number/);
   });
 
   it("sends Mega Evolutions with Charizard, no card id, and the form's own prose", () => {

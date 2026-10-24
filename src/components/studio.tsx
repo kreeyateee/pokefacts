@@ -60,6 +60,7 @@ import {
   mulberry32,
   countSpokenTracks,
   entrySpeech,
+  factParts,
   LILY_VOICE_ID,
   pokedexUpload,
   POKEDEX_HOWTO,
@@ -145,6 +146,7 @@ import { storyCard, storyPixels } from "@/lib/story/story-card";
 import { storyTrackCount } from "@/lib/story/story-check";
 import { adventureSendId, pollFailureFallsBack, VOICE_FALLBACK_NOTE } from "@/lib/story/voice-fallback";
 import type { StoryGraph } from "@/lib/story/story-graph";
+import { withSendVoice, type TrackPart } from "@/lib/story/story-voices";
 import {
   CARD_KEY,
   clearSavedLoginForScopeGap,
@@ -1075,7 +1077,7 @@ export function Studio({
     revealChoice(nav);
   }, [chapter?.key, card?.id, query, kind, view]);
 
-  async function requestDemo(text: string, title: string, dexId?: number) {
+  async function requestDemo(text: string, title: string, dexId?: number, parts?: TrackPart[]) {
     const script = text.replace(/\s+/g, " ").trim();
     if (!script) {
       speakingRef.current = false;
@@ -1100,7 +1102,7 @@ export function Studio({
         signal: controller.signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
-          demoHearBody({ text: script, voiceId: voiceIdRef.current, dexId, title, mix: playbackRef.current }),
+          demoHearBody({ text: script, voiceId: voiceIdRef.current, dexId, title, mix: playbackRef.current, parts }),
         ),
       });
       if (controller.signal.aborted) return;
@@ -1156,7 +1158,9 @@ export function Studio({
     }
   }
 
-  async function hearScript(load: () => Promise<{ text: string; title: string; dexId?: number } | null>) {
+  async function hearScript(
+    load: () => Promise<{ text: string; title: string; dexId?: number; parts?: TrackPart[] } | null>,
+  ) {
     if (speakingRef.current) {
       stopDemo();
       return;
@@ -1173,7 +1177,7 @@ export function Studio({
         setHearError("This entry has nothing to read.");
         return;
       }
-      await requestDemo(ready.text, ready.title, ready.dexId);
+      await requestDemo(ready.text, ready.title, ready.dexId, ready.parts);
     } catch (error) {
       if (!speakingRef.current) return;
       speakingRef.current = false;
@@ -1510,7 +1514,8 @@ export function Studio({
                 speechJobId,
                 speechCardId,
                 speechPart,
-                parts: job.parts,
+                // A fact's pieces are read in the voice picked for this send.
+                parts: job.parts ? withSendVoice(job.parts, voice.voiceId) : undefined,
                 bed: job.bed,
                 fallbackOnly: Boolean(pendingRef.current?.voiceFallback),
                 sendId: pendingRef.current ? adventureSendId(pendingRef.current.startedAt) : undefined,
@@ -1698,18 +1703,23 @@ export function Studio({
     const headline = bulkProgressLabel(index, bulk.total);
     setJob({ status: "sending", detail: headline, done: index - 1, total: bulk.total });
     let dexNote = "";
-    const readings = await speechesFor(playlist, (done, total, notice) => {
-      if (notice) dexNote = notice;
-      setJob({
-        status: "sending",
-        detail: statusWithDexNote(`${playlist.libraryTitle}, description ${done} of ${total}`, notice),
-        done,
-        total,
-      });
-    });
+    const factLength = playbackRef.current.factLength;
+    // Quick facts alone need no Bulbapedia reading, so none is fetched.
+    const readings =
+      factLength === "quick"
+        ? { speech: {}, notice: "" }
+        : await speechesFor(playlist, (done, total, notice) => {
+            if (notice) dexNote = notice;
+            setJob({
+              status: "sending",
+              detail: statusWithDexNote(`${playlist.libraryTitle}, description ${done} of ${total}`, notice),
+              done,
+              total,
+            });
+          });
     if (readings.notice) dexNote = readings.notice;
     changePending((send) => withDexNote(send, dexNote));
-    const spoken = applySpeciesSpeech(playlist, readings.speech);
+    const spoken = applySpeciesSpeech(playlist, readings.speech, factLength);
     const pixels = await uploadPixels(spoken, (done, total) => {
       setJob({
         status: "sending",
@@ -1989,17 +1999,22 @@ export function Studio({
         let spokenCard = card;
         // Facts and species cards read Bulbapedia's description; the Joke Book reads its jokes.
         if (!formKind && card.kind !== "guess" && card.kind !== "joke") {
-          const readings = await speechesFor(card, (done, total, notice) => {
-            if (notice) dexNote = notice;
-            setJob({
-              status: "sending",
-              detail: statusWithDexNote(`${card.libraryTitle}, description ${done} of ${total}`, notice),
-              done,
-              total,
-            });
-          });
+          const factLength = playbackRef.current.factLength;
+          // Quick facts alone need no Bulbapedia reading, so none is fetched.
+          const readings =
+            factLength === "quick"
+              ? { speech: {}, notice: "" }
+              : await speechesFor(card, (done, total, notice) => {
+                  if (notice) dexNote = notice;
+                  setJob({
+                    status: "sending",
+                    detail: statusWithDexNote(`${card.libraryTitle}, description ${done} of ${total}`, notice),
+                    done,
+                    total,
+                  });
+                });
           if (readings.notice) dexNote = readings.notice;
-          spokenCard = applySpeciesSpeech(card, readings.speech);
+          spokenCard = applySpeciesSpeech(card, readings.speech, factLength);
         }
         if (isFormPlaylistKind(card.kind)) {
           await ensureFormProse(card.kind, (detail) => {
@@ -2568,6 +2583,7 @@ export function Studio({
                       onClick={() => {
                         void hearScript(async () => {
                           let line = "";
+                          let parts: TrackPart[] | undefined;
                           let dexId = chapter.dexId;
                           if (formMode && chapter.formId && isFormPlaylistKind(card.kind)) {
                             if (!chapter.articleStatus) {
@@ -2586,13 +2602,20 @@ export function Studio({
                                 : (await speciesSpeech(chapter.dexId, chapter.title)).speech;
                             const speech = shown || chapterDexText(chapter) || `${chapter.title}.`;
                             line = entrySpeech(`${prefix}${speech}`, chapter);
+                            // Quick facts first, then the reading: the same pieces a send records.
+                            const quick = chapter.tracks[0]?.quick;
+                            if (quick) {
+                              const reading = playbackRef.current.factLength === "full" && shown ? shown : "";
+                              parts = factParts({ quick, reading, howTo: Boolean(prefix), seat: chapter });
+                              line = parts.map((part) => ("text" in part ? part.text : "")).join(" ");
+                            }
                             dexId = chapter.tracks.some((track) => track.lead === "cry") ? chapter.dexId : undefined;
                           } else {
                             line = chapter.tracks.map((track) => trackSpeech(track, chapter)).join(" ");
                             dexId = chapter.tracks.some((track) => track.lead === "cry") ? chapter.dexId : undefined;
                           }
                           if (!line) return null;
-                          return { text: line, title: chapter.title, dexId };
+                          return { text: line, title: chapter.title, dexId, parts };
                         });
                       }}
                     >

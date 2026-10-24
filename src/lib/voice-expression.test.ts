@@ -233,9 +233,12 @@ describe("expressive cards", () => {
     const meet = applySpeciesSpeech(cards[0] as KidCard, speech);
     const pikachu = meet.chapters.find((chapter) => chapter.dexId === 25);
     assert.ok(pikachu?.tracks[0]);
-    const sent = trackSpeech(pikachu.tracks[0], pikachu);
+    // The reading is the second piece, after the quick facts, and keeps its tags.
+    const reading = pikachu.tracks[0].parts?.at(-1);
+    const sent = reading && "text" in reading ? reading.text : "";
     assert.equal(sent, expressFact(FACT, pikachu));
     assert.equal(entrySpeech(FACT, pikachu), sent);
+    assert.equal(hasVoiceTags(trackSpeech(pikachu.tracks[0], pikachu)), true);
     const withHowTo = entrySpeech(`${POKEDEX_HOWTO}${FACT}`, pikachu);
     assert.equal(withHowTo, `{excited} ${POKEDEX_HOWTO}${sent}`);
   });

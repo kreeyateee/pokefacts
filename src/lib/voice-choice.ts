@@ -1,7 +1,7 @@
 import { chosenVoice } from "@/lib/piper-voice";
 import type { MixSettings } from "@/lib/playback-settings";
 import type { StoryBed } from "@/lib/story/story-sound";
-import type { TrackPart } from "@/lib/story/story-voices";
+import { withSendVoice, type TrackPart } from "@/lib/story/story-voices";
 
 const VOICE_STORAGE_KEY = "champdex.voiceId";
 
@@ -45,6 +45,8 @@ export function demoHearBody(input: {
   dexId?: number;
   title?: string;
   mix?: Partial<MixSettings>;
+  /** A track recorded in pieces, such as quick facts then the reading. Played exactly as a send records it. */
+  parts?: TrackPart[];
 }): {
   text: string;
   voiceId: string;
@@ -53,6 +55,7 @@ export function demoHearBody(input: {
   cryVolume?: number;
   voiceVolume?: number;
   pauseSeconds?: number;
+  parts?: TrackPart[];
 } {
   const body: {
     text: string;
@@ -62,10 +65,12 @@ export function demoHearBody(input: {
     cryVolume?: number;
     voiceVolume?: number;
     pauseSeconds?: number;
+    parts?: TrackPart[];
   } = {
     text: spokenForDemo(input.text),
     voiceId: chosenVoice(input.voiceId),
   };
+  if (input.parts?.length) body.parts = withSendVoice(input.parts, body.voiceId);
   if (input.title?.trim()) body.title = input.title.trim().slice(0, 80);
   if (input.dexId) body.dexId = input.dexId;
   if (input.mix) {

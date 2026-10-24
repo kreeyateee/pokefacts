@@ -31,7 +31,12 @@ function addCard(scripts: RadioScripts, card: KidCard, kinds: readonly RadioKind
     for (const track of chapter.tracks) {
       const kind = track.key as RadioKind;
       if (!kinds.includes(kind)) continue;
-      const texts = [flat(trackSpeech(track, chapter)), flat(track.spoken)];
+      // A fact recorded in pieces (quick facts, then the reading): the reading is the radio's fact.
+      const reading = track.parts?.filter((part) => "text" in part).at(-1);
+      const texts =
+        reading && "text" in reading
+          ? [flat(reading.text), ...(reading.saved ? [flat(reading.saved)] : [])]
+          : [flat(trackSpeech(track, chapter)), flat(track.spoken)];
       // Before 24 October 2026 the answer was "It is Pikachu." rather than "It's Pikachu!".
       if (kind === "answer") texts.push(flat(track.spoken).replace(/^It's (.+?)! /, "It is $1. "));
       add(scripts, chapter.dexId, kind, texts);
