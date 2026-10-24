@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -352,6 +353,31 @@ export class LabsJobs {
  */
 export const LABS_SITE_JOBS = 12;
 
+/**
+ * The site's limit can be raised or lowered without a restart: data/labs-limit.json holds
+ * {"siteJobs": n}. It is read again at most every half a minute; without it, LABS_SITE_JOBS applies.
+ */
+const LIMIT_FILE = path.join(/* turbopackIgnore: true */ process.cwd(), "data", "labs-limit.json");
+const LIMIT_READ_MS = 30_000;
+let limit = { value: LABS_SITE_JOBS, readAt: Number.NEGATIVE_INFINITY, file: LIMIT_FILE };
+
+/** The site's limit now: the limit file's `siteJobs` when it holds a sensible number, otherwise LABS_SITE_JOBS. */
+export function siteJobLimit(now: number, file: string = LIMIT_FILE): number {
+  if (file !== limit.file || now - limit.readAt >= LIMIT_READ_MS) {
+    let value = LABS_SITE_JOBS;
+    try {
+      const parsed = JSON.parse(readFileSync(file, "utf8")) as { siteJobs?: unknown };
+      if (typeof parsed.siteJobs === "number" && Number.isInteger(parsed.siteJobs) && parsed.siteJobs >= 1 && parsed.siteJobs <= 500) {
+        value = parsed.siteJobs;
+      }
+    } catch {
+      // No file, or a broken one: the built-in limit.
+    }
+    limit = { value, readAt: now, file };
+  }
+  return limit.value;
+}
+
 /** A place in line is kept this long without the page asking again; a closed page drops out. */
 const LINE_KEPT_MS = 15_000;
 
@@ -381,7 +407,7 @@ export function takeTurn(account: string, now: number): LabsTurn {
   }
   let at = line.findIndex((entry) => entry.account === account);
   if (at >= 0) (line[at] as { seen: number }).seen = now;
-  if (siteRecording(now) < LABS_SITE_JOBS && (at === 0 || (at < 0 && line.length === 0))) {
+  if (siteRecording(now) < siteJobLimit(now) && (at === 0 || (at < 0 && line.length === 0))) {
     if (at === 0) line.shift();
     return { ok: true };
   }
@@ -389,7 +415,7 @@ export function takeTurn(account: string, now: number): LabsTurn {
     line.push({ account, seen: now });
     at = line.length - 1;
     // Counts only: no account, words or token.
-    console.info(`[labs line] a send joined the line at place ${at + 1}; ${siteRecording(now)} of ${LABS_SITE_JOBS} jobs going`);
+    console.info(`[labs line] a send joined the line at place ${at + 1}; ${siteRecording(now)} of ${siteJobLimit(now)} jobs going`);
   }
   return { ok: false, position: at + 1 };
 }

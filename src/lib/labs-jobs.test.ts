@@ -15,6 +15,7 @@ import {
   LABS_SITE_JOBS,
   LabsJobs,
   releaseSlot,
+  siteJobLimit,
   takeTurn,
 } from "./labs-jobs";
 import { PIPER_VOICE_ID } from "./piper-voice";
@@ -897,5 +898,24 @@ describe("the site's line for Yoto voices", () => {
     assert.equal(queueNote({ phase: "queued", position: 12 }), "Waiting for Yoto: you're 12th in line…");
     assert.equal(queueNote({ phase: "queued", position: 22 }), "Waiting for Yoto: you're 22nd in line…");
     assert.equal(queueNote({ phase: "wait", waitMs: 2_000 }), undefined);
+  });
+});
+
+describe("the site's limit for Yoto voices", () => {
+  it("reads the limit file, again after half a minute, and keeps the built-in limit when it is missing or wrong", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pokefacts-labs-limit-"));
+    try {
+      const file = path.join(dir, "labs-limit.json");
+      assert.equal(siteJobLimit(0, file), LABS_SITE_JOBS, "no file");
+      await writeFile(file, JSON.stringify({ siteJobs: 22 }));
+      assert.equal(siteJobLimit(10_000, file), LABS_SITE_JOBS, "read again only after half a minute");
+      assert.equal(siteJobLimit(30_000, file), 22);
+      await writeFile(file, JSON.stringify({ siteJobs: "lots" }));
+      assert.equal(siteJobLimit(60_000, file), LABS_SITE_JOBS);
+      await writeFile(file, "{");
+      assert.equal(siteJobLimit(90_000, file), LABS_SITE_JOBS);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
