@@ -42,11 +42,12 @@ function tone(frequency: number, wav = false): Promise<Buffer> {
 }
 
 /**
- * Yoto Labs and the upload service, faked. Every speech job is completed at once, and its recording
- * is a tone whose pitch says which voice made it.
+ * Yoto Labs and the upload service, faked. Every speech job is completed at once, with one recording for
+ * each line it was sent, a tone whose pitch says which voice made it. `jobs` lists the lines recorded.
  */
 function fakeYoto(lines: Map<string, Buffer>, cry: Buffer) {
   const jobs: Array<{ voiceId: string; text: string }> = [];
+  const cards: Array<Array<{ key: string; voiceId: string }>> = [];
   const uploads: Buffer[] = [];
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = String(input);
@@ -56,19 +57,24 @@ function fakeYoto(lines: Map<string, Buffer>, cry: Buffer) {
     }
     if (url.startsWith("https://labs.api.yotoplay.com/content/job?")) {
       const voiceId = new URL(url).searchParams.get("voiceId") ?? "";
-      const body = JSON.parse(String(init?.body)) as { content: { chapters: Array<{ tracks: Array<{ trackUrl: string }> }> } };
-      jobs.push({ voiceId, text: body.content.chapters[0]?.tracks[0]?.trackUrl ?? "" });
-      return Response.json({ job: { jobId: `job-${String(jobs.length).padStart(4, "0")}` } });
+      const body = JSON.parse(String(init?.body)) as { content: { chapters: Array<{ tracks: Array<{ key: string; trackUrl: string }> }> } };
+      const tracks = body.content.chapters.flatMap((chapter) => chapter.tracks);
+      for (const track of tracks) jobs.push({ voiceId, text: track.trackUrl });
+      cards.push(tracks.map((track) => ({ key: track.key, voiceId })));
+      return Response.json({ job: { jobId: `job-${String(cards.length).padStart(4, "0")}` } });
     }
-    const card = /api\.yotoplay\.com\/content\/(card\d+)/.exec(url);
+    const card = /api\.yotoplay\.com\/content\/card(\d+)/.exec(url);
     if (card && init?.method === "DELETE") return new Response(null, { status: 200 });
     if (card) {
-      return Response.json({ card: { cardId: card[1], content: { chapters: [{ tracks: [{ trackUrl: `https://cdn.example/${card[1]}.mp3` }] }] } } });
+      const chapters = (cards[Number(card[1]) - 1] ?? []).map((track) => ({
+        tracks: [{ key: track.key, trackUrl: `https://cdn.example/card${card[1]}/${track.key}.mp3` }],
+      }));
+      return Response.json({ card: { cardId: `card${card[1]}`, content: { chapters } } });
     }
-    const audio = /cdn\.example\/card(\d+)\.mp3/.exec(url);
+    const audio = /cdn\.example\/card(\d+)\/([\w-]+)\.mp3/.exec(url);
     if (audio) {
-      const job = jobs[Number(audio[1]) - 1];
-      return new Response(new Uint8Array(lines.get(job?.voiceId ?? "") ?? Buffer.alloc(0)));
+      const track = cards[Number(audio[1]) - 1]?.find((item) => item.key === audio[2]);
+      return new Response(new Uint8Array(lines.get(track?.voiceId ?? "") ?? Buffer.alloc(0)));
     }
     if (url === cryUrl(25)) return new Response(new Uint8Array(cry));
     if (url.includes("/media/transcode/audio/uploadUrl")) {
@@ -207,14 +213,14 @@ describe("adventure track audio", () => {
       }
       assert.equal(phases.at(-1), "ready");
 
-      // Five spoken lines, each recorded once: Barnaby is Liam, Marigold is Alice, the narrator Lily.
+      // Five spoken lines, each recorded once, a voice at a time: Barnaby is Liam, Marigold is Alice, the narrator Lily.
       assert.deepEqual(
         yoto.jobs.map((job) => [job.voiceId, job.text]),
         [
           [LILY, "Barnaby throws."],
           [LILY, "Barnaby jumps up."],
-          [LIAM, "Mine!"],
           [LILY, "Marigold shakes her head."],
+          [LIAM, "Mine!"],
           [ALICE, "Not for long."],
         ],
       );
@@ -383,9 +389,10 @@ describe("adventure track audio", () => {
         piper: { bin: "piper", model: "voice", download: false, run: async () => ((piperLines += 1), piperWav) },
       };
       const yoto = fakeYoto(new Map(), await tone(880));
+      // A voice Yoto no longer offers. (A 429 only asks for a pause: see labs-jobs.test.ts.)
       const refusing: typeof fetch = async (input, init) => {
         if (String(input).startsWith("https://labs.api.yotoplay.com/content/job?")) {
-          return Response.json({ error: "Too many requests" }, { status: 429, headers: { "retry-after": "0" } });
+          return Response.json({ error: "That voice is not available" }, { status: 403 });
         }
         return yoto.fetchImpl(input, init);
       };
@@ -399,7 +406,7 @@ describe("adventure track audio", () => {
       // The browser sends the track again, and every track after it, with fallbackOnly.
       await drive(refusing, roots, { ...body, fallbackOnly: true });
       assert.equal(piperLines, 2, "both lines read by Piper");
-      assert.ok(logged.some((line) => /send stest01: .*refused 429 x1.*reading with Piper/.test(line)), logged.join("\n"));
+      assert.ok(logged.some((line) => /send stest01: .*refused 429 x0, other x1.*reading with Piper/.test(line)), logged.join("\n"));
       assert.ok(logged.some((line) => /send stest01: 1 tracks, 0 new Yoto voice lines, 2 new Piper lines, 0 reused/.test(line)));
       assert.ok(logged.every((line) => !/Boo|Barnaby|x{24}/.test(line)), "no words, names or tokens in the log");
     } finally {

@@ -588,6 +588,32 @@ export function factsBulkPlaylists(cards: KidCard[]): KidCard[] {
   return cards.filter((card) => card.kind === "meet" && card.id !== RANDOM_POKEDEX_ID);
 }
 
+/** Quick Pokefacts playlists are the Facts playlists read short: the cry and the quick facts, no reading. */
+export const QUICK_FACTS_PREFIX = "quick-";
+
+/**
+ * A Facts playlist as its Quick Pokefacts twin: its own id, so it is saved to its own Yoto card and never
+ * replaces the full playlist, and its own name ("Quick Pokefacts 1"). The tracks are the same; the send
+ * reads only their quick facts.
+ */
+export function quickFactsCard(card: KidCard): KidCard {
+  if (card.id.startsWith(QUICK_FACTS_PREFIX)) return card;
+  const named = (text: string) => (/^Pokefacts\b/.test(text) ? `Quick ${text}` : `Quick Pokefacts ${text}`);
+  return {
+    ...card,
+    id: `${QUICK_FACTS_PREFIX}${card.id}`,
+    title: "Quick Pokefacts",
+    libraryTitle: named(card.libraryTitle),
+    rangeLabel: named(card.rangeLabel),
+    blurb: "The cry, then quick facts: the name, kind, type, a Pokédex line, size, ability and evolution.",
+  };
+}
+
+/** The Facts playlist a Quick Facts id stands for. */
+export function factsIdOf(id: string): string {
+  return id.startsWith(QUICK_FACTS_PREFIX) ? id.slice(QUICK_FACTS_PREFIX.length) : id;
+}
+
 function withVoice(card: KidCard, voiceId: string): KidCard {
   const spoken = chosenVoice(voiceId);
   return {

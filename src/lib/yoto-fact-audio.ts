@@ -11,6 +11,15 @@ import {
   inputContainer,
   mergeCryFirst,
 } from "@/lib/cry-audio";
+import {
+  LABS_ACCOUNT_JOBS,
+  LABS_STUCK_MS,
+  LABS_TRACK_JOBS,
+  LabsJobs,
+  labsLinesPerJob,
+  oneLinePerJob,
+  type LabsLine,
+} from "@/lib/labs-jobs";
 import { clampMix, isDefaultMix, mixCacheToken, type MixSettings } from "@/lib/playback-settings";
 import { synthesizePiper, type PiperSynthOptions } from "@/lib/piper";
 import { chosenVoice, isPiperVoice, piperCacheToken } from "@/lib/piper-voice";
@@ -101,27 +110,38 @@ function transcodeFailure(body: unknown, label: string, kind: "track" | "cry"): 
   return `${lead} ${extra.length > 140 ? `${extra.slice(0, 137)}...` : extra}`;
 }
 
-function rateLimitWait(response: Response, attempt: number): number {
+/** Yoto's Retry-After, in milliseconds, when it sent one. */
+function retryAfterMs(response: Response): number | undefined {
   const retryAfter = Number(response.headers.get("retry-after"));
-  if (Number.isFinite(retryAfter) && retryAfter > 0) return Math.min(20_000, retryAfter * 1000);
+  return Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : undefined;
+}
+
+function rateLimitWait(response: Response, attempt: number): number {
+  const retryAfter = retryAfterMs(response);
+  if (retryAfter) return Math.min(20_000, retryAfter);
   return Math.min(8_000, 500 * 2 ** attempt);
 }
 
+/**
+ * One Yoto request, with the token. A 429 is asked again after a wait, `tries` times in all. Recording
+ * steps ask once: their 429 pauses the account's recordings instead (see LabsJobs.pause).
+ */
 async function yoto(
   token: string,
   url: string,
   init?: RequestInit,
   fetchImpl: typeof fetch = fetch,
   timeoutMs = 60_000,
+  tries = 4,
 ): Promise<Response> {
   const headers = new Headers(init?.headers);
   headers.set("Authorization", `Bearer ${token}`);
   headers.set("Accept", "application/json");
   let last: Response | undefined;
-  for (let attempt = 0; attempt < 4; attempt += 1) {
+  for (let attempt = 0; attempt < tries; attempt += 1) {
     const response = await fetchImpl(url, { ...init, headers, signal: AbortSignal.timeout(timeoutMs) });
     last = response;
-    if (response.status !== 429 || attempt === 3) return response;
+    if (response.status !== 429 || attempt === tries - 1) return response;
     await new Promise((resolve) => setTimeout(resolve, rateLimitWait(response, attempt)));
   }
   return last as Response;
@@ -358,14 +378,29 @@ type TrackPrepareRequest = {
   fallbackOnly?: boolean;
   /** A random id for one send, so the server log can count its recordings. Nothing personal. */
   sendId?: string;
+  /**
+   * With `sweepScratch`: save and tidy this account's lines still being recorded first, and answer with
+   * how many are still recording instead of sweeping the library while one of them could finish.
+   */
+  settleJobs?: boolean;
 };
 
 type TrackPrepareResult = {
-  /** `voice-fallback`: Yoto's voice service turned a line away; send again with `fallbackOnly`. */
-  phase: "speech" | "upload" | "ready" | "discarded" | "voice-fallback";
+  /**
+   * `voice-fallback`: Yoto's voice service turned a line away; send again with `fallbackOnly`.
+   * `wait`: Yoto asked for a pause and none of this track's lines is recording; ask again after `waitMs`.
+   */
+  phase: "speech" | "upload" | "ready" | "discarded" | "voice-fallback" | "wait";
+  /** On an adventure track, the oldest of its recordings: a page from before parallel lines polls it. */
   speechJobId?: string;
   speechPart?: string;
   speechCardId?: string;
+  /** How long to wait before the next step. The page asks again then, and the server checks every job. */
+  waitMs?: number;
+  /** Lines of this track Yoto is recording right now (or, after a sweep, of the whole account). */
+  recording?: number;
+  /** Lines of this track that are not recorded yet. */
+  linesLeft?: number;
   uploadId?: string;
   trackUrl?: string;
   duration?: number;
@@ -377,14 +412,38 @@ type TrackPrepareResult = {
 const SPEECH_ROOT = path.join(/* turbopackIgnore: true */ process.cwd(), "data", "speech");
 const RENDER_ROOT = path.join(/* turbopackIgnore: true */ process.cwd(), "data", "rendered");
 
+/** Where each account's recordings in flight are kept: beside the recordings they make. */
+function labsJobsRoot(speechRoot: string): string {
+  return path.join(/* turbopackIgnore: true */ speechRoot, ".labs-jobs");
+}
+
+/** How long the page waits between steps while a track's lines are recording. */
+export const LABS_POLL_MS = 1_500;
+
 /**
- * What to do when Yoto Labs turns a line away. A 429 that outlasted the retries, any other 4xx and a
- * failed recording job all mean the voice is not coming, so the line falls back to Piper. A 401 means
- * the login has run out, which Connect Yoto fixes, and a 5xx or a network fault is worth a retry.
+ * The HTTP answer to one track step. A pause Yoto asked for, with none of the track's lines recording, is
+ * a 429 with Retry-After: every page, including one loaded before parallel lines, waits that out and asks
+ * again. It never reads as Yoto turning the voice away.
  */
-export function labsRefusal(status: number | undefined, failedJob = false): "piper" | "reconnect" | "retry" {
+export function trackStepResponse(result: TrackPrepareResult): Response {
+  if (result.phase !== "wait") return Response.json(result);
+  const waitMs = result.waitMs ?? LABS_POLL_MS;
+  return Response.json(
+    { ...result, error: "Yoto asked for a short pause before the next line." },
+    { status: 429, headers: { "Retry-After": String(Math.max(1, Math.ceil(waitMs / 1000))), "Cache-Control": "no-store" } },
+  );
+}
+
+/**
+ * What to do when Yoto Labs turns a line away. Any 4xx but 429, and a failed recording job, mean the
+ * voice is not coming, so the line falls back to Piper. A 429 asks for a pause: the recordings wait and
+ * carry on. A 401 means the login has run out, which Connect Yoto fixes, and a 5xx or a network fault is
+ * worth a retry.
+ */
+export function labsRefusal(status: number | undefined, failedJob = false): "piper" | "reconnect" | "retry" | "wait" {
   if (failedJob) return "piper";
   if (status === 401) return "reconnect";
+  if (status === 429) return "wait";
   if (status !== undefined && status >= 400 && status < 500) return "piper";
   return "retry";
 }
@@ -401,6 +460,10 @@ type SendStats = {
   fallback: boolean;
   /** Speech keys recorded during this send, so a line reused later in the same send counts as cached. */
   recorded: Set<string>;
+  /** When this server first saw the send. */
+  startedAt: number;
+  /** Seconds each new Yoto line took, from starting its job to finding it finished. */
+  jobSeconds: number[];
 };
 
 const SEND_STATS = new Map<string, SendStats>();
@@ -419,6 +482,8 @@ function sendStats(sendId: string): SendStats {
     failedJobs: 0,
     fallback: false,
     recorded: new Set(),
+    startedAt: Date.now(),
+    jobSeconds: [],
   };
   if (!sendId) return fresh;
   SEND_STATS.set(sendId, fresh);
@@ -426,18 +491,43 @@ function sendStats(sendId: string): SendStats {
   return fresh;
 }
 
-/** One line per finished adventure track, and one per refusal: how much was new and how much was reused. */
-export function sendSummary(sendId: string, stats: Pick<SendStats, Exclude<keyof SendStats, "recorded">>, note = ""): string {
+type SummaryCounts = Omit<SendStats, "recorded" | "startedAt" | "jobSeconds"> & {
+  /** Seconds since the send's first track reached this server. */
+  seconds?: number;
+  /** The middle time a new Yoto line took to record. */
+  jobSeconds?: number;
+};
+
+function middle(values: readonly number[]): number | undefined {
+  if (values.length === 0) return undefined;
+  const sorted = [...values].sort((a, b) => a - b);
+  const half = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[half] : ((sorted[half - 1] as number) + (sorted[half] as number)) / 2;
+}
+
+/**
+ * One line per finished adventure track, and one per refusal: how much was new and how much was reused,
+ * and how long the send has taken so far.
+ */
+export function sendSummary(sendId: string, stats: SummaryCounts, note = ""): string {
+  const fresh = stats.labsNew + stats.piperNew;
+  const timing =
+    stats.seconds === undefined
+      ? ""
+      : `; ${Math.round(stats.seconds)} s` +
+        `${fresh > 0 ? `, ${(stats.seconds / fresh).toFixed(1)} s per new line` : ""}` +
+        `${stats.jobSeconds === undefined ? "" : `, a Yoto line records in ${stats.jobSeconds.toFixed(1)} s`}`;
   return (
     `[adventure voices] send ${sendId || "unnamed"}: ${stats.tracks} tracks, ` +
     `${stats.labsNew} new Yoto voice lines, ${stats.piperNew} new Piper lines, ${stats.cached} reused; ` +
     `refused 429 x${stats.refused429}, other x${stats.refusedOther}, failed jobs x${stats.failedJobs}` +
-    `${stats.fallback ? ", reading with Piper" : ""}${note ? ` (${note})` : ""}`
+    `${timing}${stats.fallback ? ", reading with Piper" : ""}${note ? ` (${note})` : ""}`
   );
 }
 
 function logSend(sendId: string, stats: SendStats, note = "") {
-  console.info(sendSummary(sendId, stats, note));
+  const seconds = (Date.now() - stats.startedAt) / 1000;
+  console.info(sendSummary(sendId, { ...stats, seconds, jobSeconds: middle(stats.jobSeconds) }, note));
 }
 
 /** Cache identity for a finished mix: voice, cry gain, voice gain, pause, dex number, and the script. */
@@ -571,6 +661,57 @@ function scratchContent(text: string, title: string, voiceId: string) {
   };
 }
 
+/** `items` in runs of at most `size`, in order. */
+function chunked<T>(items: readonly T[], size: number): T[][] {
+  const runs: T[][] = [];
+  for (let at = 0; at < items.length; at += Math.max(1, size)) runs.push(items.slice(at, at + Math.max(1, size)));
+  return runs;
+}
+
+/** The first of each list, then the second of each, and so on: each voice's first job before any voice's second. */
+function takingTurns<T>(lists: readonly (readonly T[])[]): T[] {
+  const out: T[] = [];
+  for (let turn = 0; lists.some((list) => turn < list.length); turn += 1) {
+    for (const list of lists) if (turn < list.length) out.push(list[turn] as T);
+  }
+  return out;
+}
+
+/** The track key of line `index` (from 0) of a scratch card holding `count` lines. */
+function scratchTrackKey(index: number, count: number): string {
+  return count === 1 ? "line-1" : `line-${index + 1}-1`;
+}
+
+/**
+ * A scratch card for several lines in one voice, each its own chapter with one track, so each comes back
+ * as its own recording. One line is the same card a line was always recorded on.
+ */
+function scratchLines(lines: ReadonlyArray<{ text: string }>, title: string, voiceId: string) {
+  if (lines.length === 1) return scratchContent(lines[0]?.text ?? "", title, voiceId);
+  return {
+    title: "Pokefacts scratch",
+    content: {
+      chapters: lines.map((line, index) => ({
+        key: `line-${index + 1}`,
+        title,
+        tracks: [
+          {
+            key: scratchTrackKey(index, lines.length),
+            title,
+            trackUrl: forElevenLabs(line.text),
+            type: "elevenlabs",
+            voiceId,
+          },
+        ],
+      })),
+    },
+    metadata: {
+      title: "Pokefacts scratch",
+      description: "Temporary lines. Pokefacts deletes this.",
+    },
+  };
+}
+
 function textField(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const text = value.trim();
@@ -621,6 +762,20 @@ function httpsAudio(card: CardPayload): string {
     }
   }
   return "";
+}
+
+/**
+ * The recording of one line of a scratch card: the track with its key, or, if Yoto dropped the keys, the
+ * track in its place. No key means a one-line card, whose only recording it is.
+ */
+function trackAudio(card: CardPayload, trackKey: string): string {
+  if (!trackKey) return httpsAudio(card);
+  const tracks = (card.content?.chapters ?? []).flatMap((chapter) => chapter.tracks ?? []);
+  const keyed = tracks.find((track) => track.key === trackKey)?.trackUrl;
+  if (keyed && /^https?:\/\//.test(keyed)) return keyed;
+  const place = /^line-(\d+)(?:-1)?$/.exec(trackKey);
+  const placed = place ? (tracks[Number(place[1]) - 1]?.trackUrl ?? "") : "";
+  return /^https?:\/\//.test(placed) ? placed : "";
 }
 
 function uploadMarkPath(renderedRoot: string, uploadId: string): string {
@@ -711,6 +866,128 @@ export async function discardTitledCards(
 
 async function discardCard(token: string, cardId: string, fetchImpl: typeof fetch): Promise<void> {
   await discardYotoCard(token, cardId, fetchImpl);
+}
+
+function labsJobUrl(jobId: string): string {
+  return `https://labs.api.yotoplay.com/content/job/${encodeURIComponent(jobId)}`;
+}
+
+/**
+ * Keep the recordings of a finished job. Each of its lines not saved yet is downloaded from its own track
+ * of the scratch card and saved under its speech key. Once every line is kept, or saving has failed three
+ * times, the scratch card is deleted and the job forgotten; a line given up on is recorded again later.
+ * Returns the lines saved now, and the scratch cards deleted.
+ */
+async function keepJob(
+  token: string,
+  jobs: LabsJobs,
+  jobId: string,
+  cardId: string,
+  speechRoot: string,
+  fetchImpl: typeof fetch,
+): Promise<{ saved: LabsLine[]; deleted: Set<string> }> {
+  const fileOf = (line: LabsLine) => path.join(/* turbopackIgnore: true */ speechRoot, `${line.key}.mp3`);
+  const saved: LabsLine[] = [];
+  const cards = new Set<string>([cardId]);
+  let unsaved = 0;
+  try {
+    const waiting: LabsLine[] = [];
+    for (const line of jobs.linesOf(jobId)) {
+      if (await fileExists(fileOf(line))) await jobs.finish(line.key);
+      else waiting.push(line);
+    }
+    if (waiting.length > 0) {
+      const playable = await loadCard(token, cardId, true, fetchImpl);
+      if (playable.cardId) cards.add(playable.cardId);
+      for (const line of waiting) {
+        try {
+          const source = trackAudio(playable, line.track);
+          if (!source && line.track !== "line-1" && line.track !== "") {
+            oneLinePerJob("a scratch card came back without a recording for each of its lines");
+          }
+          if (!source) throw new Error("This line's recording is not ready to download.");
+          const response = await fetchImpl(source, { signal: AbortSignal.timeout(20_000) });
+          if (!response.ok) throw new Error("This line's recording could not be downloaded.");
+          const speech = Buffer.from(await response.arrayBuffer());
+          if (speech.length < 128 || !inputContainer(speech)) throw new Error("This line's recording was empty.");
+          await writeBytesAtomic(fileOf(line), speech);
+          await jobs.finish(line.key);
+          saved.push(line);
+        } catch {
+          unsaved += 1;
+        }
+      }
+    }
+  } catch {
+    // The scratch card could not be read: none of its lines is kept yet.
+    unsaved = jobs.linesOf(jobId).length;
+  }
+  if (unsaved > 0 && (await jobs.missed(jobId, cardId)) < 3) return { saved, deleted: new Set() };
+  for (const id of cards) await discardCard(token, id, fetchImpl);
+  await jobs.finishJob(jobId);
+  return { saved, deleted: cards };
+}
+
+/**
+ * Before the library sweep, each job this account still has going is checked once. A finished one has
+ * its lines saved with the other recordings, so none is recorded again, and its scratch card deleted; a
+ * failed one is forgotten. These are jobs a stopped track, or one Yoto turned away, left behind. Returns
+ * how many lines are still recording, so the sweep can wait for their scratch cards.
+ */
+async function settleLabsJobs(
+  token: string,
+  speechRoot: string,
+  fetchImpl: typeof fetch,
+): Promise<{ recording: number; waitMs: number }> {
+  const jobs = await LabsJobs.open(labsJobsRoot(speechRoot), renderedAccount(token));
+  await jobs.prune(Date.now());
+  let recording = 0;
+  for (const jobId of new Set(jobs.list().map((line) => line.jobId))) {
+    const lines = jobs.linesOf(jobId);
+    const first = lines[0];
+    if (!first) continue;
+    const stuck = Date.now() - first.startedAt >= LABS_STUCK_MS;
+    if (jobs.pausedFor(Date.now()) > 0 || !jobs.claim(jobId, Date.now())) {
+      if (!stuck) recording += lines.length;
+      continue;
+    }
+    try {
+      let cardId = first.cardId;
+      if (!cardId) {
+        const status = await yoto(token, labsJobUrl(jobId), undefined, fetchImpl, 15_000, 1);
+        const fields = jobFields(await readJson(status));
+        if (!status.ok) {
+          const decision = labsRefusal(status.status);
+          // The login ran out: nothing more can be checked until Yoto is connected again.
+          if (decision === "reconnect") return { recording: 0, waitMs: 0 };
+          // Yoto does not know this job any more.
+          if (decision === "piper") await jobs.finishJob(jobId);
+          else {
+            if (decision === "wait") jobs.pause(Date.now(), retryAfterMs(status));
+            if (!stuck) recording += lines.length;
+          }
+          continue;
+        }
+        jobs.calm();
+        if (fields.status === "failed") {
+          await jobs.finishJob(jobId);
+          continue;
+        }
+        if (fields.status !== "completed" || !fields.cardId) {
+          if (!stuck) recording += lines.length;
+          continue;
+        }
+        cardId = fields.cardId;
+      }
+      await keepJob(token, jobs, jobId, cardId, speechRoot, fetchImpl);
+    } catch {
+      // A network fault: as far as anyone knows, it is still recording.
+      if (!stuck) recording += lines.length;
+    } finally {
+      jobs.release(jobId, Date.now());
+    }
+  }
+  return { recording, waitMs: Math.max(LABS_POLL_MS, jobs.pausedFor(Date.now())) };
 }
 
 async function openUpload(
@@ -841,6 +1118,13 @@ export async function prepareFactTrack(
   );
   if (!request.text?.trim() && (discardIds.length > 0 || request.sweepScratch)) {
     for (const cardId of discardIds) await discardCard(token, cardId, fetchImpl);
+    if (request.sweepScratch) {
+      // Lines still recording are saved first, so the sweep deletes no recording before it is kept.
+      const settled = await settleLabsJobs(token, roots.speech, fetchImpl).catch(() => ({ recording: 0, waitMs: 0 }));
+      if (settled.recording > 0 && request.settleJobs) {
+        return { phase: "discarded", recording: settled.recording, waitMs: settled.waitMs };
+      }
+    }
     await discardTitledCards(token, SCRATCH_TITLES, fetchImpl);
     return { phase: "discarded" };
   }
@@ -1026,20 +1310,22 @@ export async function prepareFactTrack(
   };
 
   /**
-   * An adventure track: each line is recorded in its own voice, one at a time, then they are joined
-   * with the sounds. A Yoto Labs line uses the same speech job and scratch card steps as a plain track,
-   * tagged with `speechPart` so a recording always lands on the line it was made for.
+   * An adventure track, or a fact read in pieces: each line is recorded in its own voice, then they are
+   * joined with the sounds. The missing Yoto Labs lines go out a voice at a time, several lines to a job,
+   * each its own track of the scratch card, with three jobs going for a track and LABS_ACCOUNT_JOBS for the
+   * account. Each step checks every job, keeps the finished lines, deletes their scratch cards and starts
+   * the next. Which job records which line is kept per account (LabsJobs), so the next poll, a refreshed
+   * page or a restarted server carries on with the same jobs. A page from before this polls the oldest job
+   * itself and comes back with its scratch card, tagged with `speechPart`.
    */
   const fromParts = async (asked: NonNullable<typeof parts>): Promise<TrackPrepareResult> => {
+    const fileFor = (part: { text: string; voiceId: string }) =>
+      path.join(
+        /* turbopackIgnore: true */ roots.speech,
+        `${speechKey(part.text, part.voiceId)}.${isPiperVoice(part.voiceId) ? "wav" : "mp3"}`,
+      );
     // A line with no recording in its voice yet, but an older script that has one, uses that recording.
-    const lines = await withSavedTakes(asked, (part) =>
-      fileExists(
-        path.join(
-          /* turbopackIgnore: true */ roots.speech,
-          `${speechKey(part.text, part.voiceId)}.${isPiperVoice(part.voiceId) ? "wav" : "mp3"}`,
-        ),
-      ),
-    );
+    const lines = await withSavedTakes(asked, (part) => fileExists(fileFor(part)));
     const spoken = lines.filter(isSpokenPart);
     const stats = sendStats(sendId);
     /** Yoto Labs turned a line away. Fall back to Piper if every line has a Piper voice to fall back to. */
@@ -1057,79 +1343,203 @@ export async function prepareFactTrack(
       logSend(sendId, stats, `Yoto voices refused (${failedJob ? "failed job" : `status ${status}`}); reading with Piper`);
       return { phase: "voice-fallback" };
     };
-    const fileFor = (part: SpokenPart) =>
-      path.join(
-        /* turbopackIgnore: true */ roots.speech,
-        `${speechKey(part.text, part.voiceId)}.${isPiperVoice(part.voiceId) ? "wav" : "mp3"}`,
-      );
-    const saveFromCard = async (part: SpokenPart, cardId: string) => {
-      const playable = await loadCard(token, cardId, true, fetchImpl);
-      const source = httpsAudio(playable);
-      if (!source) throw new Error("This line's recording is not ready to download.");
-      const response = await fetchImpl(source, { signal: AbortSignal.timeout(20_000) });
-      if (!response.ok) throw new Error("This line's recording could not be downloaded.");
-      const speech = Buffer.from(await response.arrayBuffer());
-      if (speech.length < 128 || !inputContainer(speech)) throw new Error("This line's recording was empty.");
-      await writeBytesAtomic(fileFor(part), speech);
-      stats.labsNew += 1;
-      stats.recorded.add(speechKey(part.text, part.voiceId));
-      const ids = new Set<string>([cardId]);
-      if (playable.cardId) ids.add(playable.cardId);
-      for (const id of ids) await discardCard(token, id, fetchImpl);
-      if (request.speechCardId && ids.has(request.speechCardId)) scratchHeld = false;
-    };
+
+    // Each line once, in order: a line said twice in one track is recorded once.
+    const missing: SpokenPart[] = [];
+    const seen = new Set<string>();
     for (const part of spoken) {
-      if (await fileExists(fileFor(part))) continue;
-      if (isPiperVoice(part.voiceId)) {
-        const wav = await synthesizePiper(part.text, roots.piper);
-        if (inputContainer(wav) !== "wav" || wav.length < 44) throw new Error("Piper did not write a recording.");
-        await writeBytesAtomic(fileFor(part), wav);
-        stats.piperNew += 1;
-        stats.recorded.add(speechKey(part.text, part.voiceId));
-        continue;
+      const key = speechKey(part.text, part.voiceId);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (!(await fileExists(fileFor(part)))) missing.push(part);
+    }
+    for (const part of missing) {
+      if (!isPiperVoice(part.voiceId)) continue;
+      const wav = await synthesizePiper(part.text, roots.piper);
+      if (inputContainer(wav) !== "wav" || wav.length < 44) throw new Error("Piper did not write a recording.");
+      await writeBytesAtomic(fileFor(part), wav);
+      stats.piperNew += 1;
+      stats.recorded.add(speechKey(part.text, part.voiceId));
+    }
+
+    /** One step of the Yoto Labs lines still missing. Null once every one of them is saved. */
+    const recordLabsLines = async (labs: SpokenPart[]): Promise<TrackPrepareResult | null> => {
+      const jobs = await LabsJobs.open(labsJobsRoot(roots.speech), account);
+      await jobs.prune(Date.now());
+      const keyOf = (part: SpokenPart) => speechKey(part.text, part.voiceId);
+      const left = new Map(labs.map((part) => [keyOf(part), part]));
+      /** Keep a finished job's lines, another track's among them, and count them for this send. */
+      const keep = async (jobId: string, cardId: string) => {
+        const kept = await keepJob(token, jobs, jobId, cardId, roots.speech, fetchImpl);
+        for (const line of kept.saved) {
+          stats.labsNew += 1;
+          stats.recorded.add(line.key);
+          stats.jobSeconds.push((Date.now() - line.startedAt) / 1000);
+          left.delete(line.key);
+        }
+        if (request.speechCardId && kept.deleted.has(request.speechCardId)) scratchHeld = false;
+      };
+
+      // A page from before this polls the oldest job itself and comes back with its scratch card.
+      const polled = request.speechPart ? labs.find((part) => partKey(part) === request.speechPart) : undefined;
+      if (polled && request.speechJobId) await jobs.adopt(keyOf(polled), request.speechJobId, Date.now());
+      const polledJob = polled ? jobs.line(keyOf(polled))?.jobId : undefined;
+      if (polledJob && polledJob === request.speechJobId && request.speechCardId) {
+        if (jobs.claim(polledJob, Date.now(), false)) {
+          try {
+            await keep(polledJob, request.speechCardId);
+          } finally {
+            jobs.release(polledJob, Date.now());
+          }
+        } else {
+          // Another step is keeping this job's lines from the same card, and deletes it after.
+          scratchHeld = false;
+        }
       }
-      const key = partKey(part);
-      if (request.speechPart === key && request.speechCardId) {
-        await saveFromCard(part, request.speechCardId);
-        continue;
+
+      // Check the jobs already going: keep the finished lines, and give up on a failed job.
+      let wait = jobs.pausedFor(Date.now());
+      const asked = new Set<string>();
+      for (const part of labs) {
+        const key = keyOf(part);
+        if (wait > 0) break;
+        if (!left.has(key)) continue;
+        if (await fileExists(fileFor(part))) {
+          // Another track kept this line.
+          left.delete(key);
+          continue;
+        }
+        const line = jobs.line(key);
+        if (!line || asked.has(line.jobId)) continue;
+        asked.add(line.jobId);
+        if (!jobs.claim(line.jobId, Date.now())) continue;
+        try {
+          let cardId = line.cardId;
+          if (!cardId) {
+            let status: Response;
+            try {
+              status = await yoto(token, labsJobUrl(line.jobId), undefined, fetchImpl, 15_000, 1);
+            } catch {
+              // A network fault: this job is asked about again on the next step.
+              continue;
+            }
+            const fields = jobFields(await readJson(status));
+            const decision = status.ok ? undefined : labsRefusal(status.status);
+            if (decision === "wait") {
+              stats.refused429 += 1;
+              wait = jobs.pause(Date.now(), retryAfterMs(status));
+              continue;
+            }
+            if (decision === "retry") continue;
+            if (decision) {
+              if (decision === "piper") await jobs.finishJob(line.jobId);
+              return refused(status.status, false, fields.error || "Could not check this line's recording.");
+            }
+            jobs.calm();
+            if (fields.status === "failed") {
+              await jobs.finishJob(line.jobId);
+              return refused(undefined, true, fields.error || "Yoto could not record this line.");
+            }
+            if (fields.status !== "completed" || !fields.cardId) {
+              if (Date.now() - line.startedAt < LABS_STUCK_MS) continue;
+              await jobs.finishJob(line.jobId);
+              return refused(undefined, true, "Yoto took too long to record this line.");
+            }
+            cardId = fields.cardId;
+          }
+          await keep(line.jobId, cardId);
+        } finally {
+          jobs.release(line.jobId, Date.now());
+        }
       }
-      if (request.speechPart === key && request.speechJobId) {
-        const status = await yoto(
-          token,
-          `https://labs.api.yotoplay.com/content/job/${encodeURIComponent(request.speechJobId)}`,
-          undefined,
-          fetchImpl,
-          15_000,
+
+      // Start the rest a voice at a time: up to LABS_LINES_PER_JOB lines of one voice in a job, three jobs
+      // going for this track and LABS_ACCOUNT_JOBS for the account, and always one.
+      const byVoice = new Map<string, SpokenPart[]>();
+      for (const part of labs) {
+        if (!left.has(keyOf(part)) || jobs.has(keyOf(part))) continue;
+        byVoice.set(part.voiceId, [...(byVoice.get(part.voiceId) ?? []), part]);
+      }
+      for (const batch of takingTurns([...byVoice.values()].map((parts) => chunked(parts, labsLinesPerJob())))) {
+        if (wait > 0) break;
+        const going = jobs.jobsFor(left.keys());
+        if (going >= LABS_TRACK_JOBS) break;
+        if (going > 0 && jobs.recording(Date.now()) >= LABS_ACCOUNT_JOBS) break;
+        const held = jobs.reserve(batch.map(keyOf));
+        const lines = batch.filter((part) => held.includes(keyOf(part)));
+        const voiceId = lines[0]?.voiceId;
+        if (!voiceId) continue;
+        let created: Response;
+        try {
+          created = await yoto(
+            token,
+            `https://labs.api.yotoplay.com/content/job?voiceId=${encodeURIComponent(voiceId)}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(scratchLines(lines, title, voiceId)),
+            },
+            fetchImpl,
+            20_000,
+            1,
+          );
+        } catch (error) {
+          jobs.unreserve(held);
+          // The jobs already going carry on, and these lines are asked for again on the next step.
+          if (going > 0) break;
+          throw error;
+        }
+        const started = jobFields(await readJson(created));
+        const decision = created.ok ? undefined : labsRefusal(created.status);
+        if (decision === "wait") {
+          jobs.unreserve(held);
+          stats.refused429 += 1;
+          wait = jobs.pause(Date.now(), retryAfterMs(created));
+          break;
+        }
+        if (decision === "retry" && going > 0) {
+          jobs.unreserve(held);
+          break;
+        }
+        if (decision) {
+          jobs.unreserve(held);
+          return refused(created.status, false, started.error || "Yoto did not start this line.");
+        }
+        if (!started.jobId || !/^[\w-]{8,80}$/.test(started.jobId)) {
+          jobs.unreserve(held);
+          throw new Error(started.error || "Yoto did not start this line.");
+        }
+        jobs.calm();
+        await jobs.started(
+          lines.map((part, index) => ({ key: keyOf(part), track: scratchTrackKey(index, lines.length) })),
+          started.jobId,
+          Date.now(),
         );
-        const fields = jobFields(await readJson(status));
-        if (!status.ok) {
-          const message = fields.error || "Could not check this line's recording.";
-          if (status.status >= 400 && status.status < 500) return refused(status.status, false, message);
-          throw new Error(message);
-        }
-        if (fields.status === "failed") return refused(undefined, true, fields.error || "Yoto could not record this line.");
-        if (fields.status !== "completed" || !fields.cardId) {
-          return { phase: "speech", speechJobId: request.speechJobId, speechPart: key };
-        }
-        await saveFromCard(part, fields.cardId);
-        continue;
       }
-      await releaseScratch();
-      const created = await yoto(
-        token,
-        `https://labs.api.yotoplay.com/content/job?voiceId=${encodeURIComponent(part.voiceId)}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(scratchContent(part.text, title, part.voiceId)),
-        },
-        fetchImpl,
-        20_000,
-      );
-      const started = jobFields(await readJson(created));
-      if (!created.ok) return refused(created.status, false, started.error || "Yoto did not start this line.");
-      if (!started.jobId) throw new Error(started.error || "Yoto did not start this line.");
-      return { phase: "speech", speechJobId: started.jobId, speechPart: key };
+
+      if (left.size === 0) return null;
+      const waitMs = Math.max(LABS_POLL_MS, jobs.pausedFor(Date.now()));
+      const recording = [...left.keys()].filter((key) => jobs.isRecording(key)).length;
+      const oldest = [...left.values()].find((part) => jobs.line(keyOf(part)));
+      const line = oldest ? jobs.line(keyOf(oldest)) : undefined;
+      if (!oldest || !line) return { phase: "wait", waitMs, recording, linesLeft: left.size };
+      return {
+        phase: "speech",
+        speechJobId: line.jobId,
+        speechPart: partKey(oldest),
+        waitMs,
+        recording,
+        linesLeft: left.size,
+      };
+    };
+
+    const labs = missing.filter((part) => !isPiperVoice(part.voiceId));
+    if (labs.length > 0) {
+      const step = await recordLabsLines(labs);
+      if (step) {
+        await releaseScratch();
+        return step;
+      }
     }
     await releaseScratch();
     for (const part of spoken) if (!stats.recorded.has(speechKey(part.text, part.voiceId))) stats.cached += 1;

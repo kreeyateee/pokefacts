@@ -214,7 +214,7 @@ describe("names recorded on their own", () => {
 
 describe("falling back to Piper", () => {
   it("decides from Yoto's answer", () => {
-    assert.equal(labsRefusal(429), "piper", "a 429 that outlasted the retries");
+    assert.equal(labsRefusal(429), "wait", "a 429 asks for a pause, never Piper");
     assert.equal(labsRefusal(400), "piper");
     assert.equal(labsRefusal(403), "piper", "a voice Yoto no longer offers");
     assert.equal(labsRefusal(404), "piper");
@@ -259,6 +259,22 @@ describe("falling back to Piper", () => {
     assert.equal(
       line,
       "[adventure voices] send slfls: 3 tracks, 4 new Yoto voice lines, 0 new Piper lines, 9 reused; refused 429 x1, other x0, failed jobs x0, reading with Piper",
+    );
+    // And how long the send has taken, so two sends can be compared.
+    assert.equal(
+      sendSummary("slfls", {
+        tracks: 3,
+        labsNew: 4,
+        piperNew: 2,
+        cached: 9,
+        refused429: 0,
+        refusedOther: 0,
+        failedJobs: 0,
+        fallback: false,
+        seconds: 90.4,
+        jobSeconds: 7.25,
+      }),
+      "[adventure voices] send slfls: 3 tracks, 4 new Yoto voice lines, 2 new Piper lines, 9 reused; refused 429 x0, other x0, failed jobs x0; 90 s, 15.1 s per new line, a Yoto line records in 7.3 s",
     );
     assert.match(VOICE_FALLBACK_NOTE, /Piper/);
   });
