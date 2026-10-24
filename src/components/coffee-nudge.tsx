@@ -33,7 +33,7 @@ export function markCoffeeAsked() {
   }
 }
 
-/** Asks browsers, kindly and at most once a week, after a few minutes on the page. Renders nothing. */
+/** Asks browsers, kindly and at most once a day, after a few minutes on the page. Renders nothing. */
 export function CoffeeNudge() {
   useEffect(() => {
     if (!shouldNudge(Number.POSITIVE_INFINITY, askedAt(), Date.now())) return;

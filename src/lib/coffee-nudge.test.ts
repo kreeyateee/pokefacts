@@ -11,7 +11,8 @@ describe("coffee nudge", () => {
     assert.equal(shouldNudge(COFFEE_NUDGE_AFTER_S, 0, now), true);
   });
 
-  it("asks at most once a week, counting the ask when a card is ready", () => {
+  it("asks at most once a day, counting the ask when a card is ready", () => {
+    assert.ok(COFFEE_NUDGE_GAP_MS <= 24 * 60 * 60 * 1000, "a daily visitor is asked every day");
     assert.equal(shouldNudge(600, now - 60_000, now), false, "asked a minute ago");
     assert.equal(shouldNudge(600, now - COFFEE_NUDGE_GAP_MS + 1, now), false);
     assert.equal(shouldNudge(600, now - COFFEE_NUDGE_GAP_MS, now), true);
