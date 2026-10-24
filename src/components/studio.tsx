@@ -2193,17 +2193,21 @@ export function Studio({
         setJob({ status: "sending", detail: `Sending ${story.title} to Yoto…` });
         const pixels = storyPixels(story);
         const pictures = [
-          ...pixels.real.map((id) => ({ id, shadow: false })),
-          ...pixels.shadow.map((id) => ({ id, shadow: true })),
+          ...pixels.real.map((id) => ({ id, shadow: false, attack: false })),
+          ...pixels.shadow.map((id) => ({ id, shadow: true, attack: false })),
+          ...pixels.attack.map((id) => ({ id, shadow: false, attack: true })),
         ];
         const realById: Record<number, string> = {};
         const shadowById: Record<number, string> = {};
+        const attackById: Record<number, string> = {};
         const namedById: Record<string, string> = {};
         // The Poké Ball shown on catch tracks.
         for (const name of pixels.named) namedById[name] = await uploadNamedIcon(name);
         let finished = 0;
-        await mapPool(pictures, async ({ id, shadow }) => {
-          (shadow ? shadowById : realById)[id] = await uploadIcon(id, shadow);
+        await mapPool(pictures, async ({ id, shadow, attack }) => {
+          // Most tracks bob gently; the tracks where a Pokémon attacks show its attack animation.
+          if (attack) attackById[id] = await uploadIcon(id, false, true);
+          else (shadow ? shadowById : realById)[id] = await uploadIcon(id, shadow);
           finished += 1;
           setJob({
             status: "sending",
@@ -2212,7 +2216,7 @@ export function Studio({
             total: pictures.length,
           });
         });
-        const built = storyCard(story, { voiceId: voiceIdRef.current, realById, shadowById, namedById });
+        const built = storyCard(story, { voiceId: voiceIdRef.current, realById, shadowById, namedById, attackById });
         const upload = existing ? uploadForPlaylist(built.upload, existing.cardId, "replace") : built.upload;
         return newSend({
           title: story.title,

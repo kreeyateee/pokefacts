@@ -22,7 +22,11 @@ export type StoryChoice = {
  * pictures (the Poké Ball), or a stock Yoto icon id.
  */
 export type StoryIcon =
-  | { dexId: number; shadow?: boolean }
+  /**
+   * A Pokémon. On the player its icon bobs gently; with `attack` it plays its attack animation instead,
+   * for the track where it attacks. A shadow stays still.
+   */
+  | { dexId: number; shadow?: boolean; attack?: boolean }
   /** A special form's pixel icon, such as a Gigantamax Pokémon, by its PokéAPI form id (10001 and up). */
   | { formId: number }
   | { pixel: StoryPixel }

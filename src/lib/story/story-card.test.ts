@@ -164,7 +164,7 @@ describe("storyCard", () => {
   });
 
   it("uses uploaded pixels, shadows and stock icons", () => {
-    assert.deepEqual(storyPixels(smallStory()), { real: [113], shadow: [113], named: [] });
+    assert.deepEqual(storyPixels(smallStory()), { real: [113], shadow: [113], attack: [], named: [] });
     const { card, upload } = compiled();
     const icons = Object.fromEntries(card.chapters.map((chapter) => [chapter.key, chapter.icon]));
     assert.deepEqual(icons, {
@@ -177,6 +177,19 @@ describe("storyCard", () => {
     const grass = nested(upload.content).chapters[2];
     assert.equal(grass?.display.icon16x16, "yoto:#shadow113");
     assert.deepEqual(grass?.tracks.map((track) => track.display.icon16x16), ["yoto:#shadow113", "yoto:#shadow113"]);
+  });
+
+  it("shows a Pokémon's attack animation on the track where it attacks, and its calm icon everywhere else", () => {
+    const story = smallStory();
+    const rock = story.nodes.find((node) => node.id === "rock");
+    if (rock) rock.icon = { dexId: 113, attack: true };
+    assert.deepEqual(storyPixels(story).attack, [113]);
+    const { card } = storyCard(story, { voiceId: LILY_VOICE_ID, ...MEDIA, attackById: { 113: "attack113" } });
+    const icons = Object.fromEntries(card.chapters.map((chapter) => [chapter.key, chapter.icon]));
+    assert.equal(icons.rock, "yoto:#attack113");
+    assert.equal(icons.grass, "yoto:#shadow113");
+    // Without an uploaded attack animation, the calm icon stands in.
+    assert.equal(storyCard(story, { voiceId: LILY_VOICE_ID, ...MEDIA }).card.chapters.find((chapter) => chapter.key === "rock")?.icon, "yoto:#real113");
   });
 
   it("leaves a pixel path when it was not uploaded, so the send stops with a clear error", () => {
