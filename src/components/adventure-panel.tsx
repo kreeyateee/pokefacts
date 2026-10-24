@@ -71,6 +71,23 @@ const ADVENTURES = {
     opening: "Opening the Play Park…",
     failed: "Friendly Battles could not be set up.",
   },
+  nursery: {
+    title: "Pokémon Nursery",
+    young: true,
+    blurb:
+      "Their favourite Pokémon helps Nurse Poppy look after five baby Pokémon: sleepy, hungry, chilly or muddy. Both buttons are kind ways to help, every baby ends up happy, and Poppy tells a little fact about each one.",
+    ownerNote: "Nurse Poppy says hello to them.",
+    opening: "Warming the blankets…",
+    failed: "The Pokémon Nursery could not be opened.",
+  },
+  catch: {
+    title: "Catch Quest",
+    blurb:
+      "Ranger Fern takes your child and a team of three along Route One. Each time a wild Pokémon jumps out, they pick which Pokémon to send out first, battle it, then catch it with a Poké Ball. Picking the strong type first time earns the best ending.",
+    ownerNote: "Ranger Fern calls them by name.",
+    opening: "Packing the Poké Balls…",
+    failed: "Catch Quest could not be set up.",
+  },
 } as const;
 
 type AdventureKind = keyof typeof ADVENTURES;
@@ -316,7 +333,7 @@ export function AdventurePanel({
           {"young" in adventure ? "A choose-your-own-adventure card for younger children, about three to five." : "A choose-your-own-adventure card for ages 8 to 12."}{" "}
           {adventure.blurb}
         </p>
-        {(kind === "lost" || kind === "play") && !partner ? (
+        {(kind === "lost" || kind === "play" || kind === "nursery" || kind === "catch") && !partner ? (
           <p className="mt-2 text-sm text-muted-foreground">
             No favourite chosen yet, so your child plays as Pikachu. Add their favourite below, and they play as that one.
           </p>

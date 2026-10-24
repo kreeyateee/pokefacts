@@ -43,6 +43,8 @@ describe("Friendly Battles", () => {
           assert.ok(words <= 14, `${node.id}: "${sentence}" is ${words} words`);
         }
       }
+      // Rosie tells a simple fact about the friend after every round.
+      for (const node of graph.nodes) if (node.kind === "scene") assert.match(node.text, /Did you know\? \w/, `${node.id} tells a fact`);
       // Both buttons are always happy: each leads to a cheer.
       const byId = new Map(graph.nodes.map((node) => [node.id, node]));
       for (const node of graph.nodes) {

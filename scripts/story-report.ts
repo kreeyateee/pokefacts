@@ -14,6 +14,8 @@ import { islandAdventure } from "../src/lib/story/island";
 import { lostAdventure } from "../src/lib/story/lost";
 import { paldeaAdventure } from "../src/lib/story/paldea";
 import { playAdventure } from "../src/lib/story/play";
+import { catchAdventure } from "../src/lib/story/catching";
+import { nurseryAdventure } from "../src/lib/story/nursery";
 import { safariAdventure } from "../src/lib/story/safari";
 import { storyCard } from "../src/lib/story/story-card";
 import { storyTrackCount } from "../src/lib/story/story-check";
@@ -33,6 +35,8 @@ const ADVENTURES: Record<string, (input: AdventureInput) => StoryGraph> = {
   paldea: paldeaAdventure,
   lost: lostAdventure,
   play: playAdventure,
+  nursery: nurseryAdventure,
+  catch: catchAdventure,
 };
 const SENDS = 40;
 const OWNERS = ["", "Mia", "Oliver", "Ava", "Leo"];

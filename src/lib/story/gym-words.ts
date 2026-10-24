@@ -309,6 +309,7 @@ export const STRONG_REASONS: Record<string, string> = {
   "Steel>Rock": "Metal cracks rock.",
   "Fighting>Ice": "A good punch shatters ice.",
   "Fighting>Rock": "A karate chop splits rock.",
+  "Fighting>Normal": "Fighting moves are made for knocking Normal types flat.",
 };
 
 /** One sentence on why a type hardly hurts another, keyed "Attack>Defence". */

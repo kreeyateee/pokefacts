@@ -7,6 +7,8 @@ import { islandAdventure } from "./island";
 import { lostAdventure } from "./lost";
 import { paldeaAdventure } from "./paldea";
 import { playAdventure } from "./play";
+import { catchAdventure } from "./catching";
+import { nurseryAdventure } from "./nursery";
 import { safariAdventure } from "./safari";
 import { storyCard } from "./story-card";
 import { checkStory } from "./story-check";
@@ -20,6 +22,8 @@ const ADVENTURES: Array<[string, (input: { seed: number; owner?: string }) => St
   ["Paldea", paldeaAdventure],
   ["Find Your Trainer", lostAdventure],
   ["Friendly Battles", playAdventure],
+  ["Pokémon Nursery", nurseryAdventure],
+  ["Catch Quest", catchAdventure],
 ];
 
 const CAST: StoryCharacter[] = [

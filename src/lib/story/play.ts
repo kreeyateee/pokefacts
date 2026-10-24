@@ -2,7 +2,7 @@
  * Friendly Battles: an adventure for younger children, about three to five. Your favourite Pokémon (Pikachu
  * without one) and you visit the Play Park, where six friendly Pokémon come to play. Each time, you choose:
  * use your partner's power, or do a silly dance. Both are right. Nobody loses: a power move makes your new
- * friend spin round and laugh, and a dance makes everyone giggle. How you played picks the happy ending.
+ * friend spin round and laugh, and a dance makes everyone giggle. Rosie tells one simple fact about each friend. How you played picks the happy ending.
  *
  * Sentences are short, there are sounds everywhere, and the first question comes in a few seconds.
  */
@@ -28,24 +28,24 @@ export const PLAY_CAST: StoryCharacter[] = [
   { id: "rosie", name: "Rosie", pronoun: "she", voices: ["cgSgspJ2msm6clMCkdW9", "FGY2WhTYpPnrIDTdsKH5"], tempo: 0.98, piper: { pitch: 2.5, tempo: 1 }, mood: "cheerfully" },
 ];
 
-/** Friendly Pokémon who come to play, with something they do. */
+/** Friendly Pokémon who come to play, with something they do and one simple fact about them. */
 const FRIENDS = [
-  { id: 54, name: "Psyduck", does: "Psyduck holds its head and quacks." },
-  { id: 39, name: "Jigglypuff", does: "Jigglypuff puffs up like a balloon." },
-  { id: 175, name: "Togepi", does: "Togepi wobbles in its shell." },
-  { id: 172, name: "Pichu", does: "Pichu's cheeks go sparkle, sparkle." },
-  { id: 1, name: "Bulbasaur", does: "Bulbasaur waves its vines." },
-  { id: 7, name: "Squirtle", does: "Squirtle blows a bubble." },
-  { id: 4, name: "Charmander", does: "Charmander wags its fiery tail." },
-  { id: 133, name: "Eevee", does: "Eevee wags its fluffy tail." },
-  { id: 393, name: "Piplup", does: "Piplup flaps its little wings." },
-  { id: 258, name: "Mudkip", does: "Mudkip splashes in a puddle." },
-  { id: 194, name: "Wooper", does: "Wooper smiles a great big smile." },
-  { id: 143, name: "Snorlax", does: "Snorlax yawns a great big yawn." },
-  { id: 216, name: "Teddiursa", does: "Teddiursa licks its honey paw." },
-  { id: 183, name: "Marill", does: "Marill bounces on its bouncy tail." },
-  { id: 915, name: "Lechonk", does: "Lechonk sniffs for snacks." },
-  { id: 25, name: "Pikachu", does: "Pikachu goes pika, pika!" },
+  { id: 54, name: "Psyduck", does: "Psyduck holds its head and quacks.", fact: "Psyduck always has a headache. That's why it holds its head." },
+  { id: 39, name: "Jigglypuff", does: "Jigglypuff puffs up like a balloon.", fact: "Jigglypuff's song is so sleepy, everyone nods off." },
+  { id: 175, name: "Togepi", does: "Togepi wobbles in its shell.", fact: "Togepi's shell is full of happiness. It shares it with kind people." },
+  { id: 172, name: "Pichu", does: "Pichu's cheeks go sparkle, sparkle.", fact: "Pichu is so small, its own sparks make it jump." },
+  { id: 1, name: "Bulbasaur", does: "Bulbasaur waves its vines.", fact: "Bulbasaur has a seed on its back. It grows in the sun." },
+  { id: 7, name: "Squirtle", does: "Squirtle blows a bubble.", fact: "Squirtle hides inside its shell to keep safe." },
+  { id: 4, name: "Charmander", does: "Charmander wags its fiery tail.", fact: "The flame on Charmander's tail shows how it feels." },
+  { id: 133, name: "Eevee", does: "Eevee wags its fluffy tail.", fact: "Eevee has a big fluffy collar of fur." },
+  { id: 393, name: "Piplup", does: "Piplup flaps its little wings.", fact: "Piplup is a penguin Pokémon. It's very proud." },
+  { id: 258, name: "Mudkip", does: "Mudkip splashes in a puddle.", fact: "The fin on Mudkip's head can feel the water move." },
+  { id: 194, name: "Wooper", does: "Wooper smiles a great big smile.", fact: "Wooper lives in ponds. Its skin is nice and slimy." },
+  { id: 143, name: "Snorlax", does: "Snorlax yawns a great big yawn.", fact: "Snorlax sleeps nearly all day. It only wakes up to eat." },
+  { id: 216, name: "Teddiursa", does: "Teddiursa licks its honey paw.", fact: "Teddiursa loves honey. Its paws taste of honey." },
+  { id: 183, name: "Marill", does: "Marill bounces on its bouncy tail.", fact: "Marill's tail floats like a ball, so it never sinks." },
+  { id: 915, name: "Lechonk", does: "Lechonk sniffs for snacks.", fact: "Lechonk has a super nose for finding food." },
+  { id: 25, name: "Pikachu", does: "Pikachu goes pika, pika!", fact: "Pikachu keeps electricity in its red cheeks." },
 ] as const;
 
 /** The sound word for each type's power. */
@@ -169,9 +169,10 @@ export function buildPlay(plan: PlayPlan): StoryGraph {
         id: id.power(round, powers),
         kind: "scene",
         title: `${friend.name}: ${word}!`,
-        icon: { dexId: partner.id },
+        // The partner plays its attack animation on the player while it uses its power.
+        icon: { dexId: partner.id, attack: true },
         bed,
-        text: `${P} uses ${type} power. [hit] ${word}! ${friend.name} spins round and round. Then it laughs. [cheer] Rosie claps. '${CHEERS[round] ?? "Hooray!"} Well played, ${P}!'${snack}`,
+        text: `${P} uses ${type} power. [hit] ${word}! ${friend.name} spins round and round. Then it laughs. [cheer] Rosie claps. '${CHEERS[round] ?? "Hooray!"} Well played, ${P}! Did you know? ${friend.fact}'${snack}`,
         next: last ? id.ending(endingFor(more)) : id.round(round + 1, more),
       });
       nodes.push({
@@ -180,7 +181,7 @@ export function buildPlay(plan: PlayPlan): StoryGraph {
         title: `${friend.name}: A Silly Dance`,
         icon: { dexId: friend.id },
         bed,
-        text: `${P} does a silly dance. Wiggle, wiggle! ${friend.name} does a silly dance too. [cry:${friend.id}] Everyone giggles. [cheer] Rosie laughs. '{laughs} ${GIGGLES[round] ?? "So silly!"}'${snack}`,
+        text: `${P} does a silly dance. Wiggle, wiggle! ${friend.name} does a silly dance too. [cry:${friend.id}] Everyone giggles. [cheer] Rosie laughs. '{laughs} ${GIGGLES[round] ?? "So silly!"} Did you know? ${friend.fact}'${snack}`,
         next: last ? id.ending(endingFor(powers)) : id.round(round + 1, powers),
       });
     }
