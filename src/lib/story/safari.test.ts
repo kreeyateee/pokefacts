@@ -5,6 +5,7 @@ import { GET } from "../../app/api/adventure/safari/route";
 import { listSafariSpecies } from "../catalogue-db";
 import { FIELD_NOTES, GOLDEN_STOPS } from "./safari-roster";
 import { storyTrackCount as trackCount, checkStory } from "./story-check";
+import { pacingProblems, randomPlaythroughs } from "./story-metrics";
 import { withoutCues } from "./story-sound";
 import { speakerLines } from "./story-voices";
 import { withoutVoiceTags } from "../voice-tags";
@@ -448,6 +449,65 @@ describe("safari adventure from the catalogue", () => {
     const walk = goldenWalk(graph);
     assert.equal(walk.at(-1)?.node.id, "end4");
     assert.ok(walk.some(({ node }) => node.id === "gold"));
-    assert.equal(walk.filter(({ node }) => /^s\dc0$/.test(node.id)).length, 5);
+  });
+
+  it("lets a child who listens catch Barnaby up: a catch wins one back, and finishing level opens the secret stop", () => {
+    const graph = safariAdventure({ seed: 1, owner: "Mia" });
+    const byId = new Map(graph.nodes.map((node) => [node.id, node]));
+    /** Plays a day, getting the throw wrong at the stops listed and everything else right. */
+    const day = (slipAt: number[]) => {
+      let node = byId.get("lesson") as StoryNode;
+      const seen: string[] = [];
+      for (let steps = 0; steps < 60 && node.kind !== "ending"; steps += 1) {
+        seen.push(node.id);
+        if (node.kind === "scene") {
+          node = byId.get(node.next) as StoryNode;
+          continue;
+        }
+        const stop = Number(/^s(\d)/.exec(node.id)?.[1] ?? 0);
+        const wrong = slipAt.includes(stop) && /^s\db\d$/.test(node.id);
+        const good = [node.left, node.right].find((choice) => /^(s\d[bc]\d|goldb|goldc)$/.test(choice.to));
+        const bad = [node.left, node.right].find((choice) => choice !== good);
+        node = byId.get((wrong ? bad : good)?.to ?? node.left.to) as StoryNode;
+      }
+      return { ending: node.kind === "ending" ? node.ending : null, secret: seen.includes("gold") };
+    };
+    assert.deepEqual(day([]).ending?.name, "Golden Legend");
+    assert.equal(day([2]).secret, true, "one slip, then catches, and you finish ahead of Barnaby");
+    assert.equal(day([1, 2]).secret, true, "two early slips, then three catches, still catches him up");
+    assert.equal(day([4, 5]).ending?.name, "A Good Day Out", "two late slips leave Barnaby ahead");
+    assert.equal(day([5]).ending?.name, "Barnaby's Bad Day", "a slip at the very last stop leaves him just ahead");
+  });
+
+  it("is fair: the rare one is always the shy one, and Marigold's rule comes before every throw", () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const graph = safariAdventure({ seed });
+      for (const node of graph.nodes) {
+        if (node.kind !== "choice") continue;
+        if ([node.left.label, node.right.label].some((label) => label.startsWith("throw"))) {
+          assert.match(node.text, /Common, ball\. Rare and fast, bait\. Rare and slow, rock/i, `${node.id} says the rule`);
+        }
+        if ([node.left.label, node.right.label].some((label) => label.startsWith("creep up on"))) {
+          // Exactly one of the two is shy, and it's the one the right button creeps up on.
+          const shy = /(peeking at you|ducks down|watching you, shy)/.exec(node.text);
+          assert.ok(shy, `${node.id} gives the shy tell`);
+        }
+      }
+    }
+  });
+
+  it("keeps a child pressing buttons, records a sentence at a time, and spreads its endings", () => {
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+      assert.deepEqual(pacingProblems(safariAdventure({ seed, owner: "Mia" })), [], `seed ${seed}`);
+      assert.deepEqual(pacingProblems(safariAdventure({ seed, owner: "Mia", partner: { id: 25, name: "Pikachu" } })), [], `seed ${seed} with a partner`);
+    }
+    const graph = safariAdventure({ seed: 1 });
+    assert.equal(graph.pieces, "sentences");
+    for (const seed of [1, 2, 3]) {
+      const { endings } = randomPlaythroughs(safariAdventure({ seed }));
+      const twoOrBetter = (endings[2] ?? 0) + (endings[3] ?? 0) + (endings[4] ?? 0);
+      assert.ok(twoOrBetter >= 0.25, `seed ${seed}: ending 2 or better ${twoOrBetter}`);
+      assert.ok((endings[4] ?? 0) >= 0.01 && (endings[4] ?? 0) <= 0.1, `seed ${seed}: golden ${endings[4]}`);
+    }
   });
 });

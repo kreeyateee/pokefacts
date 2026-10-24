@@ -69,7 +69,7 @@ describe("the child's partner Pokémon in every adventure", () => {
     assert.ok(withPikachu.team.some((mon) => mon.id === 25));
     assert.ok(withPikachu.gyms.every(({ first, ace }) => first.foe.id !== 25 && ace.foe.id !== 25));
     const gym = gymAdventure({ seed: 4, partner: MEWTWO });
-    assert.match(gym.nodes[0]?.text ?? "", /counting your seven Poké Balls/);
+    assert.match(gym.nodes[0]?.text ?? "", /Your team of seven/);
     assert.match(gym.nodes[0]?.text ?? "", /your partner Mewtwo, the Psychic type/);
   });
 
@@ -77,7 +77,7 @@ describe("the child's partner Pokémon in every adventure", () => {
     const story = (await islandRoute(new Request("http://localhost/api/adventure/island?seed=2&partner=25")).json()).story;
     assert.ok(says(story, "Pikachu") > 0);
     const ignored = (await gymRoute(new Request("http://localhost/api/adventure/gym?seed=2&partner=9999")).json()).story;
-    assert.match(ignored.nodes[0].text, /counting your six Poké Balls/);
+    assert.match(ignored.nodes[0].text, /Your team of six/);
     assert.equal(partnerFor(29)?.name, "Nidoran female");
     assert.equal(sayableName("Mr. Mime"), "Mr Mime");
   });

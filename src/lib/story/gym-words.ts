@@ -158,7 +158,7 @@ export function introText(owner: string, team: readonly string[], count = "six")
   return [
     "Welcome to the Gym Challenge! Eight gyms, eight badges, one Champion.",
     `A young man in a shiny tracksuit leaps out. '{excited} And here they are, folks!' says Ronnie. 'Ronnie Rumble here, and ${owner ? `this is ${owner}, ` : "here comes "}our newest challenger!'`,
-    `'Your ${count},' says Ronnie. 'You've got ${team.join(", ")}.'`,
+    `'Your team of ${count},' says Ronnie. 'You've got ${team.join(", ")}.'`,
     "'Pick the one whose type wins. Get it wrong, and the leader lets you try again. But the Champion,' says Ronnie, lowering his voice, '{whispers} does not.'",
     "'Want my quick lesson on types first?'",
   ].join(" ");

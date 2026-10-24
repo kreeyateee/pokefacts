@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { toldBy } from "../jokes";
 import { forElevenLabs, isExpression, withoutVoiceTags } from "../voice-tags";
 import { gymAdventure } from "./gym";
 import { islandAdventure } from "./island";
@@ -77,7 +76,7 @@ describe("Expression in the adventures", () => {
   });
 
   it("still finds the speaker when the tag comes after the words", () => {
-    const lines = speakerLines(toldBy("Ronnie", { dexId: 25, setup: "Why?", punchline: "Because!" }), CAST);
+    const lines = speakerLines("'Why?' says Ronnie. 'Because! {laughs}' says Ronnie, and everyone laughs.", CAST);
     const punchline = lines.find((line) => "speaker" in line && line.text.includes("Because!"));
     assert.ok(punchline && "speaker" in punchline);
     assert.equal(punchline.speaker, "ronnie");

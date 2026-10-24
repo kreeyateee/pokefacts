@@ -500,9 +500,6 @@ function decks(random: () => number) {
   const fled = Object.fromEntries(
     Object.entries(W.FLED_LINES).map(([key, lines]) => [key, deck(lines, random)]),
   ) as Record<W.WrongThrow, () => string>;
-  const tally = Object.fromEntries(
-    Object.entries(W.TALLY_LINES).map(([key, lines]) => [key, deck(lines, random)]),
-  ) as Record<string, () => string>;
   const sign = Object.fromEntries(
     Object.entries(W.TYPE_SIGNS).map(([type, { signs }]) => [type, deck(signs, random)]),
   ) as Record<string, () => string>;
@@ -513,12 +510,15 @@ function decks(random: () => number) {
     first: deck(W.FIRST_OPENERS, random),
     middle: deck(W.MIDDLE_OPENERS, random),
     last: deck(W.LAST_OPENERS, random),
-    oneSlip: deck(W.ONE_SLIP_OPENERS, random),
-    twoSlips: deck(W.TWO_SLIP_OPENERS, random),
     barnaby: deck(W.BARNABY_LINES, random),
     where: deck(W.WHERE_LINES, random),
     spot: deck(W.SPOT_LINES, random),
     spotAsk: deck(W.SPOT_ASK, random),
+    shy: deck(W.SHY_LINES, random),
+    careless: deck(W.CARELESS_LINES, random),
+    rare: deck(W.RARITY_LINES.rare, random),
+    common: deck(W.RARITY_LINES.common, random),
+    rule: deck(W.RULE_LINES, random),
     found: deck(W.FOUND_LINES, random),
     spotted: deck(W.SPOTTED_LINES, random),
     ask: deck(W.THROW_ASK, random),
@@ -529,14 +529,14 @@ function decks(random: () => number) {
     rightThrow: byThrow(W.RIGHT_THROW_LINES),
     gone: deck(W.GONE_LINES, random),
     home: deck(W.HOME_LINES, random),
-    common: deck(W.COMMON_LINES, random),
+    commonOne: deck(W.COMMON_LINES, random),
     rareGone: deck(W.RARE_GONE_LINES, random),
     firstSlip: deck(W.FIRST_SLIP_LINES, random),
     secondSlip: deck(W.SECOND_SLIP_LINES, random),
     lastSlip: deck(W.LAST_SLIP_LINES, random),
-    tally,
+    ahead: deck(W.RACE_LINES.ahead, random),
+    closer: deck(W.RACE_LINES.closer, random),
     tip: deck(W.PARTING_TIPS, random),
-    moreCaught: deck(W.MORE_CATCH_LINES, random),
   };
 }
 
@@ -605,7 +605,9 @@ function stopWords(stop: SafariStop, number: number, plan: SafariPlan, words: De
   const notes = notesOf(mon);
   const right = throwFor(mon);
   const barnaby = plan.barnaby.includes(number) ? words.barnaby() : "";
-  const opening = join(opener(number, words), barnaby);
+  // Barnaby turning up opens the stop on his own. A spot stop starts right where the Pokémon are.
+  const opening = barnaby || (stop.kind === "area" ? opener(number, words) : "");
+  const rule = words.rule();
   const fled = join(words.fled[`${stop.wrongThrow}-${right}` as W.WrongThrow]());
   const fledReveal = join(revealed(mon, false), words.rightThrow[right]());
   const caught = join(words.caught[right](), "[fanfare]");
@@ -618,8 +620,15 @@ function stopWords(stop: SafariStop, number: number, plan: SafariPlan, words: De
       find: join(opening, words.sign[type]?.() ?? "", fill(words.where(), gaps)),
       findIcon: { yoto: iconForType(type.toLowerCase()) },
       labels: [`head for ${gaps.home}`, `head for ${gaps.decoy}`],
-      missed: join(words.empty[decoy](), fill(words.gone(), gaps), fill(words.home(), gaps)),
-      meet: join(words.found(), words.arrive[mon.area](), notes.look, paceLine(mon, words), words.ask()),
+      missed: join(fill(words.gone(), gaps), fill(words.home(), gaps)),
+      meet: join(
+        words.found(),
+        notes.look,
+        right === "ball" ? words.common() : words.rare(),
+        paceLine(mon, words),
+        rule,
+        words.ask(),
+      ),
       fled,
       fledReveal,
       caught,
@@ -630,12 +639,13 @@ function stopWords(stop: SafariStop, number: number, plan: SafariPlan, words: De
   const common = stop.common;
   const commonNotes = notesOf(common);
   const [leftMon, rightMon] = stop.rareLeft ? [mon, common] : [common, mon];
-  const seen = (who: SafariMon) => `${anOne(notesOf(who).colour)}, ${notesOf(who).glimpse}.`;
+  // The tell: the rare one is shy, the common one doesn't care. Marigold says so as she asks.
+  const seen = (who: SafariMon) =>
+    `${anOne(notesOf(who).colour)}, ${notesOf(who).glimpse}, ${who === mon ? words.shy() : words.careless()}.`;
   const gaps = placeGaps(mon.area);
   return {
     find: join(
       opening,
-      words.arrive[mon.area](),
       fill(words.spot(), gaps),
       `On your left, ${seen(leftMon)} On your right, ${seen(rightMon)}`,
       words.spotAsk(),
@@ -644,11 +654,11 @@ function stopWords(stop: SafariStop, number: number, plan: SafariPlan, words: De
     findCry: mon.id,
     labels: [`creep up on the ${notes.colour} one`, `creep up on the ${commonNotes.colour} one`],
     missed: join(
-      fill(words.common(), { colour: commonNotes.colour, a: withArticle(common.name) }),
+      fill(words.commonOne(), { colour: commonNotes.colour, a: withArticle(common.name) }),
       fill(words.rareGone(), { other: notes.colour, a: withArticle(mon.name) }),
       notes.fact,
     ),
-    meet: join(fill(words.spotted(), { colour: notes.colour }), notes.look, paceLine(mon, words), words.ask()),
+    meet: join(fill(words.spotted(), { colour: notes.colour }), notes.look, paceLine(mon, words), rule, words.ask()),
     fled,
     fledReveal,
     caught,
@@ -674,8 +684,17 @@ function slipLine(number: number, slips: number, words: Decks): string {
   return words.firstSlip();
 }
 
-function tallyLine(caught: number, words: Decks): string {
-  return words.tally[String(caught)]?.() ?? `That's ${numberWords(caught)} in the bag.`;
+/** After a catch, by how the race with Barnaby stands now. */
+function raceLine(behind: number, words: Decks): string {
+  return behind === 0 ? words.ahead() : words.closer();
+}
+
+/**
+ * A catch wins one back from Barnaby. Ahead or level at the end of the day, the secret stop appears, so a
+ * child who listens gets there even after a slip, and random presses still reach every ending sometimes.
+ */
+function caughtUp(behind: number): number {
+  return Math.max(0, behind - 1);
 }
 
 /** Turns a plan into the story map. Pure: the same plan always gives the same story. */
@@ -720,11 +739,12 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
     for (let slips = 0; slips <= Math.min(index, MOST_SLIPS); slips += 1) {
       const after = Math.min(slips + 1, MOST_SLIPS);
       const last = number === stops;
-      const onWin = last ? (slips === 0 ? GOLD.find : endingAfter(slips)) : ID.find(number + 1, slips);
+      const level = caughtUp(slips);
+      const onWin = last ? (level === 0 ? GOLD.find : endingAfter(level)) : ID.find(number + 1, level);
       const onSlip = last ? endingAfter(after) : ID.find(number + 1, after);
       const title = `Stop ${number}`;
-      const warning = slips === 1 ? words.oneSlip() : slips >= MOST_SLIPS ? words.twoSlips() : "";
-      const findText = join("[footsteps]", warning, stopText.find);
+      // Where the race with Barnaby stands was said as the last stop ended, so the next one starts straight in.
+      const findText = join("[footsteps]", stopText.find);
       const missedText = join(stopText.missed, slipLine(number, slips, words));
       nodes.push({
         id: ID.find(number, slips),
@@ -777,7 +797,7 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
           stopText.caught,
           `[cry:${stop.mon.id}]`,
           stopText.caughtReveal,
-          slips >= MOST_SLIPS ? words.moreCaught() : tallyLine(number - slips, words),
+          raceLine(level, words),
         ),
         next: onWin,
       });
@@ -818,7 +838,7 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
     dexId: gold.id,
     icon: shadow(gold.id),
     bed: { ambience: PLACE_SOUND[gold.area].ambience, music: "magical" },
-    text: join(words.arrive[gold.area](), W.GOLDEN_MEET, goldNotes.look, paceLine(gold, words), W.GOLDEN_ASK),
+    text: join(W.GOLDEN_MEET, goldNotes.look, paceLine(gold, words), words.rule(), W.GOLDEN_ASK),
     questionIcon: POKEBALL,
     ...throwSides(golden, GOLD.caught, GOLD.fled),
   });
@@ -898,6 +918,8 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
     // other line. Pokémon names stay in their lines: the words around them are that Pokémon's own, so
     // cutting them out would mean more recordings, not fewer (measured over thirty sends).
     slots: plan.owner ? [plan.owner] : [],
+    // Each sentence is recorded on its own, so a new set of Pokémon only records the sentences that name them.
+    pieces: "sentences",
   };
 }
 
