@@ -81,7 +81,10 @@ export async function POST(request: Request) {
   return uploadDisplayIcon(token, bytes, filename);
 }
 
-/** Uploads a 16×16 PNG to the Yoto account's display icons and returns its media id. */
+/**
+ * Uploads a 16×16 PNG or GIF to the Yoto account's display icons and returns its media id. With
+ * autoConvert off, Yoto keeps an animated GIF moving on the player instead of flattening it.
+ */
 async function uploadDisplayIcon(token: string, bytes: Buffer, filename: string): Promise<Response> {
   const url = new URL("https://api.yotoplay.com/media/displayIcons/user/me/upload");
   url.searchParams.set("autoConvert", "false");
@@ -92,7 +95,7 @@ async function uploadDisplayIcon(token: string, bytes: Buffer, filename: string)
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/json",
-      "Content-Type": "image/png",
+      "Content-Type": bytes.subarray(0, 4).toString("ascii") === "GIF8" ? "image/gif" : "image/png",
     },
     body: new Uint8Array(bytes),
     signal: AbortSignal.timeout(30_000),

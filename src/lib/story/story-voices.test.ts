@@ -191,17 +191,17 @@ describe("names recorded on their own", () => {
     assert.deepEqual(slotPieces("No names here.", []), [{ text: "No names here.", slot: false }]);
   });
 
-  it("records the same wording for every Pokémon, so it can be reused", () => {
+  it("never cuts a sentence around a name: the name is read in its sentence", () => {
     const voices = castVoices(LILY, SAFARI_CAST);
-    const options = { slots: ["Dodrio", "Ditto"], fallback: fallbackVoices(SAFARI_CAST) };
-    const words = (text: string) =>
-      (trackParts(text, voices, SAFARI_CAST, (w) => w, options) ?? []).flatMap((part) => ("text" in part ? [part.text] : []));
-    assert.deepEqual(words("Click! It's a Dodrio! [fanfare]"), ["Click! It's a", "Dodrio!"]);
-    assert.deepEqual(words("Click! It's a Ditto! [fanfare]"), ["Click! It's a", "Ditto!"]);
-    const [first, name] = trackParts("It's a Dodrio!", voices, SAFARI_CAST, (w) => w, options) ?? [];
-    assert.equal(first && "tight" in first ? first.tight : undefined, undefined);
-    assert.equal(name && "tight" in name ? name.tight : undefined, true, "the name joins straight on");
-    assert.deepEqual(name && "fallback" in name ? name.fallback : undefined, fallbackVoices(SAFARI_CAST)[NARRATOR]);
+    const options = { slots: ["Dodrio", "Ditto"], fallback: fallbackVoices(SAFARI_CAST), sentences: true };
+    const parts = trackParts("Click! It's a Dodrio! [fanfare]", voices, SAFARI_CAST, (w) => w, options) ?? [];
+    assert.deepEqual(
+      parts.flatMap((part) => ("text" in part ? [part.text] : [])),
+      ["Click!", "It's a Dodrio!"],
+    );
+    assert.ok(parts.every((part) => !("tight" in part)), "nothing is spliced in mid-sentence");
+    const [first] = parts;
+    assert.deepEqual(first && "fallback" in first ? first.fallback : undefined, fallbackVoices(SAFARI_CAST)[NARRATOR]);
   });
 
   it("keeps a line's recording under its words and voice alone", () => {
@@ -232,7 +232,7 @@ describe("falling back to Piper", () => {
   });
 
   it("swaps every line for its Piper voice, and only accepts Piper as a fallback", () => {
-    const parts = trackParts("'Boo,' he says.", castVoices(LILY, SAFARI_CAST), SAFARI_CAST, (w) => w, {
+    const parts = trackParts("'Boo to you.' Barnaby grins.", castVoices(LILY, SAFARI_CAST), SAFARI_CAST, (w) => w, {
       fallback: fallbackVoices(SAFARI_CAST),
     }) as TrackPart[];
     const piper = piperParts(parts);
@@ -287,20 +287,32 @@ describe("track parts", () => {
     assert.equal(trackParts("Press left to throw a rock.", voices, SAFARI_CAST), null);
   });
 
-  it("gives each line its voice and keeps the catch sound in order", () => {
-    const parts = trackParts("The ball flies. [catch] 'Gotcha,' says Marigold.", voices, SAFARI_CAST, (words) =>
+  it("gives each whole sentence its voice and keeps the catch sound in order", () => {
+    const parts = trackParts("The ball flies. [catch] 'Gotcha!' Marigold punches the air.", voices, SAFARI_CAST, (words) =>
       words.toUpperCase(),
     );
     assert.deepEqual(parts, [
       { text: "THE BALL FLIES.", ...voices[NARRATOR] },
       { sound: "catch" },
-      { text: "GOTCHA,", ...voices.marigold },
-      { text: "SAYS MARIGOLD.", ...voices[NARRATOR] },
+      { text: "GOTCHA!", ...voices.marigold },
+      { text: "MARIGOLD PUNCHES THE AIR.", ...voices[NARRATOR] },
     ]);
   });
 
+  it("never cuts a sentence between a quote and who said it: the narrator reads it whole", () => {
+    const parts = trackParts("The ball flies. [catch] 'Gotcha,' says Marigold. 'Boo!' he says.", voices, SAFARI_CAST);
+    assert.deepEqual(
+      parts?.map((part) => ("text" in part ? [part.text, part.voiceId === voices[NARRATOR]?.voiceId] : ["sound"])),
+      [
+        ["The ball flies.", true],
+        ["sound"],
+        ["Gotcha, says Marigold. Boo! he says.", true],
+      ],
+    );
+  });
+
   it("checks parts from a request", () => {
-    const parts = trackParts("'Boo,' he says.", voices, SAFARI_CAST) ?? [];
+    const parts = trackParts("'Boo to you.' Barnaby grins.", voices, SAFARI_CAST) ?? [];
     assert.deepEqual(readTrackParts(JSON.parse(JSON.stringify(parts))), parts);
     assert.equal(readTrackParts([]), null);
     assert.equal(readTrackParts([{ sound: "explosion" }]), null);

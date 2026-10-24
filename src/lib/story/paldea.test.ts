@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import { GET } from "../../app/api/adventure/paldea/route";
 import { effectiveness, type PokemonType } from "../type-chart";
-import { buildPaldea, paldeaAdventure, planPaldea, STARTERS } from "./paldea";
+import { buildPaldea, MENUS, paldeaAdventure, planPaldea, STARTERS } from "./paldea";
 import { storyCard } from "./story-card";
 import { checkStory, storyTrackCount } from "./story-check";
 import { pacingProblems, randomPlaythroughs } from "./story-metrics";
@@ -122,6 +122,26 @@ describe("Paldea Picnic", () => {
     }
     const { endings } = randomPlaythroughs(paldeaAdventure({ seed: 1 }));
     for (let number = 1; number <= 9; number += 1) assert.ok((endings[number] ?? 0) > 0.01, `ending ${number}: ${endings[number]}`);
+  });
+
+  it("makes something different to eat on different cards, and sticks to it all the way through", () => {
+    const menus = new Set<string>();
+    for (let seed = 1; seed <= 40; seed += 1) {
+      const plan = planPaldea(seed);
+      menus.add(plan.menu.dish);
+      for (const partner of [undefined, { id: 909, name: "Fuecoco" }, { id: 906, name: "Sprigatito" }]) {
+        const all = paldeaAdventure({ seed, owner: "Mia", partner }).nodes.map((node) => node.text).join(" ");
+        assert.ok(all.includes(plan.menu.dish), `seed ${seed} makes ${plan.menu.dish}`);
+        assert.ok(all.includes(plan.menu.first.food) && all.includes(plan.menu.cave.food), `seed ${seed} fetches its own ingredients`);
+        for (const other of MENUS) {
+          if (other === plan.menu) continue;
+          assert.ok(!all.includes(other.dish), `seed ${seed} (${plan.menu.dish}) also mentions ${other.dish}`);
+          if (other.first.spot !== plan.menu.first.spot) assert.ok(!all.includes(other.first.spot), `seed ${seed} mentions ${other.first.spot}`);
+          if (other.cave.spot !== plan.menu.cave.spot) assert.ok(!all.includes(other.cave.spot), `seed ${seed} mentions ${other.cave.spot}`);
+        }
+      }
+    }
+    assert.deepEqual([...menus].sort(), MENUS.map((menu) => menu.dish).sort(), "every menu turns up");
   });
 
   it("gives Juno the starter that beats yours, and Arlo the other", () => {

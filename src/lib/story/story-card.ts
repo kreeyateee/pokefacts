@@ -11,6 +11,7 @@ import {
   fallbackVoices,
   NARRATOR,
   trackParts,
+  withStoryTone,
   type StoryCharacter,
   type TrackPart,
   type VoiceStyle,
@@ -179,11 +180,19 @@ function storyTrack(
   // by its words and voice and every line can fall back to Piper if Yoto's voices turn it away.
   const narrator = voicing.voices[NARRATOR] as VoiceStyle;
   const backup = voicing.fallback[NARRATOR];
+  // Every line carries the tone its words call for, so the Yoto voices act it rather than read it flat.
   const parts: TrackPart[] = trackParts(text, voicing.voices, voicing.cast, pronounce, {
     slots: voicing.slots,
     fallback: voicing.fallback,
     sentences: voicing.sentences,
-  }) ?? [{ text: spoken, ...narrator, ...(backup && backup.voiceId !== narrator.voiceId ? { fallback: backup } : {}) }];
+    tone: true,
+  }) ?? [
+    {
+      text: pronounce(withStoryTone(shown, { narrator: true })),
+      ...narrator,
+      ...(backup && backup.voiceId !== narrator.voiceId ? { fallback: backup } : {}),
+    },
+  ];
   return {
     key,
     title,

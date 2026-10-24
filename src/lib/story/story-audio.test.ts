@@ -188,7 +188,7 @@ describe("adventure track audio", () => {
       ]);
       const cry = await tone(880);
       const voices = castVoices(LILY, SAFARI_CAST);
-      const text = "Barnaby throws. [catch] 'Mine!' he shouts. 'Not for long,' says Marigold.";
+      const text = "Barnaby throws. [catch] Barnaby jumps up. 'Mine!' Marigold shakes her head. 'Not for long.'";
       const parts = trackParts(text, voices, SAFARI_CAST) as TrackPart[];
       assert.equal(parts.length, 6);
       const yoto = fakeYoto(lines, cry);
@@ -218,10 +218,10 @@ describe("adventure track audio", () => {
         yoto.jobs.map((job) => [job.voiceId, job.text]),
         [
           [LILY, "Barnaby throws."],
-          [LILY, "he shouts."],
-          [LILY, "says Marigold."],
+          [LILY, "Barnaby jumps up."],
+          [LILY, "Marigold shakes her head."],
           [LIAM, "Mine!"],
-          [ALICE, "Not for long,"],
+          [ALICE, "Not for long."],
         ],
       );
       assert.equal(yoto.uploads.length, 1);
@@ -248,7 +248,7 @@ describe("adventure track audio", () => {
         [ALICE, await tone(330)],
       ]);
       const yoto = fakeYoto(lines, await tone(880));
-      const parts = trackParts("[catch] 'Boo,' says Barnaby.", castVoices(LILY, SAFARI_CAST), SAFARI_CAST);
+      const parts = trackParts("[catch] Barnaby leaps out. 'Boo!'", castVoices(LILY, SAFARI_CAST), SAFARI_CAST);
       const result = await prepareDemoAudio(
         "x".repeat(24),
         { text: "Boo, says Barnaby.", voiceId: LILY, parts },
@@ -256,7 +256,7 @@ describe("adventure track audio", () => {
         { speech: dir, wait: async () => undefined },
       );
       assert.equal(result.cryFirst, false);
-      assert.deepEqual(yoto.jobs.map((job) => job.voiceId), [LIAM, LILY]);
+      assert.deepEqual(yoto.jobs.map((job) => job.voiceId), [LILY, LIAM]);
       assert.ok((await audioDurationSeconds(result.audio, "joined.wav")) > 4);
     } finally {
       await rm(dir, { recursive: true, force: true });
@@ -271,7 +271,7 @@ describe("adventure track audio", () => {
       start: "a",
       cast: SAFARI_CAST,
       nodes: [
-        { id: "a", kind: "scene", title: "A", text: "The ball flies. [catch] 'Well thrown,' says Marigold.", dexId: 25, next: "b" },
+        { id: "a", kind: "scene", title: "A", text: "The ball flies. [catch] 'Well thrown!' Marigold claps.", dexId: 25, next: "b" },
         { id: "b", kind: "ending", title: "B", text: "The end.", ending: { number: 1, name: "Done" } },
       ],
     };
@@ -279,7 +279,7 @@ describe("adventure track audio", () => {
     const jobs = renderJobs("Voices", card, upload);
     const first = jobs.find((job) => job.key === "aa");
     assert.equal(first?.dexId, 25);
-    assert.match(first?.text ?? "", /^The ball flies\. 'Well thrown,' says Marigold\.$/);
+    assert.match(first?.text ?? "", /^The ball flies\. 'Well thrown!' Marigold claps\.$/);
     assert.doesNotMatch(first?.text ?? "", /\[catch\]/, "the cue is never read out");
     assert.deepEqual(
       first?.parts?.map((part) => ("sound" in part ? part.sound : "cry" in part ? part.cry : part.voiceId)),
@@ -327,12 +327,15 @@ describe("adventure track audio", () => {
     }
   });
 
-  it("uploads the Poké Ball picture for catch tracks", async () => {
+  it("uploads the animated Poké Ball for catch tracks, as a GIF that keeps moving", async () => {
     const original = globalThis.fetch;
     let uploaded: Buffer | undefined;
+    let type: string | null = null;
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      // autoConvert=false keeps the animation; Yoto would flatten it to a still otherwise.
       assert.match(String(input), /displayIcons\/user\/me\/upload\?autoConvert=false&filename=pokefacts-pokeball/);
       uploaded = Buffer.from(init?.body as Uint8Array);
+      type = new Headers(init?.headers).get("Content-Type");
       return Response.json({ displayIcon: { mediaId: `yoto:#${"b".repeat(43)}` } });
     }) as typeof fetch;
     try {
@@ -341,13 +344,17 @@ describe("adventure track audio", () => {
       );
       assert.deepEqual(await response.json(), { mediaId: "b".repeat(43) });
       assert.deepEqual(uploaded, await readFile(path.join(process.cwd(), "public", POKEBALL_PIXEL)));
-      assert.equal(uploaded?.subarray(1, 4).toString("ascii"), "PNG");
+      assert.equal(uploaded?.subarray(0, 4).toString("ascii"), "GIF8");
+      assert.equal(type, "image/gif");
+      // 16 by 16, as Yoto requires: the logical screen size in the GIF header.
+      assert.equal(uploaded?.readUInt16LE(6), 16);
+      assert.equal(uploaded?.readUInt16LE(8), 16);
     } finally {
       globalThis.fetch = original;
     }
   });
 
-  it("records the wording once and only the new name on the next card", async () => {
+  it("records each whole sentence once, and on the next card only the sentence with the new name", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "champdex-story-slots-"));
     try {
       const lines = new Map([[LILY, await tone(440)]]);
@@ -355,14 +362,14 @@ describe("adventure track audio", () => {
       const roots = { speech: path.join(dir, "speech"), rendered: path.join(dir, "rendered") };
       const record = async (name: string) => {
         const parts = trackParts(`Click! It's a ${name}! That's one in the bag.`, castVoices(LILY, SAFARI_CAST), SAFARI_CAST, (w) => w, {
-          slots: [name],
+          sentences: true,
         }) as TrackPart[];
         await drive(yoto.fetchImpl, roots, factTrackBody({ text: name, title: "Stop 1", voiceId: LILY, parts }));
       };
       await record("Dodrio");
-      assert.deepEqual(yoto.jobs.map((job) => job.text), ["Click! It's a", "Dodrio!", "That's one in the bag."]);
+      assert.deepEqual(yoto.jobs.map((job) => job.text), ["Click!", "It's a Dodrio!", "That's one in the bag."]);
       await record("Ditto");
-      assert.deepEqual(yoto.jobs.map((job) => job.text).slice(3), ["Ditto!"], "only the new name is recorded");
+      assert.deepEqual(yoto.jobs.map((job) => job.text).slice(3), ["It's a Ditto!"], "only the sentence that changed is recorded");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -389,7 +396,7 @@ describe("adventure track audio", () => {
         }
         return yoto.fetchImpl(input, init);
       };
-      const parts = trackParts("'Boo,' says Barnaby.", castVoices(LILY, SAFARI_CAST), SAFARI_CAST, (w) => w, {
+      const parts = trackParts("'Boo!' Barnaby grins.", castVoices(LILY, SAFARI_CAST), SAFARI_CAST, (w) => w, {
         fallback: fallbackVoices(SAFARI_CAST),
       }) as TrackPart[];
       const body = factTrackBody({ text: "Boo", title: "Stop 2", voiceId: LILY, parts, sendId: "stest01" });

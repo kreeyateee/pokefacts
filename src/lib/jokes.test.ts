@@ -7,6 +7,7 @@ import { countSpokenTracks, jokePlaylist, mulberry32 } from "./kid-cards";
 import { gymAdventure } from "./story/gym";
 import { islandAdventure } from "./story/island";
 import { lostAdventure } from "./story/lost";
+import { PRIZES } from "./story/safari-words";
 import { paldeaAdventure } from "./story/paldea";
 import { safariAdventure } from "./story/safari";
 import { speakerLines } from "./story/story-voices";
@@ -46,6 +47,42 @@ describe("Pokémon jokes", () => {
   it("picks jokes in a repeatable order, and can leave some Pokémon out", () => {
     assert.deepEqual(jokesFor(mulberry32(3)), jokesFor(mulberry32(3)));
     assert.ok(jokesFor(mulberry32(3), [25, 143]).every((joke) => joke.dexId !== 25 && joke.dexId !== 143));
+  });
+
+  it("never tells the same joke twice on one card, whichever way the story goes", () => {
+    const partners = [undefined, { id: 25, name: "Pikachu" }, { id: 909, name: "Fuecoco" }, { id: 143, name: "Snorlax" }];
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      for (const partner of partners) {
+        for (const graph of [
+          islandAdventure({ seed, partner }),
+          safariAdventure({ seed, partner }),
+          gymAdventure({ seed, partner }),
+          paldeaAdventure({ seed, partner }),
+          lostAdventure({ seed, partner }),
+        ]) {
+          for (const joke of JOKES) {
+            const told = graph.nodes.filter((node) => node.text.includes(joke.setup)).map((node) => node.id);
+            assert.ok(told.length <= 1, `${graph.title} seed ${seed}: "${joke.setup}" is told in ${told.join(", ")}`);
+          }
+        }
+      }
+    }
+  });
+
+  it("gives every Safari ending its own joke and its own prize", () => {
+    const graph = safariAdventure({ seed: 4 });
+    const endings = graph.nodes.filter((node) => node.kind === "ending");
+    assert.equal(endings.length, 4);
+    // Each ending's prize comes from its own pool: something to take home, a bigger one the better the day.
+    endings.forEach((node, index) => {
+      const pool = PRIZES[index + 1] ?? [];
+      assert.ok(pool.some((prize) => node.text.includes(prize)), `ending ${index + 1} gives a prize from its pool`);
+    });
+    const seen = new Set([1, 2, 3, 4, 5, 6, 7, 8].map((seed) => safariAdventure({ seed }).nodes.find((node) => node.id === "end1")?.text));
+    assert.ok(seen.size > 1, "the same ending gives different prizes on different cards");
+    const jokes = endings.filter((node) => node.text.includes("Want to hear a joke?"));
+    assert.equal(jokes.length, 3, "the golden ending is a celebration, not a joke");
+    assert.match(endings[1]?.text ?? "", /Barnaby grins\. '/, "Barnaby tells the joke on his bad day");
   });
 
   it("puts a joke in every adventure", () => {

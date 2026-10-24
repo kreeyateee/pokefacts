@@ -87,7 +87,7 @@ describe("recording a sentence at a time", () => {
     assert.deepEqual(sentencePieces("{laughs}"), ["{laughs}"]);
   });
 
-  it("records each sentence as its own piece, with names still cut out and joined tight", () => {
+  it("records each whole sentence as its own piece, with the name left in its sentence", () => {
     const narrator: VoiceStyle = { voiceId: LILY_VOICE_ID, pitch: 0, tempo: 1 };
     const parts = trackParts("Hello, Mia. It's a Numel! Two!", { narrator }, [], (text) => text, {
       slots: ["Mia"],
@@ -96,17 +96,16 @@ describe("recording a sentence at a time", () => {
     assert.deepEqual(
       parts?.map((part) => ("text" in part ? [part.text, Boolean(part.tight)] : [])),
       [
-        ["Hello,", false],
-        ["Mia.", true],
+        ["Hello, Mia.", false],
         ["It's a Numel!", false],
         ["Two!", false],
       ],
     );
-    const lines = trackParts("Hello, Mia. It's a Numel! Two!", { narrator }, [], (text) => text, { slots: ["Mia"] });
-    assert.equal(lines?.filter((part) => "text" in part).length, 3, "by line, the default, is as before");
+    // By line, the default, one speaker's sentences are one recording.
+    assert.equal(trackParts("Hello, Mia. It's a Numel! Two!", { narrator }, [], (text) => text, { slots: ["Mia"] }), null);
   });
 
-  it("is chosen per story, and a story recorded by sentence reuses far more between sends", () => {
+  it("is chosen per story, and by sentence never records more than by line", () => {
     const sends = (pieces: "lines" | "sentences") => {
       const recorded = new Set<string>();
       let last = 0;
@@ -126,7 +125,7 @@ describe("recording a sentence at a time", () => {
       }
       return last;
     };
-    // Thirty sends is early on; scripts/story-report.ts shows the saving keeps growing (about 13 lines against 40).
-    assert.ok(sends("sentences") < sends("lines") * 0.8, `${sends("sentences")} vs ${sends("lines")}`);
+    // With names kept in their sentences, recording by sentence saves little, so the stories record by line.
+    assert.ok(sends("sentences") <= sends("lines"), `${sends("sentences")} vs ${sends("lines")}`);
   });
 });

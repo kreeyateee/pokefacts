@@ -505,7 +505,8 @@ describe("safari adventure from the catalogue", () => {
       }
     }
     const graph = safariAdventure({ seed: 1 });
-    assert.equal(graph.pieces, "sentences");
+    // Recorded by line: a recording never stops in the middle of a sentence or a speaker's turn.
+    assert.equal(graph.pieces, undefined);
     for (const seed of [1, 2, 3]) {
       const { endings } = randomPlaythroughs(safariAdventure({ seed }));
       const twoOrBetter = (endings[2] ?? 0) + (endings[3] ?? 0) + (endings[4] ?? 0);

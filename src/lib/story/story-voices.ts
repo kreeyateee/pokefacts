@@ -9,7 +9,7 @@
 import { chosenVoice, isPiperVoice, PIPER_VOICE_ID } from "@/lib/piper-voice";
 import { CRY_CUE, isCryId, isStorySound, SOUND_CUE, type StorySound } from "@/lib/story/story-sound";
 import { YOTO_VOICES } from "@/lib/yoto-icons";
-import { withoutVoiceTags } from "@/lib/voice-tags";
+import { hasVoiceTags, isExpression, withoutVoiceTags } from "@/lib/voice-tags";
 
 export const NARRATOR = "narrator";
 
@@ -29,6 +29,11 @@ export type StoryCharacter = {
   tempo?: number;
   /** With Piper everyone shares one voice, so each character needs a bigger shift to stand apart. */
   piper?: { pitch?: number; tempo?: number };
+  /**
+   * How they usually sound, as an expression tag, for a line of theirs with no tag of its own:
+   * "smugly" for a rival. Cheerfully when not given.
+   */
+  mood?: string;
 };
 
 export type SpeakerLine = { speaker: string; text: string } | { sound: StorySound } | { cry: number };
@@ -270,27 +275,6 @@ export function slotPieces(text: string, slots: readonly string[]): Array<{ text
   return pieces.length > 0 ? pieces : [{ text, slot: false }];
 }
 
-/**
- * Joins a piece that is only an expression tag ("{gasps}" cut off before a name) onto the words after it,
- * or before it at the end of a line, so the tag is acted on those words and no piece is left with nothing
- * to say. Piper drops tags, and would otherwise be handed an empty line.
- */
-function withTagsAttached(pieces: Array<{ text: string; slot: boolean }>): Array<{ text: string; slot: boolean }> {
-  const out: Array<{ text: string; slot: boolean }> = [];
-  let carried = "";
-  for (const piece of pieces) {
-    if (!withoutVoiceTags(piece.text).trim()) {
-      carried = `${carried} ${piece.text}`.trim();
-      continue;
-    }
-    out.push(carried ? { text: `${carried} ${piece.text}`, slot: piece.slot } : piece);
-    carried = "";
-  }
-  const last = out.at(-1);
-  if (carried && last) out[out.length - 1] = { ...last, text: `${last.text} ${carried}` };
-  return out.length > 0 ? out : pieces;
-}
-
 /** Full stops that do not end a sentence: "Mr. Mime", "Mime Jr.", "No. 25", an initial. */
 const NOT_AN_END = /(?:\b(?:Mr|Mrs|Ms|Jr|Sr|Dr|Prof|St|vs|etc|No)|\b[A-Z])\.$/;
 
@@ -321,11 +305,38 @@ export function sentencePieces(text: string): string[] {
   return kept.length > 0 ? kept : [text];
 }
 
+/** Words that mark a let-down: the Pokémon got away, or it all went wrong. Read sadly. */
+const SAD_WORDS =
+  /\b(?:got away|gets away|get away|ran off|runs off|run off|broke free|breaks free|break free|escaped|too late|oh no|sadly|missed|gone)\b/i;
+
+/** Words that mark sneaking up or keeping quiet. Read in a whisper. */
+const HUSHED_WORDS = /\b(?:creep|creeps|creeping|sneak|sneaks|sneaking|tiptoe|tiptoes|tiptoeing|quietly|shh+|hush|whispers?)\b/i;
+
+/**
+ * A line with the tone the Yoto voices should take, for a line the story has not tagged itself.
+ * Each piece of a track is recorded on its own, so without a tag a short line comes out flat:
+ * a let-down is read sadly, sneaking in a whisper, an exclamation excited, a question curious, and a
+ * character's other lines in their own mood (cheerfully unless the story gives them one). The
+ * narrator's plain sentences are left as written. Piper and the page drop the tags.
+ */
+export function withStoryTone(text: string, speaker: { narrator: boolean; mood?: string }): string {
+  if (!text.trim() || hasVoiceTags(text)) return text;
+  const ending = text.trim().replace(/["'’”)]+$/, "");
+  let tag: string | undefined;
+  if (SAD_WORDS.test(text)) tag = "sadly";
+  else if (HUSHED_WORDS.test(text)) tag = "whispers";
+  else if (ending.endsWith("!")) tag = "excited";
+  else if (ending.endsWith("?")) tag = "curious";
+  else if (!speaker.narrator) tag = speaker.mood && isExpression(speaker.mood) ? speaker.mood : "cheerfully";
+  return tag ? `{${tag}} ${text.trim()}` : text;
+}
+
 /**
  * What to record for one track: each line in its speaker's voice, and each sound, in order.
  * `say` respells names for the voice. Names listed in `slots` are recorded as their own short pieces,
  * joined tight to the words around them. Each spoken part carries its Piper fallback when `fallback`
- * is given. With `sentences`, each line is recorded a sentence at a time (see sentencePieces).
+ * is given. With `sentences`, each line is recorded a sentence at a time (see sentencePieces). With
+ * `tone`, every piece but a name is given the tone its words call for (see withStoryTone).
  * Returns null when the track is one plain narrator line, so it records as it did before voices.
  */
 export function trackParts(
@@ -333,33 +344,81 @@ export function trackParts(
   voices: Record<string, VoiceStyle>,
   cast: readonly StoryCharacter[],
   say: (words: string) => string = (words) => words,
-  options: { slots?: readonly string[]; fallback?: Record<string, VoiceStyle>; sentences?: boolean } = {},
+  options: {
+    slots?: readonly string[];
+    fallback?: Record<string, VoiceStyle>;
+    sentences?: boolean;
+    tone?: boolean;
+  } = {},
 ): TrackPart[] | null {
   const lines = speakerLines(text, cast);
   const narrator = voices[NARRATOR] as VoiceStyle;
-  const parts: TrackPart[] = [];
+
+  // Whole sentences only: a recording is never cut in the middle of a sentence. A sentence that
+  // runs across speakers ("'Marigold,' she says, shaking your hand.") is read whole by the narrator,
+  // so voices change only where a sentence ends. Names stay inside their sentence.
+  type Spoken = { speaker: string; text: string };
+  const units: Array<Spoken | { sound: StorySound } | { cry: number }> = [];
+  let open: Spoken[] = [];
+  const close = () => {
+    if (open.length === 0) return;
+    const speakers = new Set(open.map((unit) => unit.speaker));
+    const words = open.map((unit) => unit.text).join(" ").replace(/\s+/g, " ").trim();
+    if (words) units.push({ speaker: speakers.size === 1 ? (open[0] as Spoken).speaker : NARRATOR, text: words });
+    open = [];
+  };
+  const ends = (sentence: string) => /[.!?…]["'’”)]*$/.test(withoutVoiceTags(sentence).trim());
+  // "'Boo!' he says." is one sentence: words starting in lower case carry on the one before.
+  const carriesOn = (sentence: string) => /^[a-z]/.test(withoutVoiceTags(sentence).trim().replace(/^["'‘“(]+/, ""));
+  let ended = false;
   for (const line of lines) {
-    if ("sound" in line) {
-      parts.push({ sound: line.sound });
+    if ("sound" in line || "cry" in line) {
+      close();
+      ended = false;
+      units.push(line);
       continue;
     }
-    if ("cry" in line) {
-      parts.push({ cry: line.cry });
+    for (const sentence of sentencePieces(line.text)) {
+      if (ended && !carriesOn(sentence)) close();
+      open.push({ speaker: line.speaker, text: sentence });
+      ended = ends(sentence);
+    }
+  }
+  close();
+
+  // By line, a speaker's sentences in a row are recorded together; by sentence, one at a time.
+  const pieces: typeof units = [];
+  for (const unit of units) {
+    const last = pieces.at(-1);
+    if (!options.sentences && last && "speaker" in last && "speaker" in unit && last.speaker === unit.speaker) {
+      pieces[pieces.length - 1] = { speaker: last.speaker, text: `${last.text} ${unit.text}` };
+    } else {
+      pieces.push(unit);
+    }
+  }
+
+  const parts: TrackPart[] = [];
+  for (const piece of pieces) {
+    if ("sound" in piece) {
+      parts.push({ sound: piece.sound });
       continue;
     }
-    const style = voices[line.speaker] ?? narrator;
-    const backup = options.fallback?.[line.speaker] ?? options.fallback?.[NARRATOR];
-    for (const sentence of options.sentences ? sentencePieces(line.text) : [line.text]) {
-      // A name cut out of a sentence joins it tight; a new sentence keeps the usual pause.
-      withTagsAttached(slotPieces(sentence, options.slots ?? [])).forEach((piece, index) => {
-        parts.push({
-          text: say(piece.text),
-          ...style,
-          ...(index > 0 ? { tight: true } : {}),
-          ...(backup && backup.voiceId !== style.voiceId ? { fallback: backup } : {}),
-        });
-      });
+    if ("cry" in piece) {
+      parts.push({ cry: piece.cry });
+      continue;
     }
+    const style = voices[piece.speaker] ?? narrator;
+    const backup = options.fallback?.[piece.speaker] ?? options.fallback?.[NARRATOR];
+    const speaker = {
+      narrator: piece.speaker === NARRATOR,
+      mood: cast.find((character) => character.id === piece.speaker)?.mood,
+    };
+    const words = options.tone ? withStoryTone(piece.text, speaker) : piece.text;
+    parts.push({
+      text: say(words),
+      ...style,
+      ...(backup && backup.voiceId !== style.voiceId ? { fallback: backup } : {}),
+    });
   }
   const only = parts[0];
   const plain =

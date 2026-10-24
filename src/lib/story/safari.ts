@@ -15,7 +15,7 @@ import { listMonSheets, listSafariSpecies } from "@/lib/catalogue-db";
 import type { MonSheet } from "@/lib/dex-facts";
 import { drawSample, mulberry32 } from "@/lib/kid-cards";
 import { pronounce } from "@/lib/pronounce";
-import { jokesFor, toldBy } from "@/lib/jokes";
+import { jokesFor, toldBy, type Joke } from "@/lib/jokes";
 import type { AdventureInput, Partner } from "@/lib/story/adventure-route";
 import { FIELD_NOTES, GOLDEN_STOPS, type FieldNotes } from "@/lib/story/safari-roster";
 import * as W from "@/lib/story/safari-words";
@@ -81,6 +81,8 @@ export const SAFARI_CAST: StoryCharacter[] = [
     id: "barnaby",
     name: "Barnaby",
     pronoun: "he",
+    // Pleased with himself, always: every untagged line of his is read smugly.
+    mood: "smugly",
     voices: [voiceNamed("Liam"), voiceNamed("Will"), voiceNamed("Charlie")],
     tempo: 1.03,
     piper: { pitch: 2.5, tempo: 1.08 },
@@ -868,6 +870,13 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
     next: goldenEnding,
   });
 
+  // One joke for each ending, never about a Pokémon from today, and never the same one twice on a card.
+  const jokes = jokesFor(mulberry32((plan.seed ^ 0x70e) >>> 0), [...plan.stops.map((stop) => stop.mon.id), gold.id]);
+  const prizeDraw = mulberry32((plan.seed ^ 0x9e1) >>> 0);
+  const prize = (number: number) => {
+    const pool = W.PRIZES[number] ?? [];
+    return pool[Math.floor(prizeDraw() * pool.length)] ?? "";
+  };
   for (let number = 1; number <= total; number += 1) {
     const name = W.ENDING_NAMES[number - 1] ?? "Safari Trainer";
     // Back at the gate as the sun goes down: birdsong, and music to match the day.
@@ -885,6 +894,7 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
         text: join(
           revealed(gold, true),
           W.goldenText(capital(owner)),
+          prize(number),
           plan.partner ? `${plan.partner.name} does a little victory dance all round you. [cry:${plan.partner.id}]` : "",
           "[golden]",
         ),
@@ -893,8 +903,9 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
     } else {
       const text = join(
         number === 1 ? join(W.goodDayText(owner), words.tip()) : number === 2 ? W.dayEndText(owner) : W.masterText(owner),
-        // Marigold's joke on the way to the gate, never about a Pokémon from today.
-        toldBy("Marigold", jokesFor(mulberry32((plan.seed ^ 0x70e) >>> 0), [...plan.stops.map((stop) => stop.mon.id), gold.id])[0]!),
+        prize(number),
+        // A joke on the way to the gate: Barnaby, sulking, is talked into one on his bad day.
+        toldBy(number === 2 ? "Barnaby" : "Marigold", jokes[number - 1] as Joke),
         plan.partner ? `${plan.partner.name} yawns a big yawn, and you walk home together.` : "",
         "[ending]",
       );
@@ -920,7 +931,6 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
     // cutting them out would mean more recordings, not fewer (measured over thirty sends).
     slots: plan.owner ? [plan.owner] : [],
     // Each sentence is recorded on its own, so a new set of Pokémon only records the sentences that name them.
-    pieces: "sentences",
   };
 }
 

@@ -58,11 +58,11 @@ export const GYMS: readonly Gym[] = [
     voices: ["pqHfZKP75CvOlQylNhV4", "JBFqnCBsd6RMkjVDRZzb"],
     badge: "Boulder",
     intro:
-      "The first gym is an old quarry, and every footstep crunches. Leader Basil is polishing a pebble on a boulder. 'Afternoon,' says Basil, very slowly. 'Rocks don't rush. Neither do I.' He stands up, and up. He is enormous. Basil sends out",
-    ace: "Basil nods, very slowly. 'Not bad,' says Basil. 'But this one has been sitting in my quarry for a hundred years.' The ground rumbles, and out rolls",
-    tease: "'Hmm,' says Basil. 'Pebble trouble. Have another think. I've got all day. I've got all week.'",
+      "The first gym is an old quarry, and every footstep crunches. Leader Basil is polishing a pebble on a boulder. Basil speaks very slowly. 'Afternoon. Rocks don't rush. Neither do I.' He stands up, and up. He is enormous. Basil sends out",
+    ace: "Basil nods, very slowly. 'Not bad. But this one has been sitting in my quarry for a hundred years.' The ground rumbles, and out rolls",
+    tease: "Basil grins. 'Hmm. Pebble trouble. Have another think. I've got all day. I've got all week.'",
     farewell:
-      "'You're solid,' says Basil, and pins the Boulder Badge on your jacket.",
+      "Basil pins the Boulder Badge on your jacket. 'You're solid.'",
   },
   {
     type: "Water",
@@ -70,11 +70,11 @@ export const GYMS: readonly Gym[] = [
     voices: ["hpp4J3VqNfWAUOO0d1Us", "EXAVITQu4vr4xnSDxMaL"],
     badge: "Cascade",
     intro:
-      "The second gym is a swimming pool with a wave machine. Leader Coral somersaults off the diving board and lands in front of you, dripping. 'Ready to make a splash?' says Coral. 'Oh, I love saying that.' Coral sends out",
-    ace: "Coral wrings out her ponytail. 'Okay, okay, that went swimmingly,' says Coral. 'Get it? Swimmingly? Now meet my best friend.' The water in the pool heaves, and up surges",
-    tease: "'{giggles} Ooh, that sank like a stone,' says Coral. 'Dive back in and try again!'",
+      "The second gym is a swimming pool with a wave machine. Leader Coral somersaults off the diving board and lands in front of you, dripping. 'Ready to make a splash? Oh, I love saying that.' Coral sends out",
+    ace: "Coral wrings out her ponytail. 'Okay, okay, that went swimmingly. Get it? Swimmingly? Now meet my best friend.' The water in the pool heaves, and up surges",
+    tease: "Coral laughs. '{giggles} Ooh, that sank like a stone. Dive back in and try again!'",
     farewell:
-      "'Absolutely making waves,' says Coral, and hands you the Cascade Badge.",
+      "Coral hands you the Cascade Badge. 'Absolutely making waves.'",
   },
   {
     type: "Grass",
@@ -82,11 +82,11 @@ export const GYMS: readonly Gym[] = [
     voices: ["EXAVITQu4vr4xnSDxMaL", "FGY2WhTYpPnrIDTdsKH5"],
     badge: "Rainbow",
     intro:
-      "The third gym is a glass greenhouse, buzzing with bees. Leader Fern is humming to a sunflower. '{whispers} Oh, hello,' says Fern, softly. 'Shall we battle? Gently, mind. The plants are listening.' Fern sends out",
-    ace: "Fern smiles at you, as if you were a seedling that had just sprouted. 'You're growing so fast,' says Fern. 'Now, careful. This one has very deep roots.' The leaves on the floor shiver, and out steps",
-    tease: "'Oh dear,' says Fern, patting a fern. 'Never mind. Everything grows if you give it another go.'",
+      "The third gym is a glass greenhouse, buzzing with bees. Leader Fern is humming to a sunflower. Fern speaks softly. '{whispers} Oh, hello. Shall we battle? Gently, mind. The plants are listening.' Fern sends out",
+    ace: "Fern smiles at you, as if you were a seedling that had just sprouted. 'You're growing so fast. Now, careful. This one has very deep roots.' The leaves on the floor shiver, and out steps",
+    tease: "Fern is patting a fern. 'Oh dear. Never mind. Everything grows if you give it another go.'",
     farewell:
-      "'Thank you for a lovely battle,' says Fern, and picks the Rainbow Badge from a flowerpot, where it was growing.",
+      "Fern picks the Rainbow Badge from a flowerpot, where it was growing. 'Thank you for a lovely battle.'",
   },
   {
     type: "Electric",
@@ -94,11 +94,11 @@ export const GYMS: readonly Gym[] = [
     voices: ["FGY2WhTYpPnrIDTdsKH5", "cgSgspJ2msm6clMCkdW9"],
     badge: "Thunder",
     intro:
-      "The fourth gym is a workshop of whirring machines. Leader Volta skids in on roller skates, her hair standing straight up. 'Hi hi hi!' says Volta, very fast. 'Challenger, brilliant, love it, battle time!' Volta sends out",
-    ace: "Volta's eyes light up, quite literally. 'Ooh, you're quick,' says Volta. 'But are you quicker than THIS?' Every light in the gym flickers, and with a crackle, out zaps",
-    tease: "'{laughs} Bzzzt! Wrong wire!' says Volta. 'Don't worry, I blow things up all the time. Try again!'",
+      "The fourth gym is a workshop of whirring machines. Leader Volta skids in on roller skates, her hair standing straight up. Volta speaks very fast. 'Hi hi hi! Challenger, brilliant, love it, battle time!' Volta sends out",
+    ace: "Volta's eyes light up, quite literally. Volta smiles. 'Ooh, you're quick. But are you quicker than THIS?' Every light in the gym flickers, and with a crackle, out zaps",
+    tease: "Volta laughs. '{laughs} Bzzzt! Wrong wire! Don't worry, I blow things up all the time. Try again!'",
     farewell:
-      "'You're electrifying,' says Volta. The Thunder Badge comes out of a machine that goes ding.",
+      "Volta nods. 'You're electrifying.' The Thunder Badge comes out of a machine that goes ding.",
   },
   {
     type: "Flying",
@@ -106,11 +106,11 @@ export const GYMS: readonly Gym[] = [
     voices: ["cgSgspJ2msm6clMCkdW9", "hpp4J3VqNfWAUOO0d1Us"],
     badge: "Gale",
     intro:
-      "The fifth gym is on top of a windy tower. Leader Skye swoops down on a glider. '{excited} Wahoo!' says Skye. 'Don't look down. Actually, do, it's amazing.' Skye sends out",
-    ace: "Skye whistles, a long high whistle, and the clouds seem to whistle back. 'Here comes the big one,' says Skye. A great shadow sweeps over the tower, and down dives",
-    tease: "'Whoops, that one got lost in the clouds,' says Skye. 'Try again, quick, before the wind changes!'",
+      "The fifth gym is on top of a windy tower. Leader Skye swoops down on a glider. '{excited} Wahoo! Don't look down. Actually, do, it's amazing.' Skye sends out",
+    ace: "Skye whistles, a long high whistle, and the clouds seem to whistle back. 'Here comes the big one.' A great shadow sweeps over the tower, and down dives",
+    tease: "Skye grins. 'Whoops, that one got lost in the clouds. Try again, quick, before the wind changes!'",
     farewell:
-      "'You've got wings,' says Skye, and clips the Gale Badge onto your collar so it doesn't blow away.",
+      "Skye clips the Gale Badge onto your collar so it doesn't blow away. 'You've got wings.'",
   },
   {
     type: "Fire",
@@ -118,11 +118,11 @@ export const GYMS: readonly Gym[] = [
     voices: ["cjVigY5qzO86Huf0OWal", "iP95p4xoKVk53GoZ742B"],
     badge: "Volcano",
     intro:
-      "The sixth gym is a gigantic kitchen. Chef Pepper, the leader, flips a pancake so high it sticks to the ceiling. 'Today's special,' says Pepper, 'one challenger, lightly toasted. Only joking.' Pepper sends out",
-    ace: "Pepper turns every oven up to the highest number. 'Time for the main course,' says Pepper. Flames roar up from the hob, and out of them strides",
-    tease: "'Ooh, that's undercooked,' says Pepper. 'Pop it back in the oven and try again.'",
+      "The sixth gym is a gigantic kitchen. Chef Pepper, the leader, flips a pancake so high it sticks to the ceiling. Pepper winks. 'Today's special: one challenger, lightly toasted. Only joking.' Pepper sends out",
+    ace: "Pepper turns every oven up to the highest number. 'Time for the main course.' Flames roar up from the hob, and out of them strides",
+    tease: "Pepper turns to you. 'Ooh, that's undercooked. Pop it back in the oven and try again.'",
     farewell:
-      "'Chef's kiss,' says Pepper, and takes the Volcano Badge out of a cake tin. It's still hot.",
+      "Pepper takes the Volcano Badge out of a cake tin. 'Chef's kiss.' It's still hot.",
   },
   {
     type: "Ground",
@@ -130,11 +130,11 @@ export const GYMS: readonly Gym[] = [
     voices: ["CwhRBWXzGAHq8TQ4Fs17", "pqHfZKP75CvOlQylNhV4"],
     badge: "Earth",
     intro:
-      "The seventh gym is a desert arena. Leader Clay is lying in a hammock with his hat over his eyes. 'Oh, hey,' says Clay, without moving. 'Battle? Sure. Why not.' He doesn't get up. Clay sends out",
-    ace: "For the first time, Clay sits up. 'Huh,' says Clay. 'You're actually good.' He stretches, yawns, and stamps once on the sand. The whole arena shakes, and up from under the ground bursts",
-    tease: "'Nah,' says Clay, from under his hat. 'Have another go. No rush. Nothing's ever a rush.'",
+      "The seventh gym is a desert arena. Leader Clay is lying in a hammock with his hat over his eyes. Clay doesn't move. 'Oh, hey. Battle? Sure. Why not.' He doesn't get up. Clay sends out",
+    ace: "For the first time, Clay sits up. 'Huh. You're actually good.' He stretches, yawns, and stamps once on the sand. The whole arena shakes, and up from under the ground bursts",
+    tease: "Clay speaks from under his hat. 'Nah. Have another go. No rush. Nothing's ever a rush.'",
     farewell:
-      "'Respect,' says Clay, and tips his hat. The Earth Badge was under it the whole time.",
+      "Clay tips his hat. 'Respect.' The Earth Badge was under it the whole time.",
   },
   {
     type: "Dragon",
@@ -142,11 +142,11 @@ export const GYMS: readonly Gym[] = [
     voices: ["SOYHLrjzK2X1ezoPC6cr", "N2lVS1w4EtoT3dr4eOWO"],
     badge: "Rising",
     intro:
-      "The eighth gym is a castle on a cliff. Leader Wyn waits in shining armour. 'Seven badges,' says Wyn, and the words echo off the stone. 'But dragons do not bow to badges.' Wyn sends out",
-    ace: "Wyn lowers the wooden sword, and nods with respect. 'Now you face my oldest friend,' says Wyn. A roar shakes the dust from the ceiling, and out of the shadows comes",
-    tease: "'A dragon is not so easily beaten,' says Wyn. 'Think, challenger. Then try again.'",
+      "The eighth gym is a castle on a cliff. Leader Wyn waits in shining armour. Wyn's voice echoes off the stone. 'Seven badges. But dragons do not bow to badges.' Wyn sends out",
+    ace: "Wyn lowers the wooden sword, and nods with respect. 'Now you face my oldest friend.' A roar shakes the dust from the ceiling, and out of the shadows comes",
+    tease: "Wyn smiles. 'A dragon is not so easily beaten. Think, challenger. Then try again.'",
     farewell:
-      "'You have the heart of a dragon,' says Wyn, and places the Rising Badge in your hand. The eighth, and the last.",
+      "Wyn places the Rising Badge in your hand. 'You have the heart of a dragon.' The eighth, and the last.",
   },
 ];
 
@@ -157,15 +157,15 @@ export const GYMS: readonly Gym[] = [
 export function introText(owner: string, team: readonly string[], count = "six"): string {
   return [
     "Welcome to the Gym Challenge! Eight gyms, eight badges, one Champion.",
-    `A young man in a shiny tracksuit leaps out. '{excited} And here they are, folks!' says Ronnie. 'Ronnie Rumble here, and ${owner ? `this is ${owner}, ` : "here comes "}our newest challenger!'`,
-    `'Your team of ${count},' says Ronnie. 'You've got ${team.join(", ")}.'`,
-    "'Pick the type that wins. Get it wrong, and you can try again. But the Champion,' says Ronnie, lowering his voice, '{whispers} does not.'",
+    `A young man in a shiny tracksuit leaps out. Ronnie beams. '{excited} And here they are, folks! Ronnie Rumble here, and ${owner ? `this is ${owner}, ` : "here comes "}our newest challenger!'`,
+    `Ronnie grins. 'Your team of ${count}. You've got ${team.join(", ")}.'`,
+    "'Pick the type that wins. Get it wrong, and you can try again.' Ronnie lowers his voice. '{whispers} But the Champion does not.'",
     "'Want my quick lesson on types first?'",
   ].join(" ");
 }
 
 export const LESSON_TEXT = [
-  "Ronnie pulls a whiteboard out of nowhere. 'Types!' says Ronnie. 'Water puts out Fire. Fire burns Grass. Grass drinks up Water. Strong against is super effective, twice as hard.'",
+  "Ronnie pulls a whiteboard out of nowhere. 'Types! Water puts out Fire. Fire burns Grass. Grass drinks up Water. Strong against is super effective, twice as hard.'",
   "'The other way round is not very effective, and some do nothing at all. Electric on a Ground type? The ground just swallows it. And some Pokémon have two types, so think about both. Right. Badges!'",
 ].join(" ");
 
@@ -175,6 +175,9 @@ export const LESSON_LABELS = { hear: "hear Ronnie's lesson", skip: "go to the fi
 // Between gyms
 
 export const TRAVEL_LINES = [
+  "On the way, a Pidgey lands on Ronnie's head. He doesn't notice for a mile.",
+  "You share an ice cream with your team on the way to the next gym.",
+  "Ronnie hums the gym theme tune all the way there. He doesn't know the words.",
   "On the bus to the next town, Ronnie commentates the traffic lights.",
   "On the river path, Ronnie practises his commentator voice on some ducks.",
   "On the train to the next gym, Ronnie eats four sandwiches.",
@@ -185,7 +188,7 @@ export const TRAVEL_LINES = [
 
 /** After the fourth badge: halfway, and a good place to stop for today. */
 export const HALFWAY =
-  "'Halfway, folks!' says Ronnie. 'If you need a rest, this is a good place to stop. The card remembers where you got to.'";
+  "Ronnie beams. 'Halfway, folks! If you need a rest, this is a good place to stop. The card remembers where you got to.'";
 
 /** A badge count after a win: "That's three badges." */
 export function badgeCount(count: number): string {
@@ -205,9 +208,9 @@ export const SEND_OUT_LINES = [
 
 /** The question before you choose. */
 export const WHICH_LINES = [
-  "'{nervously} Who are you sending out?' says Ronnie, holding his breath.",
-  "'Choose carefully,' whispers Ronnie, a bit too loudly.",
-  "'{whispers} The crowd goes quiet,' says Ronnie. 'Which Pokémon will it be?'",
+  "Ronnie is holding his breath. '{nervously} Who are you sending out?'",
+  "Ronnie whispers, a bit too loudly. 'Choose carefully.'",
+  "Ronnie leans in. '{whispers} The crowd goes quiet. Which Pokémon will it be?'",
   "Your hand hovers over your Poké Balls.",
 ];
 
@@ -224,11 +227,14 @@ export const BIG_WIN_LINES = [
 ];
 
 export const RONNIE_WINS = [
-  "'{shouts} WHAT a choice!' says Ronnie. 'The crowd is on its feet!'",
-  "'{excited} Textbook!' says Ronnie. 'Absolutely textbook!'",
-  "'{shouts} Did you SEE that?' says Ronnie, to nobody in particular.",
-  "'{gasps} Oh, I need to sit down,' says Ronnie. 'That was beautiful.'",
-  "'{excited} Ten out of ten,' says Ronnie. 'Eleven out of ten!'",
+  "Ronnie spins round on the spot. '{excited} Can you BELIEVE it?'",
+  "Ronnie hugs his microphone. '{excited} I love this job!'",
+  "Ronnie jumps on his chair. '{shouts} Champion material, folks!'",
+  "Ronnie throws both arms up. '{shouts} WHAT a choice! The crowd is on its feet!'",
+  "Ronnie beams. '{excited} Textbook! Absolutely textbook!'",
+  "Ronnie turns to nobody in particular. '{shouts} Did you SEE that?'",
+  "Ronnie gasps. '{gasps} Oh, I need to sit down. That was beautiful.'",
+  "Ronnie beams. '{excited} Ten out of ten. Eleven out of ten!'",
 ];
 
 /** It did nothing at all. */
@@ -261,9 +267,11 @@ export const BACK_IN_LINES = [
 ];
 
 export const RONNIE_MISSES = [
-  "'{sighs} Oof,' says Ronnie. 'Happens to the best of us. Mostly to me.'",
-  "'Not to worry, folks,' says Ronnie. 'The challenger gets another go!'",
-  "'{laughs} I'd have done exactly the same,' says Ronnie. 'Which is why I'm a commentator.'",
+  "Ronnie smiles. 'Everyone needs a warm-up. Try again!'",
+  "Ronnie gives a thumbs up. 'Shake it off, champ!'",
+  "Ronnie sighs. '{sighs} Oof. Happens to the best of us. Mostly to me.'",
+  "Ronnie turns to you. 'Not to worry, folks. The challenger gets another go!'",
+  "Ronnie laughs. '{laughs} I'd have done exactly the same. Which is why I'm a commentator.'",
 ];
 
 /**
@@ -353,30 +361,30 @@ export const BADGE_LINES = [
 
 export const CHAMPION_INTRO = [
   "The Champion's stadium is huge, and thousands of people are cheering. [cheer]",
-  "'{shouts} Eight badges, folks!' says Ronnie. 'And now, the Champion!'",
-  "Champion Aurelia walks out in a long cloak, and the crowd goes silent. 'Three Pokémon,' says Aurelia, kindly. 'And at this level, there are no second chances.'",
+  "Ronnie throws both arms up. '{shouts} Eight badges, folks! And now, the Champion!'",
+  "Champion Aurelia walks out in a long cloak, and the crowd goes silent. Aurelia speaks kindly. 'Three Pokémon. And at this level, there are no second chances.'",
 ].join(" ");
 
 /** Aurelia's three send-outs, round by round, each ending just before the Pokémon's cry. */
 export const CHAMPION_SEND_OUTS = [
   "Aurelia lifts her first Poké Ball, and the lights dim. Out comes",
-  "Aurelia nods, as if she expected nothing less. 'Good,' says Aurelia. 'Very good.' Her second Poké Ball spins through the air. Out comes",
-  "The crowd is on its feet. Aurelia takes a deep breath. 'This is my oldest friend,' says Aurelia. 'We've never lost together.' Out comes",
+  "Aurelia nods, as if she expected nothing less. 'Good. Very good.' Her second Poké Ball spins through the air. Out comes",
+  "The crowd is on its feet. Aurelia takes a deep breath. 'This is my oldest friend. We've never lost together.' Out comes",
 ];
 
 /** Losing to the Champion, round by round. Endings 1 to 3. */
 export const CHAMPION_LOSSES = [
-  "Aurelia's Pokémon wins the round, and that's the battle. The crowd claps anyway, a long, warm clap. Aurelia shakes your hand. 'You made it all the way here,' says Aurelia. 'Most people never do. Come back when you're ready.' 'What a run!' says Ronnie. 'What a RUN!'",
-  "So close. Aurelia's second Pokémon wins the round, and Ronnie drops his microphone. 'One more!' says Ronnie. 'One more and it'd be the final round!' Aurelia smiles. 'That was the best start anyone's made in years,' says Aurelia. 'I'll be waiting.'",
-  "It's the very last round, and Aurelia's oldest friend holds on, just. The stadium goes completely silent. Then it erupts. [cheer] Everyone is cheering for you anyway. 'One step away,' says Aurelia, and she looks impressed. 'Next time, I think you'll take that step.'",
+  "Aurelia's Pokémon wins the round, and that's the battle. The crowd claps anyway, a long, warm clap. Aurelia shakes your hand. 'You made it all the way here. Most people never do. Come back when you're ready.' Ronnie beams. 'What a run! What a RUN!'",
+  "So close. Aurelia's second Pokémon wins the round, and Ronnie drops his microphone. 'One more! One more and it'd be the final round!' Aurelia smiles. 'That was the best start anyone's made in years. I'll be waiting.'",
+  "It's the very last round, and Aurelia's oldest friend holds on, just. The stadium goes completely silent. Then it erupts. [cheer] Everyone is cheering for you anyway. Aurelia looks impressed. 'One step away. Next time, I think you'll take that step.'",
 ];
 
 export const CHAMPION_WIN =
-  "Aurelia's last Pokémon faints, and the whole stadium explodes. [fanfare] [cheer] '{shouts} A NEW CHAMPION!' yells Ronnie. Aurelia hangs a golden medal round your neck. 'Well done, Champion,' says Aurelia.";
+  "Aurelia's last Pokémon faints, and the whole stadium explodes. [fanfare] [cheer] Ronnie throws both arms up. '{shouts} A NEW CHAMPION!' Aurelia hangs a golden medal round your neck. 'Well done, Champion.'";
 
 /** A legendary Pokémon arrives. Its cry plays where {cry} is. */
 export const LEGEND_ARRIVES =
-  "Then a shadow falls across the stadium, and a cry rings out from the sky. {cry} A legendary Pokémon is circling the roof. {about} It lands, very gently, in front of you, and bows its head. 'It came to see the new Champion,' whispers Aurelia. Ronnie is too amazed to speak, for once.";
+  "Then a shadow falls across the stadium, and a cry rings out from the sky. {cry} A legendary Pokémon is circling the roof. {about} It lands in front of you, and bows its head. Aurelia leans in. 'It came to see the new Champion.' Ronnie is too amazed to speak.";
 
 export const LEGEND_LABELS = { throwBall: "throw a Poké Ball", letRest: "let it rest" };
 
@@ -394,7 +402,7 @@ export function throwEnding(legend: string, owner: string): string {
   return [
     `You throw a Poké Ball. [throw] [escape] It pops straight open. ${legend} isn't cross. It just looks at you, as if to say, not today.`,
     "Then it spreads its wings and flies away, into the sunset, and the whole stadium waves goodbye.",
-    `'Still,' says Ronnie, wiping his eyes. '${owner ? `Champion ${owner}` : "Our new Champion"}! What a day! WHAT a day!'`,
+    `Ronnie is wiping his eyes. 'Still. ${owner ? `Champion ${owner}` : "Our new Champion"}! What a day! WHAT a day!'`,
   ].join(" ");
 }
 
@@ -402,8 +410,8 @@ export function restEnding(legend: string, owner: string): string {
   return [
     `You don't throw anything. You just let it rest. ${legend} looks at you for a long moment, and then it lowers its great head, very gently, until it touches your hand.`,
     "When it flies away, it leaves something behind: a tiny shining stone, warm to the touch.",
-    `Aurelia gasps. '{whispers} It chose you,' says Aurelia. 'It will come back${owner ? `, ${owner}` : ""}. Whenever you need it.'`,
-    "'{sighs} I'm not crying,' says Ronnie, crying. 'Ladies and gentlemen, the Champion!'",
+    `Aurelia gasps. Aurelia leans in. '{whispers} It chose you. It will come back${owner ? `, ${owner}` : ""}. Whenever you need it.'`,
+    "Ronnie is crying. '{sighs} I'm not crying. Ladies and gentlemen, the Champion!'",
   ].join(" ");
 }
 

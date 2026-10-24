@@ -6,6 +6,7 @@ import { gymAdventure } from "./gym";
 import { islandAdventure } from "./island";
 import { lostAdventure } from "./lost";
 import { paldeaAdventure } from "./paldea";
+import { playAdventure } from "./play";
 import { safariAdventure } from "./safari";
 import { storyCard } from "./story-card";
 import { checkStory } from "./story-check";
@@ -18,6 +19,7 @@ const ADVENTURES: Array<[string, (input: { seed: number; owner?: string }) => St
   ["Island", islandAdventure],
   ["Paldea", paldeaAdventure],
   ["Find Your Trainer", lostAdventure],
+  ["Friendly Battles", playAdventure],
 ];
 
 const CAST: StoryCharacter[] = [
@@ -37,6 +39,39 @@ describe("Expression in the adventures", () => {
           const count = (node.text.match(/\{[a-z]+\}/g) ?? []).length;
           assert.ok(count <= 4, `${title} ${node.id} has ${count} tags`);
         }
+      }
+    }
+  });
+
+  it("lets the characters speak in their own voices: every quote is a whole sentence of its own", () => {
+    // A recording changes voice only where a sentence ends, so "'Gotcha,' says Marigold." is read by the
+    // narrator. The stories put the speaker first ("Marigold grins. 'Gotcha!'"), and this keeps it so.
+    const words = (text: string) => withoutVoiceTags(text).split(/\s+/).filter(Boolean).length;
+    for (const [title, make] of ADVENTURES) {
+      const graph = make({ seed: 1, owner: "Mia" });
+      const cast = graph.cast ?? [];
+      const voices = castVoices("pFZP5JQG7iQjIQuC4Bku", cast);
+      const narrator = voices[NARRATOR] as { voiceId: string; pitch: number };
+      let quoted = 0;
+      let voiced = 0;
+      for (const node of graph.nodes) {
+        for (const line of speakerLines(node.text, cast)) if ("speaker" in line && line.speaker !== NARRATOR) quoted += words(line.text);
+        for (const part of trackParts(node.text, voices, cast) ?? []) {
+          if ("text" in part && (part.voiceId !== narrator.voiceId || part.pitch !== narrator.pitch)) voiced += words(part.text);
+        }
+      }
+      assert.ok(voiced / quoted >= 0.95, `${title}: only ${Math.round((100 * voiced) / quoted)}% of the characters' lines are in their own voices`);
+    }
+  });
+
+  it("is different every time: two cards of one adventure share well under nine in ten of their sentences", () => {
+    const sentences = (graph: StoryGraph) => new Set(graph.nodes.flatMap((node) => node.text.split(/(?<=[.!?]['’]?)\s+/)));
+    for (const [title, make] of ADVENTURES) {
+      for (const [one, two] of [[1, 2], [3, 4], [5, 6]] as const) {
+        const first = sentences(make({ seed: one }));
+        const second = sentences(make({ seed: two }));
+        const different = [...first].filter((sentence) => !second.has(sentence)).length / first.size;
+        assert.ok(different >= 0.15, `${title} seeds ${one} and ${two}: only ${Math.round(different * 100)}% differ`);
       }
     }
   });
@@ -67,14 +102,15 @@ describe("Expression in the adventures", () => {
     assert.equal(forElevenLabs("'{gasps} Look!'"), "'[gasps] Look!'");
   });
 
-  it("keeps a tag with the words after it when a name is cut out to be recorded on its own", () => {
+  it("keeps a tag with its sentence, and never cuts a name out of it", () => {
     const voices = castVoices("x", CAST);
     const parts = trackParts("'{gasps} Mia! You did it!' says Juno.", voices, CAST, undefined, {
       slots: ["Mia"],
       fallback: fallbackVoices(CAST),
     });
     const spoken = (parts ?? []).flatMap((part) => ("text" in part ? [part.text] : []));
-    assert.deepEqual(spoken.slice(0, 2), ["{gasps} Mia!", "You did it!"]);
+    // "You did it!" and "says Juno." are one sentence, so the narrator reads them together.
+    assert.deepEqual(spoken, ["{gasps} Mia!", "You did it! says Juno."]);
   });
 
   it("still finds the speaker when the tag comes after the words", () => {

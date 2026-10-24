@@ -22,7 +22,7 @@ const PUBLIC_ROOT = path.join(/* turbopackIgnore: true */ process.cwd(), "public
  * speaks, so every word stays clear.
  */
 export const AMBIENCE_VOLUME = 0.16;
-export const MUSIC_VOLUME = 0.1;
+export const MUSIC_VOLUME = 0.13;
 
 export type SpokenPart = Extract<TrackPart, { text: string }>;
 
@@ -45,8 +45,8 @@ export async function storySound(sound: StorySound, root = PUBLIC_ROOT): Promise
 /** The ambience and music loops for a scene, at the levels they play under speech. */
 export async function bedClips(bed: StoryBed | null | undefined, root = PUBLIC_ROOT): Promise<BedClip[]> {
   const clips: BedClip[] = [];
-  if (bed?.ambience) clips.push({ audio: await publicFile(STORY_AMBIENCE[bed.ambience], root), volume: AMBIENCE_VOLUME });
-  if (bed?.music) clips.push({ audio: await publicFile(STORY_MUSIC[bed.music], root), volume: MUSIC_VOLUME });
+  if (bed?.ambience) clips.push({ audio: await publicFile(STORY_AMBIENCE[bed.ambience], root), volume: AMBIENCE_VOLUME, kind: "ambience" });
+  if (bed?.music) clips.push({ audio: await publicFile(STORY_MUSIC[bed.music], root), volume: MUSIC_VOLUME, kind: "music" });
   return clips;
 }
 
