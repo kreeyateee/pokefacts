@@ -59,7 +59,20 @@ function OwnPickStickers({ units }: { units: MeasureUnits }) {
   );
 }
 
-/** Printables: A4 posters of any group of Pokémon, colouring sheets, then stickers for a Yoto card. */
+/** The kinds of printable, one tab each. */
+const PRINT_TABS = [
+  { id: "posters", label: "Posters" },
+  { id: "colouring", label: "Colouring sheets" },
+  { id: "stickers", label: "Card stickers" },
+] as const;
+
+type PrintTab = (typeof PRINT_TABS)[number]["id"];
+
+const PRINT_TAB_KEY = "pokefacts.print-tab";
+const readPrintTab = (raw: string | null): PrintTab => PRINT_TABS.find((tab) => tab.id === raw)?.id ?? "posters";
+const writePrintTab = (tab: PrintTab) => tab;
+
+/** Printables: A4 posters of any group of Pokémon, colouring sheets, and stickers for a Yoto card, a tab each. */
 export function PrintablesPanel({
   card,
   rangeCards,
@@ -75,43 +88,79 @@ export function PrintablesPanel({
   onStickers: () => void;
   onOwnPick: () => void;
 }) {
+  const [tab, setTab] = useStoredState(PRINT_TAB_KEY, readPrintTab, writePrintTab);
   return (
     <div className="grid min-w-0 gap-5">
-      <PosterMaker playlist={card} onOwnPick={onOwnPick} />
+      <div
+        className="pk-entry-tabs"
+        role="tablist"
+        aria-label="Printables"
+        onKeyDown={(event) => {
+          const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+          if (!step) return;
+          event.preventDefault();
+          const index = PRINT_TABS.findIndex((item) => item.id === tab);
+          const next = PRINT_TABS[(index + step + PRINT_TABS.length) % PRINT_TABS.length];
+          setTab(next.id);
+          document.getElementById(`print-tab-${next.id}`)?.focus();
+        }}
+      >
+        {PRINT_TABS.map((item) => (
+          <button
+            key={item.id}
+            id={`print-tab-${item.id}`}
+            type="button"
+            role="tab"
+            aria-selected={tab === item.id}
+            aria-controls="print-panel"
+            tabIndex={tab === item.id ? 0 : -1}
+            className="pk-tab"
+            onClick={() => setTab(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
 
-      <ColouringMaker />
+      <div id="print-panel" role="tabpanel" aria-labelledby={`print-tab-${tab}`} className="grid min-w-0 gap-5">
+        {tab === "posters" ? <PosterMaker playlist={card} onOwnPick={onOwnPick} /> : null}
 
-      <section className="pk-panel grid min-w-0 content-start gap-3" aria-labelledby="stickers-heading">
-        <h2 id="stickers-heading" className="font-display text-3xl leading-tight">
-          Card stickers
-        </h2>
-        <p className="text-sm leading-6">
-          A front and a back for a Yoto card, at real card size. Pick a group photo, a pile, a Pokédex screen or a
-          trading card, draw on it, then print a sheet.
-        </p>
-        {rangeCards.length > 1 ? (
-          <ul className="pk-scroll flex gap-2 overflow-x-auto pb-1" aria-label={`${card.title} playlists`}>
-            {rangeCards.map((item) => (
-              <li key={item.id} className="shrink-0">
-                <button
-                  type="button"
-                  aria-current={item.id === card.id ? "true" : undefined}
-                  onClick={() => onChooseCard(item)}
-                  className="pk-pill"
-                >
-                  {item.rangeLabel}
-                </button>
-              </li>
-            ))}
-          </ul>
+        {tab === "colouring" ? <ColouringMaker /> : null}
+
+        {tab === "stickers" ? (
+          <section className="pk-panel grid min-w-0 content-start gap-3" aria-labelledby="stickers-heading">
+            <h2 id="stickers-heading" className="font-display text-3xl leading-tight">
+              Card stickers
+            </h2>
+            <p className="text-sm leading-6">
+              A front and a back for a Yoto card, at real card size. Pick a group photo, a pile, a Pokédex screen or a
+              trading card, draw on it, then print a sheet.
+            </p>
+            {rangeCards.length > 1 ? (
+              <ul className="pk-scroll flex gap-2 overflow-x-auto pb-1" aria-label={`${card.title} playlists`}>
+                {rangeCards.map((item) => (
+                  <li key={item.id} className="shrink-0">
+                    <button
+                      type="button"
+                      aria-current={item.id === card.id ? "true" : undefined}
+                      onClick={() => onChooseCard(item)}
+                      className="pk-pill"
+                    >
+                      {item.rangeLabel}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="flex flex-wrap items-start gap-2">
+              <Button type="button" className="h-12 px-6 text-base" onClick={onStickers}>
+                Stickers for {card.rangeLabel && card.rangeLabel !== card.title ? card.rangeLabel : card.title}
+              </Button>
+              <OwnPickStickers units={units} />
+            </div>
+          </section>
         ) : null}
-        <div className="flex flex-wrap items-start gap-2">
-          <Button type="button" className="h-12 px-6 text-base" onClick={onStickers}>
-            Stickers for {card.rangeLabel && card.rangeLabel !== card.title ? card.rangeLabel : card.title}
-          </Button>
-          <OwnPickStickers units={units} />
-        </div>
-      </section>
+      </div>
     </div>
   );
 }

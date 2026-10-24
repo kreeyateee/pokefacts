@@ -228,6 +228,23 @@ export function PosterMaker({ playlist, onOwnPick }: { playlist: KidCard; onOwnP
     { id: PLAYLIST, label: playlist.rangeLabel || playlist.title },
   ];
 
+  // Who goes on the poster, a tab for each kind: the regions, the starters, or your own.
+  const groups = [
+    {
+      id: "regions",
+      label: "Regions",
+      row: "Every Pokémon from",
+      choices: REGION_POSTERS.map((item) => ({ id: item.id, label: item.label, count: item.dexIds.length })),
+    },
+    { id: "starters", label: "Starters", row: "Starter Pokémon", choices: STARTER_POSTERS.map((item) => ({ id: item.id, label: item.label })) },
+    { id: "yours", label: "Your own", row: "Your own", choices: yours },
+  ];
+  const group = groups.find((item) => item.choices.some((choice) => choice.id === sourceId)) ?? groups[0]!;
+  const openGroup = (id: string) => {
+    const next = groups.find((item) => item.id === id);
+    if (next && next !== group && next.choices[0]) choose(next.choices[0].id);
+  };
+
   return (
     <section className="pk-panel min-w-0" aria-labelledby="poster-heading">
       <h2 id="poster-heading" className="font-display text-3xl leading-tight">
@@ -237,20 +254,37 @@ export function PosterMaker({ playlist, onOwnPick }: { playlist: KidCard; onOwnP
 
       <div className="mt-4 grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
         <div className="grid content-start gap-4">
-          <ChoiceRow
-            label="Every Pokémon from"
-            choices={REGION_POSTERS.map((item) => ({ id: item.id, label: item.label, count: item.dexIds.length }))}
-            chosen={sourceId}
-            onChoose={choose}
-          />
-          <ChoiceRow
-            label="Starter Pokémon"
-            choices={STARTER_POSTERS.map((item) => ({ id: item.id, label: item.label }))}
-            chosen={sourceId}
-            onChoose={choose}
-          />
-          <ChoiceRow label="Your own" choices={yours} chosen={sourceId} onChoose={choose} />
-          {picks.ids.length === 0 ? (
+          <div
+            className="pk-entry-tabs"
+            role="tablist"
+            aria-label="Who goes on the poster"
+            onKeyDown={(event) => {
+              const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+              if (!step) return;
+              event.preventDefault();
+              const index = groups.indexOf(group);
+              const next = groups[(index + step + groups.length) % groups.length]!;
+              openGroup(next.id);
+              document.getElementById(`poster-tab-${next.id}`)?.focus();
+            }}
+          >
+            {groups.map((item) => (
+              <button
+                key={item.id}
+                id={`poster-tab-${item.id}`}
+                type="button"
+                role="tab"
+                aria-selected={item === group}
+                tabIndex={item === group ? 0 : -1}
+                className="pk-tab"
+                onClick={() => openGroup(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <ChoiceRow label={group.row} choices={group.choices} chosen={sourceId} onChoose={choose} />
+          {group.id === "yours" && picks.ids.length === 0 ? (
             <p className="text-sm leading-6 text-muted-foreground">
               Pick Pokémon in{" "}
               <button type="button" className="font-bold underline" onClick={onOwnPick}>
