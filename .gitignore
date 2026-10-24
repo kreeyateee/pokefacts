@@ -75,6 +75,7 @@ __pycache__/
 /data/rendered
 /data/radio
 /data/demo
+/data/demo-feedback
 /data/labs-limit.json
 
 # Piper binary and British voice model. Tens of megabytes. Downloaded once.
