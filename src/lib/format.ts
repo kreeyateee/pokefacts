@@ -78,11 +78,38 @@ export function versionRank(slug: string): number {
   return index === -1 ? VERSION_RANK.length : index;
 }
 
+/**
+ * Words the Pok\u00e9dex text was hyphenated across a line in, imported with the hyphen lost: "ac tually".
+ * Found by joining pairs that make a word used elsewhere in the Pok\u00e9dex, then checked by eye.
+ */
+const SPLIT_WORDS: ReadonlyArray<readonly [string, string]> = [
+  ["ac tually", "actually"],
+  ["atti tude", "attitude"],
+  ["communi ties", "communities"],
+  ["con stant", "constant"],
+  ["con tinuously", "continuously"],
+  ["de grees", "degrees"],
+  ["distin guish", "distinguish"],
+  ["elas tic", "elastic"],
+  ["fluc tuates", "fluctuates"],
+  ["furi ously", "furiously"],
+  ["micro scope", "microscope"],
+  ["pre historic", "prehistoric"],
+  ["predeter mined", "predetermined"],
+  ["translu cent", "translucent"],
+  ["win dows", "windows"],
+];
+
 export function cleanFlavor(text: string): string {
-  return text
+  let cleaned = text
     .replace(/\f/g, " ")
-    .replace(/\n/g, " ")
-    .replace(/\u00ad/g, "")
+    // A soft hyphen at a line break joins the word back together, not with a space.
+    .replace(/\u00ad\s*/g, "")
+    .replace(/\n/g, " ");
+  for (const [split, word] of SPLIT_WORDS) {
+    cleaned = cleaned.replace(new RegExp(`\\b${split}\\b`, "g"), word);
+  }
+  return cleaned
     .replace(/POK[eé]MON/gi, "Pokémon")
     .replace(/\s+/g, " ")
     .trim();
