@@ -2178,12 +2178,16 @@ export function Studio({
     }
   }
 
-  /** An adventure card: its pictures, then the interactive playlist. Always a new playlist, never added to one. */
+  /**
+   * An adventure card: its pictures, then the interactive playlist. By default it replaces the playlist
+   * already made for that adventure, so the library is not filled with copies; the card and anything
+   * linked to it keep working and play the new adventure. Without one, it makes a new playlist.
+   */
   async function sendAdventure(sent: StoryGraph) {
     if (sendingRef.current) return;
     if (!(await connectedSession())) return;
-    // Each send is a new adventure, so a second Safari Zone in the library becomes "Safari Zone 2".
-    const story = { ...sent, title: nextFreeTitle(sent.title, library.map((item) => item.title)) };
+    const existing = playlistNamed(library, sent.title);
+    const story = existing ? { ...sent, title: existing.title } : sent;
     try {
       await driveSend(story.title, false, async () => {
         setJob({ status: "sending", detail: `Sending ${story.title} to Yoto…` });
@@ -2209,19 +2213,22 @@ export function Studio({
           });
         });
         const built = storyCard(story, { voiceId: voiceIdRef.current, realById, shadowById, namedById });
+        const upload = existing ? uploadForPlaylist(built.upload, existing.cardId, "replace") : built.upload;
         return newSend({
           title: story.title,
           // The cover shows the adventure's place and the child's partner. Its other Pokémon may be secrets.
           current: {
-            ...pendingPlaylist(built.card, built.upload, story.title),
+            ...pendingPlaylist(built.card, upload, story.title),
             coverId: undefined,
             coverHidden: undefined,
             coverCard: adventureCoverCard(story, favourites[0]),
           },
           finish: {
-            detail: `${story.title} is in your Yoto library.`,
+            detail: existing
+              ? `${story.title} on your Yoto now plays this new adventure.`
+              : `${story.title} is in your Yoto library.`,
             toastTitle: story.title,
-            updated: false,
+            updated: Boolean(existing),
             tracks: storyTrackCount(story),
           },
         });
