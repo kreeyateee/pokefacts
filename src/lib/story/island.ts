@@ -442,13 +442,19 @@ function caughtUp(slips: number): number {
   return slips >= 2 ? slips - 1 : slips;
 }
 
-function endingText(slips: number, owner: string, giant: Giant): string {
+/** The little comforts at the end of a voyage, one picked for each card. */
+const COMFORTS = ["Nell brings you hot chocolate.", "Nell brings you warm toast and jam.", "Nell wraps you in a big soft blanket."];
+const MORNINGS = ["You fall asleep on the beach in the sunshine.", "You have breakfast on the beach with Nell.", "Gulliver brings everybody a fish for breakfast."];
+
+function endingText(slips: number, owner: string, giant: Giant, seed = 0): string {
+  const comfort = COMFORTS[seed % COMFORTS.length] as string;
+  const morning = MORNINGS[(seed >> 2) % MORNINGS.length] as string;
   const captain = owner ? `you're Captain ${owner}` : "you're a real sea captain";
   return [
     `You come into the lagoon just as the moon rises, and there they are: Mabel's family, six huge Wailord, singing and splashing. [cheer] Then the water below the island glows red, and ${giant.finale}. All at once the whole family leaps, Mabel too, up into the moonlight, with you on top, and down they come with the biggest splash there has ever been. Brine takes off his captain's hat and puts it on your head. 'From now on, ${captain}.' ${MABEL} [golden]`,
-    `The moon is just coming up as you sail into the lagoon. Mabel's family stops leaping, and swims to meet her. ${MABEL} They sing all together while the moon climbs, and far out at sea, a red glow answers. Nell brings you hot chocolate. 'I've never heard them sing like that. That's for you, that is.' [ending]`,
+    `The moon is just coming up as you sail into the lagoon. Mabel's family stops leaping, and swims to meet her. ${MABEL} They sing all together while the moon climbs, and far out at sea, a red glow answers. ${comfort} 'I've never heard them sing like that. That's for you, that is.' [ending]`,
     `It's late at night when you get to the lagoon, and Mabel's family is fast asleep, floating like islands. Mabel nudges the smallest one. One by one they wake, and sing so loudly that every light on the island comes on. ${MABEL} Brine wipes his eyes. 'Well, that was worth staying up for.' [ending]`,
-    `The sky is getting light when you reach the lagoon. Everybody is very tired, even Gulliver. But Mabel's family has waited up, and they sing a quiet morning song. ${MABEL} Mabel is home. You fall asleep on the beach in the sunshine. Brine is yawning. 'Long way round. But we got her home. That's what counts.' [ending]`,
+    `The sky is getting light when you reach the lagoon. Everybody is very tired, even Gulliver. But Mabel's family has waited up, and they sing a quiet morning song. ${MABEL} Mabel is home. ${morning} Brine is yawning. 'Long way round. But we got her home. That's what counts.' [ending]`,
   ][Math.min(slips, MOST_SLIPS)] as string;
 }
 
@@ -517,7 +523,7 @@ export function buildIsland(plan: IslandPlan, seed: number, ownerName = "", part
       title: `Ending ${number}: ${name}`,
       icon: slips === 0 ? { formId: plan.giant.formId } : { dexId: 321 },
       bed: { ambience: "lake", music: slips === 0 ? "magical" : "calm" },
-      text: withPartner(endingText(slips, owner, plan.giant), partner, slips === 0),
+      text: withPartner(endingText(slips, owner, plan.giant, Math.abs(seed)), partner, slips === 0),
       ending: { number, name, golden: slips === 0 },
     });
   }

@@ -6,6 +6,7 @@ import { gymAdventure } from "./gym";
 import { islandAdventure } from "./island";
 import { lostAdventure } from "./lost";
 import { paldeaAdventure } from "./paldea";
+import { playAdventure } from "./play";
 import { safariAdventure } from "./safari";
 import { storyCard } from "./story-card";
 import { checkStory } from "./story-check";
@@ -18,6 +19,7 @@ const ADVENTURES: Array<[string, (input: { seed: number; owner?: string }) => St
   ["Island", islandAdventure],
   ["Paldea", paldeaAdventure],
   ["Find Your Trainer", lostAdventure],
+  ["Friendly Battles", playAdventure],
 ];
 
 const CAST: StoryCharacter[] = [
@@ -59,6 +61,18 @@ describe("Expression in the adventures", () => {
         }
       }
       assert.ok(voiced / quoted >= 0.95, `${title}: only ${Math.round((100 * voiced) / quoted)}% of the characters' lines are in their own voices`);
+    }
+  });
+
+  it("is different every time: two cards of one adventure share well under nine in ten of their sentences", () => {
+    const sentences = (graph: StoryGraph) => new Set(graph.nodes.flatMap((node) => node.text.split(/(?<=[.!?]['’]?)\s+/)));
+    for (const [title, make] of ADVENTURES) {
+      for (const [one, two] of [[1, 2], [3, 4], [5, 6]] as const) {
+        const first = sentences(make({ seed: one }));
+        const second = sentences(make({ seed: two }));
+        const different = [...first].filter((sentence) => !second.has(sentence)).length / first.size;
+        assert.ok(different >= 0.15, `${title} seeds ${one} and ${two}: only ${Math.round(different * 100)}% differ`);
+      }
     }
   });
 

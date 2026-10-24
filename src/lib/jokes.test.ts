@@ -7,6 +7,7 @@ import { countSpokenTracks, jokePlaylist, mulberry32 } from "./kid-cards";
 import { gymAdventure } from "./story/gym";
 import { islandAdventure } from "./story/island";
 import { lostAdventure } from "./story/lost";
+import { PRIZES } from "./story/safari-words";
 import { paldeaAdventure } from "./story/paldea";
 import { safariAdventure } from "./story/safari";
 import { speakerLines } from "./story/story-voices";
@@ -72,8 +73,13 @@ describe("Pokémon jokes", () => {
     const graph = safariAdventure({ seed: 4 });
     const endings = graph.nodes.filter((node) => node.kind === "ending");
     assert.equal(endings.length, 4);
-    const prizes = endings.map((node) => /sticker|bronze|silver|golden Safari Ball/.exec(node.text)?.[0]);
-    assert.deepEqual(prizes, ["sticker", "bronze", "silver", "golden Safari Ball"]);
+    // Each ending's prize comes from its own pool: something to take home, a bigger one the better the day.
+    endings.forEach((node, index) => {
+      const pool = PRIZES[index + 1] ?? [];
+      assert.ok(pool.some((prize) => node.text.includes(prize)), `ending ${index + 1} gives a prize from its pool`);
+    });
+    const seen = new Set([1, 2, 3, 4, 5, 6, 7, 8].map((seed) => safariAdventure({ seed }).nodes.find((node) => node.id === "end1")?.text));
+    assert.ok(seen.size > 1, "the same ending gives different prizes on different cards");
     const jokes = endings.filter((node) => node.text.includes("Want to hear a joke?"));
     assert.equal(jokes.length, 3, "the golden ending is a celebration, not a joke");
     assert.match(endings[1]?.text ?? "", /Barnaby grins\. '/, "Barnaby tells the joke on his bad day");

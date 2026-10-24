@@ -175,6 +175,9 @@ export const LESSON_LABELS = { hear: "hear Ronnie's lesson", skip: "go to the fi
 // Between gyms
 
 export const TRAVEL_LINES = [
+  "On the way, a Pidgey lands on Ronnie's head. He doesn't notice for a mile.",
+  "You share an ice cream with your team on the way to the next gym.",
+  "Ronnie hums the gym theme tune all the way there. He doesn't know the words.",
   "On the bus to the next town, Ronnie commentates the traffic lights.",
   "On the river path, Ronnie practises his commentator voice on some ducks.",
   "On the train to the next gym, Ronnie eats four sandwiches.",
@@ -224,6 +227,9 @@ export const BIG_WIN_LINES = [
 ];
 
 export const RONNIE_WINS = [
+  "Ronnie spins round on the spot. '{excited} Can you BELIEVE it?'",
+  "Ronnie hugs his microphone. '{excited} I love this job!'",
+  "Ronnie jumps on his chair. '{shouts} Champion material, folks!'",
   "Ronnie throws both arms up. '{shouts} WHAT a choice! The crowd is on its feet!'",
   "Ronnie beams. '{excited} Textbook! Absolutely textbook!'",
   "Ronnie turns to nobody in particular. '{shouts} Did you SEE that?'",
@@ -261,6 +267,8 @@ export const BACK_IN_LINES = [
 ];
 
 export const RONNIE_MISSES = [
+  "Ronnie smiles. 'Everyone needs a warm-up. Try again!'",
+  "Ronnie gives a thumbs up. 'Shake it off, champ!'",
   "Ronnie sighs. '{sighs} Oof. Happens to the best of us. Mostly to me.'",
   "Ronnie turns to you. 'Not to worry, folks. The challenger gets another go!'",
   "Ronnie laughs. '{laughs} I'd have done exactly the same. Which is why I'm a commentator.'",

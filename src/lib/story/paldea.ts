@@ -178,27 +178,42 @@ function capitalise(text: string): string {
 }
 
 /** What the friends say after a battle, by how the week is going. */
-function cheer(stage: number, missed: boolean, misses: number, mine: Starter): string {
+/** What the friends say after a battle, by how the week is going. Each card draws its own from each set. */
+function cheer(stage: number, missed: boolean, misses: number, mine: Starter, seed = 0): string {
+  const pick = (lines: readonly string[]) => lines[(seed + stage) % lines.length] as string;
   if (missed) {
     return misses >= MOST_MISSES
-      ? "Arlo nods. 'Don't worry. Every great trainer has wobbly days. That's how you learn.'"
-      : "Juno smiles. '{cheerfully} Shake it off. You'll get the next one.'";
+      ? pick([
+          "Arlo nods. 'Don't worry. Every great trainer has wobbly days. That's how you learn.'",
+          "Arlo pats your arm. 'My notebook says everyone gets this one wrong at first.'",
+          "Juno shrugs. 'Even I get it wrong sometimes. Not often. But sometimes.'",
+        ])
+      : pick([
+          "Juno smiles. '{cheerfully} Shake it off. You'll get the next one.'",
+          "Arlo smiles. 'Now we know. That's how learning works.'",
+          "Juno grins. 'Next one's yours. I can feel it.'",
+        ]);
   }
   if (misses === 0) {
     return (
       [
-        `Juno smiles. 'You two are brilliant together.'`,
-        `Arlo beams. '{excited} Not one wrong move. I'm writing that in my notebook.'`,
-        `Juno grins. 'I've never seen ${an(mine.name)} that happy.'`,
-      ][stage] ?? ""
+        [`Juno smiles. 'You two are brilliant together.'`, `Arlo beams. 'Textbook. Absolutely textbook.'`],
+        [`Arlo beams. '{excited} Not one wrong move. I'm writing that in my notebook.'`, `Juno gasps. '{gasps} How are you so good at this?'`],
+        [`Juno grins. 'I've never seen ${an(mine.name)} that happy.'`, `Arlo grins. 'That's going straight in my notebook, with a star.'`],
+      ][stage]?.[seed % 2] ?? ""
     );
   }
-  return "Juno beams. '{excited} That's more like it! Now you're cooking.'";
+  return pick([
+    "Juno beams. '{excited} That's more like it! Now you're cooking.'",
+    "Arlo beams. 'Back on track!'",
+    "Juno cheers. '{excited} Yes! That's the way!'",
+  ]);
 }
 
 type Stage = { title: string; bed: StoryBed; foe: Foe; good: string; slip: string; ask: string; scene: string };
 
 function stagesFor(mine: Starter, plan: PaldeaPlan, owner: string): Stage[] {
+  const seed = Math.abs(plan.seed);
   const { first, trick } = plan.picks[mine.key];
   const titan = mine.titan;
   return [
@@ -208,7 +223,7 @@ function stagesFor(mine: Starter, plan: PaldeaPlan, owner: string): Stage[] {
       foe: first,
       good: mine.own,
       slip: mine.plain,
-      scene: `[footsteps] First, tomatoes from the orchard. But a wild ${first.name} is sitting in the tomato patch, and it won't let anyone near. [cry:${first.id}] Arlo grins. 'That's ${an(first.name)}. It's ${an(first.type)} type.' Juno turns to you. 'Your turn, ${owner}.'`,
+      scene: `[footsteps] ${seed % 2 ? "First, tomatoes from the orchard." : "First stop, the sunny tomato orchard."} But a wild ${first.name} is sitting in the tomato patch, and it won't let anyone near. [cry:${first.id}] Arlo grins. 'That's ${an(first.name)}. It's ${an(first.type)} type.' Juno turns to you. 'Your turn, ${owner}.'`,
       ask: `Which move should ${mine.name} use?`,
     },
     {
@@ -217,7 +232,7 @@ function stagesFor(mine: Starter, plan: PaldeaPlan, owner: string): Stage[] {
       foe: trick,
       good: mine.plain,
       slip: mine.own,
-      scene: `[footsteps] Next, cheese from the dark cave. A wild ${trick.name} is curled up on the biggest cheese of all. [cry:${trick.id}] Arlo turns to you. 'It's ${an(trick.name)}. That's ${an(trick.type)} type. Think carefully.' ${mine.name} is already getting ready to use ${mine.own}, its favourite move.`,
+      scene: `[footsteps] ${seed % 3 ? "Next, cheese from the dark cave." : "Next stop, the cool cheese cave."} A wild ${trick.name} is curled up on the biggest cheese of all. [cry:${trick.id}] Arlo turns to you. 'It's ${an(trick.name)}. That's ${an(trick.type)} type. Think carefully.' ${mine.name} is already getting ready to use ${mine.own}, its favourite move.`,
       ask: `Which move should ${mine.name} use?`,
     },
     {
@@ -244,15 +259,24 @@ function slipText(stage: Stage, mine: Starter, sulk: string, index: number, juno
   return `${mine.name} uses ${stage.slip}. [fizzle] ${whyNot} ${sulk} Juno's ${juno.name} helps out, and you get the ingredient anyway.`;
 }
 
-function endingText(band: number, mine: Starter, juno: Starter, arlo: Starter, owner: string): string {
+/** Who drops in on the picnic: one for each card. */
+const VISITORS = [
+  "A Pawmi sneaks a crumb and runs off giggling. [cry:921]",
+  "Two Tandemaus share one tiny crumb, very politely. [cry:924]",
+  "A Smoliv rolls up, sniffs the sandwich, and rolls away again. [cry:928]",
+  "A Wiglett pops out of the ground to see what the fuss is about. [cry:960]",
+  "A Flittle floats down and lands on Ms Olwen's clipboard. [cry:955]",
+];
+
+function endingText(band: number, mine: Starter, juno: Starter, arlo: Starter, owner: string, visitor = ""): string {
   const intro = `At the top of the hill, on the biggest picnic blanket in Paldea, you build the Great Picnic Sandwich. It's enormous. Juno's ${juno.name} and Arlo's ${arlo.name} sit down beside ${mine.name}.`;
   if (band === 2) {
-    return `${intro} And then ${mine.name} begins to glow. [cry:${mine.id}] Brighter, and brighter, until with a flash it becomes ${mine.mid.name}! [cry:${mine.mid.id}] And it doesn't stop. It glows again, and becomes ${mine.final.name}! [cry:${mine.final.id}] [fanfare] Then a crown of shining crystal appears above its head, sparkling every colour of the rainbow. It has Terastallised! Ms Olwen speaks very quietly. '{whispers} In thirty years at this academy, I have never seen a partner trust its trainer so much. ${owner ? `${owner}, you` : "You"} two are best friends.' Juno is so amazed she forgets to be jealous. [golden]`;
+    return `${intro} And then ${mine.name} begins to glow. [cry:${mine.id}] Brighter, and brighter, until with a flash it becomes ${mine.mid.name}! [cry:${mine.mid.id}] And it doesn't stop. It glows again, and becomes ${mine.final.name}! [cry:${mine.final.id}] [fanfare] Then a crown of shining crystal appears above its head, sparkling every colour of the rainbow. It has Terastallised! Ms Olwen speaks very quietly. '{whispers} In thirty years at this academy, I have never seen a partner trust its trainer so much. ${owner ? `${owner}, you` : "You"} two are best friends.' Juno is so amazed she forgets to be jealous. ${visitor} [golden]`;
   }
   if (band === 1) {
-    return `${intro} You share the sandwich out, and the moment ${mine.name} takes a bite, it begins to glow. [cry:${mine.id}] With a flash, it becomes ${mine.mid.name}! [cry:${mine.mid.id}] [fanfare] Ms Olwen is smiling. '{cheerfully} Look at that. Your partner is growing up, just like you.' Juno says hers is going to evolve tomorrow. Arlo writes it all down in his notebook. [ending]`;
+    return `${intro} You share the sandwich out, and the moment ${mine.name} takes a bite, it begins to glow. [cry:${mine.id}] With a flash, it becomes ${mine.mid.name}! [cry:${mine.mid.id}] [fanfare] Ms Olwen is smiling. '{cheerfully} Look at that. Your partner is growing up, just like you.' Juno says hers is going to evolve tomorrow. Arlo writes it all down in his notebook. ${visitor} [ending]`;
   }
-  return `${intro} You turn round to cut the sandwich, and when you turn back, it's gone. ${mine.name} has eaten the entire Great Picnic Sandwich, in one go, and is lying on its back with a very round tummy. [cry:${mine.id}] Everybody laughs so much that Lechonk falls over. Ms Olwen nods. 'It'll evolve when it's ready. And it will, you know. It's already very fond of you.' Juno makes everyone a second sandwich. It's not quite as big. [ending]`;
+  return `${intro} You turn round to cut the sandwich, and when you turn back, it's gone. ${mine.name} has eaten the entire Great Picnic Sandwich and is lying on its back with a very round tummy. [cry:${mine.id}] Everybody laughs so much that Lechonk falls over. Ms Olwen nods. 'It'll evolve when it's ready. And it will, you know. It's already very fond of you.' Juno makes everyone a second sandwich. ${visitor} [ending]`;
 }
 
 /** What the picnic turns into when two of the same starter evolve together, and what ends up in Ms Olwen's hair. */
@@ -403,14 +427,14 @@ export function buildPaldea(plan: PaldeaPlan, ownerName = "", partner?: Partner)
           icon: { dexId: mine.id },
           bed: stage.bed,
           text: [
-            goodText(stage, mine, mine.happy[index % mine.happy.length] as string),
+            goodText(stage, mine, mine.happy[(index + plan.seed) % mine.happy.length] as string),
             partner && index === 1
               ? twin
                 ? `Your ${P} from home cheers its twin on from right beside you.`
                 : `${P} cheers ${mine.name} on from right beside you.`
               : "",
             index === 0 ? toldBy("Juno", jokes[STARTERS.indexOf(mine)] as Joke) : "",
-            cheer(index, false, misses, mine),
+            cheer(index, false, misses, mine, plan.seed),
           ]
             .filter(Boolean)
             .join(" "),
@@ -422,7 +446,7 @@ export function buildPaldea(plan: PaldeaPlan, ownerName = "", partner?: Partner)
           title: `${stage.title}: Got It`,
           icon: { dexId: stage.foe.id },
           bed: stage.bed,
-          text: `${slipText(stage, mine, mine.sulk[index % mine.sulk.length] as string, index, juno)} ${cheer(index, true, after, mine)}`,
+          text: `${slipText(stage, mine, mine.sulk[(index + plan.seed) % mine.sulk.length] as string, index, juno)} ${cheer(index, true, after, mine, plan.seed)}`,
           next: last ? (twin ? id.twin(p, after) : id.ending(p, after)) : id.stage(p, index + 1, after),
         });
       }
@@ -454,7 +478,7 @@ export function buildPaldea(plan: PaldeaPlan, ownerName = "", partner?: Partner)
         bed: { ambience: "grass", music: twin ? "champion" : band === 2 ? "magical" : "bright" },
         text: twin
           ? twinEndingText(band, mine, owner)
-          : withPartner(endingText(band, mine, juno, arlo, owner), band, mine, partner),
+          : withPartner(endingText(band, mine, juno, arlo, owner, VISITORS[(plan.seed + band) % VISITORS.length]), band, mine, partner),
         ending: { number, name: twin ? name : `${mine.name}: ${name}`, golden: band === 2 },
       });
     }
@@ -478,7 +502,7 @@ function withPartner(text: string, band: number, mine: Starter, partner?: Partne
   const line = [
     `${partner.name} looks at ${mine.name}'s round tummy, and laughs so much it gets hiccups.`,
     `${partner.name} and ${mine.name} play tag round the picnic blanket until the sun goes down.`,
-    `${partner.name} and ${mine.name} share the very last bite, and fall asleep in the sunshine, side by side. [cry:${partner.id}]`,
+    `${partner.name} and ${mine.name} share the last bite, then nap in the sunshine. [cry:${partner.id}]`,
   ][band] as string;
   return text.replace(/ (\[(?:ending|golden)\])$/, ` ${line} $1`);
 }

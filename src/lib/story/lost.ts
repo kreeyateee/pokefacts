@@ -49,6 +49,8 @@ export type Theme = {
   fall: string;
   /** The friendly little guide who helps you, and speaks with a voice of their own. */
   guide: Mon & { kind: string };
+  /** A second guide, sleeper and boss: each card picks one or the other, so the dungeon varies. */
+  others?: { guide: Mon & { kind: string }; sleeper: Mon; boss: Mon & { trouble: string; help: string } };
   /** Two ways on for each floor. The trainer's clue is always on one of them. */
   ways: readonly [Ways, Ways, Ways];
   /** What happens down the wrong way, floor by floor. It's funny, and it costs time. */
@@ -87,6 +89,11 @@ export const THEMES: readonly Theme[] = [
     },
     sleeper: { id: 324, name: "Torkoal" },
     boss: { id: 323, name: "Camerupt", trouble: "it has a pebble stuck up its nose", help: "You gently wiggle the pebble loose. The Camerupt gives an enormous sneeze, and a puff of smoke, and smiles." },
+    others: {
+      guide: { id: 322, name: "Toffee", kind: "Numel" },
+      sleeper: { id: 126, name: "Magmar" },
+      boss: { id: 59, name: "Arcanine", trouble: "it has a thorn in its paw", help: "You pull the thorn out, very gently. The Arcanine licks your face, and steps aside." },
+    },
     wild: ["Grass", "Bug", "Ice", "Steel"],
   },
   {
@@ -112,6 +119,11 @@ export const THEMES: readonly Theme[] = [
     },
     sleeper: { id: 365, name: "Walrein" },
     boss: { id: 87, name: "Dewgong", trouble: "its tail is stuck under a block of ice", help: "You push and push, and the ice slides free. The Dewgong swishes its tail and gives you a happy bark." },
+    others: {
+      guide: { id: 393, name: "Pebble", kind: "Piplup" },
+      sleeper: { id: 131, name: "Lapras" },
+      boss: { id: 91, name: "Cloyster", trouble: "its shell is stuck shut", help: "You give the shell a gentle tickle. The Cloyster giggles, pops open, and shuffles aside." },
+    },
     wild: ["Fire", "Rock", "Ground", "Grass", "Dragon", "Flying"],
   },
   {
@@ -137,6 +149,11 @@ export const THEMES: readonly Theme[] = [
     },
     sleeper: { id: 3, name: "Venusaur" },
     boss: { id: 127, name: "Pinsir", trouble: "a big twig is tangled in its horns", help: "You carefully untangle the twig. The Pinsir clacks its horns, very pleased, and steps aside." },
+    others: {
+      guide: { id: 191, name: "Sunny", kind: "Sunkern" },
+      sleeper: { id: 286, name: "Breloom" },
+      boss: { id: 123, name: "Scyther", trouble: "a sticky leaf is stuck on its blade", help: "You peel the leaf off, very carefully. The Scyther bows, and steps aside." },
+    },
     wild: ["Water", "Ground", "Rock", "Grass", "Psychic", "Dark"],
   },
   {
@@ -162,6 +179,11 @@ export const THEMES: readonly Theme[] = [
     },
     sleeper: { id: 466, name: "Electivire" },
     boss: { id: 208, name: "Steelix", trouble: "a loose bolt is rattling in its tail", help: "You tighten the loose bolt with a twist. The Steelix gives a happy clang and lifts its great head out of the way." },
+    others: {
+      guide: { id: 100, name: "Zippy", kind: "Voltorb" },
+      sleeper: { id: 135, name: "Jolteon" },
+      boss: { id: 82, name: "Magneton", trouble: "its three magnets are stuck together", help: "You gently pull the magnets apart. The Magneton whirrs happily, and floats aside." },
+    },
     wild: ["Water", "Flying", "Ice", "Rock", "Fairy"],
   },
   {
@@ -187,6 +209,11 @@ export const THEMES: readonly Theme[] = [
     },
     sleeper: { id: 94, name: "Gengar" },
     boss: { id: 429, name: "Mismagius", trouble: "it has lost its favourite hat", help: "You spot the hat on a high shelf, and fetch it down. The Mismagius puts it on, twirls, and floats aside." },
+    others: {
+      guide: { id: 355, name: "Dusky", kind: "Duskull" },
+      sleeper: { id: 197, name: "Umbreon" },
+      boss: { id: 609, name: "Chandelure", trouble: "one of its flames has gone out", help: "You find a match, and light the flame again. The Chandelure glows, and floats aside." },
+    },
     wild: ["Ghost", "Psychic", "Fighting", "Poison", "Dark"],
   },
   {
@@ -212,6 +239,11 @@ export const THEMES: readonly Theme[] = [
     },
     sleeper: { id: 76, name: "Golem" },
     boss: { id: 95, name: "Onix", trouble: "it has a bit of grit in its eye", help: "You blow the grit out of its eye, very gently. The Onix blinks, and blinks, and then curls aside with a happy rumble." },
+    others: {
+      guide: { id: 74, name: "Rocky", kind: "Geodude" },
+      sleeper: { id: 111, name: "Rhyhorn" },
+      boss: { id: 530, name: "Excadrill", trouble: "its claws are stuck in the rock", help: "You wiggle the rock loose. The Excadrill stretches its claws, and digs aside." },
+    },
     wild: ["Fire", "Ice", "Flying", "Bug", "Electric", "Steel", "Rock", "Normal", "Dark", "Poison"],
   },
   {
@@ -237,6 +269,11 @@ export const THEMES: readonly Theme[] = [
     },
     sleeper: { id: 149, name: "Dragonite" },
     boss: { id: 18, name: "Pidgeot", trouble: "the wind has blown its nest to pieces", help: "You gather the twigs, and help it build the nest again. The Pidgeot puffs out its chest, and spreads its wings aside." },
+    others: {
+      guide: { id: 396, name: "Chirp", kind: "Starly" },
+      sleeper: { id: 334, name: "Altaria" },
+      boss: { id: 142, name: "Aerodactyl", trouble: "it has a twig stuck in its wing", help: "You pull the twig out, very gently. The Aerodactyl stretches its wings, and flaps aside." },
+    },
     wild: ["Grass", "Fighting", "Bug", "Dragon", "Dark"],
   },
   {
@@ -262,6 +299,11 @@ export const THEMES: readonly Theme[] = [
     },
     sleeper: { id: 143, name: "Snorlax" },
     boss: { id: 24, name: "Arbok", trouble: "it has tied itself in a knot", help: "You find the end of its tail, and carefully undo the knot. The Arbok stretches out, very relieved, and slides aside." },
+    others: {
+      guide: { id: 263, name: "Zigzag", kind: "Zigzagoon" },
+      sleeper: { id: 206, name: "Dunsparce" },
+      boss: { id: 110, name: "Weezing", trouble: "it has the hiccups, and can't stop", help: "You jump out and shout boo! The hiccups stop. The Weezing chuckles, and floats aside." },
+    },
     wild: ["Grass", "Fairy", "Ghost", "Bug"],
   },
 ];
@@ -345,6 +387,8 @@ export type LostPlan = {
   wayLeft: [boolean, boolean, boolean];
   fixLeft: [boolean, boolean, boolean];
   bossLeft: boolean;
+  /** Which clue each floor has: 1 their voice, 2 their sandwiches, 3 their cap. */
+  clues: number[];
 };
 
 /** Stand-ins, for when the child's own partner is the very Pokémon that would play a part. */
@@ -368,7 +412,11 @@ export function planLost(input: AdventureInput): LostPlan {
   const random = mulberry32((input.seed ^ 0x105b) >>> 0);
   const partner = input.partner ?? DEFAULT_PARTNER;
   const type = partnerType(partner.id);
-  const theme = castAround(themeFor(type), partner.id);
+  const base = themeFor(type);
+  // Half the cards meet the dungeon's other guide, sleeper or boss.
+  const pick = <K extends "guide" | "sleeper" | "boss">(key: K): Theme[K] =>
+    (base.others && random() < 0.5 ? base.others[key] : base[key]) as Theme[K];
+  const theme = castAround({ ...base, guide: pick("guide"), sleeper: pick("sleeper"), boss: pick("boss") }, partner.id);
   const genus = getCatalogueEntry(partner.id)?.genus ?? "Pokémon";
   const coin = () => random() < 0.5;
   return {
@@ -382,6 +430,7 @@ export function planLost(input: AdventureInput): LostPlan {
     wayLeft: [coin(), coin(), coin()],
     fixLeft: [coin(), coin(), coin()],
     bossLeft: coin(),
+    clues: [1, 2, 3].sort(() => random() - 0.5),
   };
 }
 
@@ -410,19 +459,25 @@ function caughtUp(behind: number): number {
 }
 
 /** The guide, after each obstacle, by how you're doing. */
-function guideSays(guide: string, trainer: string, behind: number, slipped: boolean): string {
+function guideSays(guide: string, trainer: string, behind: number, slipped: boolean, seed = 0): string {
+  const pick = (lines: string[]) => lines[seed % lines.length] as string;
   if (slipped) {
     return behind >= MOST_SLIPS
-      ? `${guide} looks worried. '{nervously} It's getting late. But we'll find ${trainer}.'`
-      : `${guide} shrugs. 'Never mind. This way.'`;
+      ? pick([
+          `${guide} looks worried. '{nervously} It's getting late. But we'll find ${trainer}.'`,
+          `${guide} takes a deep breath. 'We're slow, but we're getting there.'`,
+        ])
+      : pick([`${guide} shrugs. 'Never mind. This way.'`, `${guide} giggles. '{giggles} Oops. Let's go on.'`, `${guide} smiles. 'Everyone gets lost sometimes.'`]);
   }
-  return behind === 0 ? `${guide} beams. '{excited} You're so quick!'` : `${guide} smiles. 'That's more like it.'`;
+  return behind === 0
+    ? pick([`${guide} beams. '{excited} You're so quick!'`, `${guide} cheers. '{excited} You're amazing!'`, `${guide} does a little spin. 'Brilliant!'`])
+    : pick([`${guide} smiles. 'That's more like it.'`, `${guide} nods. 'Now we're getting somewhere.'`]);
 }
 
 /** The clue on each floor that tells you which way your trainer went. */
-function clue(floor: number, way: string, trainer: string): string {
-  if (floor === 1) return `From ${way}, very faintly, you hear ${trainer} calling your name.`;
-  if (floor === 2) return `You sniff. Sandwiches! ${capital(trainer)}'s sandwiches. The smell is coming from ${way}.`;
+function clue(kind: number, way: string, trainer: string): string {
+  if (kind === 1) return `From ${way}, very faintly, you hear ${trainer} calling your name.`;
+  if (kind === 2) return `You sniff. Sandwiches! ${capital(trainer)}'s sandwiches. The smell is coming from ${way}.`;
   return `At the start of ${way}, you find something you know: ${trainer}'s cap, dropped on the ground.`;
 }
 
@@ -443,7 +498,7 @@ export function buildLost(plan: LostPlan): StoryGraph {
   const opening = [
     `You are ${partner.name}, the ${plan.genus}. [cry:${partner.id}]`,
     `You and ${trainer} were ${theme.fall}.`,
-    `[footsteps] Now you're alone, deep in ${theme.place}.`,
+    `[footsteps] ${plan.seed % 2 ? "Now you're alone" : "You wake up all alone"}, deep in ${theme.place}.`,
     `A little ${theme.guide.kind} called ${guide} peeks out at you. [cry:${theme.guide.id}] '{curious} Are you lost? I'll help you find your way.'`,
   ].join(" ");
 
@@ -455,7 +510,7 @@ export function buildLost(plan: LostPlan): StoryGraph {
     for (let behind = 0; behind <= Math.min(2 * (floor - 1), MOST_SLIPS); behind += 1) {
       const later = Math.min(behind + 1, MOST_SLIPS);
       const ways = wayLeft ? `${right} and ${wrong}` : `${wrong} and ${right}`;
-      const question = `Two ways lead on: ${ways}. ${clue(floor, right, trainer)}`;
+      const question = `Two ways lead on: ${ways}. ${clue(plan.clues[index] ?? floor, right, trainer)}`;
       const toRight = { to: id.fix(floor, behind), label: `take ${right}` };
       const toWrong = { to: id.wrong(floor, behind), label: `take ${wrong}` };
       nodes.push({
@@ -464,7 +519,7 @@ export function buildLost(plan: LostPlan): StoryGraph {
         title: `Floor ${floor}`,
         icon: floor === 1 && behind === 0 ? you : { dexId: theme.guide.id },
         bed,
-        text: floor === 1 && behind === 0 ? `${opening} ${question}` : `[footsteps] Down you go, to floor ${["one", "two", "three"][index]}. ${question}`,
+        text: floor === 1 && behind === 0 ? `${opening} ${question}` : `[footsteps] ${["Down you go", "Down some steps you go", "Down, down you go"][(plan.seed + floor) % 3]}, to floor ${["one", "two", "three"][index]}. ${question}`,
         left: wayLeft ? toRight : toWrong,
         right: wayLeft ? toWrong : toRight,
       });
@@ -546,7 +601,7 @@ export function buildLost(plan: LostPlan): StoryGraph {
         icon: you,
         bed,
         // The guide tells a joke on the way down from floor two: its own joke for every copy of the scene.
-        text: [fix.good, guideSays(guide, trainer, won, false), floor === 2 ? toldBy(guide, jokes[behind] as Joke) : ""].filter(Boolean).join(" "),
+        text: [fix.good, guideSays(guide, trainer, won, false, plan.seed + floor), floor === 2 ? toldBy(guide, jokes[behind] as Joke) : ""].filter(Boolean).join(" "),
         next: nextOnWin,
       });
       nodes.push({
@@ -555,7 +610,7 @@ export function buildLost(plan: LostPlan): StoryGraph {
         title: `${fix.title}: Oops`,
         icon: fix.icon,
         bed,
-        text: [fix.bad, guideSays(guide, trainer, later, true)].filter(Boolean).join(" "),
+        text: [fix.bad, guideSays(guide, trainer, later, true, plan.seed + floor)].filter(Boolean).join(" "),
         next: nextOnSlip,
       });
     }
@@ -599,7 +654,7 @@ export function buildLost(plan: LostPlan): StoryGraph {
     });
   }
 
-  const reunion = `You run up the slope, out into the light, and there's ${trainer}! [cry:${partner.id}] [cheer]`;
+  const reunion = `${plan.seed % 2 ? "You run up the slope, out into the light" : "You scramble out into the fresh air"}, and there's ${trainer}! [cry:${partner.id}] [cheer]`;
   const endings = [
     `The stars are out by the time you find each other. ${reunion} ${capital(trainer)} scoops you up in the biggest hug, and doesn't let go all the way home. [ending]`,
     `The moon is up when you come out. ${reunion} ${capital(trainer)} has been calling your name all evening. Now you're together, and that's all that matters. You fall asleep in their arms on the way home. [ending]`,

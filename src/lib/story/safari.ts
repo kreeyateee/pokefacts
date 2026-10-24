@@ -872,6 +872,11 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
 
   // One joke for each ending, never about a Pokémon from today, and never the same one twice on a card.
   const jokes = jokesFor(mulberry32((plan.seed ^ 0x70e) >>> 0), [...plan.stops.map((stop) => stop.mon.id), gold.id]);
+  const prizeDraw = mulberry32((plan.seed ^ 0x9e1) >>> 0);
+  const prize = (number: number) => {
+    const pool = W.PRIZES[number] ?? [];
+    return pool[Math.floor(prizeDraw() * pool.length)] ?? "";
+  };
   for (let number = 1; number <= total; number += 1) {
     const name = W.ENDING_NAMES[number - 1] ?? "Safari Trainer";
     // Back at the gate as the sun goes down: birdsong, and music to match the day.
@@ -889,7 +894,7 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
         text: join(
           revealed(gold, true),
           W.goldenText(capital(owner)),
-          W.PRIZES[number],
+          prize(number),
           plan.partner ? `${plan.partner.name} does a little victory dance all round you. [cry:${plan.partner.id}]` : "",
           "[golden]",
         ),
@@ -898,7 +903,7 @@ export function buildSafari(plan: SafariPlan): StoryGraph {
     } else {
       const text = join(
         number === 1 ? join(W.goodDayText(owner), words.tip()) : number === 2 ? W.dayEndText(owner) : W.masterText(owner),
-        W.PRIZES[number],
+        prize(number),
         // A joke on the way to the gate: Barnaby, sulking, is talked into one on his bad day.
         toldBy(number === 2 ? "Barnaby" : "Marigold", jokes[number - 1] as Joke),
         plan.partner ? `${plan.partner.name} yawns a big yawn, and you walk home together.` : "",
