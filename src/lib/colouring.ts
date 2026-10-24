@@ -55,7 +55,8 @@ export function lineMask(
   }
   // A dark patch wider than a line (an ear tip, the inside of a wing) keeps only its edge, so it can be
   // coloured in rather than printed solid black.
-  const DARK_EDGE = 2;
+  // Anything up to about 1% of the picture across counts as a line, so thick vector strokes stay solid.
+  const DARK_EDGE = Math.max(2, Math.round(Math.max(width, height) / 110));
   const nearLight = (x: number, y: number) => {
     for (let dy = -DARK_EDGE; dy <= DARK_EDGE; dy += 1) {
       for (let dx = -DARK_EDGE; dx <= DARK_EDGE; dx += 1) {

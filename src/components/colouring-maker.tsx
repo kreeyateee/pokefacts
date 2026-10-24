@@ -18,6 +18,7 @@ import {
   type PerPage,
   type PosterSize,
 } from "@/lib/colouring-layout";
+import { artworkSrc as artworkApi } from "@/lib/artwork-path";
 import { artworkSrc } from "@/lib/page-artwork";
 import { jpegPagesPdf } from "@/lib/sticker-pdf";
 
@@ -26,6 +27,8 @@ type Named = { id: number; name: string };
 /** At most this many Pokémon in one PDF. */
 const MAX_PICKS = 24;
 const LAST_SPECIES = 1025;
+/** The last Pokémon with Dream World art (see artwork-styles.ts). */
+const LAST_DREAM_WORLD = 649;
 /** Dots per inch for a plain sheet and for each page of a poster; the poster is enlarged on top. */
 const SHEET_DPI = 300;
 const POSTER_DPI = 200;
@@ -51,15 +54,21 @@ function outlineOf(dexId: number, wanted: number): Promise<HTMLCanvasElement> {
   let made = outlines.get(key);
   if (!made) {
     made = (async () => {
-      const picture = await loadPicture(artworkSrc(dexId));
+      // Dream World's vector art has clean outlines and stays sharp at any size; it stops at number 649.
+      const picture =
+        dexId <= LAST_DREAM_WORLD
+          ? await loadPicture(artworkApi("dream", dexId)).catch(() => loadPicture(artworkSrc(dexId)))
+          : await loadPicture(artworkSrc(dexId));
       const canvas = document.createElement("canvas");
       canvas.width = size;
       canvas.height = size;
       const ctx = canvas.getContext("2d", { willReadFrequently: true });
       if (!ctx) throw new Error("This browser cannot draw the sheet.");
-      const scale = Math.min(size / picture.naturalWidth, size / picture.naturalHeight);
-      const width = picture.naturalWidth * scale;
-      const height = picture.naturalHeight * scale;
+      const naturalWidth = picture.naturalWidth || size;
+      const naturalHeight = picture.naturalHeight || size;
+      const scale = Math.min(size / naturalWidth, size / naturalHeight);
+      const width = naturalWidth * scale;
+      const height = naturalHeight * scale;
       ctx.drawImage(picture, (size - width) / 2, (size - height) / 2, width, height);
       const pixels = ctx.getImageData(0, 0, size, size);
       // Lines stay about the same width on paper whatever the size.

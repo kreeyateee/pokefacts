@@ -7,6 +7,7 @@ import { useFavourites } from "@/components/favourites";
 import { pokeballOutcome, PokeballShow } from "@/components/pokeball-show";
 import { Button } from "@/components/ui/button";
 import { useStoredState } from "@/components/use-stored-state";
+import { artworkSrc } from "@/lib/artwork-path";
 import type { MixSettings } from "@/lib/playback-settings";
 import { pickerVoice } from "@/lib/piper-voice";
 import { storyIconPath, storyQuestionIconPath } from "@/lib/story/story-card";
@@ -102,8 +103,31 @@ async function fetchAdventure(
 }
 
 /** The node's 16×16 picture, or a plain marker for a stock Yoto icon the browser cannot show. */
-function NodePicture({ node }: { node: StoryNode }) {
+/** A Pokémon the node shows: its own picture, not a shadow to guess. */
+function shownPokemon(node: StoryNode): number | undefined {
+  const icon = node.icon;
+  return icon && "dexId" in icon && !icon.shadow ? icon.dexId : undefined;
+}
+
+function NodePicture({ node, battles }: { node: StoryNode; battles?: boolean }) {
   const path = storyIconPath(node);
+  const fighter = battles ? shownPokemon(node) : undefined;
+  if (fighter) {
+    // In a battle story the page shows the Pokémon moving, as its animated battle sprite.
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        className="h-24 w-24 shrink-0 object-contain [image-rendering:pixelated]"
+        src={artworkSrc("battle", fighter)}
+        alt=""
+        width={96}
+        height={96}
+        onError={(event) => {
+          event.currentTarget.src = path;
+        }}
+      />
+    );
+  }
   if (path.startsWith("yoto:")) {
     return (
       <span
@@ -345,7 +369,7 @@ export function AdventurePanel({
         ) : (
           <div className="pk-card mt-2 px-4 py-4">
             <div className="flex items-center gap-3">
-              <NodePicture node={node} />
+              <NodePicture node={node} battles={story.battles} />
               <div className="min-w-0">
                 <p className="pk-kicker">{node.kind === "ending" ? `Ending ${node.ending.number} of ${endings}` : node.title}</p>
                 {node.dexId ? <p className="text-xs text-muted-foreground">A Pokémon cry plays first.</p> : null}

@@ -212,6 +212,8 @@ export function Catalogue({
   sending?: boolean;
 } = {}) {
   const [query, setQuery] = useState("");
+  // The entry picture in its shiny colours. It stays on as you look through other Pokémon.
+  const [shiny, setShiny] = useState(false);
   const [type, setType] = useState("");
   const [generation, setGeneration] = useState(0);
   const [page, setPage] = useState(1);
@@ -939,15 +941,26 @@ export function Catalogue({
               </div>
             }
             picture={
-              <img
-                src={artworkSrc(entry.id)}
-                alt=""
-                width={192}
-                height={192}
-                className="pk-entry-art pk-entry-photo"
-                data-fallback={artworkApi("species", entry.id)}
-                onError={hideBrokenPicture}
-              />
+              <span className="relative block">
+                <img
+                  key={shiny ? "shiny" : "normal"}
+                  src={shiny ? artworkApi("shiny", entry.id) : artworkSrc(entry.id)}
+                  alt={shiny ? `Shiny ${entry.name}` : ""}
+                  width={192}
+                  height={192}
+                  className="pk-entry-art pk-entry-photo"
+                  data-fallback={artworkApi("species", entry.id)}
+                  onError={hideBrokenPicture}
+                />
+                <button
+                  type="button"
+                  className="pk-pill absolute right-0 bottom-0 px-3 py-1 text-xs"
+                  aria-pressed={shiny}
+                  onClick={() => setShiny((value) => !value)}
+                >
+                  {shiny ? "✨ Shiny" : "Shiny?"}
+                </button>
+              </span>
             }
             yotoSrc={entryYoto}
             tabs={

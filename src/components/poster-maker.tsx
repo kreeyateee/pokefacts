@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { useStoredState } from "@/components/use-stored-state";
 import { CATALOGUE_PICKS_KEY, LAST_SPECIES_ID, readCataloguePicks, serializeCataloguePicks } from "@/lib/catalogue-picks";
 import type { KidCard } from "@/lib/kid-cards";
+import { artworkSrc as artworkApi } from "@/lib/artwork-path";
 import { artworkSrc } from "@/lib/page-artwork";
 import { posterCollection, REGION_POSTERS, STARTER_POSTERS, type PosterCollection } from "@/lib/poster-collections";
 import { hidesNames, monsFor } from "@/lib/sticker-cover";
@@ -36,8 +37,11 @@ function posterSize(dpi: number) {
   return { width: mmToPx(POSTER_PAPER_MM.width, dpi), height: mmToPx(POSTER_PAPER_MM.height, dpi) };
 }
 
-function pictureOf(dexId: number, sprites: boolean): ImageEntry {
-  const src = sprites ? `/sprites/${dexId}.png` : artworkSrc(dexId);
+/** How the Pokémon are drawn on a poster. */
+type Drawn = "art" | "shiny" | "sprites";
+
+function pictureOf(dexId: number, drawn: Drawn): ImageEntry {
+  const src = drawn === "sprites" ? `/sprites/${dexId}.png` : drawn === "shiny" ? artworkApi("shiny", dexId) : artworkSrc(dexId);
   return [`picture:${src}`, src];
 }
 
@@ -96,7 +100,8 @@ export function PosterMaker({ playlist, onOwnPick }: { playlist: KidCard; onOwnP
   const [sourceId, setSourceId] = useStoredState(SOURCE_KEY, keepSource, writeSource);
   const [favourites] = useFavourites();
   const [style, setStyle] = useState<PosterStyle>("photo");
-  const [sprites, setSprites] = useState(false);
+  const [drawn, setDrawn] = useState<Drawn>("art");
+  const sprites = drawn === "sprites";
   const [pickedScene, setPickedScene] = useState<Scene | null>(null);
   const scene: Scene = pickedScene ?? (style === "pile" ? "plain" : "sky");
   const [shake, setShake] = useState(0);
@@ -138,10 +143,10 @@ export function PosterMaker({ playlist, onOwnPick }: { playlist: KidCard; onOwnP
 
   const title = (titles[sourceId] ?? crowd?.title ?? "").slice(0, 60);
   const entries = useMemo(
-    () => [...BRAND_FILES, ...(crowd?.dexIds ?? []).map((dexId) => pictureOf(dexId, sprites))],
-    [crowd, sprites],
+    () => [...BRAND_FILES, ...(crowd?.dexIds ?? []).map((dexId) => pictureOf(dexId, drawn))],
+    [crowd, drawn],
   );
-  const loaded = (crowd?.dexIds ?? []).filter((dexId) => images.current.has(pictureOf(dexId, sprites)[0])).length;
+  const loaded = (crowd?.dexIds ?? []).filter((dexId) => images.current.has(pictureOf(dexId, drawn)[0])).length;
 
   useEffect(() => {
     void loadAll(entries);
@@ -153,7 +158,7 @@ export function PosterMaker({ playlist, onOwnPick }: { playlist: KidCard; onOwnP
       title: title.trim() || "My Pokémon",
       hidden: crowd?.hidden ?? false,
       crowd: (crowd?.dexIds ?? []).map((dexId) => ({
-        image: pictureOf(dexId, sprites)[0],
+        image: pictureOf(dexId, drawn)[0],
         heightDm: sizes[dexId]?.heightDm ?? 0,
         color: sizes[dexId]?.color,
       })),
@@ -186,7 +191,7 @@ export function PosterMaker({ playlist, onOwnPick }: { playlist: KidCard; onOwnP
     return () => {
       cancelled = true;
     };
-  }, [crowd, style, sprites, scene, shake, title, version, sizes]);
+  }, [crowd, style, drawn, scene, shake, title, version, sizes]);
 
   function choose(id: string) {
     setSourceId(id);
@@ -280,10 +285,11 @@ export function PosterMaker({ playlist, onOwnPick }: { playlist: KidCard; onOwnP
             label="Pokémon drawn as"
             choices={[
               { id: "art", label: "Artwork" },
+              { id: "shiny", label: "Shiny artwork" },
               { id: "sprites", label: "Game sprites" },
             ]}
-            chosen={sprites ? "sprites" : "art"}
-            onChoose={(id) => setSprites(id === "sprites")}
+            chosen={drawn}
+            onChoose={(id) => setDrawn(id as Drawn)}
           />
           <SceneChooser scene={scene} onScene={setPickedScene} />
 
