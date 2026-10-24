@@ -92,3 +92,13 @@ __pycache__/
 
 # The package list the VM last installed (scripts/deploy-vm.sh).
 /.installed-lock-hash
+
+# Dev and AI-assistant files stay on this computer, not on GitHub.
+.claude/
+.cursor/
+.cursorignore
+AGENTS.md
+CLAUDE.md
+.github/copilot-instructions.md
+docs/
+screenshots/
