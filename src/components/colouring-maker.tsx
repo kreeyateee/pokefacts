@@ -59,41 +59,83 @@ function loadPicture(src: string): Promise<HTMLImageElement> {
   });
 }
 
-const outlines = new Map<string, Promise<HTMLCanvasElement>>();
+const cutouts = new Map<string, Promise<HTMLCanvasElement>>();
 
-/** The artwork as black outlines, about `size` pixels across, kept for the next sheet that needs it. */
-function outlineOf(dexId: number, wanted: number): Promise<HTMLCanvasElement> {
+/**
+ * A Pokémon as a cut-out to colour: black lines, white inside its shape, clear around it, about `wanted`
+ * pixels across. The lines are traced at the picture's own size, where its edges are sharp: official art
+ * is 480 pixels, and tracing it blown up gives broken, dotted lines. Dream World art is drawn as vectors,
+ * so it is traced at the size it is needed. The traced lines are then enlarged smoothly and kept solid.
+ */
+function cutoutOf(dexId: number, wanted: number): Promise<HTMLCanvasElement> {
   const size = Math.max(64, Math.min(MAX_OUTLINE_PX, Math.round(wanted / 200) * 200 || 200));
   const key = `${dexId}:${size}`;
-  let made = outlines.get(key);
+  let made = cutouts.get(key);
   if (!made) {
     made = (async () => {
-      // Dream World's vector art has clean outlines and stays sharp at any size; it stops at number 649.
-      const picture =
-        dexId <= LAST_DREAM_WORLD
-          ? await loadPicture(artworkApi("dream", dexId)).catch(() => loadPicture(artworkSrc(dexId)))
-          : await loadPicture(artworkSrc(dexId));
-      const canvas = document.createElement("canvas");
-      canvas.width = size;
-      canvas.height = size;
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
-      if (!ctx) throw new Error("This browser cannot draw the sheet.");
+      const dream = dexId <= LAST_DREAM_WORLD;
+      const picture = dream
+        ? await loadPicture(artworkApi("dream", dexId)).catch(() => loadPicture(artworkSrc(dexId)))
+        : await loadPicture(artworkSrc(dexId));
       const naturalWidth = picture.naturalWidth || size;
       const naturalHeight = picture.naturalHeight || size;
-      const scale = Math.min(size / naturalWidth, size / naturalHeight);
+      const vector = dream && /\.svg|dream/.test(picture.src);
+      const traceSize = vector ? size : Math.min(size, Math.max(naturalWidth, naturalHeight));
+      const trace = document.createElement("canvas");
+      trace.width = traceSize;
+      trace.height = traceSize;
+      const ctx = trace.getContext("2d", { willReadFrequently: true });
+      if (!ctx) throw new Error("This browser cannot draw the sheet.");
+      const scale = Math.min(traceSize / naturalWidth, traceSize / naturalHeight);
       const width = naturalWidth * scale;
       const height = naturalHeight * scale;
-      ctx.drawImage(picture, (size - width) / 2, (size - height) / 2, width, height);
-      const pixels = ctx.getImageData(0, 0, size, size);
+      ctx.drawImage(picture, (traceSize - width) / 2, (traceSize - height) / 2, width, height);
+      const pixels = ctx.getImageData(0, 0, traceSize, traceSize);
       // Lines stay about the same width on paper whatever the size.
-      const thicken = Math.max(1, Math.round(size / 900));
-      ctx.putImageData(new ImageData(lineArtPixels(lineMask(pixels.data, size, size, { ...LINE_ART, thicken })), size, size), 0, 0);
-      return canvas;
+      const thicken = Math.max(1, Math.round(traceSize / 900));
+      const mask = lineMask(pixels.data, traceSize, traceSize, { ...LINE_ART, thicken });
+      const out = new ImageData(traceSize, traceSize);
+      for (let at = 0; at < mask.length; at += 1) {
+        const solid = (pixels.data[at * 4 + 3] ?? 0) >= 128;
+        const ink = mask[at] ? 0 : 255;
+        out.data.set([ink, ink, ink, mask[at] || solid ? 255 : 0], at * 4);
+      }
+      ctx.putImageData(out, 0, 0);
+      return traceSize >= size ? trace : crispEnlarged(trace, size);
     })();
-    made.catch(() => outlines.delete(key));
-    outlines.set(key, made);
+    made.catch(() => cutouts.delete(key));
+    cutouts.set(key, made);
   }
   return made;
+}
+
+/** A cut-out drawn bigger: smoothed, then every pixel made black, white or clear again, so lines stay crisp. */
+function crispEnlarged(small: HTMLCanvasElement, size: number): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) throw new Error("This browser cannot draw the sheet.");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(small, 0, 0, size, size);
+  const pixels = ctx.getImageData(0, 0, size, size);
+  const data = pixels.data;
+  for (let at = 0; at < data.length; at += 4) {
+    const alpha = data[at + 3] ?? 0;
+    if (alpha < 128) {
+      data[at + 3] = 0;
+      continue;
+    }
+    // Colour here is premultiplied out by the browser; a dark pixel is part of a line.
+    const ink = (data[at] ?? 255) < 128 ? 0 : 255;
+    data[at] = ink;
+    data[at + 1] = ink;
+    data[at + 2] = ink;
+    data[at + 3] = 255;
+  }
+  ctx.putImageData(pixels, 0, 0);
+  return canvas;
 }
 
 /**
@@ -116,7 +158,7 @@ async function drawSheet(ctx: CanvasRenderingContext2D, entries: readonly Named[
   for (const [index, entry] of entries.entries()) {
     const cell = cells[index];
     if (!cell) continue;
-    const outline = await outlineOf(entry.id, cell.width * pxPerMm);
+    const outline = await cutoutOf(entry.id, cell.width * pxPerMm);
     ctx.drawImage(outline, cell.x, cell.y, cell.width, cell.height);
     if (perPage > 1) {
       ctx.fillStyle = "#000000";
@@ -160,15 +202,23 @@ function colouringPicture(dexId: number): ImageEntry {
  * A group photo or a pile, as on the posters, turned into black outlines on white: the Pokémon, the
  * ribbon and its letters are all left to colour in. `dpi` is for one A4 page; `across` enlarges it.
  */
-function paintCrowdOutline(layout: "photo" | "pile", spec: CrowdPaint, dpi: number): HTMLCanvasElement {
+async function paintCrowdOutline(layout: "photo" | "pile", spec: CrowdPaint, dexIds: readonly number[], dpi: number): Promise<HTMLCanvasElement> {
   const canvas = document.createElement("canvas");
   canvas.width = Math.round((A4_MM.width / 25.4) * dpi);
   canvas.height = Math.round((A4_MM.height / 25.4) * dpi);
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) throw new Error("This browser cannot draw the sheet.");
-  paintPoster(ctx, layout, spec);
+  // Each Pokémon is drawn at most about half the page across, so that is as big as its cut-out needs to be.
+  const wanted = Math.min(MAX_OUTLINE_PX, Math.round(canvas.width * 0.6));
+  const images = new Map(spec.images);
+  await Promise.all(
+    dexIds.map(async (dexId) => {
+      images.set(colouringPicture(dexId)[0], await cutoutOf(dexId, wanted).catch(() => null));
+    }),
+  );
+  paintPoster(ctx, layout, { ...spec, images });
   const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const thicken = Math.max(1, Math.round(canvas.width / 900));
+  const thicken = Math.max(1, Math.round(canvas.width / 1800));
   const mask = lineMask(pixels.data, canvas.width, canvas.height, { ...LINE_ART, thicken });
   ctx.putImageData(new ImageData(lineArtPixels(mask), canvas.width, canvas.height), 0, 0);
   return canvas;
@@ -380,7 +430,7 @@ export function ColouringMaker({ playlist, onOwnPick }: { playlist: KidCard; onO
     const dpi = PREVIEW_DPI * (across > 1 ? 2 : 3);
     const painted = grid
       ? paintSheet(firstPage, perPage, dpi, title)
-      : document.fonts.ready.then(() => paintCrowdOutline(layout, crowdSpec(), dpi));
+      : document.fonts.ready.then(() => paintCrowdOutline(layout, crowdSpec(), dexIds, dpi));
     void painted
       .then((canvas) => {
         if (cancelled) return;
@@ -456,7 +506,7 @@ export function ColouringMaker({ playlist, onOwnPick }: { playlist: KidCard; onO
         // Big posters are drawn once, as large as a phone can manage, then shared out across the pages.
         const pagePixels = (A4_MM.width / 25.4) * (A4_MM.height / 25.4);
         const dpi = Math.min(SHEET_DPI * across, Math.floor(Math.sqrt(MAX_CROWD_PIXELS / pagePixels)));
-        const outline = paintCrowdOutline(layout, crowdSpec(), dpi);
+        const outline = await paintCrowdOutline(layout, crowdSpec(), dexIds, dpi);
         const canvases =
           across > 1
             ? await paintTiles((ctx) => ctx.drawImage(outline, 0, 0, A4_MM.width, A4_MM.height), across, POSTER_DPI)
