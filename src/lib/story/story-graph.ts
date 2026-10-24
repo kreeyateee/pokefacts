@@ -84,4 +84,6 @@ export type StoryGraph = {
    * Pokémon change on every send reuses every sentence that stays the same. Lines by default.
    */
   pieces?: "lines" | "sentences";
+  /** A story of battles: the page shows each Pokémon as its animated battle sprite instead of its icon. */
+  battles?: boolean;
 };

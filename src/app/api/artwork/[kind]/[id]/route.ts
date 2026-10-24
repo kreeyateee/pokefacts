@@ -3,12 +3,13 @@ import path from "node:path";
 
 import { getAlternateForm } from "@/lib/catalogue-db";
 import { ensureArtwork, isPng } from "@/lib/artwork";
+import { ensureStyleArtwork, isArtworkStyle } from "@/lib/artwork-styles";
 import { ensureFormPixel } from "@/lib/form-pixel";
 
 function artworkId(kind: string, raw: string): number | null {
   const id = Number(raw);
   if (!Number.isInteger(id) || id < 1) return null;
-  if (kind === "species") return id <= 1025 ? id : null;
+  if (kind === "species" || isArtworkStyle(kind)) return id <= 1025 ? id : null;
   if (kind === "form") return getAlternateForm(id) ? id : null;
   if (kind === "pixel") {
     if (id <= 1025) return id;
@@ -47,6 +48,18 @@ export async function GET(
       const bytes = await ensureFormPixel(id);
       if (!isPng(bytes)) throw new Error("not png");
       return png(bytes);
+    }
+    if (isArtworkStyle(kind)) {
+      const picture = await ensureStyleArtwork(kind, id);
+      return new Response(new Uint8Array(picture.bytes), {
+        headers: {
+          "Content-Type": picture.type,
+          "Content-Length": String(picture.bytes.length),
+          "Cache-Control": "public, max-age=604800",
+          // A picture from another site: an SVG may never run script or load anything, even opened on its own.
+          "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+        },
+      });
     }
     const bytes = await ensureArtwork(id);
     return png(bytes);
