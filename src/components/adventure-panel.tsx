@@ -53,6 +53,14 @@ const ADVENTURES = {
     opening: "Packing the picnic basket…",
     failed: "The Paldea Picnic could not be set up.",
   },
+  lost: {
+    title: "Find Your Trainer",
+    blurb:
+      "Your child plays as their own partner Pokémon, lost in a dungeon that suits its type, and finds the way back to them with the left and right buttons: following their voice, using their type's power, and helping a grumpy Pokémon at the bottom.",
+    ownerNote: "Their partner hears them calling it by name.",
+    opening: "Lighting the way down…",
+    failed: "Find Your Trainer could not be set up.",
+  },
 } as const;
 
 type AdventureKind = keyof typeof ADVENTURES;
@@ -271,6 +279,11 @@ export function AdventurePanel({
         <p className="mt-2 text-sm text-muted-foreground">
           A choose-your-own-adventure card for ages 8 to 12. {adventure.blurb}
         </p>
+        {kind === "lost" && !partner ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            No favourite chosen yet, so your child plays as Pikachu. Add their favourite below, and they play as that one.
+          </p>
+        ) : null}
         <label className="mt-4 block">
           <span className="text-sm font-medium">Child&apos;s name (optional)</span>
           <input

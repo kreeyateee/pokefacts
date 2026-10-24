@@ -103,11 +103,12 @@ export function sceneForLooks(looks: readonly MonLook[]): Scene {
   return share(most) >= SCENE_SHARE ? best : "sky";
 }
 
-/** Each adventure's own place: the Safari Zone's grass, the Gym's city, the island's sea, Paldea's hills. */
+/** Each adventure's own place: the Safari Zone's grass, the Gym's city, the island's sea, Paldea's hills, the dungeon. */
 export function adventureScene(storyId: string): Scene {
   if (storyId.startsWith("gym")) return "city";
   if (storyId.startsWith("island")) return "sea";
   if (storyId.startsWith("paldea")) return "mountain";
+  if (storyId.startsWith("lost")) return "cave";
   return "grassland";
 }
 

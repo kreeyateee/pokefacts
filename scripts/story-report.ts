@@ -11,6 +11,7 @@
 import { partnerFor, type AdventureInput } from "../src/lib/story/adventure-route";
 import { gymAdventure } from "../src/lib/story/gym";
 import { islandAdventure } from "../src/lib/story/island";
+import { lostAdventure } from "../src/lib/story/lost";
 import { paldeaAdventure } from "../src/lib/story/paldea";
 import { safariAdventure } from "../src/lib/story/safari";
 import { storyCard } from "../src/lib/story/story-card";
@@ -29,6 +30,7 @@ const ADVENTURES: Record<string, (input: AdventureInput) => StoryGraph> = {
   gym: gymAdventure,
   island: islandAdventure,
   paldea: paldeaAdventure,
+  lost: lostAdventure,
 };
 const SENDS = 40;
 const OWNERS = ["", "Mia", "Oliver", "Ava", "Leo"];

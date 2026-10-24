@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import { forElevenLabs, isExpression, withoutVoiceTags } from "../voice-tags";
 import { gymAdventure } from "./gym";
 import { islandAdventure } from "./island";
+import { lostAdventure } from "./lost";
 import { paldeaAdventure } from "./paldea";
 import { safariAdventure } from "./safari";
 import { storyCard } from "./story-card";
@@ -16,6 +17,7 @@ const ADVENTURES: Array<[string, (input: { seed: number; owner?: string }) => St
   ["Gym", gymAdventure],
   ["Island", islandAdventure],
   ["Paldea", paldeaAdventure],
+  ["Find Your Trainer", lostAdventure],
 ];
 
 const CAST: StoryCharacter[] = [

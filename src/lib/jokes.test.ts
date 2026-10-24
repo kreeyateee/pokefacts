@@ -6,6 +6,7 @@ import { JOKES, jokesFor, toldBy } from "./jokes";
 import { countSpokenTracks, jokePlaylist, mulberry32 } from "./kid-cards";
 import { gymAdventure } from "./story/gym";
 import { islandAdventure } from "./story/island";
+import { lostAdventure } from "./story/lost";
 import { paldeaAdventure } from "./story/paldea";
 import { safariAdventure } from "./story/safari";
 import { speakerLines } from "./story/story-voices";
@@ -53,6 +54,7 @@ describe("Pokémon jokes", () => {
       safariAdventure({ seed: 2 }),
       gymAdventure({ seed: 2 }),
       paldeaAdventure({ seed: 2 }),
+      lostAdventure({ seed: 2 }),
     ]) {
       assert.ok(
         graph.nodes.some((node) => node.text.includes("Want to hear a joke?")),
