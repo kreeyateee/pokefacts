@@ -347,9 +347,10 @@ export class LabsJobs {
 /**
  * Labs jobs the whole site keeps going at once, across everyone sending. When they are all taken, an
  * account that wants another waits in line, and the first in line goes when one frees up, so a big send
- * cannot crowd out a small one.
+ * cannot crowd out a small one. Set high to start, about four families at full speed: the log line
+ * "[labs line]" shows when anyone has to wait, and Yoto's own 429 pause still holds everyone back.
  */
-export const LABS_SITE_JOBS = 6;
+export const LABS_SITE_JOBS = 12;
 
 /** A place in line is kept this long without the page asking again; a closed page drops out. */
 const LINE_KEPT_MS = 15_000;
@@ -387,6 +388,8 @@ export function takeTurn(account: string, now: number): LabsTurn {
   if (at < 0) {
     line.push({ account, seen: now });
     at = line.length - 1;
+    // Counts only: no account, words or token.
+    console.info(`[labs line] a send joined the line at place ${at + 1}; ${siteRecording(now)} of ${LABS_SITE_JOBS} jobs going`);
   }
   return { ok: false, position: at + 1 };
 }
