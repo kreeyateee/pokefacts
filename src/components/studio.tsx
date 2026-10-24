@@ -79,7 +79,7 @@ import {
 import { artworkSrc as artworkApi } from "@/lib/artwork-path";
 import { artworkSrc } from "@/lib/page-artwork";
 import { yotoPixelSrc } from "@/lib/yoto-screen";
-import { riddleParts } from "@/lib/dex-facts";
+import { measuresInUnits, riddleParts } from "@/lib/dex-facts";
 import { pronounce } from "@/lib/pronounce";
 import { spokenDexLine, statusWithDexNote, WIKI_DEX_NOTE } from "@/lib/spoken-wiki";
 import { selectionUpload } from "@/lib/selection-playlist";
@@ -1829,7 +1829,7 @@ export function Studio({
           });
     if (readings.notice) dexNote = readings.notice;
     changePending((send) => withDexNote(send, dexNote));
-    const spoken = applySpeciesSpeech(playlist, readings.speech, factLength);
+    const spoken = applySpeciesSpeech(playlist, readings.speech, factLength, playbackRef.current.units);
     const pixels = await uploadPixels(spoken, (done, total) => {
       setJob({
         status: "sending",
@@ -2201,7 +2201,7 @@ export function Studio({
                   });
                 });
           if (readings.notice) dexNote = readings.notice;
-          spokenCard = applySpeciesSpeech(card, readings.speech, factLength);
+          spokenCard = applySpeciesSpeech(card, readings.speech, factLength, playbackRef.current.units);
         }
         if (isFormPlaylistKind(card.kind)) {
           await ensureFormProse(card.kind, (detail) => {
@@ -2695,7 +2695,7 @@ export function Studio({
                 <div key={chapter.key} className="pk-swap max-w-prose space-y-3 text-base leading-7">
                   {quickShelf && chapter.tracks[0]?.quick ? (
                     // Quick Pokefacts reads only the quick facts, so the page shows just those.
-                    <p>{chapter.tracks[0].quick}</p>
+                    <p>{measuresInUnits(chapter.tracks[0].quick, playback.units)}</p>
                   ) : readsSpeciesBiology(kind) && chapter.dexId ? (
                     factReading ? (
                       <>
@@ -2807,7 +2807,7 @@ export function Studio({
                             const speech = shown || chapterDexText(chapter) || `${chapter.title}.`;
                             line = entrySpeech(`${prefix}${speech}`, chapter);
                             // Quick facts first, then the reading: the same pieces a send records.
-                            const quick = chapter.tracks[0]?.quick;
+                            const quick = chapter.tracks[0]?.quick && measuresInUnits(chapter.tracks[0].quick, playbackRef.current.units);
                             if (quick) {
                               const reading = playbackRef.current.factLength === "full" && !quickShelf && shown ? shown : "";
                               parts = factParts({ quick, reading, howTo: Boolean(prefix), seat: chapter });

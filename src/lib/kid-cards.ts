@@ -1,7 +1,8 @@
 import { artworkSrc as formArtworkSrc } from "@/lib/artwork-path";
 import { artworkSrc } from "@/lib/page-artwork";
 import type { BiologyBlock } from "@/lib/catalogue-types";
-import { dexBlurb, guessSpoken, pickDexEntry, quickFacts, type MonSheet } from "@/lib/dex-facts";
+import type { MeasureUnits } from "@/lib/format";
+import { dexBlurb, guessSpoken, measuresInUnits, pickDexEntry, quickFacts, type MonSheet } from "@/lib/dex-facts";
 import { jokeIntro, JOKES } from "@/lib/jokes";
 import type { FactLength } from "@/lib/playback-settings";
 import { pronounce } from "@/lib/pronounce";
@@ -793,6 +794,7 @@ export function applySpeciesSpeech(
   card: KidCard,
   speechByDexId: Record<number, string>,
   length: FactLength = "full",
+  units: MeasureUnits = "metric",
 ): KidCard {
   if (card.kind !== "meet" && !isSpeciesPlaylistKind(card.kind)) return card;
   return {
@@ -800,8 +802,16 @@ export function applySpeciesSpeech(
     chapters: card.chapters.map((chapter) => {
       if (!chapter.dexId) return chapter;
       const speech = oneLine(speechByDexId[chapter.dexId] ?? "");
-      // Without the Biology reading, a full-length track keeps the card's own entry.
-      if (!speech && length === "full") return chapter;
+      // Without the Biology reading, a full-length track keeps the card's own entry, in the picked units.
+      if (!speech && length === "full") {
+        return {
+          ...chapter,
+          tracks: chapter.tracks.map((track) => {
+            const text = measuresInUnits(track.text, units);
+            return text === track.text ? track : { ...track, text, spoken: pronounce(text) };
+          }),
+        };
+      }
       return {
         ...chapter,
         tracks: chapter.tracks.map((track) => {
@@ -809,13 +819,14 @@ export function applySpeciesSpeech(
           const prefix = howTo ? POKEDEX_HOWTO : "";
           if (track.quick) {
             const reading = length === "full" ? speech : "";
-            const text = oneLine(`${prefix}${track.quick} ${reading}`);
+            const quick = measuresInUnits(track.quick, units);
+            const text = oneLine(`${prefix}${quick} ${reading}`);
             return {
               ...track,
               text,
               spoken: pronounce(text),
               source: undefined,
-              parts: factParts({ quick: track.quick, reading, howTo, seat: chapter }),
+              parts: factParts({ quick, reading, howTo, seat: chapter }),
             };
           }
           if (!speech) return track;

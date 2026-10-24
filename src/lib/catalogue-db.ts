@@ -557,6 +557,9 @@ export function listMonSheets(): MonSheet[] {
       .map((step) => `${row.name} becomes ${step.name} ${step.method}.`.replace(/\s+/g, " ").trim())
       .join(" ");
     const evolvesInto = [...new Set(steps.map((step) => step.name))];
+    const fromHow = row.evolves_from_id
+      ? (evolutions.get(row.evolves_from_id) ?? []).find((step) => step.name === row.name)?.method
+      : undefined;
     return {
       id: row.id,
       slug: row.slug,
@@ -571,6 +574,8 @@ export function listMonSheets(): MonSheet[] {
       evolution,
       evolvesFrom: row.evolves_from_id ? (nameById.get(row.evolves_from_id) ?? null) : null,
       evolvesInto,
+      evolvesIntoHow: steps,
+      evolvesFromHow: fromHow ?? null,
       habitat: row.habitat ? habitatSpeech(row.habitat) : null,
       color: row.color,
       entries: [

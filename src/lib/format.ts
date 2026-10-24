@@ -166,6 +166,20 @@ export function weightSpeech(hectograms: number): string {
 
 export type MeasureUnits = "metric" | "imperial";
 
+/** A height a child can picture in imperial: inches under a foot, then feet and inches. */
+export function imperialHeightSpeech(decimetres: number): string {
+  const totalInches = Math.max(1, Math.round((decimetres / 10) * 39.3701));
+  if (totalInches < 12) return `${totalInches} ${totalInches === 1 ? "inch" : "inches"}`;
+  return feetInchesSpeech(decimetres);
+}
+
+/** A weight a child can picture in imperial: ounces under a pound, then pounds. */
+export function imperialWeightSpeech(hectograms: number): string {
+  const ounces = Math.round((hectograms / 10) * 35.274);
+  if (ounces < 16) return `${Math.max(1, ounces)} ${ounces <= 1 ? "ounce" : "ounces"}`;
+  return poundsSpeech(hectograms);
+}
+
 /** Catalogue labels are kilograms. Imperial speech and the page use pounds only. */
 export function weightForUnits(label: string, units: MeasureUnits = "metric"): string {
   if (units !== "imperial") return label;

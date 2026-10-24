@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { listMonSheets } from "@/lib/catalogue-db";
-import { quickFacts, quickHeight, quickWeight, shortDexLine } from "@/lib/dex-facts";
+import { measuresInUnits, quickFacts, quickHeight, quickWeight, shortDexLine } from "@/lib/dex-facts";
 import { cleanFlavor } from "@/lib/format";
 import { factParts } from "@/lib/kid-cards";
 import { PIPER_VOICE_ID } from "@/lib/piper-voice";
@@ -16,7 +16,7 @@ describe("quick facts", () => {
     const pikachu = quickFacts(sheet(25));
     assert.match(
       pikachu,
-      /^Pikachu\. The Mouse Pokémon\. Electric type\. The Pokédex says: .+\. 40 centimetres tall, 6 kilograms\. Ability: Static\. Evolves from Pichu, into Raichu\.$/,
+      /^Pikachu\. The Mouse Pokémon\. Electric type\. The Pokédex says: .+\. 40 centimetres tall, 6 kilograms\. Ability: Static\. Evolves from Pichu by leveling up once it is very happy\. Evolves into Raichu with a Thunder Stone\.$/,
     );
   });
 
@@ -25,7 +25,8 @@ describe("quick facts", () => {
   });
 
   it("stay short enough to be quick", () => {
-    for (const row of sheets) assert.ok(quickFacts(row).split(/\s+/).length <= 60, row.name);
+    // A little room for the evolutions that depend on stats, such as Tyrogue's.
+    for (const row of sheets) assert.ok(quickFacts(row).split(/\s+/).length <= 72, row.name);
   });
 
   it("use metres from a metre up, and grams under a kilogram", () => {
@@ -37,10 +38,22 @@ describe("quick facts", () => {
     assert.equal(quickWeight(905), "90.5 kilograms");
   });
 
-  it("name a long evolution list briefly, and say when there is none", () => {
-    assert.match(quickFacts(sheet(133)), /Evolves into Vaporeon, Jolteon, Flareon, and 5 more\./);
+  it("say how and when it evolves, name a long list briefly, and say when there is none", () => {
+    assert.match(quickFacts(sheet(4)), /Evolves into Charmeleon at level 16\.$/);
+    assert.match(quickFacts(sheet(5)), /Evolves from Charmander at level 16\. Evolves into Charizard at level 36\.$/);
+    assert.match(quickFacts(sheet(6)), /Evolves from Charmeleon at level 36\.$/);
+    assert.match(
+      quickFacts(sheet(133)),
+      /Evolves into Vaporeon with a Water Stone, Jolteon with a Thunder Stone, Flareon with a Fire Stone, and 5 more\./,
+    );
     assert.match(quickFacts(sheet(132)), /Does not evolve\./);
-    assert.match(quickFacts(sheet(6)), /Evolves from Charmeleon\.$/);
+  });
+
+  it("say sizes in feet, inches, pounds and ounces when imperial is picked", () => {
+    assert.match(measuresInUnits(quickFacts(sheet(4)), "imperial"), / 2 feet tall, 19 pounds\. /);
+    assert.match(measuresInUnits(quickFacts(sheet(92)), "imperial"), / 4 feet 3 inches tall, 4 ounces\. /);
+    assert.equal(measuresInUnits("20 centimetres tall, 300 grams.", "imperial"), "8 inches tall, 11 ounces.");
+    assert.equal(measuresInUnits(quickFacts(sheet(4)), "metric"), quickFacts(sheet(4)));
   });
 
   it("pick a Pokédex sentence that stands on its own, with the name written normally", () => {

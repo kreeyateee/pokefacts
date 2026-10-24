@@ -2,7 +2,10 @@ import { POKE_DESCRIPTIONS } from "@/lib/descriptions";
 import {
   centimetresSpeech,
   cleanFlavor,
+  imperialHeightSpeech,
+  imperialWeightSpeech,
   kilogramsSpeech,
+  type MeasureUnits,
   versionName,
   versionRank,
 } from "@/lib/format";
@@ -79,6 +82,10 @@ export type MonSheet = {
   evolvesFrom?: string | null;
   /** Species it can become. Names only, not the method. */
   evolvesInto?: string[];
+  /** How it becomes each of those: "at level 16", "with a Thunder Stone". */
+  evolvesIntoHow?: Array<{ name: string; method: string }>;
+  /** How it grows from its pre-evolution: "at level 16". */
+  evolvesFromHow?: string | null;
   habitat: string | null;
   /** Official colour, such as Green. */
   color?: string | null;
@@ -610,22 +617,35 @@ export function shortDexLine(sheet: MonSheet): string {
   return pool.sort((a, b) => a.length - b.length)[0] ?? "";
 }
 
-/** "Evolves from Pichu, into Raichu." Up to three names, then how many more. */
+/** A list read aloud: "A", "A or B", "A, B or C", then "and 2 more". */
+function spokenChoices(items: readonly string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  if (items.length <= 3) return `${items.slice(0, -1).join(", ")} or ${items.at(-1)}`;
+  return `${items.slice(0, 3).join(", ")}, and ${items.length - 3} more`;
+}
+
+/**
+ * How it evolves, with the level or the item, because children playing the games ask that most:
+ * "Evolves from Charmander at level 16. Evolves into Charizard at level 36." Up to three, then how many more.
+ */
 function quickEvolution(sheet: MonSheet): string {
   const from = sheet.evolvesFrom?.trim();
-  const into = (sheet.evolvesInto ?? []).filter(Boolean);
-  const intoText =
-    into.length === 0
-      ? ""
-      : into.length <= 3
-        ? into.length === 1
-          ? (into[0] as string)
-          : `${into.slice(0, -1).join(", ")} or ${into.at(-1)}`
-        : `${into.slice(0, 3).join(", ")}, and ${into.length - 3} more`;
-  if (from && intoText) return `Evolves from ${from}, into ${intoText}.`;
-  if (from) return `Evolves from ${from}.`;
-  if (intoText) return `Evolves into ${intoText}.`;
-  return "Does not evolve.";
+  const fromHow = sheet.evolvesFromHow?.trim();
+  const ways = new Map<string, string[]>();
+  for (const step of sheet.evolvesIntoHow ?? []) {
+    if (!step.name) continue;
+    ways.set(step.name, [...(ways.get(step.name) ?? []), step.method.trim()].filter(Boolean));
+  }
+  // Without the methods, the names alone.
+  for (const name of sheet.evolvesInto ?? []) if (name && !ways.has(name)) ways.set(name, []);
+  // Some have many ways to one Pokémon (Milcery's Alcremie): the first, then "or another way".
+  const how = (methods: string[]) => (methods.length > 2 ? `${methods[0]} or another way` : methods.join(" or "));
+  const into = [...ways].map(([name, methods]) => (methods.length > 0 ? `${name} ${how([...new Set(methods)])}` : name));
+  const sentences = [
+    from ? `Evolves from ${from}${fromHow ? ` ${fromHow}` : ""}.` : "",
+    into.length > 0 ? `Evolves into ${spokenChoices(into)}.` : "",
+  ].filter(Boolean);
+  return sentences.length > 0 ? sentences.join(" ") : "Does not evolve.";
 }
 
 /**
@@ -650,6 +670,21 @@ export function quickFacts(sheet: MonSheet): string {
     .join(" ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/**
+ * A fact line's own measurements ("40 centimetres tall, 6 kilograms") in the units picked for the card.
+ * Only for lines this file writes: a Bulbapedia reading is left as it is.
+ */
+export function measuresInUnits(text: string, units: MeasureUnits): string {
+  if (units !== "imperial") return text;
+  return text
+    .replace(/\b(\d+(?:\.\d+)?) (centimetres|metres|metre)\b/g, (_, amount: string, unit: string) =>
+      imperialHeightSpeech(unit === "centimetres" ? Number(amount) / 10 : Number(amount) * 10),
+    )
+    .replace(/\b(\d+(?:\.\d+)?) (grams|kilograms|kilogram)\b/g, (_, amount: string, unit: string) =>
+      imperialWeightSpeech(unit === "grams" ? Number(amount) / 100 : Number(amount) * 10),
+    );
 }
 
 /** Spoken Who's That Pokémon scripts. The cry is joined in front of each track later. */
