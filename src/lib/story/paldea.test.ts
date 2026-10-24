@@ -6,6 +6,7 @@ import { effectiveness, type PokemonType } from "../type-chart";
 import { buildPaldea, paldeaAdventure, planPaldea, STARTERS } from "./paldea";
 import { storyCard } from "./story-card";
 import { checkStory, storyTrackCount } from "./story-check";
+import { pacingProblems, randomPlaythroughs } from "./story-metrics";
 import type { StoryGraph, StoryNode } from "./story-graph";
 import { withoutCues } from "./story-sound";
 import { speakerLines } from "./story-voices";
@@ -31,6 +32,11 @@ function play(graph: StoryGraph, starter: 0 | 1 | 2, missAt: readonly number[]):
     if (node.id === "pick1" || node.id === "pick2") {
       const side = [node.left, node.right].find((choice) => choice.label === starterLabel);
       node = nodes.get(side ? side.to : node.right.to) as StoryNode;
+      continue;
+    }
+    // The twins' silly choice before the secret ending: both buttons go the same way.
+    if (/t\d$/.test(node.id)) {
+      node = nodes.get(node.right.to) as StoryNode;
       continue;
     }
     const goodTo = [node.left, node.right].find((choice) => /g\d$/.test(choice.to))?.to as string;
@@ -90,7 +96,8 @@ describe("Paldea Picnic", () => {
       for (const missAt of [[], [1], [0, 2]]) {
         const { ending } = play(graph, index as 0 | 1 | 2, missAt);
         assert.ok(ending.kind === "ending" && ending.ending.name.includes("Secret"), `${starter.name} ${missAt}`);
-        assert.match(ending.text, new RegExp(`Two ${starter.mid.name}! .*Two ${starter.final.name}!`));
+        const twins = byId(graph).get(`${["g", "f", "w"][index]}t${Math.min(missAt.length, 2)}`)?.text ?? "";
+        assert.match(twins, new RegExp(`Two ${starter.mid.name}! .*Two ${starter.final.name}!`));
         assert.match(ending.text, /\[hit\]/, "something explodes");
         assert.match(ending.text, /\[cheer\]/, "and everyone cheers");
         const { card } = storyCard(graph);
@@ -103,6 +110,18 @@ describe("Paldea Picnic", () => {
       const plain = paldeaAdventure({ seed: 5, partner: { id: other.id, name: other.name } });
       assert.doesNotMatch(play(plain, index as 0 | 1 | 2, []).ending.text, /Secret|Two /);
     }
+  });
+
+  it("keeps a child pressing buttons: no long stretches of listening, with or without twins", () => {
+    for (const seed of SEEDS) {
+      assert.deepEqual(pacingProblems(paldeaAdventure({ seed, owner: "Mia" })), [], `seed ${seed}`);
+      for (const starter of STARTERS) {
+        const twins = paldeaAdventure({ seed, owner: "Mia", partner: { id: starter.id, name: starter.name } });
+        assert.deepEqual(pacingProblems(twins), [], `seed ${seed} with two ${starter.name}`);
+      }
+    }
+    const { endings } = randomPlaythroughs(paldeaAdventure({ seed: 1 }));
+    for (let number = 1; number <= 9; number += 1) assert.ok((endings[number] ?? 0) > 0.01, `ending ${number}: ${endings[number]}`);
   });
 
   it("gives Juno the starter that beats yours, and Arlo the other", () => {

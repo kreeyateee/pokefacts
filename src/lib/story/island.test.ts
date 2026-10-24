@@ -5,6 +5,7 @@ import { GET } from "../../app/api/adventure/island/route";
 import { buildIsland, GIANTS, ISLAND_ENDINGS, islandAdventure, planIsland, type IslandPlan } from "./island";
 import { storyCard, storyPixels } from "./story-card";
 import { checkStory, storyTrackCount } from "./story-check";
+import { pacingProblems, randomPlaythroughs } from "./story-metrics";
 import type { StoryGraph, StoryNode } from "./story-graph";
 import { withoutCues } from "./story-sound";
 import { speakerLines } from "./story-voices";
@@ -55,7 +56,7 @@ describe("Island Adventure", () => {
     assert.ok(graph.nodes.every((node) => node.kind !== "ending" || node.ending.number <= ISLAND_ENDINGS.length));
   });
 
-  it("ends by how many slips you made: none is the golden Big Splash, three or more arrive at dawn", () => {
+  it("ends by how far behind you are: none is the golden Big Splash, and good answers win time back", () => {
     const plan = planIsland(9);
     const graph = buildIsland(plan, 9);
     const name = (slipAt: number[]) => {
@@ -65,9 +66,27 @@ describe("Island Adventure", () => {
     assert.deepEqual(name([]), { number: 4, name: "The Big Splash", golden: true });
     assert.equal(name([3])?.name, "The Moonlight Song");
     assert.equal(name([6])?.name, "The Moonlight Song", "a slip at the very last choice still counts");
-    assert.equal(name([0, 5])?.name, "Home at Last");
-    assert.equal(name([0, 2, 4])?.name, "The Long Way Home");
+    assert.equal(name([0, 1])?.name, "The Moonlight Song", "a good run after two slips wins one back");
+    assert.equal(name([5, 6])?.name, "Home at Last");
+    assert.equal(name([4, 5, 6])?.name, "The Long Way Home");
     assert.equal(name([0, 1, 2, 3, 4, 5, 6])?.name, "The Long Way Home");
+    // A single slip is never won back: only a perfect voyage is golden.
+    assert.ok(name([0, 1, 2]) && !name([0])?.golden);
+  });
+
+  it("spreads random playthroughs across every ending, with golden kept rare", () => {
+    for (const seed of [1, 5, 9]) {
+      const { endings } = randomPlaythroughs(islandAdventure({ seed }));
+      for (const number of [1, 2, 3]) assert.ok((endings[number] ?? 0) >= 0.15, `seed ${seed} ending ${number}: ${endings[number]}`);
+      assert.ok((endings[4] ?? 0) > 0 && (endings[4] ?? 0) < 0.05, `golden ${endings[4]}`);
+    }
+  });
+
+  it("keeps a child pressing buttons: no long stretches of listening, with or without a partner", () => {
+    for (const seed of [...SEEDS, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]) {
+      assert.deepEqual(pacingProblems(islandAdventure({ seed, owner: "Mia" })), [], `seed ${seed}`);
+      assert.deepEqual(pacingProblems(islandAdventure({ seed, partner: { id: 25, name: "Pikachu" } })), [], `seed ${seed} with a partner`);
+    }
   });
 
   it("is different every time: other encounters, other giants, other Mabel moments", () => {
@@ -115,7 +134,7 @@ describe("Island Adventure", () => {
 
   it("calls the child by name, or shipmate without one", () => {
     const graph = islandAdventure({ seed: 1, owner: "Mia" });
-    assert.match(graph.nodes[0]?.text ?? "", /Now then, Mia, first things first/);
+    assert.match(graph.nodes[0]?.text ?? "", /Now then, Mia, how do we get her back/);
     assert.match(byId(graph).get("end4")?.text ?? "", /you're Captain Mia/);
     assert.deepEqual(graph.slots, ["Mia"]);
     assert.match(islandAdventure({ seed: 1 }).nodes[0]?.text ?? "", /Now then, shipmate/);

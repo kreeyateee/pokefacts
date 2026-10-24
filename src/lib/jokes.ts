@@ -74,7 +74,7 @@ export function jokesFor(random: () => number, avoid: readonly number[] = []): J
  * {cheerfully} and the {laughs}; Piper and the page drop them.
  */
 export function toldBy(name: string, joke: Joke): string {
-  return `'{cheerfully} Want to hear a joke?' says ${name}. '${joke.setup}' Nobody knows. '${joke.punchline} {laughs}' says ${name}, and laughs so hard at it that everyone else laughs too.`;
+  return `'{cheerfully} Want to hear a joke?' says ${name}. '${joke.setup}' Nobody knows. '${joke.punchline} {laughs}' says ${name}, and everyone laughs.`;
 }
 
 /** A Joke Book track: the Pokémon named, the question, a pause, then the punchline and a laugh. */

@@ -3,7 +3,8 @@
  * family on Moonshell Island, with Captain Brine and his grumpy Pelipper, Gulliver.
  *
  * Every voyage reaches the island. The seven choices on the way test sea sense and Pokémon know-how,
- * and a wrong one never ends the story: it costs time, and Brine says so. When you arrive decides how
+ * and a wrong one never ends the story: it costs time, and Brine says so. A good answer after a bad patch
+ * wins some of it back, so every ending can be reached, but only a voyage with no slips is golden. When you arrive decides how
  * it ends: before the moon rises (the golden Big Splash), as it rises, late at night, or at dawn.
  *
  * Each voyage is different. The seed picks what you meet on the open water, in the fog and before
@@ -56,23 +57,23 @@ export type Stage = {
 export type Giant = { name: string; formId: number; dexId: number; stage: Stage; finale: string };
 
 const GLOW =
-  "Then the sea starts to glow red. Clouds swirl up into the sky in a great red ring, and something rises out of the water, bigger than anything you've ever seen.";
+  "Then the sea glows red, clouds swirl up in a red ring, and something enormous rises out of the water.";
 const LORE =
-  "'{whispers} Gigantamax,' whispers Brine. 'Sailors from Galar tell of it. Near a place of power, a Pokémon can grow giant, glowing red, with clouds over its head. And there's an old story that something under Moonshell Island glows like that.'";
+  "'{whispers} Gigantamax,' whispers Brine. 'Near a place of power, a Pokémon can grow giant and glowing. They say something under Moonshell Island glows just like that.'";
 
 const BEACH: Stage = {
   key: "beach",
   title: "Driftwood Beach",
   icon: { dexId: 321 },
   bed: { ambience: "sea", music: "bright" },
-  text: `[footsteps] It's early in the morning on Driftwood Beach, and something enormous is lying on the sand. It's a Wailord, as big as a house, and she's singing. ${MABEL} Next to her stands an old sailor with a white beard and a Pelipper sitting on his hat. 'Morning,' says Captain Brine. 'This here is Mabel. She got lost in the night, and the tide went out without her. Her family lives on Moonshell Island, far across the sea, and every evening when the moon comes up, they sing and leap in the lagoon. If we get her home before moonrise, she'll be leaping with them.' Mabel blinks one huge, gentle eye at you, and blows a little fountain of hello. {partner}The Pelipper flaps its wings crossly. 'And that's Gulliver,' says Brine. 'He delivers the post. Don't call him a seagull. Now then, {shipmate}, first things first. How do we get her back in the water?'`,
+  text: `[footsteps] Early one morning on Driftwood Beach, there's a Wailord on the sand, as big as a house, singing. ${MABEL} Beside her stands an old sailor with a Pelipper on his hat. 'Morning,' says Captain Brine. 'This is Mabel. The tide went out without her. Her family sings in the lagoon on Moonshell Island when the moon comes up. Get her home by moonrise, and she'll sing with them.' Mabel blows a little fountain of hello. {partner}'That's Gulliver on my hat,' says Brine. 'Don't call him a seagull. Now then, {shipmate}, how do we get her back in the water?'`,
   good: {
     label: "wait for high tide",
-    text: `So you wait. You build a sandcastle, and Gulliver knocks it over. Mabel watches the whole time, humming. Then, slowly, the sea comes creeping back up the beach until she is floating. She sings for joy. ${MABEL} 'All aboard!' says Brine. You climb up her side and sit on her broad blue back, and off you go.`,
+    text: `So you wait. You build a sandcastle, and Gulliver knocks it over. Then, slowly, the sea creeps back up the beach until Mabel is floating. ${MABEL} 'All aboard!' says Brine, and off you go on her broad blue back.`,
   },
   slip: {
     label: "ask some Machamp to push",
-    text: `Four Machamp march down the beach and push with all sixteen arms. Mabel giggles, because she's very ticklish, but she doesn't move an inch. A Wailord is one of the heaviest Pokémon there is. In the end you wait for the tide anyway, and half the morning has gone. ${MABEL} 'All aboard!' says Brine. 'And no more Machamp.'`,
+    text: `Four Machamp push with all sixteen arms. Mabel giggles, but doesn't move an inch: a Wailord is one of the heaviest Pokémon there is. In the end you wait for the tide anyway. ${MABEL} 'All aboard!' says Brine. 'And no more Machamp.'`,
   },
   goodLeft: true,
 };
@@ -91,7 +92,7 @@ const OPEN_WATER: Stage[] = [
     },
     slip: {
       label: "follow the Wingull",
-      text: "The Wingull lead you straight to a busy harbour, because that's where Wingull like to be: anywhere with boats and leftover chips. Mabel tries to squeeze in between the fishing boats. She does not fit. A little girl gives her an ice cream, which she swallows, cone and all, and then it takes ages to turn her round and swim back out to the deep water.",
+      text: "The Wingull lead you to a busy harbour, because Wingull love boats and leftover chips. Mabel does not fit between the fishing boats, and it takes ages to turn her round.",
     },
     goodLeft: false,
   },
@@ -107,7 +108,7 @@ const OPEN_WATER: Stage[] = [
     },
     slip: {
       label: "race the Mantine",
-      text: "Mabel races the Mantine, flippers going like windmills. The Mantine wins, of course, by a mile, and does a loop the loop to show off. Mabel is so puffed out that she has to float on her back for ages before she can swim again.",
+      text: "Mabel races the Mantine, flippers going like windmills. The Mantine wins by a mile, and Mabel is so puffed out she has to float on her back for ages.",
     },
     goodLeft: true,
   },
@@ -123,7 +124,7 @@ const OPEN_WATER: Stage[] = [
     },
     slip: {
       label: "go straight through",
-      text: "Mabel swims straight through the Tentacruel. Her skin is ever so thick, so she hardly notices, but they get tangled round her flippers, and untangling them takes forever. One reaches up and stings Brine right on the hat. [fizzle] 'My best hat!' says Brine. 'Sixty years I've had this hat!'",
+      text: "Mabel swims straight through. The Tentacruel tangle round her flippers, and untangling them takes forever. One stings Brine right on the hat. [fizzle] 'My best hat!' says Brine.",
     },
     goodLeft: false,
   },
@@ -139,7 +140,7 @@ const OPEN_WATER: Stage[] = [
     },
     slip: {
       label: "ride the whirlpool",
-      text: "Round and round you go, faster and faster, Mabel spinning like a top, Brine holding his hat, Gulliver squawking. You come out the other side so dizzy that Mabel swims in circles for an hour, and you're not entirely sure which way is up.",
+      text: "Round and round you go, Mabel spinning like a top, Gulliver squawking. You come out so dizzy that Mabel swims in circles for an hour.",
     },
     goodLeft: true,
   },
@@ -152,14 +153,14 @@ const FOG: Stage[] = [
     title: "The Fog",
     icon: { dexId: 171 },
     bed: { ambience: "sea", music: "mysterious" },
-    text: "A thick white fog rolls in, so thick you can't see Gulliver on the end of Brine's hat. Down in the water, a little light begins to glow. It's a Lanturn, a friendly Pokémon with a lamp on its head, blinking hello. And far, far away, so quiet you can hardly hear it, there's a song. '{whispers} Is that Mabel's family?' whispers Brine. 'Or a trick of the fog? Your call.'",
+    text: "A thick white fog rolls in. Down in the water, a little light glows: a Lanturn, a friendly Pokémon with a lamp on its head. And far, far away, there's a song. '{whispers} Is that Mabel's family?' whispers Brine. 'Or a trick of the fog? Your call.'",
     good: {
       label: "follow the far-off song",
-      text: `You listen hard, and steer towards the song. Mabel sings back, ${MABEL} and the Lanturn swims alongside for a while, lighting up the fog like a little lantern, before it waves goodbye and dives back to the deep.`,
+      text: `You steer towards the song. Mabel sings back, ${MABEL} and the Lanturn lights your way for a while, then waves goodbye.`,
     },
     slip: {
       label: "follow the Lanturn's light",
-      text: "Mabel follows the Lanturn as it dives, down, down, into the dark. Then up she shoots again like a cork, spluttering and blowing bubbles. Lanturn live in the deep sea, but a Wailord is a whale, and whales have to come up to breathe. [fizzle] By the time she's got her breath back, the song has gone quiet, and you drift in the fog until you hear it again.",
+      text: "Mabel follows the Lanturn down into the dark, then shoots up again like a cork, spluttering. Lanturn live in the deep sea, but a Wailord is a whale, and whales have to come up to breathe. [fizzle] By then the song has gone quiet, and you drift in the fog for ages.",
     },
     goodLeft: false,
   },
@@ -168,14 +169,14 @@ const FOG: Stage[] = [
     title: "Lights in the Mist",
     icon: { dexId: 121 },
     bed: { ambience: "sea", music: "mysterious" },
-    text: "A silver mist comes down over the sea, and in it, lights start to flash, red and gold and purple, spinning round and round. They're Starmie, dozens of them, twirling on the waves, and Mabel watches them with wide, shining eyes. And underneath the twinkling, very faint, there's a song. 'Starmie lights are pretty,' says Brine, 'but they go wherever the dance takes them. What'll it be?'",
+    text: "A silver mist comes down, and in it, lights flash red and gold: Starmie, dozens of them, twirling on the waves, and Mabel watches with shining eyes. Underneath, very faint, there's a song. 'Starmie lights are pretty,' says Brine, 'but they go wherever the dance takes them. What'll it be?'",
     good: {
       label: "follow the song",
-      text: `You follow the song, and the Starmie twirl out of the way to let Mabel through, flashing goodbye. Mabel sings to them as she passes, ${MABEL} and they spin so fast they glow like little stars.`,
+      text: `You follow the song, and the Starmie twirl aside to let Mabel through. She sings to them as she passes, ${MABEL} and they glow like little stars.`,
     },
     slip: {
       label: "follow the flashing lights",
-      text: "You follow the flashing lights, round to the left, round to the right, round and round, until you realise the Starmie are just dancing in a great big circle, and so are you. Mabel gets so dizzy she starts to hiccup, and it takes ages to find the song again.",
+      text: "You follow the flashing lights, round and round, until you realise the Starmie are dancing in a circle, and so are you. Mabel gets the hiccups, and it takes ages to find the song again.",
     },
     goodLeft: true,
   },
@@ -192,10 +193,10 @@ export const GIANTS: Giant[] = [
       title: "The Giant",
       icon: { formId: 10204 },
       bed: { ambience: "sea", music: "magical" },
-      text: `${GLOW} [cry:131] It's a Lapras, but a Lapras as big as a castle, with a shining shell like the northern lights. ${LORE} Mabel isn't scared at all. She swims right up and looks at it, as if she knows it. The giant Lapras bends its long neck down towards you.`,
+      text: `${GLOW} [cry:131] It's a Lapras as big as a castle, with a shell like the northern lights. ${LORE} The giant Lapras bends its long neck down towards Mabel.`,
       good: {
         label: "sing to it with Mabel",
-        text: `You sing, and Mabel sings, ${MABEL} and the giant Lapras sings back, a deep, shimmering song that makes the whole sea glow. Then it points its great head towards the horizon, and a path of light opens up across the water, all the way to Moonshell Island.`,
+        text: `You sing, and Mabel sings, ${MABEL} and the giant Lapras sings back, so deep the whole sea glows. Then a path of light opens up across the water, all the way to Moonshell Island.`,
       },
       slip: {
         label: "climb onto its giant shell",
@@ -214,7 +215,7 @@ export const GIANTS: Giant[] = [
       title: "The Giant",
       icon: { formId: 10214 },
       bed: { ambience: "sea", music: "magical" },
-      text: `${GLOW} [cry:834] At first you think it's an island, with rocks on top and moss and even a tree. Then the island opens one enormous eye. It's a Drednaw, a giant one, as big as a hill. ${LORE} The giant Drednaw yawns. It looks very sleepy. Mabel looks up at it, and whispers a tiny song.`,
+      text: `${GLOW} [cry:834] At first it looks like an island, with a tree on top. Then the island opens one enormous eye. It's a giant Drednaw. ${LORE} The giant Drednaw yawns at Mabel. It looks very sleepy.`,
       good: {
         label: "sail round it quietly",
         text: `You sail round it ever so quietly. As you pass, the giant Drednaw opens its eye again and gives Mabel a slow, friendly nod, and the swirl of water from its flipper pushes you along, faster than ever. ${MABEL}`,
@@ -236,10 +237,10 @@ export const GIANTS: Giant[] = [
       title: "The Giant",
       icon: { formId: 10206 },
       bed: { ambience: "sea", music: "magical" },
-      text: `${GLOW} [cry:143] On a sandbank in the middle of the sea lies a Snorlax, a Snorlax so big that a whole little forest is growing on its tummy, and Wingull are nesting in the trees. It's fast asleep, and every snore makes a wave. ${LORE} Mabel giggles. She has never seen anything so silly.`,
+      text: `${GLOW} [cry:143] On a sandbank lies a Snorlax so big that a little forest grows on its tummy. Every snore makes a wave. ${LORE} Mabel giggles.`,
       good: {
         label: "tiptoe past and let it sleep",
-        text: `You tiptoe past. Well, Mabel tiptoes, which for a Wailord means swimming very, very slowly. Just as you get by, the giant Snorlax lets out the biggest snore of all, and the gust blows you along like a sailing boat. ${MABEL}`,
+        text: `Mabel tiptoes past, which for a Wailord means swimming very slowly. Then the giant Snorlax lets out its biggest snore, and the gust blows you along like a sailing boat. ${MABEL}`,
       },
       slip: {
         label: "tickle its tummy",
@@ -258,7 +259,7 @@ export const GIANTS: Giant[] = [
       title: "The Giant",
       icon: { formId: 10198 },
       bed: { ambience: "sea", music: "magical" },
-      text: `${GLOW} [cry:12] Out of the red clouds flutters a Butterfree, a giant one, with wings that shimmer like stained glass windows, every colour you can think of. Glittering scales drift down from its wings like snow. ${LORE} 'Careful,' says Brine. 'Butterfree scales make you sleepy.' Mabel gazes up, enchanted.`,
+      text: `${GLOW} [cry:12] Out of the clouds flutters a giant Butterfree, with wings like stained glass. Glittering scales drift down like snow. ${LORE} Mabel gazes up. 'Careful,' says Brine. 'Butterfree scales make you sleepy.'`,
       good: {
         label: "cover your eyes and keep going",
         text: `You cover your eyes, and Mabel keeps her head down and swims. The glittering scales settle on her back like stars, and she starts to glow, faintly, all over. She feels so light that she swims twice as fast. ${MABEL}`,
@@ -280,10 +281,10 @@ export const GIANTS: Giant[] = [
       title: "The Giant",
       icon: { formId: 10203 },
       bed: { ambience: "sea", music: "magical" },
-      text: `${GLOW} [cry:99] Out of the sea rises a Kingler, a giant one, with one enormous claw that bubbles and foams. Every time it clacks the claw, a cloud of foam bubbles floats up into the sky, each one as big as a house. ${LORE} One huge bubble drifts down towards Mabel. She sniffs it.`,
+      text: `${GLOW} [cry:99] Out of the sea rises a giant Kingler. Every clack of its enormous claw sends up foam bubbles as big as houses. ${LORE} One huge bubble drifts down towards Mabel.`,
       good: {
         label: "let the bubble lift you up",
-        text: `You let the bubble float down over you, and it lifts Mabel right up out of the water, Brine and Gulliver and all, and carries you across the sea, high over the waves. Mabel is so surprised that she sings the whole way. ${MABEL}`,
+        text: `The bubble floats down over you and lifts Mabel right out of the water, Brine and all, and carries you high over the waves. ${MABEL}`,
       },
       slip: {
         label: "swim through the foam",
@@ -302,14 +303,14 @@ const BEFORE_DARK: Stage[] = [
     title: "The Reef",
     icon: { dexId: 369 },
     bed: { ambience: "lake", music: "calm" },
-    text: "The sea turns calm and clear. Below you is a coral reef, full of pink Corsola and silver fish, and Mabel peers down at it, fascinated. Somewhere through it is the way to Moonshell Island. On the sea bed, an old grey Pokémon with a stony face is resting. 'A Relicanth,' says Brine, in a whisper. 'They've been around for a hundred million years. If anyone knows the old way through, it's that one.' But the Corsola are waving at you, and they look like they know everything.",
+    text: "Mabel peers down at a coral reef full of pink Corsola. Somewhere through it is the way to the island. On the sea bed rests an old grey Pokémon. 'A Relicanth,' says Brine, in a whisper. 'If anyone knows the way, it's that one.' But the Corsola are waving, as if they know everything.",
     good: {
       label: "ask the Relicanth",
-      text: "The Relicanth looks at you with one old eye. Then it swims ahead, slowly, through a secret gap in the reef that you would never have found, and out the other side. '{gasps} Well I never,' says Brine. 'A shortcut a hundred million years old.'",
+      text: "The Relicanth looks at Mabel with one old eye, then leads her slowly through a secret gap in the reef. '{gasps} Well I never,' says Brine. 'A shortcut a hundred million years old.'",
     },
     slip: {
       label: "ask the Corsola",
-      text: "The Corsola are delighted to help. They're so delighted that they throw a party, with music and dancing and seaweed cake, and by the end of it nobody can remember what the question was. [cheer] Mabel dances too, which makes a very big wave. In the end, the Relicanth sighs and shows you the way through anyway.",
+      text: "The Corsola are so delighted to help that they throw a party, with seaweed cake. Mabel dances, which makes a very big wave, and nobody remembers the question. [cheer] In the end, the Relicanth sighs and shows you the way anyway.",
     },
     goodLeft: true,
   },
@@ -318,10 +319,10 @@ const BEFORE_DARK: Stage[] = [
     title: "Tired Flippers",
     icon: { dexId: 321 },
     bed: { ambience: "sea", music: "calm" },
-    text: "Mabel is slowing down. Her flippers are drooping, and her song has gone very quiet. She's only young, and it's been a long day. '{sighs} She's tuckered out,' says Brine, patting her side. 'We could let her float for a bit and sing her a lullaby. Or we could keep going and hope she gets her second wind.'",
+    text: "Mabel is slowing down. Her flippers droop, and her song has gone quiet. '{sighs} She's tuckered out,' says Brine. 'We could let her float and sing her a lullaby. Or we could keep going, and hope she gets her second wind.'",
     good: {
       label: "sing her a lullaby",
-      text: `Mabel floats on the gentle swell, and you sing her the softest song you know. Brine hums along, and even Gulliver tucks his head under his wing. Mabel closes her eyes, just for a few minutes. When she opens them again, she's full of beans, and she swims faster than ever. ${MABEL}`,
+      text: `You sing her the softest song you know, and Mabel closes her eyes for a few minutes. When she opens them, she's full of beans. ${MABEL}`,
     },
     slip: {
       label: "keep going",
@@ -336,14 +337,14 @@ const DARK_SEA: Stage = {
   title: "The Dark Sea",
   icon: { dexId: 321 },
   bed: { ambience: "sea", music: "magical" },
-  text: "The sun is going down, and the sea is turning dark. Far away, you hear the song again, but you can't tell where it's coming from. Mabel stops swimming and listens, her whole huge body still. 'I know an old saying,' says Brine, 'older than me. Where the sea is darkest, sing, and the island will answer.' He clears his throat. 'Well? Do we sing back, or stay quiet and listen?'",
+  text: "The sun goes down, and the sea turns dark. Far away, you hear the song again. Mabel stops and listens. 'There's an old saying,' says Brine. 'Where the sea is darkest, sing, and the island will answer. Well? Do we sing back, or stay quiet and listen?'",
   good: {
     label: "sing back",
-    text: `You sing as loudly as you can. Brine sings too, very badly, and Gulliver squawks along. Mabel sings the loudest of all. ${MABEL} From the darkness ahead, a song comes back, and then a light comes on: a lighthouse, on a little island shaped like a moon. Moonshell Island! [fanfare]`,
+    text: `You all sing as loudly as you can, Brine very badly. ${MABEL} From the darkness, a song comes back, and a light comes on: a lighthouse, on an island shaped like a moon. Moonshell Island! [fanfare]`,
   },
   slip: {
     label: "stay quiet and listen",
-    text: "You stay very quiet and listen. The song gets louder, and then you see them: a whole family of Wailord, gliding past in the dusk, heading home. Mabel calls after them, too late, and too quietly. They don't hear her, and soon they're gone. You follow their trail for a long, long time, until at last a light comes on: a lighthouse, on a little island shaped like a moon. Moonshell Island!",
+    text: "You stay quiet. A family of Wailord glides past in the dusk, and Mabel calls after them, too late. You follow their trail for a long time, until at last a light comes on: a lighthouse, on an island shaped like a moon. Moonshell Island!",
   },
   goodLeft: true,
 };
@@ -353,14 +354,14 @@ const ISLAND: Stage = {
   title: "Moonshell Island",
   icon: { dexId: 357 },
   bed: { ambience: "grass", music: "bright" },
-  text: "Waiting on the jetty is a woman with a lantern. '{cheerfully} Hello there!' says Nell. 'I'm the lighthouse keeper. Mabel's family is in the lagoon, on the far side of the island. There are two ways round. There's the jungle path, which is quicker, and there are Tropius in the trees with the sweetest fruit you've ever tasted. Or there's the long way, along the beach, by the water.' Of course, Mabel can't walk through a jungle. Mabel can only swim.",
+  text: "On the jetty waits a woman with a lantern. '{cheerfully} Hello there!' says Nell. 'I'm the lighthouse keeper. Mabel's family is in the lagoon, round the far side. The jungle path is quicker, with the sweetest fruit. Or there's the long way, along the beach.' Of course, Mabel can't walk through a jungle. She can only swim.",
   good: {
     label: "go the long way, along the beach",
-    text: "You walk along the beach, and Mabel swims right beside you, all the way round the island, splashing you every few steps on purpose. On the way, three Sharpedo come circling, with very pointy teeth, but you stay close to Mabel, and they decide she's far too big to bother with.",
+    text: "You walk along the beach, and Mabel swims beside you, splashing you on purpose. Three Sharpedo come circling, but you stay close to Mabel, and they decide she's far too big to bother with.",
   },
   slip: {
     label: "take the jungle path",
-    text: "You take the jungle path. The Tropius share their fruit, and it really is the sweetest fruit you've ever tasted. But when you come out on the other side, there's no Mabel. She couldn't follow you through the trees. You have to run all the way back to the jetty to fetch her, and go round by the beach after all.",
+    text: "You take the jungle path, and the fruit really is the sweetest ever. But on the other side, there's no Mabel. She couldn't follow you through the trees, so you run all the way back and go round by the beach after all.",
   },
   goodLeft: false,
 };
@@ -391,24 +392,26 @@ function progressLine(stage: number, slipped: boolean, slips: number): string {
     if (slips === 0) {
       return (
         [
-          "'{excited} Not one wrong turn,' says Brine. 'At this rate, we'll be there before the moon comes up.'",
+          "'{excited} Not one wrong turn,' says Brine.",
           "'Right on time,' says Brine, checking his pocket watch.",
           "'Smooth sailing,' says Brine. 'Mabel will be leaping with her family tonight, you mark my words.'",
           "'We're making cracking time,' says Brine.",
-          "'{proudly} Still not a single wrong turn,' says Brine. 'Sixty years at sea, and I've never had a better first mate.'",
+          "'{proudly} Still not a single wrong turn,' says Brine.",
           "'The sun's still up,' says Brine, 'and so are we.'",
           "'Nearly there,' says Brine. 'And the moon's not up yet.'",
         ][stage] ?? ""
       );
     }
-    return "'{cheerfully} That's more like it,' says Brine. 'We're catching up.'";
+    return slips >= 2
+      ? "'{cheerfully} That's more like it,' says Brine. 'We're catching up.'"
+      : "'{cheerfully} Steady as she goes,' says Brine.";
   }
   return (
     [
       "",
-      "'We've lost a bit of time,' says Brine. 'No matter. Plenty of day left.'",
-      "'{nervously} The sun's getting low,' says Brine. 'We'd best hurry, or we'll miss the moonrise.'",
-      "'{sighs} It'll be dark before we get there,' says Brine. 'But we'll get there. Mabel's not giving up, and neither are we.'",
+      "'We've lost a bit of time,' says Brine. 'No matter.'",
+      "'{nervously} The sun's getting low,' says Brine. 'We'd best hurry.'",
+      "'{sighs} It'll be dark before we get there,' says Brine. 'But we'll get there.'",
     ][Math.min(slips, MOST_SLIPS)] ?? ""
   );
 }
@@ -434,13 +437,18 @@ const id = {
   ending: (slips: number) => `end${ISLAND_ENDINGS.length - Math.min(slips, MOST_SLIPS)}`,
 };
 
+/** A good answer after two or more slips makes up one of them. One slip stays: the golden ending needs none. */
+function caughtUp(slips: number): number {
+  return slips >= 2 ? slips - 1 : slips;
+}
+
 function endingText(slips: number, owner: string, giant: Giant): string {
   const captain = owner ? `you're Captain ${owner}` : "you're a real sea captain";
   return [
-    `You come into the lagoon just as the moon rises over Moonshell Island, and there they are: Mabel's family, six huge Wailord, waiting for her. They crowd round, singing and splashing, and blowing fountains into the air. [cheer] Then the water deep below the island begins to glow red, and ${giant.finale}. All at once, the whole Wailord family leaps, Mabel too, right up out of the water and into the moonlight: the biggest Pokémon in the sea, flying, with you on top. Down they come, with the biggest splash there has ever been. Captain Brine is very quiet. 'Sixty years at sea,' says Brine, 'and I've never seen that.' He takes off his old captain's hat and puts it on your head. 'From now on,' says Brine, '${captain}.' Mabel sings to you, and her whole family sings too. ${MABEL} [golden]`,
-    `The moon is just coming up as you sail into the lagoon. Mabel's family has already started to leap, but when they hear her song they stop, and turn, and swim to meet her. ${MABEL} Then they sing all together, the loveliest song you've ever heard, while the moon climbs up into the sky, and far out at sea, a red glow answers. Nell brings you a mug of hot chocolate. 'I've never heard them sing like that,' says Nell. 'That's for you, that is.' [ending]`,
-    `It's late at night when you get to the lagoon, and Mabel's family is fast asleep, floating like islands in the moonlight. Mabel swims in among them and gives the smallest one a nudge. One by one they wake, and when they see her, they sing so loudly that every light on the island comes on. ${MABEL} 'Well,' says Brine, wiping his eyes, 'that was worth staying up for.' Gulliver delivers a letter. It says thank you, in very big writing. [ending]`,
-    `The sky is getting light by the time you reach the lagoon. You've been sailing all night, and everybody is very, very tired, even Gulliver. But Mabel's family has waited up for her, every one of them, and when they see her, they sing a quiet morning song. ${MABEL} Mabel is home. Nell makes you breakfast, and you fall asleep on the beach in the sunshine, with Mabel humming in the water beside you. 'Long way round,' says Brine, with a big yawn. 'But we got her home. That's what counts.' [ending]`,
+    `You come into the lagoon just as the moon rises, and there they are: Mabel's family, six huge Wailord, singing and splashing. [cheer] Then the water below the island glows red, and ${giant.finale}. All at once the whole family leaps, Mabel too, up into the moonlight, with you on top, and down they come with the biggest splash there has ever been. Brine takes off his captain's hat and puts it on your head. 'From now on,' says Brine, '${captain}.' ${MABEL} [golden]`,
+    `The moon is just coming up as you sail into the lagoon. Mabel's family stops leaping, and swims to meet her. ${MABEL} They sing all together while the moon climbs, and far out at sea, a red glow answers. Nell brings you hot chocolate. 'I've never heard them sing like that,' says Nell. 'That's for you, that is.' [ending]`,
+    `It's late at night when you get to the lagoon, and Mabel's family is fast asleep, floating like islands. Mabel nudges the smallest one. One by one they wake, and sing so loudly that every light on the island comes on. ${MABEL} 'Well,' says Brine, wiping his eyes, 'that was worth staying up for.' [ending]`,
+    `The sky is getting light when you reach the lagoon. Everybody is very tired, even Gulliver. But Mabel's family has waited up, and they sing a quiet morning song. ${MABEL} Mabel is home. You fall asleep on the beach in the sunshine. 'Long way round,' says Brine, yawning. 'But we got her home. That's what counts.' [ending]`,
   ][Math.min(slips, MOST_SLIPS)] as string;
 }
 
@@ -449,7 +457,7 @@ export function buildIsland(plan: IslandPlan, seed: number, ownerName = "", part
   const owner = ownerName.trim();
   const named = (line: string) => (partner ? line.replaceAll("{P}", partner.name) : "");
   const greeting = partner
-    ? `${partner.name} peeks out from behind your legs, then waves hello. [cry:${partner.id}] Mabel blows another fountain, just for ${partner.name}. `
+    ? `${partner.name} waves hello. [cry:${partner.id}] `
     : "";
   const shipmate = owner || "shipmate";
   const nodes: StoryNode[] = [];
@@ -480,10 +488,12 @@ export function buildIsland(plan: IslandPlan, seed: number, ownerName = "", part
         title: `${stage.title}: Onwards`,
         icon: { dexId: 321 },
         bed: stage.bed,
-        text: [stage.good.text, moment, named(PARTNER_MOMENTS[index] ?? ""), index === 4 ? toldBy("Brine", joke) : "", progressLine(index, false, slips)]
+        // Brine's joke takes the place of Mabel's moment, so the scene stays short.
+        text: [stage.good.text, index === 4 ? toldBy("Brine", joke) : moment, named(PARTNER_MOMENTS[index] ?? ""), progressLine(index, false, slips)]
           .filter(Boolean)
           .join(" "),
-        next: index < last ? id.choice(index + 1, slips) : id.ending(slips),
+        // A good answer after a bad patch wins a little time back, but only a perfect voyage is golden.
+        next: index < last ? id.choice(index + 1, caughtUp(slips)) : id.ending(caughtUp(slips)),
       });
       nodes.push({
         id: id.slip(index, slips),
