@@ -61,6 +61,15 @@ const ADVENTURES = {
     opening: "Lighting the way down…",
     failed: "Find Your Trainer could not be set up.",
   },
+  play: {
+    title: "Friendly Battles",
+    young: true,
+    blurb:
+      "Their favourite Pokémon plays with six friendly Pokémon at the Play Park: use its power, or do a silly dance. Every choice is a happy one, with short sentences and lots of sounds.",
+    ownerNote: "Rosie the park keeper says hello to them.",
+    opening: "Opening the Play Park…",
+    failed: "Friendly Battles could not be set up.",
+  },
 } as const;
 
 type AdventureKind = keyof typeof ADVENTURES;
@@ -270,6 +279,7 @@ export function AdventurePanel({
               onClick={() => chooseKind(option)}
             >
               {ADVENTURES[option].title}
+              {"young" in ADVENTURES[option] ? <span className="ml-1.5 text-xs font-normal opacity-80">for younger kids</span> : null}
             </Button>
           ))}
         </div>
@@ -277,9 +287,10 @@ export function AdventurePanel({
           {adventure.title}
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          A choose-your-own-adventure card for ages 8 to 12. {adventure.blurb}
+          {"young" in adventure ? "A choose-your-own-adventure card for younger children, about three to five." : "A choose-your-own-adventure card for ages 8 to 12."}{" "}
+          {adventure.blurb}
         </p>
-        {kind === "lost" && !partner ? (
+        {(kind === "lost" || kind === "play") && !partner ? (
           <p className="mt-2 text-sm text-muted-foreground">
             No favourite chosen yet, so your child plays as Pikachu. Add their favourite below, and they play as that one.
           </p>
