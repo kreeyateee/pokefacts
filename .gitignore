@@ -88,3 +88,6 @@ __pycache__/
 
 # PokéAPI tables used to fill the second Pokédex line. Not the catalogue itself.
 /data/poke-csv
+
+# The package list the VM last installed (scripts/deploy-vm.sh).
+/.installed-lock-hash

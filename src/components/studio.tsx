@@ -2581,7 +2581,10 @@ export function Studio({
                 yotoSrc={yotoIcon}
               >
                 <div key={chapter.key} className="pk-swap max-w-prose space-y-3 text-base leading-7">
-                  {readsSpeciesBiology(kind) && chapter.dexId ? (
+                  {quickShelf && chapter.tracks[0]?.quick ? (
+                    // Quick Pokefacts reads only the quick facts, so the page shows just those.
+                    <p>{chapter.tracks[0].quick}</p>
+                  ) : readsSpeciesBiology(kind) && chapter.dexId ? (
                     factReading ? (
                       <>
                         {factReading.notice ? (
