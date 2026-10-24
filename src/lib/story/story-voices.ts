@@ -297,7 +297,8 @@ const NOT_AN_END = /(?:\b(?:Mr|Mrs|Ms|Jr|Sr|Dr|Prof|St|vs|etc|No)|\b[A-Z])\.$/;
 /**
  * A line cut into its sentences. Recorded one sentence at a time, the sentences that are the same on
  * every card are reused, and only the ones that change (a Pokémon's name or its facts) are new, instead
- * of the whole line. An expression tag stays with the sentence it starts.
+ * of the whole line. An expression tag stays with the sentence it starts. A tag with no words after it
+ * ("…fresh! {laughs}") stays on the end of the sentence before it, so no piece is only a tag.
  */
 export function sentencePieces(text: string): string[] {
   const pieces: string[] = [];
@@ -311,7 +312,13 @@ export function sentencePieces(text: string): string[] {
   }
   const rest = text.slice(at).trim();
   if (rest) pieces.push(rest);
-  return pieces.length > 0 ? pieces : [text];
+  const kept: string[] = [];
+  for (const piece of pieces) {
+    const previous = kept.at(-1);
+    if (previous !== undefined && !withoutVoiceTags(piece).trim()) kept[kept.length - 1] = `${previous} ${piece}`;
+    else kept.push(piece);
+  }
+  return kept.length > 0 ? kept : [text];
 }
 
 /**

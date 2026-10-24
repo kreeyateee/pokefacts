@@ -80,6 +80,11 @@ describe("recording a sentence at a time", () => {
     assert.deepEqual(sentencePieces("Mime Jr. Sits down."), ["Mime Jr. Sits down."]);
     assert.deepEqual(sentencePieces("Why? ... {laughs} It forgot!"), ["Why? ...", "{laughs} It forgot!"]);
     assert.deepEqual(sentencePieces("One line"), ["One line"]);
+    // A tag with nothing after it stays on the sentence before, so Piper is never handed an empty line.
+    assert.deepEqual(sentencePieces("Lettuce be friends! {laughs}"), ["Lettuce be friends! {laughs}"]);
+    // Tags with words after them belong to those words.
+    assert.deepEqual(sentencePieces("Ready? Go! {laughs} {giggles} Off we go."), ["Ready?", "Go!", "{laughs} {giggles} Off we go."]);
+    assert.deepEqual(sentencePieces("{laughs}"), ["{laughs}"]);
   });
 
   it("records each sentence as its own piece, with names still cut out and joined tight", () => {
